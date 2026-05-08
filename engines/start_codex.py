@@ -215,9 +215,9 @@ class CodexEngine(BaseEngine):
             UTC
         ).strftime("%Y-%m-%dT%H:%M:%SZ")
         data["marketplaces"][self.MARKETPLACE_NAME]["source_type"] = "local"
-        data["marketplaces"][self.MARKETPLACE_NAME][
-            "source"
-        ] = self._format_codex_local_path(marketplace_root)
+        data["marketplaces"][self.MARKETPLACE_NAME]["source"] = (
+            self._format_codex_local_path(marketplace_root)
+        )
 
         allowed_plugin_ids = {
             f"{plugin_meta['name']}@{self.MARKETPLACE_NAME}" for plugin_meta in plugins

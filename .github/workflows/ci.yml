@@ -29,10 +29,10 @@ jobs:
         run: uv sync --frozen --all-groups
 
       - name: Lint (ruff)
-        run: uvx ruff check ca_launcher.py core engines tests
+        run: uv run ruff check ca_launcher.py core engines tests
 
       - name: Format check (ruff)
-        run: uvx ruff format --check ca_launcher.py core engines tests
+        run: uv run ruff format --check ca_launcher.py core engines tests
 
       - name: Test
         run: uv run pytest --tb=short -q --cov --cov-report=term-missing
