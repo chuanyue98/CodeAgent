@@ -1,6 +1,0 @@
-{
-  "name": "pre-commit-setup",
-  "event": "SessionStart",
-  "command": "python {hook_dir}/hook.py",
-  "description": "Ensure pre-commit hooks are installed if .pre-commit-config.yaml exists."
-}
