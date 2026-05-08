@@ -72,10 +72,20 @@ class BaseEngine:
         self.full_config = self._load_full_config()
         self.env_manager = EnvironmentManager(self.root_dir)
         self.temp_prompt_name = ".ca_prompt.tmp"
-        self.skill_scanner = SkillScanner(self.root_dir / "skills")
-        self.prompt_scanner = PromptScanner(self.root_dir / "prompt")
+        resource_root = self._resolve_resource_root()
+        self.skill_scanner = SkillScanner(resource_root / "skills")
+        self.prompt_scanner = PromptScanner(resource_root / "prompt")
         self.hook_scanner = HookScanner(self._get_hook_search_roots())
-        self.plugin_scanner = PluginScanner(self.root_dir / "plugins")
+        self.plugin_scanner = PluginScanner(resource_root / "plugins")
+
+    def _resolve_resource_root(self) -> Path:
+        """Returns the resource root directory, respecting resource_root in config.json."""
+        resource_root = self.full_config.get("paths", {}).get("resource_root")
+        if resource_root:
+            resolved = (self.root_dir / resource_root).resolve()
+            if resolved.is_dir():
+                return resolved
+        return self.root_dir
 
     def _load_full_config(self) -> dict:
         """Loads the complete configuration from config.json in the project root.
@@ -243,7 +253,7 @@ class BaseEngine:
             List[Path]: A list of absolute paths to plugin search roots.
         """
         plugin_path_cfg = self.full_config.get("paths", {}).get("plugins", "plugins")
-        default_root = (self.root_dir / plugin_path_cfg).resolve()
+        default_root = (self._resolve_resource_root() / plugin_path_cfg).resolve()
 
         roots = []
         cwd = Path.cwd().resolve()
@@ -270,7 +280,7 @@ class BaseEngine:
             List[Path]: A list of absolute paths to hook search roots.
         """
         hook_path_cfg = self.full_config.get("paths", {}).get("hooks", "hooks")
-        default_root = (self.root_dir / hook_path_cfg).resolve()
+        default_root = (self._resolve_resource_root() / hook_path_cfg).resolve()
 
         roots = []
         cwd = Path.cwd().resolve()
