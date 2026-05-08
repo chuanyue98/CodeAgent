@@ -36,12 +36,7 @@ def mock_env(tmp_path, monkeypatch):
     monkeypatch.setenv("CA_HOOKS_ROOT", str(hooks_root))
     monkeypatch.setenv("CA_PLUGINS_ROOT", str(plugins_root))
 
-    # Also monkeypatch server globals for backward compatibility if needed
-    monkeypatch.setattr(server, "ROOT_DIR", root_dir)
     monkeypatch.setattr(server, "CONFIG_PATH", config_path)
-    monkeypatch.setattr(server, "SKILLS_ROOT", skills_root)
-    monkeypatch.setattr(server, "PROMPTS_ROOT", prompts_root)
-    monkeypatch.setattr(server, "HOOKS_ROOT", hooks_root)
 
     return root_dir
 
@@ -211,11 +206,13 @@ def test_initialize_default_groups_logic(tmp_path, monkeypatch):
     config_path.write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr(server, "CONFIG_PATH", config_path)
-    monkeypatch.setattr(server, "SKILLS_ROOT", tmp_path / "skills")
-    monkeypatch.setattr(server, "PROMPTS_ROOT", tmp_path / "prompt")
+    monkeypatch.setenv("CA_SKILLS_ROOT", str(tmp_path / "skills"))
+    monkeypatch.setenv("CA_PROMPTS_ROOT", str(tmp_path / "prompt"))
+    monkeypatch.setenv("CA_PLUGINS_ROOT", str(tmp_path / "plugins"))
     (tmp_path / "skills").mkdir()
     (tmp_path / "prompt").mkdir()
     (tmp_path / "hooks").mkdir()
+    (tmp_path / "plugins").mkdir()
 
     server.initialize_default_groups()
 

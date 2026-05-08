@@ -1,17 +1,12 @@
-import os
 from fastapi import APIRouter
-from pathlib import Path
 from core.services.skill_service import SkillService
+from core.web.resource_paths import resolve_resource_path
 
 router = APIRouter(prefix="/api")
 
 
 def get_skills_root():
-    env_path = os.environ.get("CA_SKILLS_ROOT")
-    if env_path:
-        return Path(env_path)
-    root_dir = Path(__file__).resolve().parent.parent.parent.parent
-    return root_dir / "skills"
+    return resolve_resource_path("skills", "CA_SKILLS_ROOT")
 
 
 @router.get("/skills")

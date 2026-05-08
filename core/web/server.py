@@ -1,6 +1,5 @@
 import json
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -9,14 +8,19 @@ from core.prompt_scanner import DEFAULT_GROUP_PROMPTS, PromptScanner
 from core.skill_scanner import SkillScanner
 from core.plugin_scanner import PluginScanner
 from core.web.routers import analytics, config, hooks, plugins, prompts, skills, tasks
+from core.web.resource_paths import ROOT_DIR, resolve_resource_path
 
-# Locate config.json and resource roots
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 CONFIG_PATH = ROOT_DIR / "config.json"
-SKILLS_ROOT = ROOT_DIR / "skills"
-PROMPTS_ROOT = ROOT_DIR / "prompt"
-HOOKS_ROOT = ROOT_DIR / "hooks"
 FRONTEND_DIST = ROOT_DIR / "web" / "frontend" / "dist"
+
+
+def _get_roots():
+    return (
+        resolve_resource_path("skills", "CA_SKILLS_ROOT"),
+        resolve_resource_path("prompt", "CA_PROMPTS_ROOT"),
+        resolve_resource_path("hooks", "CA_HOOKS_ROOT"),
+    )
+
 
 # Default group → skill category mapping
 DEFAULT_GROUP_CATEGORIES: dict[str, list[str]] = {
@@ -37,13 +41,14 @@ def initialize_default_groups() -> None:
     except Exception:
         return
 
+    skills_root, prompts_root, hooks_root = _get_roots()
     groups: dict = config_data.get("groups", {})
-    skill_scanner = SkillScanner(SKILLS_ROOT)
+    skill_scanner = SkillScanner(skills_root)
     scanned_skills = skill_scanner.scan()
-    prompt_scanner = PromptScanner(PROMPTS_ROOT)
+    prompt_scanner = PromptScanner(prompts_root)
     scanned_prompts = prompt_scanner.scan()
 
-    plugin_scanner = PluginScanner(HOOKS_ROOT.parent / "plugins")
+    plugin_scanner = PluginScanner(resolve_resource_path("plugins", "CA_PLUGINS_ROOT"))
     scanned_plugins = plugin_scanner.scan()
 
     changed = False
