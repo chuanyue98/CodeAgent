@@ -13,11 +13,13 @@ def mock_env(tmp_path, monkeypatch):
     prompts_root = root_dir / "prompt"
     hooks_root = root_dir / "hooks"
     plugins_root = root_dir / "plugins"
+    tasks_root = root_dir / "tasks"
 
     skills_root.mkdir()
     prompts_root.mkdir()
     hooks_root.mkdir()
     plugins_root.mkdir()
+    tasks_root.mkdir()
 
     config = {
         "default_mode": "local",
@@ -35,6 +37,7 @@ def mock_env(tmp_path, monkeypatch):
     monkeypatch.setenv("CA_PROMPTS_ROOT", str(prompts_root))
     monkeypatch.setenv("CA_HOOKS_ROOT", str(hooks_root))
     monkeypatch.setenv("CA_PLUGINS_ROOT", str(plugins_root))
+    monkeypatch.setenv("CA_TASKS_ROOT", str(tasks_root))
 
     monkeypatch.setattr(server, "CONFIG_PATH", config_path)
 
@@ -75,30 +78,35 @@ async def test_get_hooks(mock_env):
 
 
 @pytest.mark.asyncio
-async def test_get_task_status(mock_env):
-    plan_path = mock_env / "IMPLEMENTATION_PLAN.md"
-    plan_content = """
-# Plan
-## 阶段 1: 基础
-**目标**: 实现基础功能
-**状态**: [完成]
-## 阶段 2: 高级
-**目标**: 实现高级功能
-**状态**: 进行中
-"""
-    plan_path.write_text(plan_content, encoding="utf-8")
+async def test_list_tasks(mock_env, tmp_path):
+    tasks_root = tmp_path / "tasks"
+    tasks_root.mkdir(exist_ok=True)
+    (tasks_root / "refactor.md").write_text(
+        "# Refactor Task\nImprove code readability.", encoding="utf-8"
+    )
+    (tasks_root / "upgrade.md").write_text(
+        "# Upgrade\n## 阶段 1\n**目标**: 升级依赖\n**状态**: 已完成\n",
+        encoding="utf-8",
+    )
+    import os
+
+    os.environ["CA_TASKS_ROOT"] = str(tasks_root)
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
-        response = await ac.get("/api/task")
+        response = await ac.get("/api/tasks")
 
     assert response.status_code == 200
     data = response.json()
-    assert data["exists"] is True
-    assert len(data["tasks"]) == 2
-    assert data["tasks"][0]["name"] == "阶段 1: 基础"
-    assert data["tasks"][0]["status"] == "完成"
+    assert len(data) == 2
+    names = [t["name"] for t in data]
+    assert "refactor" in names
+    assert "upgrade" in names
+
+    upgrade = next(t for t in data if t["name"] == "upgrade")
+    assert upgrade["hasStages"] is True
+    assert upgrade["stages"][0]["status"] == "已完成"
 
 
 @pytest.mark.asyncio
