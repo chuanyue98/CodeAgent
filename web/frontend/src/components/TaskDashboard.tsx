@@ -204,6 +204,7 @@ const TaskDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchTasks();
     const id = setInterval(() => void fetchTasks(), 10000);
     return () => clearInterval(id);
