@@ -1,0 +1,146 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import List
+
+from core.analytics.models import RawUsageEntry
+
+
+def _ms_to_iso(ms: int) -> str:
+    """Converts a millisecond timestamp to an ISO 8601 formatted string.
+
+    Args:
+        ms: The timestamp in milliseconds.
+
+    Returns:
+        str: The ISO 8601 formatted timestamp string.
+    """
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%S.000Z"
+    )
+
+
+def _safe_float(value: object) -> float:
+    """Safely converts a value to a float.
+
+    Args:
+        value: The value to convert.
+
+    Returns:
+        float: The converted float value, or 0.0 if conversion fails.
+    """
+    try:
+        return float(value) if value is not None else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _iso_to_ms(iso: str) -> int:
+    """Converts an ISO 8601 timestamp string to milliseconds.
+
+    Args:
+        iso: The ISO 8601 formatted timestamp string.
+
+    Returns:
+        int: The timestamp in milliseconds, or 0 if parsing fails.
+    """
+    if not iso:
+        return 0
+    try:
+        return int(
+            datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp() * 1000
+        )
+    except (ValueError, TypeError):
+        return 0
+
+
+def scan_opencode_usage(
+    home: Path | None = None, since_timestamp: str = ""
+) -> List[RawUsageEntry]:
+    """Scans the OpenCode SQLite database for usage statistics.
+
+    Args:
+        home: Optional home directory path. If not provided, defaults to the
+            user's home directory.
+        since_timestamp: Only return entries newer than this ISO 8601 timestamp.
+
+    Returns:
+        List[RawUsageEntry]: A list of raw usage entries extracted from the
+            OpenCode database, including token counts and costs.
+    """
+    db_path = (home or Path.home()) / ".local" / "share" / "opencode" / "opencode.db"
+    if not db_path.exists():
+        return []
+
+    since_ms = _iso_to_ms(since_timestamp)
+    entries: List[RawUsageEntry] = []
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        con.row_factory = sqlite3.Row
+
+        # Join part → message (for model) → session (for directory)
+        # part.data contains tokens + cost for type="step-finish"
+        rows = con.execute(
+            """
+            SELECT
+                p.session_id,
+                p.message_id,
+                p.time_created,
+                p.data AS part_data,
+                m.data AS msg_data,
+                s.directory
+            FROM part p
+            JOIN message m ON m.id = p.message_id
+            JOIN session s ON s.id = p.session_id
+            WHERE json_extract(p.data, '$.type') = 'step-finish'
+              AND p.time_created > ?
+              AND (
+                json_extract(p.data, '$.tokens.input') > 0
+                OR json_extract(p.data, '$.tokens.output') > 0
+              )
+            ORDER BY p.time_created ASC
+            """,
+            (since_ms,),
+        ).fetchall()
+        con.close()
+    except sqlite3.Error:
+        return []
+
+    for row in rows:
+        try:
+            part = json.loads(row["part_data"])
+            msg = json.loads(row["msg_data"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+        tokens = part.get("tokens", {})
+        cache = tokens.get("cache", {})
+
+        input_t = int(tokens.get("input", 0) or 0)
+        output_t = int(tokens.get("output", 0) or 0)
+        reasoning_t = int(tokens.get("reasoning", 0) or 0)
+        cache_write = int(cache.get("write", 0) or 0)
+        cache_read = int(cache.get("read", 0) or 0)
+        cost = _safe_float(part.get("cost"))
+
+        model = msg.get("modelID") or msg.get("model") or "opencode-unknown"
+
+        entries.append(
+            RawUsageEntry(
+                timestamp=_ms_to_iso(row["time_created"]),
+                session_id=row["session_id"],
+                model=model,
+                input_tokens=input_t,
+                output_tokens=output_t + reasoning_t,
+                cache_creation_tokens=cache_write,
+                cache_read_tokens=cache_read,
+                cost=cost,
+                project_path=row["directory"] or "",
+                target="opencode",
+            )
+        )
+
+    return entries

@@ -1,0 +1,3 @@
+[submodule "plugins/base/superpowers"]
+	path = plugins/base/superpowers
+	url = https://github.com/obra/superpowers

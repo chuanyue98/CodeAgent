@@ -1,0 +1,50 @@
+# Python
+.uvenv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.DS_Store
+IMPLEMENTATION_PLAN.md
+# Environment variables
+.env
+.idea
+code_plan
+code_plan.*
+ai.md
+*.todo.md
+# Auto Review 配置文件
+scripts/auto-review/config.json
+# 智慧编码工作目录
+DEVELOPMENT/
+.vscode
+.coverage
+one_tool/
+# Build artifacts
+repos/
+repos_fix_by_pr/
+repos_comment_issue/
+git_workspace/
+repos_fix_by_pr/
+.ca_prompt.tmp
+.gemini/
+.claude/
+
+# Build artifacts
+codeagent.egg-info/
+dist/
+*.egg
+.opencode/
+.claude/
+.opencode/
+assets/edit_tmp/
+assets/watermark_tmp/
+
+.superpowers/
+
+# Debug and local engine configs
+prompt_debug*.json
+.codex/
+config.json

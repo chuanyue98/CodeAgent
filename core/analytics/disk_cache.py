@@ -1,0 +1,87 @@
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+from typing import Any, Optional
+
+CACHE_SCHEMA_VERSION = 3
+CACHE_TTL_SECONDS = 300  # 5 minutes — fresh
+CACHE_STALE_SECONDS = 7 * 86400  # 7 days — stale-while-revalidate boundary
+
+
+def _default_cache_path() -> Path:
+    """Returns the default path for the analytics cache file.
+
+    Returns:
+        Path: The default path (~/.ca_analytics_cache.json).
+    """
+    return Path.home() / ".ca_analytics_cache.json"
+
+
+def load_cache(path: Path | None = None) -> Optional[Any]:
+    """Loads cached analytics data from a JSON file.
+
+    Handles TTL and stale-while-revalidate logic. Returns data if fresh or stale
+    (marking it as stale). Returns None if the cache doesn't exist, is corrupt,
+    has an incompatible version, or is past the stale boundary.
+
+    Args:
+        path: Optional specific path to load from. Defaults to ~/.ca_analytics_cache.json.
+
+    Returns:
+        The cached data if valid, otherwise None.
+    """
+    p = path or _default_cache_path()
+    if not p.exists():
+        return None
+    try:
+        with open(p, encoding="utf-8") as f:
+            doc = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    if doc.get("version") != CACHE_SCHEMA_VERSION:
+        return None
+
+    age = time.time() - doc.get("saved_at", 0)
+    if age > CACHE_STALE_SECONDS:
+        return None
+    if age > CACHE_TTL_SECONDS:
+        # Stale-while-revalidate: return stale data; caller should refresh async
+        doc["stale"] = True
+    return doc.get("data")
+
+
+def save_cache(data: Any, path: Path | None = None) -> None:
+    """Saves analytics data to a JSON file.
+
+    Args:
+        data: The data to cache.
+        path: Optional specific path to save to. Defaults to ~/.ca_analytics_cache.json.
+    """
+    p = path or _default_cache_path()
+    doc = {
+        "version": CACHE_SCHEMA_VERSION,
+        "saved_at": time.time(),
+        "data": data,
+    }
+    try:
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(doc, f, ensure_ascii=False)
+    except OSError:
+        pass
+
+
+def invalidate_cache(path: Path | None = None) -> None:
+    """Deletes the analytics cache file.
+
+    Args:
+        path: Optional specific path to invalidate. Defaults to ~/.ca_analytics_cache.json.
+    """
+    p = path or _default_cache_path()
+    if p.exists():
+        try:
+            p.unlink()
+        except OSError:
+            pass

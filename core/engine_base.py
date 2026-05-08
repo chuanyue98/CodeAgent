@@ -1,0 +1,930 @@
+#!/usr/bin/env python3
+import os
+import subprocess
+import json
+import shutil
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from core.prompt_kit import prompt_general, prompt_review
+from core.skill_scanner import SkillScanner
+from core.prompt_scanner import PromptScanner
+from core.hook_scanner import HookScanner
+from core.plugin_scanner import PluginScanner
+
+
+class EnvironmentManager:
+    """Manages environment variables for the CodeAgent execution environment.
+
+    Attributes:
+        root_dir (Path): The root directory of the CodeAgent project.
+    """
+
+    def __init__(self, root_dir: Path):
+        """Initializes EnvironmentManager with the project root directory.
+
+        Args:
+            root_dir (Path): The root directory of the CodeAgent project.
+        """
+        self.root_dir = root_dir
+
+    def get_env(self) -> dict:
+        """Returns a copy of the current environment variables with CodeAgent specific variables added.
+
+        Returns:
+            dict: A dictionary containing environment variables, including 'CODEAGENT_PATH'.
+        """
+        env = os.environ.copy()
+        env["CODEAGENT_PATH"] = str(self.root_dir.absolute()).replace("\\", "/")
+        return env
+
+
+class BaseEngine:
+    """Abstract base class for LLM engines.
+
+    Provides core functionality for configuration management, environment setup,
+    resource discovery (skills, prompts, hooks, plugins), and prompt assembly.
+
+    Attributes:
+        name (str): The unique name of the engine (e.g., 'gemini', 'claude').
+        default_model (str): The default LLM model name to use.
+        root_dir (Path): The root directory of the CodeAgent project.
+        full_config (dict): The complete configuration loaded from config.json.
+        env_manager (EnvironmentManager): Manager for environment variables.
+        temp_prompt_name (str): Filename for the temporary prompt file.
+        skill_scanner (SkillScanner): Scanner for discovering skills.
+        prompt_scanner (PromptScanner): Scanner for discovering prompts.
+        hook_scanner (HookScanner): Scanner for discovering hooks.
+        plugin_scanner (PluginScanner): Scanner for discovering plugins.
+    """
+
+    def __init__(self, name: str, default_model: str):
+        """Initializes the BaseEngine with its core components.
+
+        Args:
+            name (str): The name of the engine.
+            default_model (str): The default model to be used by this engine.
+        """
+        self.name = name
+        self.default_model = default_model
+        self.root_dir = Path(__file__).resolve().parent.parent
+        self.full_config = self._load_full_config()
+        self.env_manager = EnvironmentManager(self.root_dir)
+        self.temp_prompt_name = ".ca_prompt.tmp"
+        self.skill_scanner = SkillScanner(self.root_dir / "skills")
+        self.prompt_scanner = PromptScanner(self.root_dir / "prompt")
+        self.hook_scanner = HookScanner(self._get_hook_search_roots())
+        self.plugin_scanner = PluginScanner(self.root_dir / "plugins")
+
+    def _load_full_config(self) -> dict:
+        """Loads the complete configuration from config.json in the project root.
+
+        Returns:
+            dict: The loaded configuration dictionary, or an empty dict if not found or invalid.
+        """
+        config_path = self.root_dir / "config.json"
+        if not config_path.exists():
+            return {}
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def _resolve_config_groups(self, section_name: str) -> List[str]:
+        """Resolves configuration groups based on the current working directory.
+
+        It matches the current directory against patterns defined in the configuration
+        and resolves any nested group references.
+
+        Args:
+            section_name (str): The configuration section to resolve (e.g., 'skills', 'prompts').
+
+        Returns:
+            List[str]: A list of resolved item names belonging to the matched group.
+        """
+        import re
+
+        cfg = self.full_config.get(section_name, {})
+        groups = cfg.get("groups", {})
+        mappings = cfg.get("project_mapping", [])
+        default_group = cfg.get("default_group", "common")
+
+        cwd_str = str(Path.cwd().as_posix())
+        selected_group_name = default_group
+
+        # print(f"DEBUG: Current path: {cwd_str}")
+        for mapping in mappings:
+            pattern = mapping.get("pattern")
+            if pattern:
+                # 尝试两种匹配：全路径和去掉盘符的路径
+                path_to_match = cwd_str
+                if re.search(pattern, path_to_match, re.IGNORECASE):
+                    selected_group_name = mapping.get("group")
+                    break
+
+        # 仅在解析 prompts 时打印，避免与 skills 的输出重复
+        if section_name == "prompts":
+            print(f"🎯 Prompts matched group: [{selected_group_name}]")
+
+        def resolve(name, visited=None):
+            if visited is None:
+                visited = set()
+            if name in visited:
+                return []
+
+            visited.add(name)
+
+            result = []
+            if name in groups:
+                for item in groups.get(name, []):
+                    result.extend(resolve(item, visited))
+            else:
+                result.append(name)
+            return result
+
+        return list(set(resolve(selected_group_name)))
+
+    def _get_mapped_config_value(
+        self,
+        section_name: str,
+        mapping_key: str,
+        value_key: str,
+    ) -> Optional[str]:
+        """Retrieves a specific configuration value based on project path mapping.
+
+        Args:
+            section_name (str): The configuration section.
+            mapping_key (str): The key containing the mapping list.
+            value_key (str): The key for the value to retrieve from the matched mapping.
+
+        Returns:
+            Optional[str]: The mapped value if found, otherwise None.
+        """
+        import re
+
+        cfg = self.full_config.get(section_name, {})
+        mappings = cfg.get(mapping_key, [])
+        cwd_str = str(Path.cwd().as_posix())
+
+        for mapping in mappings:
+            pattern = mapping.get("pattern")
+            if pattern and re.search(pattern, cwd_str, re.IGNORECASE):
+                value = mapping.get(value_key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        return None
+
+    def _resolve_path_token(self, raw_path: str) -> Path:
+        """Resolves path tokens ($CWD, $CODEAGENT) in a raw path string.
+
+        Args:
+            raw_path (str): The path string potentially containing tokens.
+
+        Returns:
+            Path: The resolved absolute Path object.
+        """
+        expanded = raw_path.replace("$CWD", str(Path.cwd().as_posix()))
+        expanded = expanded.replace("$CODEAGENT", str(self.root_dir.as_posix()))
+        path_obj = Path(expanded)
+        if path_obj.is_absolute():
+            return path_obj
+        return (self.root_dir / path_obj).resolve()
+
+    def _get_skill_search_roots(self) -> List[Path]:
+        """Identifies all root directories where skills should be searched.
+
+        This includes the default skills directory, any project-specific skill roots
+        defined in config.json, and the 'skills' directory in the current working directory.
+
+        Returns:
+            List[Path]: A list of absolute paths to skill search roots.
+        """
+        skill_path_cfg = self.full_config.get("paths", {}).get("skills", "skills")
+        default_root = (self.root_dir / skill_path_cfg).resolve()
+
+        # 允许多个映射路径
+        cfg = self.full_config.get("skills", {})
+        mappings = cfg.get("project_skill_root_mapping", [])
+        cwd = Path.cwd().resolve()
+        cwd_str = str(cwd.as_posix())
+
+        roots = []
+        import re
+
+        for mapping in mappings:
+            pattern = mapping.get("pattern")
+            if pattern and re.search(pattern, cwd_str, re.IGNORECASE):
+                mapped_path = mapping.get("path")
+                if mapped_path:
+                    roots.append(self._resolve_path_token(mapped_path).resolve())
+
+        # 自动加载当前目录下的 skills/ 目录 (排除 CodeAgent 本身)
+        if cwd != self.root_dir.resolve():
+            project_skills = cwd / "skills"
+            if project_skills.is_dir():
+                if project_skills.resolve() not in roots:
+                    roots.append(project_skills.resolve())
+
+        # 始终包含默认路径作为兜底
+        if default_root not in roots:
+            roots.append(default_root)
+
+        return roots
+
+    def _get_plugin_search_roots(self) -> List[Path]:
+        """Identifies all root directories where plugins should be searched.
+
+        This includes the default plugins directory and the 'plugins' directory
+        in the current working directory.
+
+        Returns:
+            List[Path]: A list of absolute paths to plugin search roots.
+        """
+        plugin_path_cfg = self.full_config.get("paths", {}).get("plugins", "plugins")
+        default_root = (self.root_dir / plugin_path_cfg).resolve()
+
+        roots = []
+        cwd = Path.cwd().resolve()
+
+        # 自动加载当前目录下的 plugins/ 目录 (排除 CodeAgent 本身)
+        if cwd != self.root_dir.resolve():
+            project_plugins = cwd / "plugins"
+            if project_plugins.is_dir():
+                roots.append(project_plugins.resolve())
+
+        # 始终包含默认路径作为兜底
+        if default_root not in roots:
+            roots.append(default_root)
+
+        return roots
+
+    def _get_hook_search_roots(self) -> List[Path]:
+        """Identifies all root directories where hooks should be searched.
+
+        This includes the default hooks directory and the 'hooks' directory
+        in the current working directory.
+
+        Returns:
+            List[Path]: A list of absolute paths to hook search roots.
+        """
+        hook_path_cfg = self.full_config.get("paths", {}).get("hooks", "hooks")
+        default_root = (self.root_dir / hook_path_cfg).resolve()
+
+        roots = []
+        cwd = Path.cwd().resolve()
+
+        # 自动加载当前目录下的 hooks/ 目录 (排除 CodeAgent 本身)
+        if cwd != self.root_dir.resolve():
+            project_hooks = cwd / "hooks"
+            if project_hooks.is_dir():
+                roots.append(project_hooks.resolve())
+
+        # 始终包含默认路径作为兜底
+        if default_root not in roots:
+            roots.append(default_root)
+
+        return roots
+
+    def get_current_project_group(self) -> str:
+        """Determines the unified project group name for the current working directory.
+
+        It first checks if the CWD is within CodeAgent itself. If not, it attempts
+         to match the CWD against the 'project_registry' in config.json.
+
+        Returns:
+            str: The matched group name (e.g., 'codeagent', 'some-project'),
+                 or the default group if no match is found.
+        """
+        cwd = Path.cwd().resolve()
+        root = self.root_dir.resolve()
+
+        # 1. 结构化自动识别：如果当前 CWD 是 CodeAgent 本身或其子目录，自动判定为 codeagent
+        if cwd == root or root in cwd.parents:
+            return "codeagent"
+
+        # 2. 从统一的项目注册表中匹配 (支持最长路径优先)
+        registry = self.full_config.get("project_registry", [])
+        best_match_group = None
+        max_match_len = -1
+
+        for item in registry:
+            raw_path = item.get("path")
+            if not raw_path:
+                continue
+
+            try:
+                mapping_path = Path(raw_path).resolve()
+                if cwd == mapping_path or mapping_path in cwd.parents:
+                    match_len = len(str(mapping_path.as_posix()))
+                    if match_len > max_match_len:
+                        max_match_len = match_len
+                        best_match_group = item.get("group")
+            except Exception:
+                continue
+
+        if best_match_group:
+            return best_match_group
+
+        return self.full_config.get("default_group", "common")
+
+    def get_skills_to_mount(self) -> List[str]:
+        """Retrieves the list of skill names to be mounted for the current project.
+
+        Returns:
+            List[str]: A list of skill names.
+        """
+        from core.skill_scanner import get_skills_to_mount
+
+        project_type = self.get_current_project_group()
+        return get_skills_to_mount(
+            self.full_config, self.skill_scanner, project_type=project_type
+        )
+
+    def get_plugins_to_mount(self) -> List[Dict[str, Any]]:
+        """Retrieves the list of plugins to be mounted for the current project.
+
+        Returns:
+            List[Dict[str, Any]]: A list of plugin metadata dictionaries.
+        """
+        from core.plugin_scanner import get_plugins_to_mount
+
+        project_type = self.get_current_project_group()
+        return get_plugins_to_mount(
+            self.full_config, self.plugin_scanner, project_type=project_type
+        )
+
+    def get_prompts_to_inject(self) -> List[str]:
+        """Retrieves the list of prompt groups to be injected for the current project.
+
+        Returns:
+            List[str]: A list of prompt group names.
+        """
+        from core.prompt_scanner import get_prompts_to_inject
+
+        project_type = self.get_current_project_group()
+        return get_prompts_to_inject(
+            self.full_config, self.prompt_scanner, project_type=project_type
+        )
+
+    def get_hooks_to_inject(self) -> List[Dict[str, Any]]:
+        """Retrieves the list of hooks to be injected for the current project.
+
+        Returns:
+            List[Dict[str, Any]]: A list of hook metadata dictionaries.
+        """
+        from core.hook_scanner import get_hooks_to_inject
+
+        project_type = self.get_current_project_group()
+        return get_hooks_to_inject(
+            self.full_config, self.hook_scanner, project_type=project_type
+        )
+
+    def assemble_prompt(self, task: str | None = None, is_review: bool = False) -> str:
+        """Assembles the final system prompt by combining base prompts and injected groups.
+
+        Args:
+            task (str | None): The current task description.
+            is_review (bool): Whether to assemble a review-specific prompt.
+
+        Returns:
+            str: The assembled prompt string.
+        """
+        groups = self.get_prompts_to_inject()
+        prompt_fn = prompt_review if is_review else prompt_general
+
+        return prompt_fn(task=task, groups=groups)
+
+    def write_temp_prompt(self, prompt: str) -> str:
+        """Writes the assembled prompt to a temporary file in the project root.
+
+        Args:
+            prompt (str): The full prompt string to write.
+
+        Returns:
+            str: A guidance message for the agent on how to load the prompt.
+        """
+        # 1. 依然将物理文件保存在 CodeAgent 根目录，避免污染项目
+        temp_file_path = self.root_dir / self.temp_prompt_name
+        temp_file_path.write_text(prompt, encoding="utf-8")
+
+        # 2. 获取绝对路径并标准化
+        abs_path = str(temp_file_path.absolute()).replace("\\", "/")
+
+        # 根据 OS 建议读取命令
+        read_cmd = "Get-Content" if os.name == "nt" else "cat"
+
+        return (
+            f"IMPORTANT: The engineering standards for this session are in the CodeAgent file: {abs_path}. "
+            f"Please use your 'run_shell_command' (e.g., '{read_cmd}') to load this file IMMEDIATELY. "
+            f"**CRITICAL**: If searching for 'IMPLEMENTATION_PLAN.md' or other core files, be aware they may be listed in '.gitignore'. "
+            f"You MUST use 'read_file' directly or set 'no_ignore=true' in search tools to find them."
+        )
+
+    def cleanup_temp_prompt(self):
+        """Removes the temporary prompt file from the project root."""
+        # 清理 CodeAgent 根目录下的临时文件
+        temp_file_path = self.root_dir / self.temp_prompt_name
+        if temp_file_path.exists():
+            temp_file_path.unlink()
+
+    def run_shell(self, cmd: List[str], env: dict):
+        """Executes a command in a subprocess with the given environment.
+
+        Args:
+            cmd (List[str]): The command and its arguments as a list of strings.
+            env (dict): A dictionary of environment variables.
+
+        Raises:
+            FileNotFoundError: If the command executable cannot be found.
+            SystemExit: If the command returns a non-zero exit code.
+        """
+        resolved_cmd = list(cmd)
+        executable = shutil.which(resolved_cmd[0], path=env.get("PATH"))
+        if executable:
+            resolved_cmd[0] = executable
+
+        try:
+            result = subprocess.run(resolved_cmd, env=env, check=False)
+        except FileNotFoundError:
+            print(f"❌ Command not found: {cmd[0]}", file=sys.stderr)
+            raise
+
+        if result.returncode:
+            raise SystemExit(result.returncode)
+
+    def ensure_skills_link(self, target_link_path: str):
+        """Ensures that skill links are created in the target directory.
+
+        It resolves the skills to be mounted based on the current project group,
+        cleans up any existing stale links, and creates new symlinks or junctions.
+
+        Args:
+            target_link_path (str): The relative path to the directory where skills should be linked.
+        """
+        link_path = (Path.cwd() / target_link_path).absolute()
+        self._cleanup_link_dir(link_path)
+
+        skills_to_mount = self.get_skills_to_mount()
+        if not skills_to_mount:
+            return
+
+        skill_roots = self._get_skill_search_roots()
+
+        # 准备实际需要挂载的技能源列表
+        resolved_skills: List[Tuple[str, Path]] = []
+        resolved_skill_names = set()
+
+        def append_resolved_skill(target_name: str, skill_src: Path):
+            if target_name in resolved_skill_names:
+                print(
+                    f"ℹ️ Skip duplicate skill '{target_name}', "
+                    f"keeping higher-priority source and ignoring: {skill_src}"
+                )
+                return
+            resolved_skill_names.add(target_name)
+            resolved_skills.append((target_name, skill_src))
+
+        for skill_name in skills_to_mount:
+            skill_src = None
+            for root in skill_roots:
+                candidate = (root / skill_name).resolve()
+                if candidate.exists():
+                    skill_src = candidate
+                    break
+
+            if skill_src:
+                if skill_src.is_dir() and not (skill_src / "SKILL.md").exists():
+                    for sub_item in skill_src.iterdir():
+                        if sub_item.is_dir() and (sub_item / "SKILL.md").exists():
+                            append_resolved_skill(sub_item.name, sub_item)
+                else:
+                    append_resolved_skill(skill_name.split("/")[-1], skill_src)
+            else:
+                searched = ", ".join(str(root / skill_name) for root in skill_roots)
+                print(
+                    f"⚠️ Warning: Skill '{skill_name}' not found. Searched: {searched}"
+                )
+
+        if not resolved_skills:
+            searched_roots = ", ".join(str(root) for root in skill_roots)
+            print(
+                "⚠️ Warning: No mountable skills were resolved. "
+                "Matched skill groups exist, but none of the candidate directories contain a valid SKILL.md. "
+                f"Search roots: {searched_roots}"
+            )
+            return
+
+        print(
+            f"🛠️  Skills matched group: [{self.get_current_project_group()}] "
+            f"(匹配 {len(skills_to_mount)} 个根目录，挂载 {len(resolved_skills)} 个技能)"
+        )
+        link_path.mkdir(parents=True, exist_ok=True)
+
+        for target_name, skill_src in resolved_skills:
+            target_skill_path = link_path / target_name
+            if target_skill_path.exists():
+                self._safe_remove_link(target_skill_path)
+
+            try:
+                self._create_skill_link(skill_src, target_skill_path)
+            except Exception as e:
+                print(f"⚠️ Failed to link skill '{target_name}': {e}")
+
+    def _get_global_ext_dir(self) -> Path:
+        """Retrieves the global extensions directory.
+
+        Defaults to the '.gemini/extensions' directory in the user's home folder.
+        Subclasses can override this.
+
+        Returns:
+            Path: The absolute path to the global extensions directory.
+        """
+        home = Path.home()
+        ext_dir = home / ".gemini" / "extensions"
+        return ext_dir.absolute()
+
+    def ensure_plugins_link(self, target_link_path: str = None):
+        """Ensures that plugin links exist in the global extensions directory.
+
+        Uses a 'stable mapping' strategy: if a link already points to the correct
+        source, it is not recreated. Stale links are removed and recreated.
+
+        Args:
+            target_link_path (str, optional): Reserved for future use. Defaults to None.
+        """
+        plugins_to_mount = self.get_plugins_to_mount()
+        if not plugins_to_mount:
+            return
+
+        global_ext_dir = self._get_global_ext_dir()
+        global_ext_dir.mkdir(parents=True, exist_ok=True)
+
+        mounted_count = 0
+        for plugin_meta in plugins_to_mount:
+            plugin_name = plugin_meta["name"]
+            plugin_src_str = plugin_meta.get("_plugin_dir")
+
+            if not plugin_src_str:
+                continue
+
+            plugin_src = Path(plugin_src_str).resolve()
+            target_link = global_ext_dir / plugin_name
+
+            # 检查是否已存在正确的链接
+            if target_link.exists():
+                try:
+                    # 如果已经是链接，检查它的指向
+                    if self._is_windows_link(target_link) or target_link.is_symlink():
+                        if target_link.resolve() == plugin_src:
+                            continue  # 已经指对了，跳过
+                        else:
+                            # 指错了，删掉重建
+                            self._safe_remove_link(target_link)
+                    else:
+                        print(
+                            f"⚠️ Warning: '{plugin_name}' exists as a real directory in global exts. Skipping."
+                        )
+                        continue
+                except Exception:
+                    self._safe_remove_link(target_link)
+
+            try:
+                self._create_skill_link(plugin_src, target_link)
+                mounted_count += 1
+            except Exception as e:
+                print(f"⚠️ Failed to link plugin '{plugin_name}': {e}")
+
+        if mounted_count:
+            print(
+                f"🔌 Ensured {mounted_count} plugin links in global extensions directory"
+            )
+
+    def cleanup_plugins_link(self, target_link_path: str = None):
+        """Removes temporary plugin links from the global extensions directory.
+
+        Only removes items that are verified to be links (symlinks or Windows junctions).
+
+        Args:
+            target_link_path (str, optional): Reserved for future use. Defaults to None.
+        """
+        plugins_to_mount = self.get_plugins_to_mount()
+        if not plugins_to_mount:
+            return
+
+        global_ext_dir = self._get_global_ext_dir()
+        for plugin_meta in plugins_to_mount:
+            plugin_name = plugin_meta["name"]
+            target_link = global_ext_dir / plugin_name
+
+            # 只有是链接时才删除，绝不误删真实安装的扩展
+            if self._is_windows_link(target_link) or target_link.is_symlink():
+                self._safe_remove_link(target_link)
+
+    def _create_skill_link(self, source: Path, target: Path):
+        """Creates a symbolic link or Windows junction from source to target.
+
+        Args:
+            source (Path): The source directory or file.
+            target (Path): The target link path.
+
+        Raises:
+            subprocess.CalledProcessError: If mklink fails on Windows.
+            OSError: If symlink creation fails on other platforms.
+        """
+        try:
+            target.symlink_to(source, target_is_directory=source.is_dir())
+            return
+        except OSError:
+            if os.name != "nt" or not source.is_dir():
+                raise
+
+        # Windows directory symlinks can require developer mode/admin rights.
+        # Junctions work without that privilege and still keep cleanup scoped.
+        subprocess.run(
+            ["cmd", "/c", "mklink", "/j", str(target), str(source)],
+            capture_output=True,
+            check=True,
+        )
+
+    def _safe_remove_link(self, path: Path):
+        """Safely removes a link without affecting the target content.
+
+        Handles both standard symlinks and Windows junctions.
+
+        Args:
+            path (Path): The path to the link to remove.
+        """
+        if not path.exists() and not path.is_symlink():
+            return
+
+        try:
+            if os.name == "nt":
+                if path.is_dir():
+                    subprocess.run(
+                        ["cmd", "/c", "rmdir", str(path)],
+                        capture_output=True,
+                        check=False,
+                    )
+                else:
+                    path.unlink(missing_ok=True)
+            else:
+                path.unlink(missing_ok=True)
+        except Exception as e:
+            print(f"⚠️ Security: Failed to remove link {path}: {e}")
+
+    def _cleanup_link_dir(self, link_path: Path):
+        """Cleans up stale links within a directory while preserving other files.
+
+        Args:
+            link_path (Path): The directory to clean up.
+        """
+        if not link_path.exists():
+            return
+
+        try:
+            for item in list(link_path.iterdir()):
+                if self._is_windows_link(item) or item.is_symlink():
+                    self._safe_remove_link(item)
+
+            if not any(link_path.iterdir()):
+                link_path.rmdir()
+        except Exception:
+            pass
+
+    def cleanup_skills_link(self, target_link_path: str):
+        """Cleans up injected skill links in the specified directory.
+
+        Args:
+            target_link_path (str): The relative path to the directory containing skill links.
+        """
+        self._cleanup_link_dir((Path.cwd() / target_link_path).absolute())
+
+    def _is_windows_link(self, path: Path) -> bool:
+        """Verifies if a path is a Windows link or junction point.
+
+        Uses multiple checks including symlink status, reparse point attributes,
+        and mount point status.
+
+        Args:
+            path (Path): The path to check.
+
+        Returns:
+            bool: True if it's a Windows link/junction, False otherwise.
+        """
+        try:
+            # 1. 优先使用标准 is_symlink (跨平台)
+            if path.is_symlink():
+                return True
+
+            # 2. 检查 Lstat 属性 (针对 Windows Junction)
+            stat_info = path.lstat()
+            # st_file_attributes 仅在 Windows 上可用
+            attrs = getattr(stat_info, "st_file_attributes", 0)
+            is_reparse = bool(attrs & 1024)  # 1024 = FILE_ATTRIBUTE_REPARSE_POINT
+
+            if is_reparse:
+                return True
+
+            # 3. 检查是否为挂载点 (Windows 下 Junction 常被识别为 mount)
+            if path.is_mount():
+                return True
+
+            return False
+        except Exception:
+            return False
+
+    def _windows_safe_rmtree(self, path: Path):
+        """Legacy method for safe directory removal.
+
+        Deprecated: No longer uses recursive removal for safety.
+        Delegates to _safe_remove_link.
+
+        Args:
+            path (Path): The path to remove.
+        """
+        self._safe_remove_link(path)
+
+    def inject_hooks_to_settings(
+        self, settings_rel_path: str, hooks: List[Dict[str, Any]]
+    ):
+        """Injects hook configurations into a settings file (e.g., .gemini/settings.json).
+
+        Creates a backup of the settings file if it doesn't already exist.
+
+        Args:
+            settings_rel_path (str): Relative path to the settings file.
+            hooks (List[Dict[str, Any]]): List of hook metadata dictionaries.
+        """
+        if not hooks:
+            return
+
+        settings_path = (Path.cwd() / settings_rel_path).absolute()
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 1. 备份原始配置 (只在没有备份时创建，避免循环覆盖)
+        backup_path = settings_path.with_suffix(".json.bak")
+        if settings_path.exists() and not backup_path.exists():
+            shutil.copy2(settings_path, backup_path)
+            print(f"💾 Created safety backup: {backup_path.name}")
+
+        data = {}
+        if settings_path.exists():
+            try:
+                with open(settings_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                data = {}
+
+        if "hooks" not in data:
+            data["hooks"] = {}
+
+        data["_ca_injected"] = True
+
+        for hook in hooks:
+            event = hook["event"]
+            if event not in data["hooks"]:
+                data["hooks"][event] = [{"matcher": "*", "hooks": []}]
+
+            target_group = next(
+                (g for g in data["hooks"][event] if g.get("matcher") == "*"), None
+            )
+            if not target_group:
+                target_group = {"matcher": "*", "hooks": []}
+                data["hooks"][event].append(target_group)
+
+            event_hooks = target_group["hooks"]
+            existing = next(
+                (h for h in event_hooks if h.get("name") == hook["name"]), None
+            )
+
+            hook_entry = {
+                "name": hook["name"],
+                "type": "command",
+                "command": hook["command"],
+            }
+
+            if existing:
+                existing.update(hook_entry)
+            else:
+                event_hooks.append(hook_entry)
+
+        with open(settings_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+        print(f"✅ Injected {len(hooks)} hooks into {settings_rel_path}")
+
+    def inject_plugins_to_settings(self, settings_rel_path: str):
+        """Orchestrates the injection of plugin configurations into a settings file.
+
+        Manages backups and delegates loading, formatting, and saving to helper methods.
+
+        Args:
+            settings_rel_path (str): Relative path to the settings file.
+        """
+        plugins = self.get_plugins_to_mount()
+        if not plugins:
+            return
+
+        settings_path = (Path.cwd() / settings_rel_path).absolute()
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 1. 备份原始配置 (统一使用 .bak 后缀，简化逻辑)
+        backup_path = settings_path.with_suffix(settings_path.suffix + ".bak")
+        if settings_path.exists() and not backup_path.exists():
+            shutil.copy2(settings_path, backup_path)
+            print(f"💾 Created safety backup: {backup_path.name}")
+
+        # 2. 调用子类提供的加载逻辑
+        data = self._load_config(settings_path)
+        data["_ca_injected"] = True
+
+        # 3. 调用子类提供的格式化逻辑
+        data = self._format_plugins_for_settings(data, plugins)
+
+        # 4. 调用子类提供的保存逻辑
+        self._save_config(settings_path, data)
+
+        print(f"✅ Registered plugins in {settings_rel_path}")
+
+    def _load_config(self, path: Path) -> Any:
+        """Loads a configuration file.
+
+        Default implementation handles JSON. Subclasses can override for other formats.
+
+        Args:
+            path (Path): The path to the configuration file.
+
+        Returns:
+            Any: The loaded configuration data.
+        """
+        if not path.exists():
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def _save_config(self, path: Path, data: Any):
+        """Saves configuration data to a file.
+
+        Default implementation handles JSON.
+
+        Args:
+            path (Path): The path to the configuration file.
+            data (Any): The data to save.
+        """
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+    def _format_plugins_for_settings(self, data: Any, plugins: List[dict]) -> Any:
+        """Formats plugin metadata for the specific engine's settings.
+
+        Args:
+            data (Any): The existing configuration data.
+            plugins (List[dict]): The list of plugins to format.
+
+        Returns:
+            Any: The updated configuration data with plugins registered.
+        """
+        return data
+
+    def restore_settings(self, settings_rel_path: str):
+        """Restores a settings file from its backup or removes it if it was newly created.
+
+        Args:
+            settings_rel_path (str): Relative path to the settings file to restore.
+        """
+        settings_path = (Path.cwd() / settings_rel_path).absolute()
+        backup_path = settings_path.with_suffix(settings_path.suffix + ".bak")
+
+        if backup_path.exists():
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(str(backup_path), str(settings_path))
+            print(f"♻️ Restored {settings_rel_path} from backup")
+            return
+
+        # 如果没有备份但有注入标记，则直接删除（说明之前是新建的文件）
+        if settings_path.exists():
+            try:
+                data = self._load_config(settings_path)
+                if isinstance(data, dict) and data.get("_ca_injected") is True:
+                    settings_path.unlink()
+                    print(f"♻️ Removed injected {settings_rel_path}")
+            except Exception:
+                pass
+
+    def execute(self, message: str, model: str, non_interactive: bool = False):
+        """Abstract method to execute a message with the LLM engine.
+
+        Args:
+            message (str): The message or prompt to send.
+            model (str): The model name to use.
+            non_interactive (bool): Whether to run in non-interactive mode.
+
+        Raises:
+            NotImplementedError: Must be implemented by subclasses.
+        """
+        raise NotImplementedError

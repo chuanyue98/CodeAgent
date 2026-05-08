@@ -1,0 +1,296 @@
+import React, { useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { BookMarked, ChevronRight, Files, GitBranch, Search } from 'lucide-react';
+import { useProject } from '../context/ProjectContext';
+
+interface PromptFile {
+  name: string;
+  path: string;
+}
+
+interface PromptGroup {
+  id: string;
+  name: string;
+  description: string;
+  readme: string;
+  files: PromptFile[];
+}
+
+const EMPTY_GROUP = { skills: [], prompts: [], hooks: [], plugins: [] };
+
+const PromptsGallery: React.FC = () => {
+  const { currentGroup, groups, refreshConfig } = useProject();
+  const [promptGroups, setPromptGroups] = useState<PromptGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedPrompt, setSelectedPrompt] = useState<PromptGroup | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    const fetchPrompts = async () => {
+      try {
+        const response = await fetch('/api/prompts');
+        if (!response.ok) {
+          throw new Error('Failed to fetch prompts');
+        }
+        const data = await response.json();
+        const promptArray = Array.isArray(data) ? data : [];
+        setPromptGroups(promptArray);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPrompts();
+  }, []);
+
+  const isPromptActive = (promptId: string) => {
+    return groups[currentGroup]?.prompts?.includes(promptId) ?? false;
+  };
+
+  const togglePromptStatus = async (promptId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!currentGroup) return;
+
+    try {
+      const currentGroupDef = groups[currentGroup] || EMPTY_GROUP;
+      const newPrompts = [...currentGroupDef.prompts];
+      const index = newPrompts.indexOf(promptId);
+
+      if (index > -1) {
+        newPrompts.splice(index, 1);
+      } else {
+        newPrompts.push(promptId);
+      }
+
+      await fetch(`/api/groups/${currentGroup}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...currentGroupDef, prompts: newPrompts }),
+      });
+
+      await refreshConfig();
+    } catch (err) {
+      console.error('Failed to toggle prompt:', err);
+      setError(err instanceof Error ? err.message : 'Failed to toggle prompt');
+    }
+  };
+
+  const filteredPrompts = promptGroups.filter((promptGroup) =>
+    promptGroup.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    promptGroup.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    promptGroup.files.some((file) =>
+      file.name.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 text-center text-red-500">
+        <p>Error: {error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-4 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (selectedPrompt) {
+    return (
+      <div className="flex h-full overflow-hidden p-6 gap-6">
+        <div className="flex-1 glass-card flex flex-col overflow-hidden">
+          <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-slate-50/30 backdrop-blur-sm">
+            <button
+              onClick={() => setSelectedPrompt(null)}
+              className="p-2 hover:bg-slate-100 rounded-xl transition-all border border-slate-100"
+            >
+              <ChevronRight className="w-5 h-5 rotate-180" />
+            </button>
+            <div className="flex-1">
+              <span className="text-[10px] uppercase tracking-widest text-primary font-bold">Prompt Group</span>
+              <h1 className="text-2xl font-semibold tracking-tight capitalize">{selectedPrompt.name}</h1>
+            </div>
+            <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100">
+              <span className="text-xs font-semibold text-slate-500">Active in {currentGroup}</span>
+              <button
+                onClick={(e) => togglePromptStatus(selectedPrompt.id, e)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+                  isPromptActive(selectedPrompt.id) ? 'bg-primary' : 'bg-slate-200'
+                }`}
+              >
+                <span
+                  className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                    isPromptActive(selectedPrompt.id) ? 'translate-x-5' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] flex-1 min-h-0">
+            <div className="border-r border-slate-100 bg-slate-50/30 p-6 overflow-y-auto">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400 mb-4">
+                <Files className="w-4 h-4 text-primary" />
+                Files in Group
+              </div>
+              <div className="space-y-2">
+                {selectedPrompt.files.map((file) => (
+                  <div
+                    key={file.path}
+                    className="rounded-xl border border-slate-100 bg-white px-4 py-3"
+                  >
+                    <div className="text-sm font-semibold text-slate-800">{file.name}</div>
+                    <div className="mt-1 text-[11px] font-mono text-slate-400 break-all">
+                      {file.path}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="overflow-y-auto p-8 prose prose-slate prose-cyan max-w-none font-sans">
+              <ReactMarkdown
+                components={{
+                  code({ className, children, ...props }) {
+                    return (
+                      <code
+                        className={`${className ?? ''} font-mono bg-slate-50 px-1.5 py-0.5 rounded text-primary`}
+                        {...props}
+                      >
+                        {children}
+                      </code>
+                    );
+                  },
+                  pre({ children, ...props }) {
+                    return (
+                      <pre
+                        className="!bg-slate-900 !text-slate-100 p-4 rounded-xl shadow-inner border border-slate-800"
+                        {...props}
+                      >
+                        {children}
+                      </pre>
+                    );
+                  },
+                }}
+              >
+                {selectedPrompt.readme}
+              </ReactMarkdown>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden p-6 gap-6">
+      <div className="flex items-center justify-between glass-card p-6 bg-slate-50/30 backdrop-blur-sm">
+        <div className="relative max-w-md w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search prompt groups..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 bg-white border border-slate-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary/30 transition-all text-sm placeholder:text-slate-400"
+          />
+        </div>
+        <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-sm font-semibold">
+          <GitBranch className="w-4 h-4" />
+          <span>{promptGroups.length} Prompt Groups</span>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto pr-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {filteredPrompts.map((promptGroup) => {
+            const active = isPromptActive(promptGroup.id);
+            return (
+              <div
+                key={promptGroup.id}
+                onClick={() => setSelectedPrompt(promptGroup)}
+                className={`group glass-card p-6 hover:border-primary/20 hover:bg-slate-50/50 transition-all cursor-pointer relative overflow-hidden ${
+                  !active ? 'opacity-70' : ''
+                }`}
+              >
+                <div className="flex justify-between items-start mb-4">
+                  <div className={`p-2 rounded-lg ${active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                    <BookMarked className="w-5 h-5" />
+                  </div>
+
+                  <button
+                    onClick={(e) => togglePromptStatus(promptGroup.id, e)}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+                      active ? 'bg-primary' : 'bg-slate-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                        active ? 'translate-x-5' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <h3 className="text-lg font-semibold tracking-tight group-hover:text-primary transition-colors mb-2 capitalize">
+                  {promptGroup.name}
+                </h3>
+                <p className="text-sm text-slate-500 line-clamp-3 font-medium leading-relaxed">
+                  {promptGroup.description}
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {promptGroup.files.slice(0, 4).map((file) => (
+                    <span
+                      key={file.path}
+                      className="text-[10px] px-2 py-1 rounded-full border border-slate-100 bg-slate-50 text-slate-500 font-semibold"
+                    >
+                      {file.name}
+                    </span>
+                  ))}
+                  {promptGroup.files.length > 4 && (
+                    <span className="text-[10px] px-2 py-1 rounded-full border border-slate-100 bg-slate-50 text-slate-400 font-semibold">
+                      +{promptGroup.files.length - 4}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-6 flex items-center justify-between text-[11px] font-bold uppercase tracking-widest">
+                  <span className="text-slate-400">{promptGroup.files.length} files</span>
+                  <span className="text-primary/70 group-hover:text-primary transition-all group-hover:translate-x-1 flex items-center">
+                    View group <ChevronRight className="w-3 h-3 ml-1" />
+                  </span>
+                </div>
+
+                <div className={`absolute top-0 right-0 w-1 h-full transition-all ${
+                  active ? 'bg-primary' : 'bg-slate-200'
+                }`} />
+              </div>
+            );
+          })}
+        </div>
+
+        {filteredPrompts.length === 0 && (
+          <div className="text-center py-20 text-slate-400 glass-card">
+            No prompt groups found matching your search.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default PromptsGallery;
