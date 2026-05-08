@@ -7,7 +7,16 @@ from fastapi.staticfiles import StaticFiles
 from core.prompt_scanner import DEFAULT_GROUP_PROMPTS, PromptScanner
 from core.skill_scanner import SkillScanner
 from core.plugin_scanner import PluginScanner
-from core.web.routers import analytics, config, hooks, plugins, prompts, skills, tasks
+from core.web.routers import (
+    analytics,
+    config,
+    hooks,
+    plugins,
+    prompts,
+    skills,
+    tasks,
+    terminal,
+)
 from core.web.resource_paths import ROOT_DIR, resolve_resource_path
 
 CONFIG_PATH = ROOT_DIR / "config.json"
@@ -109,6 +118,7 @@ app.include_router(plugins.router)
 app.include_router(prompts.router)
 app.include_router(skills.router)
 app.include_router(tasks.router)
+app.include_router(terminal.router)
 
 
 @app.get("/api/health")

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp } from 'lucide-react';
+import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, TerminalSquare } from 'lucide-react';
 import SkillGallery from './components/SkillGallery';
 import ConfigHub from './components/ConfigHub';
 import TaskDashboard from './components/TaskDashboard';
@@ -10,6 +10,7 @@ import PromptsGallery from './components/PromptsGallery';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ManifestDrawer from './components/ManifestDrawer';
 import Analytics from './components/Analytics';
+import Terminal from './components/Terminal';
 
 const navItems = [
   { path: '/skills', label: 'Skills', icon: Box },
@@ -19,6 +20,7 @@ const navItems = [
   { path: '/config', label: 'Configuration', icon: Settings },
   { path: '/dashboard', label: 'Dashboard', icon: Activity },
   { path: '/analytics', label: 'Analytics', icon: TrendingUp },
+  { path: '/terminal', label: 'Terminal', icon: TerminalSquare },
 ] as const;
 
 const PAGE_LABELS: Record<string, string> = {
@@ -29,6 +31,7 @@ const PAGE_LABELS: Record<string, string> = {
   '/config': 'Configuration',
   '/dashboard': 'Dashboard',
   '/analytics': 'Analytics',
+  '/terminal': 'Terminal',
 };
 
 function App() {
@@ -88,7 +91,7 @@ function App() {
           <h2 className="text-xl font-bold text-slate-800">{pageLabel}</h2>
           <ProjectSwitcher />
         </header>
-        <div className="flex-1 min-h-0 overflow-y-auto pr-2 custom-scrollbar">
+        <div className={`flex-1 min-h-0 ${pathname === '/terminal' ? 'overflow-hidden glass-card' : 'overflow-y-auto pr-2 custom-scrollbar'}`}>
           <Routes>
             <Route path="/" element={<Navigate to="/skills" replace />} />
             <Route path="/skills" element={<SkillGallery />} />
@@ -98,6 +101,7 @@ function App() {
             <Route path="/config" element={<ConfigHub />} />
             <Route path="/dashboard" element={<TaskDashboard />} />
             <Route path="/analytics" element={<Analytics />} />
+            <Route path="/terminal" element={<Terminal />} />
           </Routes>
         </div>
       </main>
