@@ -28,12 +28,13 @@ def scan_gemini_usage(
     entries: List[RawUsageEntry] = []
 
     for jsonl_file in base.rglob("*.jsonl"):
-        # Quick check: if the file hasn't been modified since since_timestamp, skip it.
-        # This is an optimization. since_timestamp is ISO 8601, but we can compare
-        # it with file mtime if we convert since_timestamp to epoch.
-        # For simplicity and correctness (in case of clock drift), we'll parse the file
-        # but filter entries inside.
-        workspace = jsonl_file.parent.parent.name
+        # Gemini has two layouts:
+        # 1. tmp/<project>/chats/<session>.jsonl          → parent.parent = <project>
+        # 2. tmp/<project>/chats/<session_hash>/<f>.jsonl → parent.parent = chats, need to go up one more
+        candidate = jsonl_file.parent.parent
+        workspace = (
+            candidate.parent.name if candidate.name == "chats" else candidate.name
+        )
         session_id = jsonl_file.stem
         _parse_gemini_file(jsonl_file, session_id, workspace, entries, since_timestamp)
 
