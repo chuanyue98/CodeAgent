@@ -1,51 +1,83 @@
+from __future__ import annotations
+
 import re
 from pathlib import Path
 
 
 class TaskService:
-    """Service for managing tasks and implementation plans."""
+    """Service for listing and reading tasks from the tasks directory."""
 
-    def __init__(self, root_dir: Path):
-        """Initializes the TaskService with the project root directory.
+    def __init__(self, tasks_root: Path):
+        self.tasks_root = tasks_root
 
-        Args:
-            root_dir: Path to the project root directory.
-        """
-        self.root_dir = root_dir
+    def list_tasks(self) -> list[dict]:
+        if not self.tasks_root.exists():
+            return []
 
-    def get_plan_status(self) -> dict:
-        """Parses the IMPLEMENTATION_PLAN.md file to retrieve task statuses.
+        tasks = []
+        for md_file in sorted(self.tasks_root.glob("*.md")):
+            tasks.append(self._parse_task(md_file, full_content=False))
+        return tasks
 
-        Returns:
-            A dictionary containing the existence of the plan, a list of tasks,
-            and any parsing errors. Each task includes: name, status, and goal.
-        """
-        plan_path = self.root_dir / "IMPLEMENTATION_PLAN.md"
-        if not plan_path.exists():
-            return {"exists": False, "tasks": []}
+    def get_task(self, name: str) -> dict | None:
+        path = self.tasks_root / f"{name}.md"
+        if not path.exists():
+            return None
+        return self._parse_task(path, full_content=True)
 
+    def _parse_task(self, path: Path, full_content: bool = False) -> dict:
         try:
-            content = plan_path.read_text(encoding="utf-8")
-            tasks = []
-            sections = re.split(r"^##\s+", content, flags=re.MULTILINE)
-            for section in sections:
-                if not section.startswith("阶段"):
-                    continue
+            content = path.read_text(encoding="utf-8")
+        except OSError:
+            content = ""
 
-                lines = section.splitlines()
-                name = lines[0].strip()
-                goal = ""
-                status = ""
+        lines = content.splitlines()
+        title = path.stem
 
-                for line in lines:
-                    if "**目标**:" in line:
-                        goal = line.split("**目标**:", 1)[1].strip()
-                    elif "**状态**:" in line:
-                        status = line.split("**状态**:", 1)[1].strip()
-                        status = status.strip("[]")
+        # First `# ` heading as title
+        for line in lines:
+            if line.startswith("# "):
+                title = line[2:].strip()
+                break
 
-                tasks.append({"name": name, "status": status, "goal": goal})
+        # First non-empty, non-heading line as description
+        description = ""
+        for line in lines:
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                description = stripped[:120]
+                break
 
-            return {"exists": True, "tasks": tasks}
-        except Exception:
-            return {"exists": False, "tasks": [], "error": "Error parsing plan"}
+        stages = _parse_stages(content)
+
+        result: dict = {
+            "name": path.stem,
+            "title": title,
+            "description": description,
+            "hasStages": bool(stages),
+            "stages": stages,
+        }
+        if full_content:
+            result["content"] = content
+        return result
+
+
+def _parse_stages(content: str) -> list[dict]:
+    stages = []
+    sections = re.split(r"^##\s+", content, flags=re.MULTILINE)
+    for section in sections:
+        if not section.strip():
+            continue
+        lines = section.splitlines()
+        name = lines[0].strip()
+        goal = ""
+        status = ""
+        for line in lines:
+            if "**目标**" in line and ":" in line:
+                goal = line.split(":", 1)[1].strip()
+            elif "**状态**" in line and ":" in line:
+                raw = line.split(":", 1)[1].strip()
+                status = raw.strip("[]").strip()
+        if status or goal:
+            stages.append({"name": name, "status": status, "goal": goal})
+    return stages
