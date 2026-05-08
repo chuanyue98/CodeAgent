@@ -1,0 +1,6 @@
+{
+  "name": "ci-monitor",
+  "event": "AfterTool",
+  "command": "python {hook_dir}/hook.py",
+  "description": "git push 到远程后自动监控 CI 状态，直到所有检查通过或失败。"
+}
