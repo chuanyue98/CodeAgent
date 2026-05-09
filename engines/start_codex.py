@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.engine_base import BaseEngine
-from core.prompt_lib import (
+from core.task_lib import (
     TASK_FILE_SUFFIX,
     get_tasks_dir,
     handle_task_mode,
