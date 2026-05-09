@@ -561,20 +561,28 @@ class BaseEngine:
         return ext_dir.absolute()
 
     def ensure_plugins_link(self, target_link_path: str = None):
-        """Ensures that plugin links exist in the global extensions directory.
+        """Ensures that plugin links exist in the target directory.
+
+        When target_link_path is provided, links are created in that project-level
+        directory (e.g., ``.claude/plugins``). Otherwise falls back to the engine's
+        global extensions directory (e.g., ``~/.gemini/extensions``).
 
         Uses a 'stable mapping' strategy: if a link already points to the correct
         source, it is not recreated. Stale links are removed and recreated.
 
         Args:
-            target_link_path (str, optional): Reserved for future use. Defaults to None.
+            target_link_path (str, optional): Relative path for project-level linking.
+                When None, uses the engine's global extensions directory.
         """
         plugins_to_mount = self.get_plugins_to_mount()
         if not plugins_to_mount:
             return
 
-        global_ext_dir = self._get_global_ext_dir()
-        global_ext_dir.mkdir(parents=True, exist_ok=True)
+        if target_link_path:
+            link_dir = (Path.cwd() / target_link_path).absolute()
+        else:
+            link_dir = self._get_global_ext_dir()
+        link_dir.mkdir(parents=True, exist_ok=True)
 
         mounted_count = 0
         for plugin_meta in plugins_to_mount:
@@ -585,7 +593,7 @@ class BaseEngine:
                 continue
 
             plugin_src = Path(plugin_src_str).resolve()
-            target_link = global_ext_dir / plugin_name
+            target_link = link_dir / plugin_name
 
             # 检查是否已存在正确的链接
             if target_link.exists():
@@ -612,26 +620,31 @@ class BaseEngine:
                 print(f"⚠️ Failed to link plugin '{plugin_name}': {e}")
 
         if mounted_count:
-            print(
-                f"🔌 Ensured {mounted_count} plugin links in global extensions directory"
-            )
+            display_dir = target_link_path or str(self._get_global_ext_dir())
+            print(f"🔌 Ensured {mounted_count} plugin links in {display_dir}")
 
     def cleanup_plugins_link(self, target_link_path: str = None):
-        """Removes temporary plugin links from the global extensions directory.
+        """Removes temporary plugin links from the target directory.
 
-        Only removes items that are verified to be links (symlinks or Windows junctions).
+        When target_link_path is provided, removes links from that project-level
+        directory. Otherwise removes from the engine's global extensions directory.
+        Only removes items verified to be links (symlinks or Windows junctions).
 
         Args:
-            target_link_path (str, optional): Reserved for future use. Defaults to None.
+            target_link_path (str, optional): Relative path used during ensure_plugins_link.
+                Must match the path passed to ensure_plugins_link.
         """
         plugins_to_mount = self.get_plugins_to_mount()
         if not plugins_to_mount:
             return
 
-        global_ext_dir = self._get_global_ext_dir()
+        if target_link_path:
+            link_dir = (Path.cwd() / target_link_path).absolute()
+        else:
+            link_dir = self._get_global_ext_dir()
         for plugin_meta in plugins_to_mount:
             plugin_name = plugin_meta["name"]
-            target_link = global_ext_dir / plugin_name
+            target_link = link_dir / plugin_name
 
             # 只有是链接时才删除，绝不误删真实安装的扩展
             if self._is_windows_link(target_link) or target_link.is_symlink():
