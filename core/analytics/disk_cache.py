@@ -6,8 +6,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 CACHE_SCHEMA_VERSION = 3
-CACHE_TTL_SECONDS = 300  # 5 minutes — fresh
-CACHE_STALE_SECONDS = 7 * 86400  # 7 days — stale-while-revalidate boundary
+CACHE_TTL_SECONDS = 300  # 5 minutes
 
 
 def _default_cache_path() -> Path:
@@ -45,11 +44,8 @@ def load_cache(path: Path | None = None) -> Optional[Any]:
         return None
 
     age = time.time() - doc.get("saved_at", 0)
-    if age > CACHE_STALE_SECONDS:
-        return None
     if age > CACHE_TTL_SECONDS:
-        # Stale-while-revalidate: return stale data; caller should refresh async
-        doc["stale"] = True
+        return None
     return doc.get("data")
 
 
