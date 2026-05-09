@@ -36,6 +36,7 @@ dev = [
     "freezegun==1.5.1",
     "httpx>=0.28.1",
     "iniconfig==2.3.0",
+    "mypy==1.11.2",
     "pluggy==1.6.0",
     "pygments==2.19.2",
     "pytest==9.0.2",
