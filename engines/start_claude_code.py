@@ -30,18 +30,15 @@ class ClaudeEngine(BaseEngine):
         "after_tool": "PostToolUse",
     }
 
-    def _get_plugin_link_dir(self):
-        return (Path.cwd() / ".claude" / "plugins").absolute()
-
     def __init__(self):
         super().__init__("Claude", "claude-3-5-sonnet")
 
     def build_command(self, message: str, non_interactive: bool) -> List[str]:
-        # 构建命令列表以绕过 Windows 长度限制
         cmd = [self.CLAUDE_COMMAND, self.CLAUDE_SKIP_PERMISSIONS_FLAG]
-
-        # 目前 Claude CLI 对非交互模式的支持各异，暂不加额外 flag
-        # 直接追加消息内容
+        for plugin_meta in self.get_plugins_to_mount():
+            plugin_dir = plugin_meta.get("_plugin_dir")
+            if plugin_dir:
+                cmd.extend(["--plugin-dir", plugin_dir])
         cmd.append(message)
         return cmd
 
@@ -75,8 +72,6 @@ def main():
 
     # 统一技能链接
     engine.ensure_skills_link(".claude/skills")
-    # 统一插件链接
-    engine.ensure_plugins_link()
 
     # 注入动态钩子
     resolved_hooks = engine.get_hooks_to_inject()
@@ -98,9 +93,7 @@ def main():
         engine.restore_settings(".claude/settings.json")
         # 2. 清理技能链接，保持项目纯净
         engine.cleanup_skills_link(".claude/skills")
-        # 3. 清理插件链接
-        engine.cleanup_plugins_link()
-        # 4. 使用基类统一清理临时提示词
+        # 3. 使用基类统一清理临时提示词
         engine.cleanup_temp_prompt()
 
 
