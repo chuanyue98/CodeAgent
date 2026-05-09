@@ -62,10 +62,11 @@ def test_get_plugins_to_mount(tmp_path, monkeypatch):
     # Create local plugin
     (project_dir / "plugins" / "local" / "local-plugin").mkdir(parents=True)
 
-    plugins = get_plugins_to_mount(config, scanner, "common")
+    plugins, warnings = get_plugins_to_mount(config, scanner, "common")
     plugin_names = [p["name"] for p in plugins]
     assert "plugin1" in plugin_names
     assert "local-plugin" in plugin_names
+    assert warnings == []
 
 
 def test_ensure_plugins_link(tmp_path, monkeypatch):

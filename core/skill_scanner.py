@@ -1,5 +1,7 @@
 """Scanner for discovering skills in the skills directory."""
 
+import os
+import traceback
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -47,11 +49,15 @@ class SkillScanner:
                     warnings.append(
                         f"Failed to scan category directory '{category_dir}': {e}"
                     )
+                    if os.getenv("CA_DEBUG"):
+                        traceback.print_exc()
 
                 if skills:
                     result[category] = skills
         except Exception as e:
             warnings.append(f"Failed to iterate skills root '{self.skills_root}': {e}")
+            if os.getenv("CA_DEBUG"):
+                traceback.print_exc()
 
         return result, warnings
 

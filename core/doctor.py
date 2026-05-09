@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+from core.hook_scanner import get_hooks_to_inject
+from core.plugin_scanner import get_plugins_to_mount
 from core.services.config_service import ConfigService
 
 # ── Status symbols ────────────────────────────────────────────────────────────
@@ -386,14 +388,20 @@ class _LightweightResolver:
         return data, warnings
 
     def get_hooks_to_inject(self) -> tuple[List[dict], List[str]]:
-        data = self._engine.get_hooks_to_inject()
-        _, warnings = self._engine.hook_scanner.scan()
-        return data, warnings
+        project_type = self._engine.get_current_project_group()
+        return get_hooks_to_inject(
+            self._engine.full_config,
+            self._engine.hook_scanner,
+            project_type=project_type,
+        )
 
     def get_plugins_to_mount(self) -> tuple[List[dict], List[str]]:
-        data = self._engine.get_plugins_to_mount()
-        _, warnings = self._engine.plugin_scanner.scan()
-        return data, warnings
+        project_type = self._engine.get_current_project_group()
+        return get_plugins_to_mount(
+            self._engine.full_config,
+            self._engine.plugin_scanner,
+            project_type=project_type,
+        )
 
     def __getattr__(self, name):
         return getattr(self._engine, name)
@@ -424,7 +432,7 @@ def _render(sections: List[Section]) -> int:
     print()
     if failures:
         print(
-            f"  Result: {failures} failure(s), {warnings} warning(s) — run 'ca doctor' for auto-repairs"
+            f"  Result: {failures} failure(s), {warnings} warning(s) — run 'ca doctor --fix' for auto-repairs"
         )
     elif warnings:
         print(f"  Result: {warnings} warning(s) — check the hints above")

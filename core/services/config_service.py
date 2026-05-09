@@ -1,4 +1,6 @@
 import json
+import os
+import traceback
 from pathlib import Path
 
 
@@ -26,12 +28,8 @@ class ConfigService:
             with open(self.config_path, "r", encoding="utf-8") as f:
                 return json.load(f), []
         except Exception as e:
-            import os
-
             warnings.append(f"Failed to parse config.json: {e}")
             if os.getenv("CA_DEBUG"):
-                import traceback
-
                 traceback.print_exc()
             return {}, warnings
 

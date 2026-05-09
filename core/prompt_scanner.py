@@ -1,5 +1,7 @@
 """Scanner for discovering prompt templates in the prompt directory."""
 
+import os
+import traceback
 from pathlib import Path
 from typing import Dict, List
 
@@ -47,12 +49,16 @@ class PromptScanner:
                             prompts.append(md_file.stem)
                 except Exception as e:
                     warnings.append(f"Failed to scan directory {group_dir}: {e}")
+                    if os.getenv("CA_DEBUG"):
+                        traceback.print_exc()
                     continue
 
                 if prompts:
                     result[group] = prompts
         except Exception as e:
             warnings.append(f"Failed to iterate prompt root {self.prompt_root}: {e}")
+            if os.getenv("CA_DEBUG"):
+                traceback.print_exc()
 
         return result, warnings
 
@@ -62,7 +68,7 @@ def get_prompts_to_inject(
     scanner: PromptScanner,
     project_type: str = "common",
     extra_prompts: List[str] = None,
-) -> List[str]:
+) -> tuple[List[str], List[str]]:
     """Determines which prompt groups should be injected based on configuration.
 
     Args:
@@ -72,7 +78,7 @@ def get_prompts_to_inject(
         extra_prompts: Additional prompt groups to inject.
 
     Returns:
-        A list of prompt group names to inject.
+        A tuple of prompt group names to inject and warning messages.
     """
     scanned, scan_warnings = scanner.scan()
     result: List[str] = []
@@ -107,4 +113,4 @@ def get_prompts_to_inject(
     # 4. Extra prompts passed by the caller
     add_items(extra_prompts)
 
-    return result
+    return result, scan_warnings

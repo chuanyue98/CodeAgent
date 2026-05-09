@@ -337,9 +337,11 @@ class BaseEngine:
             List[Dict[str, Any]]: A list of plugin metadata dictionaries.
         """
         project_type = self.get_current_project_group()
-        return get_plugins_to_mount(
+        plugins, warnings = get_plugins_to_mount(
             self.full_config, self.plugin_scanner, project_type=project_type
         )
+        self._print_scan_warnings("Plugin Scanner", warnings)
+        return plugins
 
     def get_prompts_to_inject(self) -> List[str]:
         """Retrieves the list of prompt groups to be injected for the current project.
@@ -348,9 +350,11 @@ class BaseEngine:
             List[str]: A list of prompt group names.
         """
         project_type = self.get_current_project_group()
-        return get_prompts_to_inject(
+        prompts, warnings = get_prompts_to_inject(
             self.full_config, self.prompt_scanner, project_type=project_type
         )
+        self._print_scan_warnings("Prompt Scanner", warnings)
+        return prompts
 
     def get_hooks_to_inject(self) -> List[Dict[str, Any]]:
         """Retrieves the list of hooks to be injected for the current project.
@@ -359,9 +363,16 @@ class BaseEngine:
             List[Dict[str, Any]]: A list of hook metadata dictionaries.
         """
         project_type = self.get_current_project_group()
-        return get_hooks_to_inject(
+        hooks, warnings = get_hooks_to_inject(
             self.full_config, self.hook_scanner, project_type=project_type
         )
+        self._print_scan_warnings("Hook Scanner", warnings)
+        return hooks
+
+    def _print_scan_warnings(self, scanner_name: str, warnings: List[str]) -> None:
+        """Prints non-fatal scan warnings so they are visible to the user."""
+        for warning in warnings:
+            print(f"⚠️ {scanner_name}: {warning}")
 
     def assemble_prompt(self, task: str | None = None, is_review: bool = False) -> str:
         """Assembles the final system prompt by combining base prompts and injected groups.

@@ -1,6 +1,8 @@
 """Scanner for discovering plugins in the plugins directory."""
 
 import json
+import os
+import traceback
 from pathlib import Path
 from typing import Dict, List, Any
 
@@ -46,13 +48,9 @@ class PluginScanner:
                         with open(metadata_path, "r", encoding="utf-8") as f:
                             metadata = json.load(f)
                     except Exception as e:
-                        import os
-
                         msg = f"Failed to load metadata from {metadata_path}: {e}"
                         warnings.append(msg)
                         if os.getenv("CA_DEBUG"):
-                            import traceback
-
                             traceback.print_exc()
                         continue
 
@@ -81,7 +79,7 @@ def get_plugins_to_mount(
     config: dict,
     scanner: PluginScanner,
     project_type: str = "common",
-) -> List[Dict[str, Any]]:
+) -> tuple[List[Dict[str, Any]], List[str]]:
     """Determines which plugins should be mounted based on configuration and environment.
 
     Args:
@@ -90,10 +88,11 @@ def get_plugins_to_mount(
         project_type: The type of project (e.g., 'common', 'web').
 
     Returns:
-        A list of plugin metadata dictionaries to mount.
+        A tuple of plugin metadata dictionaries to mount and warning messages.
     """
     scanned, scan_warnings = scanner.scan()
     result_map = {}
+    warnings = list(scan_warnings)
 
     def add_plugin(full_name: str):
         if "/" not in full_name:
@@ -115,10 +114,11 @@ def get_plugins_to_mount(
             # Scan local plugins
             local_scanner = PluginScanner(local_plugins)
             local_scanned, local_warnings = local_scanner.scan()
+            warnings.extend(local_warnings)
             for cat, plugins in local_scanned.items():
                 for name, metadata in plugins.items():
                     full_name = f"{cat}/{name}"
                     if full_name not in result_map:
                         result_map[full_name] = metadata
 
-    return list(result_map.values())
+    return list(result_map.values()), warnings

@@ -68,7 +68,7 @@ def get_hooks_to_inject(
     scanner: HookScanner,
     project_type: str = "common",
     extra_hooks: list[str] | None = None,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[str]]:
     """Determines which hooks should be injected based on configuration and environment.
 
     Args:
@@ -78,9 +78,9 @@ def get_hooks_to_inject(
         extra_hooks: Additional hooks to inject.
 
     Returns:
-        A list of hook metadata dictionaries to inject.
+        A tuple of hook metadata dictionaries to inject and warning messages.
     """
-    scanned, _ = scanner.scan()
+    scanned, scan_warnings = scanner.scan()
     result_map = {}  # Use name as key to avoid duplicates
 
     def add_hook(full_name: str):
@@ -127,4 +127,4 @@ def get_hooks_to_inject(
                         if full_name not in result_map:
                             add_hook(full_name)
 
-    return list(result_map.values())
+    return list(result_map.values()), scan_warnings

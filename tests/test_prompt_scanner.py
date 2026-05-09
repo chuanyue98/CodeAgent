@@ -31,9 +31,10 @@ def test_get_prompts_to_inject_uses_configured_group_prompts(tmp_path):
         }
     }
 
-    prompts = get_prompts_to_inject(config, scanner, project_type="web")
+    prompts, warnings = get_prompts_to_inject(config, scanner, project_type="web")
 
     assert prompts == ["base", "web"]
+    assert warnings == []
 
 
 def test_get_prompts_to_inject_falls_back_to_default_mapping(tmp_path):
@@ -45,9 +46,10 @@ def test_get_prompts_to_inject_falls_back_to_default_mapping(tmp_path):
 
     scanner = PromptScanner(prompt_root)
 
-    prompts = get_prompts_to_inject({}, scanner, project_type="work")
+    prompts, warnings = get_prompts_to_inject({}, scanner, project_type="work")
 
     assert prompts == ["base", "engineering", "coding", "work"]
+    assert warnings == []
 
 
 def test_get_prompts_to_inject_respects_explicit_empty_prompt_config(tmp_path):
@@ -66,6 +68,7 @@ def test_get_prompts_to_inject_respects_explicit_empty_prompt_config(tmp_path):
         }
     }
 
-    prompts = get_prompts_to_inject(config, scanner, project_type="work")
+    prompts, warnings = get_prompts_to_inject(config, scanner, project_type="work")
 
     assert prompts == []
+    assert warnings == []
