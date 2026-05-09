@@ -547,25 +547,25 @@ class BaseEngine:
             except Exception as e:
                 print(f"⚠️ Failed to link skill '{target_name}': {e}")
 
-    def _get_global_ext_dir(self) -> Path:
-        """Retrieves the global extensions directory.
+    def _get_global_ext_dir(self) -> Optional[Path]:
+        """Returns the engine-specific global extensions directory, or None if not applicable.
 
-        Defaults to the '.gemini/extensions' directory in the user's home folder.
-        Subclasses can override this.
+        Engines that support a global plugin directory (e.g. Gemini, Codex) must
+        override this method. The base class returns None — no engine is the default.
 
         Returns:
-            Path: The absolute path to the global extensions directory.
+            Optional[Path]: The absolute path to the global extensions directory,
+                or None if the engine does not use one.
         """
-        home = Path.home()
-        ext_dir = home / ".gemini" / "extensions"
-        return ext_dir.absolute()
+        return None
 
     def ensure_plugins_link(self, target_link_path: str = None):
         """Ensures that plugin links exist in the target directory.
 
         When target_link_path is provided, links are created in that project-level
         directory (e.g., ``.claude/plugins``). Otherwise falls back to the engine's
-        global extensions directory (e.g., ``~/.gemini/extensions``).
+        global extensions directory returned by ``_get_global_ext_dir()``.
+        If neither is available, the method is a no-op.
 
         Uses a 'stable mapping' strategy: if a link already points to the correct
         source, it is not recreated. Stale links are removed and recreated.
@@ -582,6 +582,12 @@ class BaseEngine:
             link_dir = (Path.cwd() / target_link_path).absolute()
         else:
             link_dir = self._get_global_ext_dir()
+            if link_dir is None:
+                print(
+                    f"⚠️ {self.name} engine has no global extensions directory. "
+                    "Pass target_link_path to ensure_plugins_link()."
+                )
+                return
         link_dir.mkdir(parents=True, exist_ok=True)
 
         mounted_count = 0
@@ -642,6 +648,8 @@ class BaseEngine:
             link_dir = (Path.cwd() / target_link_path).absolute()
         else:
             link_dir = self._get_global_ext_dir()
+            if link_dir is None:
+                return
         for plugin_meta in plugins_to_mount:
             plugin_name = plugin_meta["name"]
             target_link = link_dir / plugin_name
