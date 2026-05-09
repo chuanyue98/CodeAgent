@@ -24,8 +24,11 @@ class ClaudeEngine(BaseEngine):
     """Claude 引擎的具体实现"""
 
     CLAUDE_COMMAND = "claude"
-    # Claude Code 默认会跳过权限确认
     CLAUDE_SKIP_PERMISSIONS_FLAG = "--dangerously-skip-permissions"
+    EVENT_MAP = {
+        "before_tool": "PreToolUse",
+        "after_tool": "PostToolUse",
+    }
 
     def __init__(self):
         super().__init__("Claude", "claude-3-5-sonnet")

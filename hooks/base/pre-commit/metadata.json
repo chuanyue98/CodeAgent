@@ -1,6 +1,6 @@
 {
   "name": "pre-commit",
-  "event": "BeforeTool",
+  "event": "before_tool",
   "command": "python {hook_dir}/hook.py",
   "description": "在 git commit 前自动运行 ruff check 和 ruff format，不通过则阻止提交。"
 }

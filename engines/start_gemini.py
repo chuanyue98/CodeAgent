@@ -28,6 +28,11 @@ set_additional_template_search_paths([Path(__file__).resolve().parent.parent])
 class GeminiEngine(BaseEngine):
     """Gemini 引擎的具体实现"""
 
+    EVENT_MAP = {
+        "before_tool": "BeforeTool",
+        "after_tool": "AfterTool",
+    }
+
     def __init__(self):
         super().__init__("Gemini", "gemini-3-flash-preview")
 
