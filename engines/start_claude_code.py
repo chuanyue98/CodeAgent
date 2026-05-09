@@ -30,6 +30,9 @@ class ClaudeEngine(BaseEngine):
         "after_tool": "PostToolUse",
     }
 
+    def _get_plugin_link_dir(self):
+        return (Path.cwd() / ".claude" / "plugins").absolute()
+
     def __init__(self):
         super().__init__("Claude", "claude-3-5-sonnet")
 
@@ -73,7 +76,7 @@ def main():
     # 统一技能链接
     engine.ensure_skills_link(".claude/skills")
     # 统一插件链接
-    engine.ensure_plugins_link(".claude/plugins")
+    engine.ensure_plugins_link()
 
     # 注入动态钩子
     resolved_hooks = engine.get_hooks_to_inject()
@@ -96,7 +99,7 @@ def main():
         # 2. 清理技能链接，保持项目纯净
         engine.cleanup_skills_link(".claude/skills")
         # 3. 清理插件链接
-        engine.cleanup_plugins_link(".claude/plugins")
+        engine.cleanup_plugins_link()
         # 4. 使用基类统一清理临时提示词
         engine.cleanup_temp_prompt()
 
