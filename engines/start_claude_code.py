@@ -28,6 +28,8 @@ class ClaudeEngine(BaseEngine):
     EVENT_MAP = {
         "before_tool": "PreToolUse",
         "after_tool": "PostToolUse",
+        "BeforeTool": "PreToolUse",
+        "AfterTool": "PostToolUse",
     }
 
     def __init__(self):

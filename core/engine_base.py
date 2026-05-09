@@ -798,7 +798,10 @@ class BaseEngine:
         data["_ca_injected"] = True
 
         for hook in hooks:
-            event = self.EVENT_MAP.get(hook["event"], hook["event"])
+            event_name = hook.get("event")
+            if not event_name:
+                continue
+            event = self.EVENT_MAP.get(event_name, event_name)
             if event not in data["hooks"]:
                 data["hooks"][event] = [{"matcher": "*", "hooks": []}]
 
