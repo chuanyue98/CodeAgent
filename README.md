@@ -17,19 +17,17 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
     - `base/`: Core philosophy and values.
     - `coding/`: Language-specific and general coding standards.
     - `engineering/`: Workflow enhancements (Git, PR, File Safety).
-    - `web/`: Frontend-specific review and development standards.
 3.  **Skills (`skills/`)**: Atomic, reusable automation capabilities.
     - Each skill contains its own `SKILL.md` (instruction) and `scripts/` (execution).
     - Dynamically mounted based on project context.
 4.  **Plugins (`plugins/`)**: Domain-specific capability bundles.
     - Contains groups of skills, prompts (e.g., `GEMINI.md`), and hooks.
-    - Examples: `base/superpowers`.
 5.  **Hooks (`hooks/`)**: Lifecycle event triggers.
-    - Execute commands during `session-start`, `pre-commit`, etc.
+    - Execute commands during `session-start`, `pre-commit`, `post-tool`, etc.
 6.  **Tasks (`tasks/`)**: High-level execution blueprints.
     - Pre-defined workflows like `refactor`, `code_review`, or `create_pr`.
 7.  **Core (`core/`)**: The lightweight orchestration logic.
-    - Handles dynamic prompt synthesis, plugin mounting, and environment management.
+    - Handles dynamic prompt synthesis, resource resolution, and environment management.
 
 ---
 
@@ -38,7 +36,6 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 ### Prerequisites
 - Python 3.13+
 - [Optional] `opencode-ai` installed via npm for the OpenCode engine.
-- [Optional] `codex` CLI installed for the Codex engine.
 
 ### Launching Your Engine
 CodeAgent automatically injects your private standards based on the current project directory.
@@ -47,19 +44,18 @@ CodeAgent automatically injects your private standards based on the current proj
 python ca_launcher.py opencode              # Launch OpenCode TUI with standard injection
 python ca_launcher.py gemini "Refactor this" # Execute a quick task with Gemini
 python ca_launcher.py claude -t refactor     # Run a pre-defined refactor task with Claude
-python ca_launcher.py codex -t refactor      # Run a pre-defined refactor task with Codex
-python ca_launcher.py opencode --proxy       # Launch with proxy support
+python ca_launcher.py ui                     # Start the Web UI & Analytics Dashboard
+python ca_launcher.py doctor --fix           # Self-check and repair the environment
 ```
 
 ---
 
-## 🧰 The Power of Skills
+## 📊 Monitoring & Analytics
 
-Skills are modular capabilities that your AI agent can leverage. They are stored in `skills/` and categorized by domain:
-- **base/**: Commit messages, git-audit, lorem-ipsum.
-- **devops/**: PR automation, notification bots, git-maintenance.
-- **web/**: Image optimization, QR codes, frontend review helpers.
-- **toolbox/**: Work reports, GitHub trending, Hacker News.
+CodeAgent includes a built-in analytics engine to track usage across all drivers:
+- **Multi-Engine Support**: Aggregates data from Claude, Gemini, Codex, and OpenCode.
+- **Cost Estimation**: Estimates USD costs based on model-specific pricing.
+- **Web Dashboard**: Use `python ca_launcher.py ui` to visualize trends, token usage, and session history.
 
 ---
 
@@ -75,10 +71,11 @@ Skills are modular capabilities that your AI agent can leverage. They are stored
 ## 📈 Structure
 ```text
 .
-├── core/          # Framework logic (Synthesis & Management)
+├── core/          # Framework logic (Analytics, Services, Web)
 ├── engines/       # LLM Adapters (Gemini, Claude, OpenCode, Codex)
 ├── prompt/        # Modular standard groups (The Soul)
 ├── skills/        # Atomic automation capabilities (The Tools)
-├── tasks/         # Pre-defined workflows (The Blueprints)
+├── hooks/         # Lifecycle event triggers
+├── web/           # Frontend (React/Vite) for the Analytics UI
 └── tests/         # Quality guardrails
 ```

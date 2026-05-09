@@ -91,43 +91,40 @@ def aggregate(entries: List[RawUsageEntry]) -> Dict[str, Any]:
             - monthly: List of MonthlyUsage dictionaries.
             - sessions: List of SessionUsage dictionaries.
     """
-    # Keyed by (date, target)
     daily: Dict[tuple, DailyUsage] = {}
-    daily_breakdowns: Dict[tuple, Dict[str, ModelBreakdown]] = defaultdict(dict)
+    daily_bds: Dict[tuple, Dict[str, ModelBreakdown]] = defaultdict(dict)
 
-    # Keyed by (month, target)
     monthly: Dict[tuple, MonthlyUsage] = {}
-    monthly_breakdowns: Dict[tuple, Dict[str, ModelBreakdown]] = defaultdict(dict)
+    monthly_bds: Dict[tuple, Dict[str, ModelBreakdown]] = defaultdict(dict)
 
-    # Keyed by (session_id, target)
     sessions: Dict[tuple, SessionUsage] = {}
-    session_breakdowns: Dict[tuple, Dict[str, ModelBreakdown]] = defaultdict(dict)
+    session_bds: Dict[tuple, Dict[str, ModelBreakdown]] = defaultdict(dict)
+
+    def update_usage(usage_obj, entry: RawUsageEntry, cost: float):
+        usage_obj.input_tokens += entry.input_tokens
+        usage_obj.output_tokens += entry.output_tokens
+        usage_obj.cache_creation_tokens += entry.cache_creation_tokens
+        usage_obj.cache_read_tokens += entry.cache_read_tokens
+        usage_obj.cost += cost
 
     for e in entries:
         cost = _entry_cost(e)
 
+        # Daily
         d_key = (_date(e.timestamp), e.target)
         if d_key not in daily:
             daily[d_key] = DailyUsage(date=d_key[0], target=e.target)
-        du = daily[d_key]
-        du.input_tokens += e.input_tokens
-        du.output_tokens += e.output_tokens
-        du.cache_creation_tokens += e.cache_creation_tokens
-        du.cache_read_tokens += e.cache_read_tokens
-        du.cost += cost
-        _merge_breakdown(daily_breakdowns[d_key], e, cost)
+        update_usage(daily[d_key], e, cost)
+        _merge_breakdown(daily_bds[d_key], e, cost)
 
+        # Monthly
         m_key = (_month(e.timestamp), e.target)
         if m_key not in monthly:
             monthly[m_key] = MonthlyUsage(month=m_key[0], target=e.target)
-        mu = monthly[m_key]
-        mu.input_tokens += e.input_tokens
-        mu.output_tokens += e.output_tokens
-        mu.cache_creation_tokens += e.cache_creation_tokens
-        mu.cache_read_tokens += e.cache_read_tokens
-        mu.cost += cost
-        _merge_breakdown(monthly_breakdowns[m_key], e, cost)
+        update_usage(monthly[m_key], e, cost)
+        _merge_breakdown(monthly_bds[m_key], e, cost)
 
+        # Session
         s_key = (e.session_id, e.target)
         if s_key not in sessions:
             sessions[s_key] = SessionUsage(
@@ -136,30 +133,21 @@ def aggregate(entries: List[RawUsageEntry]) -> Dict[str, Any]:
                 project_path=e.project_path,
             )
         su = sessions[s_key]
-        su.input_tokens += e.input_tokens
-        su.output_tokens += e.output_tokens
-        su.cache_creation_tokens += e.cache_creation_tokens
-        su.cache_read_tokens += e.cache_read_tokens
-        su.cost += cost
+        update_usage(su, e, cost)
         if e.timestamp > su.last_activity:
             su.last_activity = e.timestamp
-        _merge_breakdown(session_breakdowns[s_key], e, cost)
+        _merge_breakdown(session_bds[s_key], e, cost)
 
     # Attach model breakdowns and unique models
-    for key, du in daily.items():
-        bds = list(daily_breakdowns[key].values())
-        du.model_breakdowns = bds
-        du.models_used = sorted({bd.model_name for bd in bds})
+    def finalize(usage_map, breakdown_map):
+        for key, obj in usage_map.items():
+            bds = list(breakdown_map[key].values())
+            obj.model_breakdowns = bds
+            obj.models_used = sorted({bd.model_name for bd in bds})
 
-    for key, mu in monthly.items():
-        bds = list(monthly_breakdowns[key].values())
-        mu.model_breakdowns = bds
-        mu.models_used = sorted({bd.model_name for bd in bds})
-
-    for key, su in sessions.items():
-        bds = list(session_breakdowns[key].values())
-        su.model_breakdowns = bds
-        su.models_used = sorted({bd.model_name for bd in bds})
+    finalize(daily, daily_bds)
+    finalize(monthly, monthly_bds)
+    finalize(sessions, session_bds)
 
     daily_list = sorted(daily.values(), key=lambda x: x.date)
     monthly_list = sorted(monthly.values(), key=lambda x: x.month)
@@ -167,24 +155,17 @@ def aggregate(entries: List[RawUsageEntry]) -> Dict[str, Any]:
         sessions.values(), key=lambda x: x.last_activity, reverse=True
     )
 
-    # Summary totals across all targets
-    total_input = sum(e.input_tokens for e in entries)
-    total_output = sum(e.output_tokens for e in entries)
-    total_cache_create = sum(e.cache_creation_tokens for e in entries)
-    total_cache_read = sum(e.cache_read_tokens for e in entries)
-
-    targets_seen = sorted({e.target for e in entries})
-    models_seen = sorted({e.model for e in entries})
-
     return {
         "summary": {
             "total_entries": len(entries),
-            "total_input_tokens": total_input,
-            "total_output_tokens": total_output,
-            "total_cache_creation_tokens": total_cache_create,
-            "total_cache_read_tokens": total_cache_read,
-            "targets": targets_seen,
-            "models": models_seen,
+            "total_input_tokens": sum(e.input_tokens for e in entries),
+            "total_output_tokens": sum(e.output_tokens for e in entries),
+            "total_cache_creation_tokens": sum(
+                e.cache_creation_tokens for e in entries
+            ),
+            "total_cache_read_tokens": sum(e.cache_read_tokens for e in entries),
+            "targets": sorted({e.target for e in entries}),
+            "models": sorted({e.model for e in entries}),
             "session_count": len(sessions),
         },
         "daily": [_daily_to_dict(du) for du in daily_list],
