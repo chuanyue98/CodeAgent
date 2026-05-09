@@ -1,7 +1,7 @@
 """Scanner for discovering skills in the skills directory."""
 
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 class SkillScanner:
@@ -21,7 +21,7 @@ class SkillScanner:
         Returns:
             A dictionary mapping category names to lists of skill names.
         """
-        result = {}
+        result: Dict[str, List[str]] = {}
         if not self.skills_root.exists():
             return result
 
@@ -42,7 +42,7 @@ def get_skills_to_mount(
     config: dict,
     scanner: SkillScanner,
     project_type: str = "common",
-    extra_skills: List[str] = None,
+    extra_skills: Optional[List[str]] = None,
 ) -> List[str]:
     """Determines which skills should be mounted based on configuration and environment.
 

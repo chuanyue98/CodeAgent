@@ -8,11 +8,11 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core.hook_scanner import HookScanner
-from core.plugin_scanner import PluginScanner
+from core.hook_scanner import HookScanner, get_hooks_to_inject
+from core.plugin_scanner import PluginScanner, get_plugins_to_mount
 from core.prompt_kit import prompt_general, prompt_review
-from core.prompt_scanner import PromptScanner
-from core.skill_scanner import SkillScanner
+from core.prompt_scanner import PromptScanner, get_prompts_to_inject
+from core.skill_scanner import SkillScanner, get_skills_to_mount
 
 
 class EnvironmentManager:
@@ -329,8 +329,6 @@ class BaseEngine:
         Returns:
             List[str]: A list of skill names.
         """
-        from core.skill_scanner import get_skills_to_mount
-
         project_type = self.get_current_project_group()
         return get_skills_to_mount(
             self.full_config, self.skill_scanner, project_type=project_type
@@ -342,8 +340,6 @@ class BaseEngine:
         Returns:
             List[Dict[str, Any]]: A list of plugin metadata dictionaries.
         """
-        from core.plugin_scanner import get_plugins_to_mount
-
         project_type = self.get_current_project_group()
         return get_plugins_to_mount(
             self.full_config, self.plugin_scanner, project_type=project_type
@@ -355,8 +351,6 @@ class BaseEngine:
         Returns:
             List[str]: A list of prompt group names.
         """
-        from core.prompt_scanner import get_prompts_to_inject
-
         project_type = self.get_current_project_group()
         return get_prompts_to_inject(
             self.full_config, self.prompt_scanner, project_type=project_type
@@ -368,8 +362,6 @@ class BaseEngine:
         Returns:
             List[Dict[str, Any]]: A list of hook metadata dictionaries.
         """
-        from core.hook_scanner import get_hooks_to_inject
-
         project_type = self.get_current_project_group()
         return get_hooks_to_inject(
             self.full_config, self.hook_scanner, project_type=project_type

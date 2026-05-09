@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Terminal } from 'lucide-react';
+import request from '../utils/request';
 
 interface Engine {
   id: string;
@@ -22,10 +23,10 @@ export default function LaunchPad() {
   async function launch(engine: string) {
     setLaunching(engine);
     try {
-      const response = await fetch(`/api/launch/${engine}`, { method: 'POST' });
-      if (response.ok) {
-        setLastLaunched(engine);
-      }
+      await request(`/api/launch/${engine}`, { method: 'POST' });
+      setLastLaunched(engine);
+    } catch (error) {
+      console.error('Launch engine failed:', error);
     } finally {
       setLaunching(null);
     }
