@@ -270,14 +270,25 @@ class CodexEngine(BaseEngine):
         if backup_path.exists():
             os.replace(str(backup_path), str(config_path))
             print("♻️ Restored global config.toml from backup")
-        else:
-            # 如果没有备份但有注入标记，尝试清理（TOML 处理较复杂，暂以备份恢复为主）
-            pass
+        elif config_path.exists():
+            # 如果没有备份但文件存在，检查是否由 CodeAgent 创建
+            try:
+                content = config_path.read_text(encoding="utf-8")
+                if self.MARKETPLACE_NAME in content:
+                    config_path.unlink()
+                    print("♻️ Removed temporary global config.toml")
+            except Exception:
+                pass
 
         # 清理临时市场目录
         marketplace_root = self._get_marketplace_root()
         if marketplace_root.exists():
-            self._safe_remove_link(marketplace_root / "plugins")  # 先删链接
+            # 仅在非 Linux 或确认是链接时移除 plugins 链接，避免 rmtree 报错
+            plugins_link = marketplace_root / "plugins"
+            if plugins_link.exists() and (
+                self._is_windows_link(plugins_link) or plugins_link.is_symlink()
+            ):
+                self._safe_remove_link(plugins_link)
             shutil.rmtree(marketplace_root, ignore_errors=True)
 
         # 清理插件缓存 (CodeAgent 专有部分)
