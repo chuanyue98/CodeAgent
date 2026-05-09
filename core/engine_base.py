@@ -43,6 +43,9 @@ class EnvironmentManager:
 class BaseEngine:
     """Abstract base class for LLM engines.
 
+    Subclasses declare EVENT_MAP to translate canonical hook event names
+    (e.g. ``before_tool``) to the vendor-specific names their settings file expects.
+
     Provides core functionality for configuration management, environment setup,
     resource discovery (skills, prompts, hooks, plugins), and prompt assembly.
 
@@ -58,6 +61,8 @@ class BaseEngine:
         hook_scanner (HookScanner): Scanner for discovering hooks.
         plugin_scanner (PluginScanner): Scanner for discovering plugins.
     """
+
+    EVENT_MAP: dict = {}
 
     def __init__(self, name: str, default_model: str):
         """Initializes the BaseEngine with its core components.
@@ -793,7 +798,7 @@ class BaseEngine:
         data["_ca_injected"] = True
 
         for hook in hooks:
-            event = hook["event"]
+            event = self.EVENT_MAP.get(hook["event"], hook["event"])
             if event not in data["hooks"]:
                 data["hooks"][event] = [{"matcher": "*", "hooks": []}]
 
