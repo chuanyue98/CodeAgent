@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-import os
-import subprocess
 import json
+import os
+import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core.prompt_kit import prompt_general, prompt_review
-from core.skill_scanner import SkillScanner
-from core.prompt_scanner import PromptScanner
 from core.hook_scanner import HookScanner
 from core.plugin_scanner import PluginScanner
+from core.prompt_kit import prompt_general, prompt_review
+from core.prompt_scanner import PromptScanner
+from core.skill_scanner import SkillScanner
 
 
 class EnvironmentManager:
@@ -119,8 +120,6 @@ class BaseEngine:
         Returns:
             List[str]: A list of resolved item names belonging to the matched group.
         """
-        import re
-
         cfg = self.full_config.get(section_name, {})
         groups = cfg.get("groups", {})
         mappings = cfg.get("project_mapping", [])
@@ -129,17 +128,13 @@ class BaseEngine:
         cwd_str = str(Path.cwd().as_posix())
         selected_group_name = default_group
 
-        # print(f"DEBUG: Current path: {cwd_str}")
         for mapping in mappings:
             pattern = mapping.get("pattern")
             if pattern:
-                # 尝试两种匹配：全路径和去掉盘符的路径
-                path_to_match = cwd_str
-                if re.search(pattern, path_to_match, re.IGNORECASE):
+                if re.search(pattern, cwd_str, re.IGNORECASE):
                     selected_group_name = mapping.get("group")
                     break
 
-        # 仅在解析 prompts 时打印，避免与 skills 的输出重复
         if section_name == "prompts":
             print(f"🎯 Prompts matched group: [{selected_group_name}]")
 
@@ -177,8 +172,6 @@ class BaseEngine:
         Returns:
             Optional[str]: The mapped value if found, otherwise None.
         """
-        import re
-
         cfg = self.full_config.get(section_name, {})
         mappings = cfg.get(mapping_key, [])
         cwd_str = str(Path.cwd().as_posix())
@@ -219,15 +212,12 @@ class BaseEngine:
         skill_path_cfg = self.full_config.get("paths", {}).get("skills", "skills")
         default_root = (self.root_dir / skill_path_cfg).resolve()
 
-        # 允许多个映射路径
         cfg = self.full_config.get("skills", {})
         mappings = cfg.get("project_skill_root_mapping", [])
         cwd = Path.cwd().resolve()
         cwd_str = str(cwd.as_posix())
 
         roots = []
-        import re
-
         for mapping in mappings:
             pattern = mapping.get("pattern")
             if pattern and re.search(pattern, cwd_str, re.IGNORECASE):
@@ -235,14 +225,12 @@ class BaseEngine:
                 if mapped_path:
                     roots.append(self._resolve_path_token(mapped_path).resolve())
 
-        # 自动加载当前目录下的 skills/ 目录 (排除 CodeAgent 本身)
         if cwd != self.root_dir.resolve():
             project_skills = cwd / "skills"
             if project_skills.is_dir():
                 if project_skills.resolve() not in roots:
                     roots.append(project_skills.resolve())
 
-        # 始终包含默认路径作为兜底
         if default_root not in roots:
             roots.append(default_root)
 
@@ -263,13 +251,11 @@ class BaseEngine:
         roots = []
         cwd = Path.cwd().resolve()
 
-        # 自动加载当前目录下的 plugins/ 目录 (排除 CodeAgent 本身)
         if cwd != self.root_dir.resolve():
             project_plugins = cwd / "plugins"
             if project_plugins.is_dir():
                 roots.append(project_plugins.resolve())
 
-        # 始终包含默认路径作为兜底
         if default_root not in roots:
             roots.append(default_root)
 
@@ -290,13 +276,11 @@ class BaseEngine:
         roots = []
         cwd = Path.cwd().resolve()
 
-        # 自动加载当前目录下的 hooks/ 目录 (排除 CodeAgent 本身)
         if cwd != self.root_dir.resolve():
             project_hooks = cwd / "hooks"
             if project_hooks.is_dir():
                 roots.append(project_hooks.resolve())
 
-        # 始终包含默认路径作为兜底
         if default_root not in roots:
             roots.append(default_root)
 
@@ -315,11 +299,9 @@ class BaseEngine:
         cwd = Path.cwd().resolve()
         root = self.root_dir.resolve()
 
-        # 1. 结构化自动识别：如果当前 CWD 是 CodeAgent 本身或其子目录，自动判定为 codeagent
         if cwd == root or root in cwd.parents:
             return "codeagent"
 
-        # 2. 从统一的项目注册表中匹配 (支持最长路径优先)
         registry = self.full_config.get("project_registry", [])
         best_match_group = None
         max_match_len = -1
@@ -339,10 +321,7 @@ class BaseEngine:
             except Exception:
                 continue
 
-        if best_match_group:
-            return best_match_group
-
-        return self.full_config.get("default_group", "common")
+        return best_match_group or self.full_config.get("default_group", "common")
 
     def get_skills_to_mount(self) -> List[str]:
         """Retrieves the list of skill names to be mounted for the current project.
@@ -420,14 +399,10 @@ class BaseEngine:
         Returns:
             str: A guidance message for the agent on how to load the prompt.
         """
-        # 1. 依然将物理文件保存在 CodeAgent 根目录，避免污染项目
         temp_file_path = self.root_dir / self.temp_prompt_name
         temp_file_path.write_text(prompt, encoding="utf-8")
 
-        # 2. 获取绝对路径并标准化
         abs_path = str(temp_file_path.absolute()).replace("\\", "/")
-
-        # 根据 OS 建议读取命令
         read_cmd = "Get-Content" if os.name == "nt" else "cat"
 
         return (
@@ -439,7 +414,6 @@ class BaseEngine:
 
     def cleanup_temp_prompt(self):
         """Removes the temporary prompt file from the project root."""
-        # 清理 CodeAgent 根目录下的临时文件
         temp_file_path = self.root_dir / self.temp_prompt_name
         if temp_file_path.exists():
             temp_file_path.unlink()
@@ -487,7 +461,6 @@ class BaseEngine:
 
         skill_roots = self._get_skill_search_roots()
 
-        # 准备实际需要挂载的技能源列表
         resolved_skills: List[Tuple[str, Path]] = []
         resolved_skill_names = set()
 
@@ -589,15 +562,12 @@ class BaseEngine:
             plugin_src = Path(plugin_src_str).resolve()
             target_link = link_dir / plugin_name
 
-            # 检查是否已存在正确的链接
             if target_link.exists():
                 try:
-                    # 如果已经是链接，检查它的指向
                     if self._is_windows_link(target_link) or target_link.is_symlink():
                         if target_link.resolve() == plugin_src:
-                            continue  # 已经指对了，跳过
+                            continue
                         else:
-                            # 指错了，删掉重建
                             self._safe_remove_link(target_link)
                     else:
                         print(
@@ -633,7 +603,6 @@ class BaseEngine:
             plugin_name = plugin_meta["name"]
             target_link = link_dir / plugin_name
 
-            # 只有是链接时才删除，绝不误删真实安装的扩展
             if self._is_windows_link(target_link) or target_link.is_symlink():
                 self._safe_remove_link(target_link)
 
@@ -655,8 +624,6 @@ class BaseEngine:
             if os.name != "nt" or not source.is_dir():
                 raise
 
-        # Windows directory symlinks can require developer mode/admin rights.
-        # Junctions work without that privilege and still keep cleanup scoped.
         subprocess.run(
             ["cmd", "/c", "mklink", "/j", str(target), str(source)],
             capture_output=True,
@@ -729,37 +696,22 @@ class BaseEngine:
             bool: True if it's a Windows link/junction, False otherwise.
         """
         try:
-            # 1. 优先使用标准 is_symlink (跨平台)
             if path.is_symlink():
                 return True
 
-            # 2. 检查 Lstat 属性 (针对 Windows Junction)
             stat_info = path.lstat()
-            # st_file_attributes 仅在 Windows 上可用
             attrs = getattr(stat_info, "st_file_attributes", 0)
-            is_reparse = bool(attrs & 1024)  # 1024 = FILE_ATTRIBUTE_REPARSE_POINT
+            is_reparse = bool(attrs & 1024)
 
             if is_reparse:
                 return True
 
-            # 3. 检查是否为挂载点 (Windows 下 Junction 常被识别为 mount)
             if path.is_mount():
                 return True
 
             return False
         except Exception:
             return False
-
-    def _windows_safe_rmtree(self, path: Path):
-        """Legacy method for safe directory removal.
-
-        Deprecated: No longer uses recursive removal for safety.
-        Delegates to _safe_remove_link.
-
-        Args:
-            path (Path): The path to remove.
-        """
-        self._safe_remove_link(path)
 
     def inject_hooks_to_settings(
         self, settings_rel_path: str, hooks: List[Dict[str, Any]]
@@ -778,7 +730,6 @@ class BaseEngine:
         settings_path = (Path.cwd() / settings_rel_path).absolute()
         settings_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 1. 备份原始配置 (只在没有备份时创建，避免循环覆盖)
         backup_path = settings_path.with_suffix(".json.bak")
         if settings_path.exists() and not backup_path.exists():
             shutil.copy2(settings_path, backup_path)
@@ -848,20 +799,16 @@ class BaseEngine:
         settings_path = (Path.cwd() / settings_rel_path).absolute()
         settings_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 1. 备份原始配置 (统一使用 .bak 后缀，简化逻辑)
         backup_path = settings_path.with_suffix(settings_path.suffix + ".bak")
         if settings_path.exists() and not backup_path.exists():
             shutil.copy2(settings_path, backup_path)
             print(f"💾 Created safety backup: {backup_path.name}")
 
-        # 2. 调用子类提供的加载逻辑
         data = self._load_config(settings_path)
         data["_ca_injected"] = True
 
-        # 3. 调用子类提供的格式化逻辑
         data = self._format_plugins_for_settings(data, plugins)
 
-        # 4. 调用子类提供的保存逻辑
         self._save_config(settings_path, data)
 
         print(f"✅ Registered plugins in {settings_rel_path}")
@@ -924,7 +871,6 @@ class BaseEngine:
             print(f"♻️ Restored {settings_rel_path} from backup")
             return
 
-        # 如果没有备份但有注入标记，则直接删除（说明之前是新建的文件）
         if settings_path.exists():
             try:
                 data = self._load_config(settings_path)

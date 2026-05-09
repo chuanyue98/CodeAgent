@@ -51,6 +51,12 @@ def main():
     parser.add_argument(
         "-ni", "--non-interactive", action="store_true", help="非交互模式"
     )
+    parser.add_argument(
+        "-y",
+        "--yolo",
+        action="store_true",
+        help="YOLO 模式 (Claude 使用 --dangerously-skip-permissions)",
+    )
     args, unknown = parser.parse_known_args()
 
     if args.list:
