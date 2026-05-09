@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 import shutil
 import subprocess
 import sys
@@ -23,7 +24,7 @@ async def launch_engine(engine: str) -> dict:
     if sys.platform == "win32":
         subprocess.Popen(["cmd", "/c", "start", "cmd", "/k"] + cmd)
     elif sys.platform == "darwin":
-        script = f'tell app "Terminal" to do script "cd {Path.cwd().as_posix()} && {" ".join(cmd)}"'
+        script = f'tell app "Terminal" to do script "cd {shlex.quote(Path.cwd().as_posix())} && {shlex.join(cmd)}"'
         subprocess.Popen(["osascript", "-e", script])
     else:
         for terminal in ["gnome-terminal", "konsole", "xterm"]:

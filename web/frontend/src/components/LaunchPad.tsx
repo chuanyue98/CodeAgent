@@ -22,8 +22,10 @@ export default function LaunchPad() {
   async function launch(engine: string) {
     setLaunching(engine);
     try {
-      await fetch(`/api/launch/${engine}`, { method: 'POST' });
-      setLastLaunched(engine);
+      const response = await fetch(`/api/launch/${engine}`, { method: 'POST' });
+      if (response.ok) {
+        setLastLaunched(engine);
+      }
     } finally {
       setLaunching(null);
     }
