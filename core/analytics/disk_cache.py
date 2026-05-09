@@ -6,8 +6,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 CACHE_SCHEMA_VERSION = 3
-CACHE_TTL_SECONDS = 300  # 5 minutes — fresh
-CACHE_STALE_SECONDS = 7 * 86400  # 7 days — stale-while-revalidate boundary
+CACHE_TTL_SECONDS = 300  # 5 minutes
 
 
 def _default_cache_path() -> Path:
@@ -22,15 +21,14 @@ def _default_cache_path() -> Path:
 def load_cache(path: Path | None = None) -> Optional[Any]:
     """Loads cached analytics data from a JSON file.
 
-    Handles TTL and stale-while-revalidate logic. Returns data if fresh or stale
-    (marking it as stale). Returns None if the cache doesn't exist, is corrupt,
-    has an incompatible version, or is past the stale boundary.
+    Returns cached data if it exists, has a compatible schema version, and is
+    within TTL. Returns None if the cache is missing, corrupt, incompatible, or expired.
 
     Args:
         path: Optional specific path to load from. Defaults to ~/.ca_analytics_cache.json.
 
     Returns:
-        The cached data if valid, otherwise None.
+        The cached data if valid and fresh, otherwise None.
     """
     p = path or _default_cache_path()
     if not p.exists():
@@ -45,11 +43,8 @@ def load_cache(path: Path | None = None) -> Optional[Any]:
         return None
 
     age = time.time() - doc.get("saved_at", 0)
-    if age > CACHE_STALE_SECONDS:
-        return None
     if age > CACHE_TTL_SECONDS:
-        # Stale-while-revalidate: return stale data; caller should refresh async
-        doc["stale"] = True
+        return None
     return doc.get("data")
 
 
