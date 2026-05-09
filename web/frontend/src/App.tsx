@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp } from 'lucide-react';
+import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket } from 'lucide-react';
 import SkillGallery from './components/SkillGallery';
 import ConfigHub from './components/ConfigHub';
 import TaskDashboard from './components/TaskDashboard';
@@ -10,8 +10,10 @@ import PromptsGallery from './components/PromptsGallery';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ManifestDrawer from './components/ManifestDrawer';
 import Analytics from './components/Analytics';
+import LaunchPad from './components/LaunchPad';
 
 const navItems = [
+  { path: '/launch', label: 'Launch', icon: Rocket },
   { path: '/skills', label: 'Skills', icon: Box },
   { path: '/prompts', label: 'Prompts', icon: GitBranch },
   { path: '/hooks', label: 'Hooks', icon: Anchor },
@@ -22,6 +24,7 @@ const navItems = [
 ] as const;
 
 const PAGE_LABELS: Record<string, string> = {
+  '/launch': 'Launch',
   '/skills': 'Skills',
   '/prompts': 'Prompts',
   '/hooks': 'Hooks',
@@ -90,7 +93,8 @@ function App() {
         </header>
         <div className="flex-1 min-h-0 overflow-y-auto pr-2 custom-scrollbar">
           <Routes>
-            <Route path="/" element={<Navigate to="/skills" replace />} />
+            <Route path="/" element={<Navigate to="/launch" replace />} />
+            <Route path="/launch" element={<LaunchPad />} />
             <Route path="/skills" element={<SkillGallery />} />
             <Route path="/prompts" element={<PromptsGallery />} />
             <Route path="/hooks" element={<HooksGallery />} />

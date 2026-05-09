@@ -7,7 +7,16 @@ from fastapi.staticfiles import StaticFiles
 from core.prompt_scanner import DEFAULT_GROUP_PROMPTS, PromptScanner
 from core.skill_scanner import SkillScanner
 from core.plugin_scanner import PluginScanner
-from core.web.routers import analytics, config, hooks, plugins, prompts, skills, tasks
+from core.web.routers import (
+    analytics,
+    config,
+    hooks,
+    launch,
+    plugins,
+    prompts,
+    skills,
+    tasks,
+)
 from core.web.resource_paths import ROOT_DIR, resolve_resource_path
 
 CONFIG_PATH = ROOT_DIR / "config.json"
@@ -105,6 +114,7 @@ app = FastAPI(title="CodeAgent Web UI", lifespan=lifespan)
 app.include_router(analytics.router)
 app.include_router(config.router)
 app.include_router(hooks.router)
+app.include_router(launch.router)
 app.include_router(plugins.router)
 app.include_router(prompts.router)
 app.include_router(skills.router)
