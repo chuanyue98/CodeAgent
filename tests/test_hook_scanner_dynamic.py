@@ -54,7 +54,7 @@ def test_hook_scanner_multiple_roots(tmp_path):
     )
 
     scanner = HookScanner([root1, root2])
-    scanned = scanner.scan()
+    scanned, _ = scanner.scan()
 
     assert "base" in scanned
     assert "devops" in scanned
@@ -115,7 +115,7 @@ def test_get_hooks_to_inject_dynamic(tmp_path):
     }
 
     # Test auto-loading local hooks and resolving configured ones
-    hooks = get_hooks_to_inject(
+    hooks, warnings = get_hooks_to_inject(
         config, scanner, project_type="web", extra_hooks=["local/my-hook"]
     )
 
@@ -133,3 +133,4 @@ def test_get_hooks_to_inject_dynamic(tmp_path):
     # For hooks, it might be more complex because of categories.
 
     assert "my-hook" in names
+    assert warnings == []

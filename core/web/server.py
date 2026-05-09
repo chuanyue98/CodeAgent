@@ -53,12 +53,12 @@ def initialize_default_groups() -> None:
     skills_root, prompts_root, hooks_root = _get_roots()
     groups: dict = config_data.get("groups", {})
     skill_scanner = SkillScanner(skills_root)
-    scanned_skills = skill_scanner.scan()
+    scanned_skills, _ = skill_scanner.scan()
     prompt_scanner = PromptScanner(prompts_root)
-    scanned_prompts = prompt_scanner.scan()
+    scanned_prompts, _ = prompt_scanner.scan()
 
     plugin_scanner = PluginScanner(resolve_resource_path("plugins", "CA_PLUGINS_ROOT"))
-    scanned_plugins = plugin_scanner.scan()
+    scanned_plugins, _ = plugin_scanner.scan()
 
     changed = False
     for group_name, categories in DEFAULT_GROUP_CATEGORIES.items():

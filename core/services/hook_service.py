@@ -24,7 +24,7 @@ class HookService:
             A list of dictionaries, each containing hook metadata:
             id, name, event, description, path, and isActive.
         """
-        scanned = self.scanner.scan()
+        scanned, _ = self.scanner.scan()
 
         # Load config to check active hooks
         active_hooks = set()

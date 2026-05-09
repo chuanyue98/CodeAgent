@@ -18,7 +18,8 @@ def get_config_path():
 @router.get("/projects")
 async def list_projects():
     service = ConfigService(get_config_path())
-    return service.get_config().get("project_registry", [])
+    config, _ = service.get_config()
+    return config.get("project_registry", [])
 
 
 @router.post("/projects")
@@ -46,14 +47,15 @@ async def delete_project(path: str):
 @router.get("/groups")
 async def list_groups():
     service = ConfigService(get_config_path())
-    return service.get_config().get("groups", {})
+    config, _ = service.get_config()
+    return config.get("groups", {})
 
 
 @router.post("/groups/{group_name}")
 async def update_group(group_name: str, definition: dict = Body(...)):
     try:
         service = ConfigService(get_config_path())
-        config = service.get_config()
+        config, _ = service.get_config()
         if "groups" not in config:
             config["groups"] = {}
         config["groups"][group_name] = definition
@@ -67,7 +69,7 @@ async def update_group(group_name: str, definition: dict = Body(...)):
 async def delete_group(group_name: str):
     try:
         service = ConfigService(get_config_path())
-        config = service.get_config()
+        config, _ = service.get_config()
         if "groups" in config and group_name in config["groups"]:
             del config["groups"][group_name]
         else:
@@ -84,7 +86,8 @@ async def get_config():
     if not path.exists():
         raise HTTPException(status_code=404, detail="config.json not found")
     service = ConfigService(path)
-    return service.get_config()
+    config, _ = service.get_config()
+    return config
 
 
 @router.post("/config")

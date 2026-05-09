@@ -12,6 +12,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+from core.hook_scanner import get_hooks_to_inject
+from core.plugin_scanner import get_plugins_to_mount
+from core.services.config_service import ConfigService
+
 # ── Status symbols ────────────────────────────────────────────────────────────
 
 OK = "[OK]"
@@ -93,24 +97,26 @@ def check_engines(section: Section) -> None:
 
 def check_config(section: Section, root: Path) -> Optional[dict]:
     config_path = root / "config.json"
-    if not config_path.exists():
-        section.add(
-            FAIL,
-            "config.json",
-            "file not found",
-            "Run: ca (first launch creates defaults)",
-        )
+    config_service = ConfigService(config_path)
+    cfg, warnings = config_service.get_config()
+
+    for warning in warnings:
+        section.add(WARN, "config.json", warning)
+
+    if not cfg:
+        if not config_path.exists():
+            section.add(
+                FAIL,
+                "config.json",
+                "file not found",
+                "Run: ca (first launch creates defaults)",
+            )
+        else:
+            section.add(FAIL, "config.json", "failed to load or parse configuration")
         return None
-    try:
-        with open(config_path, encoding="utf-8") as f:
-            cfg = json.load(f)
-        section.add(OK, "config.json", "valid JSON")
-        return cfg
-    except json.JSONDecodeError as e:
-        section.add(
-            FAIL, "config.json", f"invalid JSON: {e}", "Fix JSON syntax in config.json"
-        )
-        return None
+
+    section.add(OK, "config.json", "valid configuration")
+    return cfg
 
 
 def check_directories(section: Section, root: Path) -> None:
@@ -138,7 +144,10 @@ def check_skills_resolution(section: Section, root: Path, cfg: dict) -> None:
         project_type = engine.get_current_project_group()
         section.add(INFO, f"Active project group: {project_type}")
 
-        skills = engine.get_skills_to_mount()
+        skills, warnings = engine.get_skills_to_mount()
+        for w in warnings:
+            section.add(WARN, "Skill Scanner", w)
+
         skill_roots = engine._get_skill_search_roots()
 
         missing = []
@@ -165,7 +174,9 @@ def check_hooks_resolution(section: Section, root: Path, cfg: dict) -> None:
     try:
         engine = _LightweightResolver(root, cfg)
         project_type = engine.get_current_project_group()
-        hooks = engine.get_hooks_to_inject()
+        hooks, warnings = engine.get_hooks_to_inject()
+        for w in warnings:
+            section.add(WARN, "Hook Scanner", w)
 
         declared = cfg.get("groups", {}).get(project_type, {}).get("hooks", [])
         missing = []
@@ -190,7 +201,9 @@ def check_plugins_resolution(section: Section, root: Path, cfg: dict) -> None:
     try:
         engine = _LightweightResolver(root, cfg)
         project_type = engine.get_current_project_group()
-        plugins = engine.get_plugins_to_mount()
+        plugins, warnings = engine.get_plugins_to_mount()
+        for w in warnings:
+            section.add(WARN, "Plugin Scanner", w)
 
         declared = cfg.get("groups", {}).get(project_type, {}).get("plugins", [])
         missing = []
@@ -369,6 +382,27 @@ class _LightweightResolver:
 
         self._engine = _Stub()
 
+    def get_skills_to_mount(self) -> tuple[List[str], List[str]]:
+        data = self._engine.get_skills_to_mount()
+        _, warnings = self._engine.skill_scanner.scan()
+        return data, warnings
+
+    def get_hooks_to_inject(self) -> tuple[List[dict], List[str]]:
+        project_type = self._engine.get_current_project_group()
+        return get_hooks_to_inject(
+            self._engine.full_config,
+            self._engine.hook_scanner,
+            project_type=project_type,
+        )
+
+    def get_plugins_to_mount(self) -> tuple[List[dict], List[str]]:
+        project_type = self._engine.get_current_project_group()
+        return get_plugins_to_mount(
+            self._engine.full_config,
+            self._engine.plugin_scanner,
+            project_type=project_type,
+        )
+
     def __getattr__(self, name):
         return getattr(self._engine, name)
 
@@ -463,3 +497,7 @@ def run_doctor(fix: bool = False) -> int:
         print()
 
     return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(run_doctor())

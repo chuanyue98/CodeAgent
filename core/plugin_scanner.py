@@ -1,6 +1,8 @@
 """Scanner for discovering plugins in the plugins directory."""
 
 import json
+import os
+import traceback
 from pathlib import Path
 from typing import Dict, List, Any
 
@@ -16,15 +18,18 @@ class PluginScanner:
         """
         self.plugins_root = plugins_root
 
-    def scan(self) -> Dict[str, Dict[str, Any]]:
+    def scan(self) -> tuple[Dict[str, Dict[str, Any]], List[str]]:
         """Scans the plugins root directory for categories and plugin metadata.
 
         Returns:
-            A dictionary mapping category names to dictionaries of plugin metadata.
+            A tuple containing:
+            - A dictionary mapping category names to dictionaries of plugin metadata.
+            - A list of warning strings.
         """
         result = {}
+        warnings = []
         if not self.plugins_root.exists():
-            return result
+            return result, warnings
 
         for category_dir in self.plugins_root.iterdir():
             if not category_dir.is_dir():
@@ -42,8 +47,12 @@ class PluginScanner:
                     try:
                         with open(metadata_path, "r", encoding="utf-8") as f:
                             metadata = json.load(f)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        msg = f"Failed to load metadata from {metadata_path}: {e}"
+                        warnings.append(msg)
+                        if os.getenv("CA_DEBUG"):
+                            traceback.print_exc()
+                        continue
 
                 # Basic info
                 metadata["name"] = item.name
@@ -63,14 +72,14 @@ class PluginScanner:
 
             if plugins:
                 result[category] = plugins
-        return result
+        return result, warnings
 
 
 def get_plugins_to_mount(
     config: dict,
     scanner: PluginScanner,
     project_type: str = "common",
-) -> List[Dict[str, Any]]:
+) -> tuple[List[Dict[str, Any]], List[str]]:
     """Determines which plugins should be mounted based on configuration and environment.
 
     Args:
@@ -79,10 +88,11 @@ def get_plugins_to_mount(
         project_type: The type of project (e.g., 'common', 'web').
 
     Returns:
-        A list of plugin metadata dictionaries to mount.
+        A tuple of plugin metadata dictionaries to mount and warning messages.
     """
-    scanned = scanner.scan()
+    scanned, scan_warnings = scanner.scan()
     result_map = {}
+    warnings = list(scan_warnings)
 
     def add_plugin(full_name: str):
         if "/" not in full_name:
@@ -103,11 +113,12 @@ def get_plugins_to_mount(
         if local_plugins.exists():
             # Scan local plugins
             local_scanner = PluginScanner(local_plugins)
-            local_scanned = local_scanner.scan()
+            local_scanned, local_warnings = local_scanner.scan()
+            warnings.extend(local_warnings)
             for cat, plugins in local_scanned.items():
                 for name, metadata in plugins.items():
                     full_name = f"{cat}/{name}"
                     if full_name not in result_map:
                         result_map[full_name] = metadata
 
-    return list(result_map.values())
+    return list(result_map.values()), warnings

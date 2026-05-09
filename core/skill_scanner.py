@@ -1,5 +1,7 @@
 """Scanner for discovering skills in the skills directory."""
 
+import os
+import traceback
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -15,27 +17,49 @@ class SkillScanner:
         """
         self.skills_root = skills_root
 
-    def scan(self) -> Dict[str, List[str]]:
+    def scan(self) -> tuple[Dict[str, List[str]], List[str]]:
         """Scans the skills root directory for categories and individual skill definitions.
 
         Returns:
-            A dictionary mapping category names to lists of skill names.
+            A tuple containing:
+            - A dictionary mapping category names to lists of skill names.
+            - A list of warning messages encountered during scanning.
         """
         result: Dict[str, List[str]] = {}
+        warnings: List[str] = []
         if not self.skills_root.exists():
-            return result
+            return result, warnings
 
-        for category_dir in self.skills_root.iterdir():
-            if not category_dir.is_dir():
-                continue
-            category = category_dir.name
-            skills = []
-            for item in category_dir.iterdir():
-                if item.is_dir() and (item / "SKILL.md").exists():
-                    skills.append(item.name)
-            if skills:
-                result[category] = skills
-        return result
+        try:
+            for category_dir in self.skills_root.iterdir():
+                if not category_dir.is_dir():
+                    continue
+                category = category_dir.name
+                skills = []
+                try:
+                    for item in category_dir.iterdir():
+                        if item.is_dir():
+                            if (item / "SKILL.md").exists():
+                                skills.append(item.name)
+                            else:
+                                warnings.append(
+                                    f"Skill directory '{item}' does not contain SKILL.md"
+                                )
+                except Exception as e:
+                    warnings.append(
+                        f"Failed to scan category directory '{category_dir}': {e}"
+                    )
+                    if os.getenv("CA_DEBUG"):
+                        traceback.print_exc()
+
+                if skills:
+                    result[category] = skills
+        except Exception as e:
+            warnings.append(f"Failed to iterate skills root '{self.skills_root}': {e}")
+            if os.getenv("CA_DEBUG"):
+                traceback.print_exc()
+
+        return result, warnings
 
 
 def get_skills_to_mount(

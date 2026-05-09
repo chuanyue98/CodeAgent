@@ -25,7 +25,7 @@ class PromptService:
             Each dictionary contains: id, name, description, readme (combined content),
             and a list of individual prompt files with their paths.
         """
-        scanned = self.scanner.scan()
+        scanned, _ = self.scanner.scan()
         prompt_groups = []
         excluded_files = EXCLUDED_PROMPT_FILES
 

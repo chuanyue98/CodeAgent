@@ -21,7 +21,7 @@ class PluginService:
             A dictionary mapping categories to lists of plugin details.
             Each plugin detail includes: name, id, description, and readme.
         """
-        scanned = self.scanner.scan()
+        scanned, warnings = self.scanner.scan()
         detailed_plugins = {}
         for category, plugins in scanned.items():
             detailed_plugins[category] = []

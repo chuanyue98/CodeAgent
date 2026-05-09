@@ -1,4 +1,6 @@
 import json
+import os
+import traceback
 from pathlib import Path
 
 
@@ -13,20 +15,23 @@ class ConfigService:
         """
         self.config_path = config_path
 
-    def get_config(self) -> dict:
+    def get_config(self) -> tuple[dict, list[str]]:
         """Retrieves the current configuration.
 
         Returns:
-            The configuration as a dictionary, or an empty dictionary if the file
-            does not exist or cannot be parsed.
+            A tuple of (configuration_dict, warnings_list).
         """
+        warnings = []
         if not self.config_path.exists():
-            return {}
+            return {}, []
         try:
             with open(self.config_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
+                return json.load(f), []
+        except Exception as e:
+            warnings.append(f"Failed to parse config.json: {e}")
+            if os.getenv("CA_DEBUG"):
+                traceback.print_exc()
+            return {}, warnings
 
     def update_config(self, config: dict):
         """Updates the configuration file with the provided dictionary.
@@ -47,7 +52,7 @@ class ConfigService:
         Returns:
             The updated project registry list.
         """
-        config = self.get_config()
+        config, _ = self.get_config()
         registry = config.get("project_registry", [])
         updated = False
         for item in registry:
@@ -70,7 +75,7 @@ class ConfigService:
         Returns:
             The updated project registry list.
         """
-        config = self.get_config()
+        config, _ = self.get_config()
         registry = config.get("project_registry", [])
         new_registry = [item for item in registry if item["path"] != path]
         config["project_registry"] = new_registry
