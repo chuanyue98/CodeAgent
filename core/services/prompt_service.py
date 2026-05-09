@@ -1,4 +1,5 @@
 from pathlib import Path
+from core.prompt_kit import EXCLUDED_PROMPT_FILES
 from core.prompt_scanner import PromptScanner
 
 
@@ -26,7 +27,7 @@ class PromptService:
         """
         scanned = self.scanner.scan()
         prompt_groups = []
-        excluded_files = {"README.md", "IMPLEMENTATION_PLAN.md"}
+        excluded_files = EXCLUDED_PROMPT_FILES
 
         for category in sorted(scanned.keys()):
             group_dir = self.prompts_root / category

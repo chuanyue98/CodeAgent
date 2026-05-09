@@ -9,6 +9,8 @@ from typing import List
 
 VERSION = "0.2"
 
+EXCLUDED_PROMPT_FILES = {"IMPLEMENTATION_PLAN.md", "README.md"}
+
 
 def get_prompts_from_directory(directory: Path) -> str:
     """Retrieves and merges all markdown prompt files from a specified directory.
@@ -23,7 +25,7 @@ def get_prompts_from_directory(directory: Path) -> str:
         return ""
 
     md_files = sorted(directory.glob("*.md"))
-    excluded_files = {"IMPLEMENTATION_PLAN.md", "README.md"}
+    excluded_files = EXCLUDED_PROMPT_FILES
 
     prompt_parts = []
 

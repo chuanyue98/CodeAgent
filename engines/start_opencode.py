@@ -13,7 +13,7 @@ from typing import List
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.engine_base import BaseEngine
-from core.prompt_lib import (
+from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
     show_tasks,
