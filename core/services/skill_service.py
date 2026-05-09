@@ -22,7 +22,7 @@ class SkillService:
             A dictionary mapping categories to lists of skill details.
             Each skill detail includes: name, id, description, and readme (content).
         """
-        scanned = self.scanner.scan()
+        scanned, warnings = self.scanner.scan()
         detailed_skills = {}
         for category, skills in scanned.items():
             detailed_skills[category] = []

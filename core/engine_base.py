@@ -12,6 +12,7 @@ from core.hook_scanner import HookScanner, get_hooks_to_inject
 from core.plugin_scanner import PluginScanner, get_plugins_to_mount
 from core.prompt_kit import prompt_general, prompt_review
 from core.prompt_scanner import PromptScanner, get_prompts_to_inject
+from core.services.config_service import ConfigService
 from core.skill_scanner import SkillScanner, get_skills_to_mount
 
 
@@ -94,19 +95,14 @@ class BaseEngine:
         return self.root_dir
 
     def _load_full_config(self) -> dict:
-        """Loads the complete configuration from config.json in the project root.
+        """Loads the complete configuration using ConfigService.
 
         Returns:
             dict: The loaded configuration dictionary, or an empty dict if not found or invalid.
         """
-        config_path = self.root_dir / "config.json"
-        if not config_path.exists():
-            return {}
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
+        config_service = ConfigService(self.root_dir / "config.json")
+        config, _ = config_service.get_config()
+        return config
 
     def _resolve_config_groups(self, section_name: str) -> List[str]:
         """Resolves configuration groups based on the current working directory.

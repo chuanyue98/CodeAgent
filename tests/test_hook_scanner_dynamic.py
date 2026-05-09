@@ -54,7 +54,7 @@ def test_hook_scanner_multiple_roots(tmp_path):
     )
 
     scanner = HookScanner([root1, root2])
-    scanned = scanner.scan()
+    scanned, _ = scanner.scan()
 
     assert "base" in scanned
     assert "devops" in scanned

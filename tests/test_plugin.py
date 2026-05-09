@@ -16,15 +16,34 @@ def test_plugin_scanner_scan(tmp_path):
     (cat_dir / "test-plugin").mkdir()
 
     scanner = PluginScanner(plugins_root)
-    result = scanner.scan()
+    result, warnings = scanner.scan()
 
     assert "base" in result
     assert "test-plugin" in result["base"]
+    assert warnings == []
 
 
 def test_plugin_scanner_empty(tmp_path):
     scanner = PluginScanner(tmp_path / "non_existent")
-    assert scanner.scan() == {}
+    result, warnings = scanner.scan()
+    assert result == {}
+    assert warnings == []
+
+
+def test_plugin_scanner_invalid_json(tmp_path):
+    plugins_root = tmp_path / "plugins"
+    cat_dir = plugins_root / "base"
+    cat_dir.mkdir(parents=True)
+    plugin_dir = cat_dir / "bad-plugin"
+    plugin_dir.mkdir()
+    (plugin_dir / "metadata.json").write_text("{ invalid json }")
+
+    scanner = PluginScanner(plugins_root)
+    result, warnings = scanner.scan()
+
+    assert "base" not in result
+    assert len(warnings) == 1
+    assert "Failed to load metadata" in warnings[0]
 
 
 def test_get_plugins_to_mount(tmp_path, monkeypatch):

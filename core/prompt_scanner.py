@@ -22,27 +22,39 @@ class PromptScanner:
         """
         self.prompt_root = prompt_root
 
-    def scan(self) -> Dict[str, List[str]]:
+    def scan(self) -> tuple[Dict[str, List[str]], List[str]]:
         """Scans the prompt root directory for prompt groups and files.
 
         Returns:
-            A dictionary mapping group names to lists of prompt names (file stems).
+            A tuple containing:
+            - A dictionary mapping group names to lists of prompt names (file stems).
+            - A list of warning strings.
         """
         result = {}
+        warnings = []
         if not self.prompt_root.exists():
-            return result
+            return result, warnings
 
-        for group_dir in self.prompt_root.iterdir():
-            if not group_dir.is_dir():
-                continue
-            group = group_dir.name
-            prompts = []
-            for md_file in group_dir.glob("*.md"):
-                if md_file.stem not in ("README", "IMPLEMENTATION_PLAN"):
-                    prompts.append(md_file.stem)
-            if prompts:
-                result[group] = prompts
-        return result
+        try:
+            for group_dir in self.prompt_root.iterdir():
+                if not group_dir.is_dir():
+                    continue
+                group = group_dir.name
+                prompts = []
+                try:
+                    for md_file in group_dir.glob("*.md"):
+                        if md_file.stem not in ("README", "IMPLEMENTATION_PLAN"):
+                            prompts.append(md_file.stem)
+                except Exception as e:
+                    warnings.append(f"Failed to scan directory {group_dir}: {e}")
+                    continue
+
+                if prompts:
+                    result[group] = prompts
+        except Exception as e:
+            warnings.append(f"Failed to iterate prompt root {self.prompt_root}: {e}")
+
+        return result, warnings
 
 
 def get_prompts_to_inject(
@@ -62,7 +74,7 @@ def get_prompts_to_inject(
     Returns:
         A list of prompt group names to inject.
     """
-    scanned = scanner.scan()
+    scanned, scan_warnings = scanner.scan()
     result: List[str] = []
     groups_cfg = config.get("groups", {})
     project_group_cfg = groups_cfg.get(project_type, {})

@@ -48,3 +48,5 @@ assets/watermark_tmp/
 prompt_debug*.json
 .codex/
 config.json
+
+gha-creds-*.json

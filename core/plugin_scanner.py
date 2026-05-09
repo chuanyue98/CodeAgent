@@ -16,15 +16,18 @@ class PluginScanner:
         """
         self.plugins_root = plugins_root
 
-    def scan(self) -> Dict[str, Dict[str, Any]]:
+    def scan(self) -> tuple[Dict[str, Dict[str, Any]], List[str]]:
         """Scans the plugins root directory for categories and plugin metadata.
 
         Returns:
-            A dictionary mapping category names to dictionaries of plugin metadata.
+            A tuple containing:
+            - A dictionary mapping category names to dictionaries of plugin metadata.
+            - A list of warning strings.
         """
         result = {}
+        warnings = []
         if not self.plugins_root.exists():
-            return result
+            return result, warnings
 
         for category_dir in self.plugins_root.iterdir():
             if not category_dir.is_dir():
@@ -42,8 +45,16 @@ class PluginScanner:
                     try:
                         with open(metadata_path, "r", encoding="utf-8") as f:
                             metadata = json.load(f)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        import os
+
+                        msg = f"Failed to load metadata from {metadata_path}: {e}"
+                        warnings.append(msg)
+                        if os.getenv("CA_DEBUG"):
+                            import traceback
+
+                            traceback.print_exc()
+                        continue
 
                 # Basic info
                 metadata["name"] = item.name
@@ -63,7 +74,7 @@ class PluginScanner:
 
             if plugins:
                 result[category] = plugins
-        return result
+        return result, warnings
 
 
 def get_plugins_to_mount(
@@ -81,7 +92,7 @@ def get_plugins_to_mount(
     Returns:
         A list of plugin metadata dictionaries to mount.
     """
-    scanned = scanner.scan()
+    scanned, scan_warnings = scanner.scan()
     result_map = {}
 
     def add_plugin(full_name: str):
@@ -103,7 +114,7 @@ def get_plugins_to_mount(
         if local_plugins.exists():
             # Scan local plugins
             local_scanner = PluginScanner(local_plugins)
-            local_scanned = local_scanner.scan()
+            local_scanned, local_warnings = local_scanner.scan()
             for cat, plugins in local_scanned.items():
                 for name, metadata in plugins.items():
                     full_name = f"{cat}/{name}"

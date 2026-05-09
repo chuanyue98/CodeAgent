@@ -1,6 +1,8 @@
 """Scanner for discovering hooks in the hooks directory."""
 
 import json
+import os
+import traceback
 from pathlib import Path
 from typing import Dict, Any
 
@@ -19,13 +21,16 @@ class HookScanner:
         else:
             self.hooks_roots = hooks_roots
 
-    def scan(self) -> Dict[str, Dict[str, Any]]:
+    def scan(self) -> tuple[Dict[str, Dict[str, Any]], list[str]]:
         """Scans the hook root directories for categories and hook metadata.
 
         Returns:
-            A dictionary mapping category names to dictionaries of hook metadata.
+            A tuple containing:
+            - A dictionary mapping category names to dictionaries of hook metadata.
+            - A list of warning strings encountered during scanning.
         """
         result = {}
+        warnings = []
         # Iterate in reverse order so that hooks in earlier roots override later ones
         for root in reversed(self.hooks_roots):
             if not root.exists():
@@ -41,17 +46,21 @@ class HookScanner:
 
                 for item in category_dir.iterdir():
                     if item.is_dir() and (item / "metadata.json").exists():
+                        metadata_path = item / "metadata.json"
                         try:
-                            with open(
-                                item / "metadata.json", "r", encoding="utf-8"
-                            ) as f:
+                            with open(metadata_path, "r", encoding="utf-8") as f:
                                 metadata = json.load(f)
                                 metadata["_hook_dir"] = str(item.resolve().as_posix())
                                 # Use category/name as unique identifier for overriding
                                 result[category][item.name] = metadata
-                        except Exception:
+                        except Exception as e:
+                            if os.getenv("CA_DEBUG"):
+                                traceback.print_exc()
+                            warnings.append(
+                                f"Failed to load hook metadata from {metadata_path}: {e}"
+                            )
                             continue
-        return result
+        return result, warnings
 
 
 def get_hooks_to_inject(
@@ -71,7 +80,7 @@ def get_hooks_to_inject(
     Returns:
         A list of hook metadata dictionaries to inject.
     """
-    scanned = scanner.scan()
+    scanned, _ = scanner.scan()
     result_map = {}  # Use name as key to avoid duplicates
 
     def add_hook(full_name: str):
