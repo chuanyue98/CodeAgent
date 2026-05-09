@@ -250,10 +250,52 @@ class CodexEngine(BaseEngine):
 
         config_path = self._get_user_config_path()
         config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 备份全局配置
+        backup_path = config_path.with_suffix(".toml.bak")
+        if config_path.exists() and not backup_path.exists():
+            shutil.copy2(config_path, backup_path)
+            print(f"💾 Created safety backup of global config: {backup_path.name}")
+
         data = self._load_config(config_path)
         data = self._format_plugins_for_settings(data, plugins)
         self._save_config(config_path, data)
         print(f"✅ Registered Codex plugins in {config_path}")
+
+    def cleanup_plugins_available(self) -> None:
+        """还原全局配置并清理临时市场/缓存"""
+        config_path = self._get_user_config_path()
+        backup_path = config_path.with_suffix(".toml.bak")
+
+        if backup_path.exists():
+            os.replace(str(backup_path), str(config_path))
+            print("♻️ Restored global config.toml from backup")
+        elif config_path.exists():
+            # 如果没有备份但文件存在，检查是否由 CodeAgent 创建
+            try:
+                content = config_path.read_text(encoding="utf-8")
+                if self.MARKETPLACE_NAME in content:
+                    config_path.unlink()
+                    print("♻️ Removed temporary global config.toml")
+            except Exception:
+                pass
+
+        # 清理临时市场目录
+        marketplace_root = self._get_marketplace_root()
+        if marketplace_root.exists():
+            # 仅在非 Linux 或确认是链接时移除 plugins 链接，避免 rmtree 报错
+            plugins_link = marketplace_root / "plugins"
+            if plugins_link.exists() and (
+                self._is_windows_link(plugins_link) or plugins_link.is_symlink()
+            ):
+                self._safe_remove_link(plugins_link)
+            shutil.rmtree(marketplace_root, ignore_errors=True)
+
+        # 清理插件缓存 (CodeAgent 专有部分)
+        cache_root = self._get_plugin_cache_root()
+        if cache_root.exists():
+            shutil.rmtree(cache_root, ignore_errors=True)
+            print("🧹 Cleaned up local Codex plugin cache")
 
 
 def extract_shell_first_blocks(text: str) -> Tuple[str, List[str]]:
@@ -661,9 +703,11 @@ def main() -> None:
     finally:
         # 1. 还原配置到注入前状态
         engine.restore_settings(".codex/settings.json")
-        # 2. 清理所有技能链接
+        # 2. 还原全局 config.toml 并清理缓存
+        engine.cleanup_plugins_available()
+        # 3. 清理所有技能链接
         engine.cleanup_skills_link(".codex/skills")
-        # 3. 兜底清理所有临时文件
+        # 4. 兜底清理所有临时文件
         engine.cleanup_temp_prompt()
 
 
