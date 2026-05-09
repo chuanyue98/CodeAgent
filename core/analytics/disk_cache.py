@@ -21,15 +21,14 @@ def _default_cache_path() -> Path:
 def load_cache(path: Path | None = None) -> Optional[Any]:
     """Loads cached analytics data from a JSON file.
 
-    Handles TTL and stale-while-revalidate logic. Returns data if fresh or stale
-    (marking it as stale). Returns None if the cache doesn't exist, is corrupt,
-    has an incompatible version, or is past the stale boundary.
+    Returns cached data if it exists, has a compatible schema version, and is
+    within TTL. Returns None if the cache is missing, corrupt, incompatible, or expired.
 
     Args:
         path: Optional specific path to load from. Defaults to ~/.ca_analytics_cache.json.
 
     Returns:
-        The cached data if valid, otherwise None.
+        The cached data if valid and fresh, otherwise None.
     """
     p = path or _default_cache_path()
     if not p.exists():
