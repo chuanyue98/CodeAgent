@@ -31,6 +31,62 @@ class OpenCodeEngine(BaseEngine):
     def _get_plugin_link_dir(self):
         return (Path.cwd() / ".opencode" / "plugins").absolute()
 
+    def ensure_plugins_link(self):
+        """为 OpenCode 优化插件挂载逻辑：支持扁平化链接以符合 OpenCode 的扫描规范"""
+        plugins_to_mount = self.get_plugins_to_mount()
+        if not plugins_to_mount:
+            return
+
+        link_dir = self._get_plugin_link_dir()
+        link_dir.mkdir(parents=True, exist_ok=True)
+
+        mounted_count = 0
+        for plugin_meta in plugins_to_mount:
+            plugin_name = plugin_meta["name"]
+            plugin_src_str = plugin_meta.get("_plugin_dir")
+            if not plugin_src_str:
+                continue
+
+            plugin_src = Path(plugin_src_str).resolve()
+
+            # 策略：如果插件内部有 .opencode/plugins 目录，则直接挂载其内部内容（扁平化）
+            # 否则挂载整个插件目录
+            opencode_inner_plugins = plugin_src / ".opencode" / "plugins"
+            if opencode_inner_plugins.is_dir():
+                # 挂载内部所有的 .js/.ts 文件
+                for item in opencode_inner_plugins.iterdir():
+                    if item.is_file() and item.suffix in (".js", ".ts"):
+                        target_link = link_dir / item.name
+                        self._safe_remove_link(target_link)
+                        self._create_skill_link(item, target_link)
+                        mounted_count += 1
+            else:
+                # 降级方案：挂载整个文件夹
+                target_link = link_dir / plugin_name
+                self._safe_remove_link(target_link)
+                self._create_skill_link(plugin_src, target_link)
+                mounted_count += 1
+
+        if mounted_count:
+            print(f"🔌 Ensured {mounted_count} flattened plugin links in {link_dir}")
+
+    def cleanup_plugins_link(self):
+        """清理所有创建的链接，不限于文件夹"""
+        link_dir = self._get_plugin_link_dir()
+        if not link_dir.exists():
+            return
+
+        for item in link_dir.iterdir():
+            if self._is_windows_link(item) or item.is_symlink():
+                self._safe_remove_link(item)
+
+        # 如果目录空了则删除
+        if not any(link_dir.iterdir()):
+            try:
+                link_dir.rmdir()
+            except Exception:
+                pass
+
     def build_command(self, message: str, non_interactive: bool) -> List[str]:
         if non_interactive:
             # 非交互模式使用 run

@@ -250,10 +250,41 @@ class CodexEngine(BaseEngine):
 
         config_path = self._get_user_config_path()
         config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 备份全局配置
+        backup_path = config_path.with_suffix(".toml.bak")
+        if config_path.exists() and not backup_path.exists():
+            shutil.copy2(config_path, backup_path)
+            print(f"💾 Created safety backup of global config: {backup_path.name}")
+
         data = self._load_config(config_path)
         data = self._format_plugins_for_settings(data, plugins)
         self._save_config(config_path, data)
         print(f"✅ Registered Codex plugins in {config_path}")
+
+    def cleanup_plugins_available(self) -> None:
+        """还原全局配置并清理临时市场/缓存"""
+        config_path = self._get_user_config_path()
+        backup_path = config_path.with_suffix(".toml.bak")
+
+        if backup_path.exists():
+            os.replace(str(backup_path), str(config_path))
+            print("♻️ Restored global config.toml from backup")
+        else:
+            # 如果没有备份但有注入标记，尝试清理（TOML 处理较复杂，暂以备份恢复为主）
+            pass
+
+        # 清理临时市场目录
+        marketplace_root = self._get_marketplace_root()
+        if marketplace_root.exists():
+            self._safe_remove_link(marketplace_root / "plugins")  # 先删链接
+            shutil.rmtree(marketplace_root, ignore_errors=True)
+
+        # 清理插件缓存 (CodeAgent 专有部分)
+        cache_root = self._get_plugin_cache_root()
+        if cache_root.exists():
+            shutil.rmtree(cache_root, ignore_errors=True)
+            print("🧹 Cleaned up local Codex plugin cache")
 
 
 def extract_shell_first_blocks(text: str) -> Tuple[str, List[str]]:
@@ -661,9 +692,11 @@ def main() -> None:
     finally:
         # 1. 还原配置到注入前状态
         engine.restore_settings(".codex/settings.json")
-        # 2. 清理所有技能链接
+        # 2. 还原全局 config.toml 并清理缓存
+        engine.cleanup_plugins_available()
+        # 3. 清理所有技能链接
         engine.cleanup_skills_link(".codex/skills")
-        # 3. 兜底清理所有临时文件
+        # 4. 兜底清理所有临时文件
         engine.cleanup_temp_prompt()
 
 
