@@ -547,47 +547,35 @@ class BaseEngine:
             except Exception as e:
                 print(f"⚠️ Failed to link skill '{target_name}': {e}")
 
-    def _get_global_ext_dir(self) -> Optional[Path]:
-        """Returns the engine-specific global extensions directory, or None if not applicable.
+    def _get_plugin_link_dir(self) -> Optional[Path]:
+        """Returns the directory where this engine's plugin links should be created.
 
-        Engines that support a global plugin directory (e.g. Gemini, Codex) must
-        override this method. The base class returns None — no engine is the default.
+        Each engine must override this to return its specific plugin directory:
+        - Gemini:   ~/.gemini/extensions/
+        - Codex:    ~/.codex/plugins/
+        - Claude:   <cwd>/.claude/plugins/
+        - OpenCode: <cwd>/.opencode/plugins/
 
         Returns:
-            Optional[Path]: The absolute path to the global extensions directory,
-                or None if the engine does not use one.
+            Optional[Path]: The absolute path to the plugin link directory,
+                or None if plugins are not supported for this engine.
         """
         return None
 
-    def ensure_plugins_link(self, target_link_path: str = None):
-        """Ensures that plugin links exist in the target directory.
-
-        When target_link_path is provided, links are created in that project-level
-        directory (e.g., ``.claude/plugins``). Otherwise falls back to the engine's
-        global extensions directory returned by ``_get_global_ext_dir()``.
-        If neither is available, the method is a no-op.
+    def ensure_plugins_link(self):
+        """Ensures that plugin links exist in the engine's plugin directory.
 
         Uses a 'stable mapping' strategy: if a link already points to the correct
         source, it is not recreated. Stale links are removed and recreated.
-
-        Args:
-            target_link_path (str, optional): Relative path for project-level linking.
-                When None, uses the engine's global extensions directory.
+        No-op if ``_get_plugin_link_dir()`` returns None.
         """
         plugins_to_mount = self.get_plugins_to_mount()
         if not plugins_to_mount:
             return
 
-        if target_link_path:
-            link_dir = (Path.cwd() / target_link_path).absolute()
-        else:
-            link_dir = self._get_global_ext_dir()
-            if link_dir is None:
-                print(
-                    f"⚠️ {self.name} engine has no global extensions directory. "
-                    "Pass target_link_path to ensure_plugins_link()."
-                )
-                return
+        link_dir = self._get_plugin_link_dir()
+        if link_dir is None:
+            return
         link_dir.mkdir(parents=True, exist_ok=True)
 
         mounted_count = 0
@@ -626,30 +614,21 @@ class BaseEngine:
                 print(f"⚠️ Failed to link plugin '{plugin_name}': {e}")
 
         if mounted_count:
-            display_dir = target_link_path or str(self._get_global_ext_dir())
-            print(f"🔌 Ensured {mounted_count} plugin links in {display_dir}")
+            print(f"🔌 Ensured {mounted_count} plugin links in {link_dir}")
 
-    def cleanup_plugins_link(self, target_link_path: str = None):
-        """Removes temporary plugin links from the target directory.
+    def cleanup_plugins_link(self):
+        """Removes plugin links from the engine's plugin directory.
 
-        When target_link_path is provided, removes links from that project-level
-        directory. Otherwise removes from the engine's global extensions directory.
         Only removes items verified to be links (symlinks or Windows junctions).
-
-        Args:
-            target_link_path (str, optional): Relative path used during ensure_plugins_link.
-                Must match the path passed to ensure_plugins_link.
+        No-op if ``_get_plugin_link_dir()`` returns None.
         """
         plugins_to_mount = self.get_plugins_to_mount()
         if not plugins_to_mount:
             return
 
-        if target_link_path:
-            link_dir = (Path.cwd() / target_link_path).absolute()
-        else:
-            link_dir = self._get_global_ext_dir()
-            if link_dir is None:
-                return
+        link_dir = self._get_plugin_link_dir()
+        if link_dir is None:
+            return
         for plugin_meta in plugins_to_mount:
             plugin_name = plugin_meta["name"]
             target_link = link_dir / plugin_name

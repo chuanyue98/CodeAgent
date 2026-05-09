@@ -62,11 +62,8 @@ class CodexEngine(BaseEngine):
             message,
         ]
 
-    def _get_global_ext_dir(self) -> Path:
-        """重写：获取 Codex 的全局插件目录"""
-        home = Path.home()
-        ext_dir = home / ".codex" / "plugins"
-        return ext_dir.absolute()
+    def _get_plugin_link_dir(self) -> Path:
+        return (Path.home() / ".codex" / "plugins").absolute()
 
     def _load_config(self, path: Path) -> Any:
         """重写：支持 TOML 格式加载"""

@@ -28,6 +28,9 @@ class OpenCodeEngine(BaseEngine):
     def __init__(self):
         super().__init__("OpenCode", "opencode-default")
 
+    def _get_plugin_link_dir(self):
+        return (Path.cwd() / ".opencode" / "plugins").absolute()
+
     def build_command(self, message: str, non_interactive: bool) -> List[str]:
         if non_interactive:
             # 非交互模式使用 run
@@ -74,7 +77,7 @@ def main():
     # 统一技能链接 (挂载到 .opencode/skills)
     engine.ensure_skills_link(".opencode/skills")
     # 统一插件链接
-    engine.ensure_plugins_link(".opencode/plugins")
+    engine.ensure_plugins_link()
 
     # 注入动态钩子
     resolved_hooks = engine.get_hooks_to_inject()
@@ -93,7 +96,7 @@ def main():
         # 2. 清理技能链接
         engine.cleanup_skills_link(".opencode/skills")
         # 3. 清理插件链接
-        engine.cleanup_plugins_link(".opencode/plugins")
+        engine.cleanup_plugins_link()
         # 4. 使用基类统一清理临时提示词
         engine.cleanup_temp_prompt()
 

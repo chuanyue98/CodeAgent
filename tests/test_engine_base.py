@@ -304,7 +304,7 @@ def test_ensure_plugins_link(mock_engine, tmp_path, monkeypatch):
     # Setup global extensions dir
     global_ext = tmp_path / "global_ext"
     global_ext.mkdir()
-    monkeypatch.setattr(mock_engine, "_get_global_ext_dir", lambda: global_ext)
+    monkeypatch.setattr(mock_engine, "_get_plugin_link_dir", lambda: global_ext)
 
     # Setup a plugin
     plugin_dir = tmp_path / "my-plugin"

@@ -33,7 +33,7 @@ class GeminiEngine(BaseEngine):
         "after_tool": "AfterTool",
     }
 
-    def _get_global_ext_dir(self):
+    def _get_plugin_link_dir(self):
         return (Path.home() / ".gemini" / "extensions").absolute()
 
     def __init__(self):
