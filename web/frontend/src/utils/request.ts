@@ -2,7 +2,7 @@ interface RequestConfig extends RequestInit {
   timeout?: number;
 }
 
-interface ApiResponse<T = any> {
+interface ApiResponse<T = unknown> {
   code: number;
   data: T;
   message: string;
@@ -10,7 +10,7 @@ interface ApiResponse<T = any> {
 
 const DEFAULT_TIMEOUT = 10000;
 
-async function request<T = any>(url: string, config: RequestConfig = {}): Promise<T> {
+async function request<T = unknown>(url: string, config: RequestConfig = {}): Promise<T> {
   const { timeout = DEFAULT_TIMEOUT, ...restConfig } = config;
 
   const controller = new AbortController();
@@ -36,7 +36,7 @@ async function request<T = any>(url: string, config: RequestConfig = {}): Promis
     return data.data;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Request timeout');
+      throw new Error('Request timeout', { cause: error });
     }
     console.error('Request error:', error);
     throw error;
