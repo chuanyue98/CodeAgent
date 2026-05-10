@@ -228,7 +228,7 @@ def main():
     }
 
     raw_args = sys.argv[1:]
-    use_proxy = "--proxy" in raw_args or "-p" in raw_args
+    use_proxy = "--proxy" in raw_args
 
     if use_proxy:
         child_env, proxy_host, proxy_port, proxy_scheme = build_proxy_env(config)
@@ -236,22 +236,20 @@ def main():
     else:
         child_env = None
 
-    # 过滤掉帮助、YOLO、代理相关参数（虽然我们已经默认 True，但保留参数解析以防用户习惯性输入）
+    # 过滤掉帮助、YOLO、代理相关参数；`-p` 保留给底层 CLI 自己处理。
     filtered_args = [
         arg
         for arg in raw_args
-        if arg not in ["-y", "--yolo", "-h", "--help", "--proxy", "-p"]
+        if arg not in ["-y", "--yolo", "-h", "--help", "--proxy"]
     ]
 
     if "-h" in sys.argv or "--help" in sys.argv:
         print("CodeAgent: Professional AI Engineering Shell\n")
-        print(
-            "Usage: python ca_launcher.py [engine|command] [extra_args] [--proxy|-p]\n"
-        )
+        print("Usage: python ca_launcher.py [engine|command] [extra_args] [--proxy]\n")
         print("Engines: gemini, claude, opencode, codex (default: gemini)")
         print("Options: (YOLO mode is enabled by default)")
         print("  -h, --help    Show this help message")
-        print("  -p, --proxy   Enable proxy from config.json")
+        print("  --proxy       Enable proxy from config.json")
         print("Commands:")
         print("  ui            Start the Web UI")
         print("  doctor        Run health self-check")

@@ -195,3 +195,15 @@ def test_main_default_engine_with_proxy(monkeypatch, capsys):
             assert "HTTP_PROXY" in kwargs["env"]
             captured = capsys.readouterr()
             assert "🌐 代理已启用" in captured.out
+
+
+def test_main_passes_dash_p_through_to_engine(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "claude", "-p", "hello"])
+    with patch("subprocess.run") as mock_run:
+        ca_launcher.main()
+        args, kwargs = mock_run.call_args
+        cmd = args[0]
+        assert "start_claude_code.py" in cmd[1]
+        assert "-p" in cmd
+        assert "hello" in cmd
+        assert kwargs["env"] is None
