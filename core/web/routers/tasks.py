@@ -21,6 +21,34 @@ async def list_tasks():
     return TaskService(get_tasks_root()).list_tasks()
 
 
+@router.get("/tasks/runs")
+async def list_runs():
+    """Lists all background task runs."""
+    return _runner.list_runs()
+
+
+@router.get("/tasks/runs/{task_id}")
+async def get_run_status(task_id: str):
+    """Retrieves the status of a specific background task run, including real-time progress."""
+    status = _runner.get_status(task_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    # Enrich with latest task data
+    task_name = task_id.rsplit("_", 1)[0]
+    task_service = TaskService(get_tasks_root())
+    task_data = task_service.get_task(task_name, log_path=status.log_path)
+
+    return {"status": status, "progress": task_data}
+
+
+@router.post("/tasks/runs/{task_id}/stop")
+async def stop_run(task_id: str):
+    """Stops a running background task."""
+    success = _runner.stop_task(task_id)
+    return {"success": success}
+
+
 @router.get("/tasks/{name}")
 async def get_task(name: str, group: str = Query(None)):
     task = TaskService(get_tasks_root()).get_task(name)
@@ -59,34 +87,6 @@ async def run_task(
     """Launches a task in the background with the selected engine."""
     status = _runner.run_task(name, engine, group)
     return status
-
-
-@router.get("/tasks/runs")
-async def list_runs():
-    """Lists all background task runs."""
-    return _runner.list_runs()
-
-
-@router.get("/tasks/runs/{task_id}")
-async def get_run_status(task_id: str):
-    """Retrieves the status of a specific background task run, including real-time progress."""
-    status = _runner.get_status(task_id)
-    if not status:
-        raise HTTPException(status_code=404, detail="Run not found")
-
-    # Enrich with latest task data
-    task_name = task_id.rsplit("_", 1)[0]
-    task_service = TaskService(get_tasks_root())
-    task_data = task_service.get_task(task_name, log_path=status.log_path)
-
-    return {"status": status, "progress": task_data}
-
-
-@router.post("/tasks/runs/{task_id}/stop")
-async def stop_run(task_id: str):
-    """Stops a running background task."""
-    success = _runner.stop_task(task_id)
-    return {"success": success}
 
 
 @router.get("/engines")

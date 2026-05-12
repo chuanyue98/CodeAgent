@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import os
+import re
 import signal
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
+
+_SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
 
 
 @dataclass
@@ -25,6 +28,7 @@ class TaskRunner:
     def __init__(self, root_dir: Path):
         self.root_dir = root_dir
         self.active_runs: Dict[str, TaskRunStatus] = {}
+        self._processes: Dict[str, subprocess.Popen] = {}
         self.log_dir = self.root_dir / ".ca_task_logs"
         self.log_dir.mkdir(exist_ok=True)
 
@@ -34,8 +38,13 @@ class TaskRunner:
         """Starts a task in the background using the specified engine."""
         import time
 
+        if not _SAFE_NAME_RE.match(task_name):
+            raise ValueError(f"Invalid task name: {task_name!r}")
+
         task_id = f"{task_name}_{int(time.time())}"
         log_file = self.log_dir / f"{task_id}.log"
+        if not log_file.resolve().is_relative_to(self.log_dir.resolve()):
+            raise ValueError("Log path escapes log directory")
 
         # Build command: python ca_launcher.py {engine} {task_name} -y
         launcher = self.root_dir / "ca_launcher.py"
@@ -66,6 +75,7 @@ class TaskRunner:
                 start_time=time.time(),
             )
             self.active_runs[task_id] = status
+            self._processes[task_id] = process
             return status
         except Exception as e:
             return TaskRunStatus(
@@ -95,8 +105,9 @@ class TaskRunner:
 
         # Check if process is still alive
         if not self._is_process_running(run.pid):
-            # In a real implementation, we'd check the return code here
-            run.status = "completed"  # Or check log for errors
+            proc = self._processes.get(task_id)
+            rc = proc.poll() if proc is not None else None
+            run.status = "completed" if rc == 0 else "failed"
 
         return run
 

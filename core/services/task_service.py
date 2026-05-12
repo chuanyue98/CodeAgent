@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import collections
 import os
 import re
 from pathlib import Path
+
+_SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
 
 
 class TaskService:
@@ -21,7 +24,11 @@ class TaskService:
         return tasks
 
     def get_task(self, name: str, log_path: str | None = None) -> dict | None:
+        if not _SAFE_NAME_RE.match(name):
+            return None
         path = self.tasks_root / f"{name}.md"
+        if not path.resolve().is_relative_to(self.tasks_root.resolve()):
+            return None
         if not path.exists():
             return None
 
@@ -31,8 +38,7 @@ class TaskService:
             try:
                 # Only read last 100 lines for efficiency
                 with open(log_path, "r", encoding="utf-8") as f:
-                    lines = f.readlines()
-                    task_data["logs"] = "".join(lines[-100:])
+                    task_data["logs"] = "".join(collections.deque(f, maxlen=100))
             except Exception:
                 task_data["logs"] = "Failed to read logs."
 

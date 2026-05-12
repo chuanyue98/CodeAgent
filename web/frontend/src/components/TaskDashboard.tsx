@@ -467,12 +467,13 @@ const TaskDashboard: React.FC = () => {
     void fetchTasks();
     void fetchRuns();
     void fetchEngines();
+    if (activeRunId) return;
     const id = setInterval(() => {
       void fetchTasks();
       void fetchRuns();
     }, 5000);
     return () => clearInterval(id);
-  }, [fetchTasks, fetchRuns, fetchEngines]);
+  }, [fetchTasks, fetchRuns, fetchEngines, activeRunId]);
 
   useEffect(() => {
     if (activeRunId) {
