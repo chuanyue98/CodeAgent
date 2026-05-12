@@ -69,7 +69,8 @@ class SkillService:
                                 and not script_file.name.startswith(".")
                             ):
                                 scripts.append(script_file.name)
-                    except Exception:
+                    except OSError:
+                        # Silently ignore directory access errors during scan
                         pass
 
                 detailed_skills[category].append(

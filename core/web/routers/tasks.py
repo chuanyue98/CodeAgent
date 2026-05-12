@@ -34,10 +34,10 @@ async def get_task(name: str, group: str = Query(None)):
         detailed_skills = skill_service.get_detailed_skills()
 
         task_skills = []
-        group_skills = group_def.get("skills", [])
+        group_skills_set = set(group_def.get("skills", []))
         for category in detailed_skills:
             for skill in detailed_skills[category]:
-                if skill["id"] in group_skills:
+                if skill["id"] in group_skills_set:
                     task_skills.append(skill)
 
         task["resolved_skills"] = task_skills

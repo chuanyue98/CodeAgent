@@ -270,7 +270,9 @@ const TaskDashboard: React.FC = () => {
 
   const openTask = useCallback(async (name: string) => {
     try {
-      const res = await fetch(`/api/tasks/${name}?group=${currentGroup}`);
+      const params = new URLSearchParams();
+      if (currentGroup) params.append('group', currentGroup);
+      const res = await fetch(`/api/tasks/${name}?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch task');
       setSelected(await res.json());
     } catch (e) {
