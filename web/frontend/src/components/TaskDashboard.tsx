@@ -9,12 +9,23 @@ import {
   ArrowLeft,
   FileText,
   Layers,
+  Terminal,
+  Code,
+  BookOpen,
 } from 'lucide-react';
+import { useProject } from '../context/ProjectContext';
 
 interface Stage {
   name: string;
   status: string;
   goal: string;
+}
+
+interface Skill {
+  name: string;
+  id: string;
+  description: string;
+  scripts: string[];
 }
 
 interface Task {
@@ -24,6 +35,8 @@ interface Task {
   hasStages: boolean;
   stages: Stage[];
   content?: string;
+  resolved_skills?: Skill[];
+  resolved_prompts?: string[];
 }
 
 const STATUS_DONE = ['已完成', 'DONE', '无需修改'];
@@ -112,64 +125,125 @@ function TaskDetail({ task, onBack }: { task: Task; onBack: () => void }) {
   const pct = task.stages.length > 0 ? Math.round((done / task.stages.length) * 100) : 0;
 
   return (
-    <div className="p-8 max-w-3xl mx-auto space-y-6 pb-20">
+    <div className="p-8 max-w-4xl mx-auto space-y-6 pb-20">
       <button onClick={onBack} className="flex items-center gap-2 text-sm text-slate-500 hover:text-primary transition-colors">
         <ArrowLeft className="w-4 h-4" />
         Back
       </button>
 
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{task.title}</h1>
-        {task.description && <p className="text-sm text-slate-500 mt-1">{task.description}</p>}
+      <div className="flex justify-between items-start">
+        <div className="flex-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{task.title}</h1>
+          {task.description && <p className="text-sm text-slate-500 mt-1">{task.description}</p>}
+        </div>
       </div>
 
-      {task.hasStages && (
-        <>
-          <section className="glass-card p-6 space-y-4 border-slate-100">
-            <div className="flex justify-between items-end">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Progress</span>
-              <span className="text-3xl font-semibold text-primary tracking-tighter">{pct}%</span>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          {task.hasStages && (
+            <>
+              <section className="glass-card p-6 space-y-4 border-slate-100">
+                <div className="flex justify-between items-end">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Progress</span>
+                  <span className="text-3xl font-semibold text-primary tracking-tighter">{pct}%</span>
+                </div>
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
+                </div>
+                <p className="text-xs text-slate-400">{done} / {task.stages.length} stages completed</p>
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Stages</h2>
+                {task.stages.map((stage, i) => (
+                  <div
+                    key={i}
+                    className={`glass-card p-5 flex items-start gap-4 border transition-all ${
+                      STATUS_WIP.includes(stage.status)
+                        ? 'border-amber-200/60 bg-amber-50/30'
+                        : 'border-slate-100'
+                    }`}
+                  >
+                    <div className="flex-shrink-0 mt-0.5">{stageIcon(stage.status)}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start gap-2">
+                        <h3 className="font-medium text-slate-900 text-sm">{stage.name}</h3>
+                        {stage.status && (
+                          <span className={`text-[10px] px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider border flex-shrink-0 ${stageBadge(stage.status)}`}>
+                            {stage.status}
+                          </span>
+                        )}
+                      </div>
+                      {stage.goal && <p className="text-xs text-slate-500 mt-1">{stage.goal}</p>}
+                    </div>
+                  </div>
+                ))}
+              </section>
+            </>
+          )}
+
+          {!task.hasStages && task.content && (
+            <section className="glass-card p-6 border-slate-100">
+              <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{task.content}</pre>
+            </section>
+          )}
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-3">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <Terminal className="w-3.5 h-3.5" />
+              Mounted Skills
+            </h2>
+            <div className="space-y-2">
+              {task.resolved_skills && task.resolved_skills.length > 0 ? (
+                task.resolved_skills.map(skill => (
+                  <div key={skill.id} className="glass-card p-4 border-slate-100 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Code className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-semibold text-slate-900">{skill.name}</span>
+                    </div>
+                    {skill.description && <p className="text-xs text-slate-500 line-clamp-2">{skill.description}</p>}
+                    {skill.scripts && skill.scripts.length > 0 && (
+                      <div className="pt-2 flex flex-wrap gap-1.5">
+                        {skill.scripts.map(s => (
+                          <span key={s} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-mono">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-slate-400 italic p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                  No skills mounted
+                </div>
+              )}
             </div>
-            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
-            </div>
-            <p className="text-xs text-slate-400">{done} / {task.stages.length} stages completed</p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Stages</h2>
-            {task.stages.map((stage, i) => (
-              <div
-                key={i}
-                className={`glass-card p-5 flex items-start gap-4 border transition-all ${
-                  STATUS_WIP.includes(stage.status)
-                    ? 'border-amber-200/60 bg-amber-50/30'
-                    : 'border-slate-100'
-                }`}
-              >
-                <div className="flex-shrink-0 mt-0.5">{stageIcon(stage.status)}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-start gap-2">
-                    <h3 className="font-medium text-slate-900 text-sm">{stage.name}</h3>
-                    {stage.status && (
-                      <span className={`text-[10px] px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider border flex-shrink-0 ${stageBadge(stage.status)}`}>
-                        {stage.status}
-                      </span>
-                    )}
-                  </div>
-                  {stage.goal && <p className="text-xs text-slate-500 mt-1">{stage.goal}</p>}
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <BookOpen className="w-3.5 h-3.5" />
+              Injected Prompts
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {task.resolved_prompts && task.resolved_prompts.length > 0 ? (
+                task.resolved_prompts.map(prompt => (
+                  <span key={prompt} className="px-2 py-1 bg-primary/5 text-primary border border-primary/10 rounded-lg text-xs font-medium">
+                    {prompt}
+                  </span>
+                ))
+              ) : (
+                <div className="text-xs text-slate-400 italic p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200 w-full">
+                  No prompts injected
                 </div>
-              </div>
-            ))}
+              )}
+            </div>
           </section>
-        </>
-      )}
-
-      {!task.hasStages && task.content && (
-        <section className="glass-card p-6 border-slate-100">
-          <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{task.content}</pre>
-        </section>
-      )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -179,6 +253,7 @@ const TaskDashboard: React.FC = () => {
   const [selected, setSelected] = useState<Task | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { currentGroup } = useProject();
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -195,13 +270,15 @@ const TaskDashboard: React.FC = () => {
 
   const openTask = useCallback(async (name: string) => {
     try {
-      const res = await fetch(`/api/tasks/${name}`);
+      const params = new URLSearchParams();
+      if (currentGroup) params.append('group', currentGroup);
+      const res = await fetch(`/api/tasks/${name}?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch task');
       setSelected(await res.json());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error');
     }
-  }, []);
+  }, [currentGroup]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

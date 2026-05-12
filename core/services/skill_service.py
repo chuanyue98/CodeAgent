@@ -58,12 +58,28 @@ class SkillService:
                                 description = line
                                 break
 
+                # List scripts in the scripts/ subdirectory
+                scripts = []
+                scripts_dir = skill_dir / "scripts"
+                if scripts_dir.is_dir():
+                    try:
+                        for script_file in scripts_dir.iterdir():
+                            if (
+                                script_file.is_file()
+                                and not script_file.name.startswith(".")
+                            ):
+                                scripts.append(script_file.name)
+                    except OSError:
+                        # Silently ignore directory access errors during scan
+                        pass
+
                 detailed_skills[category].append(
                     {
                         "name": skill_name,
                         "id": f"{category}/{skill_name}",
                         "description": description,
                         "readme": content,
+                        "scripts": sorted(scripts),
                     }
                 )
         return detailed_skills
