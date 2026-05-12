@@ -12,6 +12,8 @@ import {
   Terminal,
   Code,
   BookOpen,
+  Play,
+  StopCircle,
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 
@@ -28,6 +30,20 @@ interface Skill {
   scripts: string[];
 }
 
+interface Engine {
+  id: string;
+  name: string;
+  description: string;
+}
+
+interface RunStatus {
+  task_id: string;
+  engine: string;
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+  log_path: string;
+  start_time: number;
+}
+
 interface Task {
   name: string;
   title: string;
@@ -37,6 +53,7 @@ interface Task {
   content?: string;
   resolved_skills?: Skill[];
   resolved_prompts?: string[];
+  logs?: string;
 }
 
 const STATUS_DONE = ['已完成', 'DONE', '无需修改'];
@@ -71,7 +88,15 @@ function StageProgress({ stages }: { stages: Stage[] }) {
   );
 }
 
-function TaskList({ tasks, onSelect }: { tasks: Task[]; onSelect: (name: string) => void }) {
+function TaskList({
+  tasks,
+  runs,
+  onSelect
+}: {
+  tasks: Task[];
+  runs: RunStatus[];
+  onSelect: (name: string) => void
+}) {
   if (tasks.length === 0)
     return (
       <div className="flex items-center justify-center h-full text-slate-400">
@@ -92,48 +117,116 @@ function TaskList({ tasks, onSelect }: { tasks: Task[]; onSelect: (name: string)
       </div>
 
       <div className="grid gap-4">
-        {tasks.map(task => (
-          <button
-            key={task.name}
-            onClick={() => onSelect(task.name)}
-            className="glass-card p-6 text-left hover:bg-slate-50/50 border-slate-100 transition-all group flex items-start gap-4"
-          >
-            <div className="p-2.5 bg-slate-100 rounded-xl group-hover:bg-primary/10 transition-colors flex-shrink-0 mt-0.5">
-              {task.hasStages
-                ? <Layers className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
-                : <FileText className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="font-semibold text-slate-900 truncate">{task.title}</h3>
-                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-primary flex-shrink-0 transition-colors" />
+        {tasks.map(task => {
+          const activeRun = runs.find(r => r.task_id.startsWith(task.name) && r.status === 'running');
+
+          return (
+            <button
+              key={task.name}
+              onClick={() => onSelect(task.name)}
+              className="glass-card p-6 text-left hover:bg-slate-50/50 border-slate-100 transition-all group flex items-start gap-4"
+            >
+              <div className="p-2.5 bg-slate-100 rounded-xl group-hover:bg-primary/10 transition-colors flex-shrink-0 mt-0.5">
+                {task.hasStages
+                  ? <Layers className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
+                  : <FileText className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />}
               </div>
-              {task.description && (
-                <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">{task.description}</p>
-              )}
-              {task.hasStages && <StageProgress stages={task.stages} />}
-            </div>
-          </button>
-        ))}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <h3 className="font-semibold text-slate-900 truncate">{task.title}</h3>
+                    {activeRun && (
+                      <span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider border border-emerald-100 animate-pulse">
+                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                        Running on {activeRun.engine}
+                      </span>
+                    )}
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-primary flex-shrink-0 transition-colors" />
+                </div>
+                {task.description && (
+                  <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">{task.description}</p>
+                )}
+                {task.hasStages && <StageProgress stages={task.stages} />}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function TaskDetail({ task, onBack }: { task: Task; onBack: () => void }) {
+function TaskDetail({
+  task,
+  engines,
+  activeRun,
+  onBack,
+  onRun,
+  onStop
+}: {
+  task: Task;
+  engines: Engine[];
+  activeRun?: RunStatus;
+  onBack: () => void;
+  onRun: (engine: string) => void;
+  onStop: (id: string) => void;
+}) {
+  const [selectedEngine, setSelectedEngine] = useState(engines[0]?.id || 'gemini');
+
   const done = task.stages.filter(s => STATUS_DONE.includes(s.status)).length;
   const pct = task.stages.length > 0 ? Math.round((done / task.stages.length) * 100) : 0;
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6 pb-20">
-      <button onClick={onBack} className="flex items-center gap-2 text-sm text-slate-500 hover:text-primary transition-colors">
-        <ArrowLeft className="w-4 h-4" />
-        Back
-      </button>
+      <div className="flex items-center justify-between">
+        <button onClick={onBack} className="flex items-center gap-2 text-sm text-slate-500 hover:text-primary transition-colors">
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </button>
+
+        <div className="flex items-center gap-3">
+          {activeRun ? (
+            <button
+              onClick={() => onStop(activeRun.task_id)}
+              className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-sm font-bold border border-red-100 hover:bg-red-100 transition-colors"
+            >
+              <StopCircle className="w-4 h-4" />
+              Stop Execution
+            </button>
+          ) : (
+            <>
+              <select
+                value={selectedEngine}
+                onChange={(e) => setSelectedEngine(e.target.value)}
+                className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                {engines.map(e => (
+                  <option key={e.id} value={e.id}>{e.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => onRun(selectedEngine)}
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+              >
+                <Play className="w-4 h-4" />
+                Run Task
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
       <div className="flex justify-between items-start">
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{task.title}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 flex items-center gap-3">
+            {task.title}
+            {activeRun && (
+              <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-bold uppercase tracking-wider border border-emerald-100 animate-pulse">
+                Running
+              </span>
+            )}
+          </h1>
           {task.description && <p className="text-sm text-slate-500 mt-1">{task.description}</p>}
         </div>
       </div>
@@ -182,7 +275,21 @@ function TaskDetail({ task, onBack }: { task: Task; onBack: () => void }) {
             </>
           )}
 
-          {!task.hasStages && task.content && (
+          {activeRun && task.logs && (
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                <Terminal className="w-4 h-4" />
+                Execution Logs
+              </h2>
+              <div className="glass-card bg-slate-900 border-slate-800 p-4 rounded-xl overflow-hidden">
+                <pre className="text-[11px] font-mono text-emerald-400/90 whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto custom-scrollbar-dark">
+                  {task.logs}
+                </pre>
+              </div>
+            </section>
+          )}
+
+          {!task.hasStages && task.content && !activeRun && (
             <section className="glass-card p-6 border-slate-100">
               <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{task.content}</pre>
             </section>
@@ -250,7 +357,10 @@ function TaskDetail({ task, onBack }: { task: Task; onBack: () => void }) {
 
 const TaskDashboard: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [runs, setRuns] = useState<RunStatus[]>([]);
+  const [engines, setEngines] = useState<Engine[]>([]);
   const [selected, setSelected] = useState<Task | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const { currentGroup } = useProject();
@@ -268,6 +378,28 @@ const TaskDashboard: React.FC = () => {
     }
   }, []);
 
+  const fetchRuns = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tasks/runs');
+      if (res.ok) {
+        setRuns(await res.json());
+      }
+    } catch (e) {
+      console.error('Failed to fetch runs', e);
+    }
+  }, []);
+
+  const fetchEngines = useCallback(async () => {
+    try {
+      const res = await fetch('/api/engines');
+      if (res.ok) {
+        setEngines(await res.json());
+      }
+    } catch (e) {
+      console.error('Failed to fetch engines', e);
+    }
+  }, []);
+
   const openTask = useCallback(async (name: string) => {
     try {
       const params = new URLSearchParams();
@@ -275,17 +407,79 @@ const TaskDashboard: React.FC = () => {
       const res = await fetch(`/api/tasks/${name}?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch task');
       setSelected(await res.json());
+
+      // Check if this task is already running
+      const active = runs.find(r => r.task_id.startsWith(name) && r.status === 'running');
+      if (active) setActiveRunId(active.task_id);
+      else setActiveRunId(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error');
     }
-  }, [currentGroup]);
+  }, [currentGroup, runs]);
+
+  const runTask = async (engine: string) => {
+    if (!selected) return;
+    try {
+      const res = await fetch(`/api/tasks/${selected.name}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ engine, group: currentGroup || 'common' })
+      });
+      if (res.ok) {
+        const status: RunStatus = await res.json();
+        setActiveRunId(status.task_id);
+        void fetchRuns();
+      }
+    } catch (e) {
+      console.error('Failed to run task', e);
+    }
+  };
+
+  const stopTask = async (id: string) => {
+    try {
+      const res = await fetch(`/api/tasks/runs/${id}/stop`, { method: 'POST' });
+      if (res.ok) {
+        setActiveRunId(null);
+        void fetchRuns();
+      }
+    } catch (e) {
+      console.error('Failed to stop task', e);
+    }
+  };
+
+  const pollActiveRun = useCallback(async () => {
+    if (!activeRunId || !selected) return;
+    try {
+      const res = await fetch(`/api/tasks/runs/${activeRunId}`);
+      if (res.ok) {
+        const { status, progress } = await res.json();
+        if (status.status !== 'running') {
+          setActiveRunId(null);
+        }
+        setSelected(prev => prev ? { ...prev, ...progress } : null);
+      }
+    } catch (e) {
+      console.error('Failed to poll run', e);
+    }
+  }, [activeRunId, selected]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchTasks();
-    const id = setInterval(() => void fetchTasks(), 10000);
+    void fetchRuns();
+    void fetchEngines();
+    const id = setInterval(() => {
+      void fetchTasks();
+      void fetchRuns();
+    }, 5000);
     return () => clearInterval(id);
-  }, [fetchTasks]);
+  }, [fetchTasks, fetchRuns, fetchEngines]);
+
+  useEffect(() => {
+    if (activeRunId) {
+      const id = setInterval(() => void pollActiveRun(), 2000);
+      return () => clearInterval(id);
+    }
+  }, [activeRunId, pollActiveRun]);
 
   if (loading)
     return (
@@ -304,10 +498,21 @@ const TaskDashboard: React.FC = () => {
       </div>
     );
 
-  if (selected)
-    return <TaskDetail task={selected} onBack={() => setSelected(null)} />;
+  const activeRun = activeRunId ? runs.find(r => r.task_id === activeRunId) : undefined;
 
-  return <TaskList tasks={tasks} onSelect={openTask} />;
+  if (selected)
+    return (
+      <TaskDetail
+        task={selected}
+        engines={engines}
+        activeRun={activeRun}
+        onBack={() => setSelected(null)}
+        onRun={runTask}
+        onStop={stopTask}
+      />
+    );
+
+  return <TaskList tasks={tasks} runs={runs} onSelect={openTask} />;
 };
 
 export default TaskDashboard;

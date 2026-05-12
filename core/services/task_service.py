@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -19,11 +20,23 @@ class TaskService:
             tasks.append(self._parse_task(md_file, full_content=False))
         return tasks
 
-    def get_task(self, name: str) -> dict | None:
+    def get_task(self, name: str, log_path: str | None = None) -> dict | None:
         path = self.tasks_root / f"{name}.md"
         if not path.exists():
             return None
-        return self._parse_task(path, full_content=True)
+
+        task_data = self._parse_task(path, full_content=True)
+
+        if log_path and os.path.exists(log_path):
+            try:
+                # Only read last 100 lines for efficiency
+                with open(log_path, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                    task_data["logs"] = "".join(lines[-100:])
+            except Exception:
+                task_data["logs"] = "Failed to read logs."
+
+        return task_data
 
     def _parse_task(self, path: Path, full_content: bool = False) -> dict:
         try:

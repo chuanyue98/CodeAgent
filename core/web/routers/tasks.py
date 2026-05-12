@@ -1,11 +1,15 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Body
 from core.services.task_service import TaskService
 from core.services.config_service import ConfigService
 from core.services.skill_service import SkillService
-from core.web.resource_paths import resolve_resource_path
+from core.services.runner_service import TaskRunner
+from core.web.resource_paths import ROOT_DIR, resolve_resource_path
 from core.web.routers.config import get_config_path
 
 router = APIRouter(prefix="/api")
+
+# Singleton runner for the session
+_runner = TaskRunner(ROOT_DIR)
 
 
 def get_tasks_root():
@@ -44,3 +48,70 @@ async def get_task(name: str, group: str = Query(None)):
         task["resolved_prompts"] = group_def.get("prompts", [])
 
     return task
+
+
+@router.post("/tasks/{name}/run")
+async def run_task(
+    name: str,
+    engine: str = Body(..., embed=True),
+    group: str = Body("common", embed=True),
+):
+    """Launches a task in the background with the selected engine."""
+    status = _runner.run_task(name, engine, group)
+    return status
+
+
+@router.get("/tasks/runs")
+async def list_runs():
+    """Lists all background task runs."""
+    return _runner.list_runs()
+
+
+@router.get("/tasks/runs/{task_id}")
+async def get_run_status(task_id: str):
+    """Retrieves the status of a specific background task run, including real-time progress."""
+    status = _runner.get_status(task_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    # Enrich with latest task data
+    task_name = task_id.rsplit("_", 1)[0]
+    task_service = TaskService(get_tasks_root())
+    task_data = task_service.get_task(task_name, log_path=status.log_path)
+
+    return {"status": status, "progress": task_data}
+
+
+@router.post("/tasks/runs/{task_id}/stop")
+async def stop_run(task_id: str):
+    """Stops a running background task."""
+    success = _runner.stop_task(task_id)
+    return {"success": success}
+
+
+@router.get("/engines")
+async def list_engines():
+    """Lists available AI engines."""
+    # This could be more dynamic by checking shutil.which for binaries
+    return [
+        {
+            "id": "gemini",
+            "name": "Gemini CLI",
+            "description": "Google AI Engineering Driver",
+        },
+        {
+            "id": "claude",
+            "name": "Claude Code",
+            "description": "Anthropic High-Reasoning Driver",
+        },
+        {
+            "id": "opencode",
+            "name": "OpenCode AI",
+            "description": "Local npm CLI with TUI",
+        },
+        {
+            "id": "codex",
+            "name": "OpenAI Codex",
+            "description": "OpenAI Engineering Driver",
+        },
+    ]
