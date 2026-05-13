@@ -26,6 +26,19 @@ def test_config_service_malformed_json(tmp_path):
     assert "Failed to parse config.json" in warnings[0]
 
 
+def test_config_service_utf8_bom(tmp_path):
+    config_path = tmp_path / "config.json"
+    # Write UTF-8 BOM followed by JSON
+    content = '{"test": "bom"}'.encode("utf-8-sig")
+    config_path.write_bytes(content)
+
+    service = ConfigService(config_path)
+    data, warnings = service.get_config()
+
+    assert data == {"test": "bom"}
+    assert warnings == []
+
+
 def test_config_service_project_management(tmp_path):
     config_path = tmp_path / "config.json"
     service = ConfigService(config_path)

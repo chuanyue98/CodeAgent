@@ -1,0 +1,6 @@
+{
+  "id": "branch-protection",
+  "name": "Branch Protection Hook",
+  "description": "Prevents accidental direct commits or pushes to the main branch.",
+  "command": "python {hook_dir}/hook.py"
+}
