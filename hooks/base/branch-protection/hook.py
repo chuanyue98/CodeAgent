@@ -47,9 +47,11 @@ def main():
     # Check for git commit or push commands
     if "git commit" in command or "git push" in command:
         current_branch = get_current_branch()
-        if current_branch == "main":
+        protected_branches = ["main", "master"]
+
+        if current_branch in protected_branches:
             _deny(
-                "禁止直接在 main 分支进行 commit 或 push 操作。请创建特性分支并提交 Pull Request。"
+                f"禁止直接在 {current_branch} 分支进行 commit 或 push 操作。请创建特性分支并提交 Pull Request。"
             )
             sys.exit(0)
 
