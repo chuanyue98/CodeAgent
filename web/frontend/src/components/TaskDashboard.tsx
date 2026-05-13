@@ -464,15 +464,28 @@ const TaskDashboard: React.FC = () => {
   }, [activeRunId, selected]);
 
   useEffect(() => {
-    void fetchTasks();
-    void fetchRuns();
-    void fetchEngines();
+    let mounted = true;
+
+    const init = async () => {
+      await fetchTasks();
+      if (mounted) {
+        await fetchRuns();
+        await fetchEngines();
+      }
+    };
+
+    void init();
+
     if (activeRunId) return;
     const id = setInterval(() => {
       void fetchTasks();
       void fetchRuns();
     }, 5000);
-    return () => clearInterval(id);
+
+    return () => {
+      mounted = false;
+      clearInterval(id);
+    };
   }, [fetchTasks, fetchRuns, fetchEngines, activeRunId]);
 
   useEffect(() => {
