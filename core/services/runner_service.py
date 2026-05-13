@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+import os
+import re
+import signal
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional
+
+_SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
+
+
+@dataclass
+class TaskRunStatus:
+    task_id: str
+    engine: str
+    pid: Optional[int]
+    status: str  # "running", "completed", "failed", "stopped"
+    log_path: str
+    start_time: float
+
+
+class TaskRunner:
+    """Manages background execution of CodeAgent tasks."""
+
+    def __init__(self, root_dir: Path):
+        self.root_dir = root_dir
+        self.active_runs: Dict[str, TaskRunStatus] = {}
+        self._processes: Dict[str, subprocess.Popen] = {}
+        self.log_dir = self.root_dir / ".ca_task_logs"
+        self.log_dir.mkdir(exist_ok=True)
+
+    def run_task(
+        self, task_name: str, engine: str, group: str = "common"
+    ) -> TaskRunStatus:
+        """Starts a task in the background using the specified engine."""
+        import time
+
+        if not _SAFE_NAME_RE.match(task_name):
+            raise ValueError(f"Invalid task name: {task_name!r}")
+
+        task_id = f"{task_name}_{int(time.time())}"
+        log_file = self.log_dir / f"{task_id}.log"
+        if not log_file.resolve().is_relative_to(self.log_dir.resolve()):
+            raise ValueError("Log path escapes log directory")
+
+        # Build command: python ca_launcher.py {engine} {task_name} -y
+        launcher = self.root_dir / "ca_launcher.py"
+        cmd = [sys.executable, str(launcher), engine, task_name, "-y"]
+
+        # Use subprocess.Popen for background execution
+        # Redirect stdout and stderr to the log file
+        try:
+            with open(log_file, "w", encoding="utf-8") as f:
+                process = subprocess.Popen(
+                    cmd,
+                    cwd=str(Path.cwd()),
+                    stdout=f,
+                    stderr=subprocess.STDOUT,
+                    stdin=subprocess.DEVNULL,
+                    start_new_session=True if sys.platform != "win32" else False,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                    if sys.platform == "win32"
+                    else 0,
+                )
+
+            status = TaskRunStatus(
+                task_id=task_id,
+                engine=engine,
+                pid=process.pid,
+                status="running",
+                log_path=str(log_file),
+                start_time=time.time(),
+            )
+            self.active_runs[task_id] = status
+            self._processes[task_id] = process
+            return status
+        except Exception as e:
+            return TaskRunStatus(
+                task_id=task_id,
+                engine=engine,
+                pid=None,
+                status=f"failed: {e}",
+                log_path=str(log_file),
+                start_time=time.time(),
+            )
+
+    def list_runs(self) -> List[TaskRunStatus]:
+        """Returns all tracked task runs, updating their status first."""
+        # Update statuses for all running tasks
+        for task_id in list(self.active_runs.keys()):
+            self.get_status(task_id)
+        return list(self.active_runs.values())
+
+    def get_status(self, task_id: str) -> Optional[TaskRunStatus]:
+        """Checks if a background task is still running and updates its status."""
+        if task_id not in self.active_runs:
+            return None
+
+        run = self.active_runs[task_id]
+        if run.status != "running" or run.pid is None:
+            return run
+
+        # Check if process is still alive
+        if not self._is_process_running(run.pid):
+            proc = self._processes.get(task_id)
+            rc = proc.poll() if proc is not None else None
+            run.status = "completed" if rc == 0 else "failed"
+
+        return run
+
+    def stop_task(self, task_id: str) -> bool:
+        """Terminates a background task."""
+        run = self.active_runs.get(task_id)
+        if not run or run.pid is None:
+            return False
+
+        try:
+            if sys.platform == "win32":
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(run.pid)], capture_output=True
+                )
+            else:
+                os.killpg(os.getpgid(run.pid), signal.SIGTERM)
+            run.status = "stopped"
+            return True
+        except Exception:
+            return False
+
+    def _is_process_running(self, pid: int) -> bool:
+        try:
+            if sys.platform == "win32":
+                import ctypes
+
+                PROCESS_QUERY_INFORMATION = 0x0400
+                PROCESS_VM_READ = 0x0010
+                handle = ctypes.windll.kernel32.OpenProcess(
+                    PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, False, pid
+                )
+                if handle == 0:
+                    return False
+                ctypes.windll.kernel32.CloseHandle(handle)
+                return True
+            else:
+                os.kill(pid, 0)
+                return True
+        except OSError:
+            return False
