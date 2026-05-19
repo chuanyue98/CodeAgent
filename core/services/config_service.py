@@ -25,7 +25,7 @@ class ConfigService:
         if not self.config_path.exists():
             return {}, []
         try:
-            with open(self.config_path, "r", encoding="utf-8-sig") as f:
+            with open(self.config_path, "r", encoding="utf-8") as f:
                 return json.load(f), []
         except Exception as e:
             warnings.append(f"Failed to parse config.json: {e}")
