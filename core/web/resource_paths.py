@@ -8,7 +8,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 def _config_resource_root() -> Path:
     config_path = ROOT_DIR / "config.json"
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, "r", encoding="utf-8-sig") as f:
             resource_root = json.load(f).get("paths", {}).get("resource_root")
         if resource_root:
             resolved = (ROOT_DIR / resource_root).resolve()

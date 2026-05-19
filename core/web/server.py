@@ -45,7 +45,7 @@ def initialize_default_groups() -> None:
     if not CONFIG_PATH.exists():
         return
     try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
             config_data = json.load(f)
     except Exception:
         return

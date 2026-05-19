@@ -24,7 +24,7 @@ def load_config():
     }
     if config_path.exists():
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, "r", encoding="utf-8-sig") as f:
                 return {**default_config, **json.load(f)}
         except Exception as e:
             print(f"⚠️ Warning: Failed to load config.json: {e}")

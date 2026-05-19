@@ -45,7 +45,7 @@ class PluginScanner:
                 metadata = {}
                 if metadata_path.exists():
                     try:
-                        with open(metadata_path, "r", encoding="utf-8") as f:
+                        with open(metadata_path, "r", encoding="utf-8-sig") as f:
                             metadata = json.load(f)
                     except Exception as e:
                         msg = f"Failed to load metadata from {metadata_path}: {e}"

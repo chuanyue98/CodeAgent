@@ -48,7 +48,7 @@ class HookScanner:
                     if item.is_dir() and (item / "metadata.json").exists():
                         metadata_path = item / "metadata.json"
                         try:
-                            with open(metadata_path, "r", encoding="utf-8") as f:
+                            with open(metadata_path, "r", encoding="utf-8-sig") as f:
                                 metadata = json.load(f)
                                 metadata["_hook_dir"] = str(item.resolve().as_posix())
                                 # Use category/name as unique identifier for overriding
