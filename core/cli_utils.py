@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import shutil
-import sys
 from typing import Iterable
 
 ENGINE_CLI_CANDIDATES: dict[str, tuple[str, ...]] = {
