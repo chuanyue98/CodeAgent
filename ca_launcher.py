@@ -14,6 +14,16 @@ UI_DEV_SERVER_PORT = 5173
 UI_DEV_SERVER_START_TIMEOUT = 15
 
 
+def _configure_console_encoding():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
+_configure_console_encoding()
+
+
 def load_config():
     root = Path(__file__).resolve().parent
     config_path = root / "config.json"

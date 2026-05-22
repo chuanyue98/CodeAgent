@@ -24,8 +24,11 @@ dependencies = [
 ca = "ca_launcher:main"
 
 [tool.setuptools]
-packages = ["core", "engines", "core.web"]
 py-modules = ["ca_launcher"]
+
+[tool.setuptools.packages.find]
+include = ["core*", "engines*"]
+namespaces = true
 
 [tool.uv]
 package = true

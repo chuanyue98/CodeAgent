@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 # Ensure core modules are importable when running as a script.
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
+from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine
 from core.task_lib import (
     TASK_FILE_SUFFIX,
@@ -552,6 +553,9 @@ def main() -> None:
                 if idx < len(code_plan_directories) - 1:
                     print()
         return
+
+    if not require_engine_cli("codex"):
+        sys.exit(1)
 
     full_prompt = engine.assemble_prompt(task=" ".join(extra_args).strip() or None)
     full_prompt, general_commands = extract_shell_first_blocks(full_prompt)
