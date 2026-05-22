@@ -8,20 +8,14 @@ import socket
 import time
 from pathlib import Path
 
+from core.console import configure_console_encoding
+
 UI_API_PORT = 8000
 UI_DEV_SERVER_HOST = "127.0.0.1"
 UI_DEV_SERVER_PORT = 5173
 UI_DEV_SERVER_START_TIMEOUT = 15
 
-
-def _configure_console_encoding():
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    if hasattr(sys.stderr, "reconfigure"):
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-
-
-_configure_console_encoding()
+configure_console_encoding()
 
 
 def load_config():
