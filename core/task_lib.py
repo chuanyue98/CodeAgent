@@ -6,6 +6,10 @@ import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
+from core.console import configure_console_encoding
+
+configure_console_encoding()
+
 TASKS_DIR = "tasks"
 TASK_FILE_SUFFIX = ".md"
 GENERAL_PROMPT_RELATIVE_PATH = "prompt/general.basic.md"

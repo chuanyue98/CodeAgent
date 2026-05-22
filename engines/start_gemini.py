@@ -13,6 +13,7 @@ from typing import List
 # 确保能找到 core 模块
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
+from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine
 from core.task_lib import (
     TASK_FILE_SUFFIX,
@@ -113,6 +114,9 @@ def main():
     if args.list:
         show_tasks(label="Task List", file_suffix=TASK_FILE_SUFFIX)
         sys.exit(0)
+
+    if not require_engine_cli("gemini"):
+        sys.exit(1)
 
     # 默认即为 yolo 模式
     approval_mode = "yolo"
