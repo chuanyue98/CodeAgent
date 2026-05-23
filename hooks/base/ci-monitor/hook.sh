@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 input=$(cat)
-echo "$input" | grep -q 'git push' || exit 0
+printf '%s' "$input" | grep -q '"tool_name":[[:space:]]*"Bash"' || exit 0
+printf '%s' "$input" | grep -q 'git push' || exit 0
 
 branch=$(git branch --show-current)
 if [ -z "$branch" ] || [ "$branch" = "main" ]; then
@@ -13,8 +14,8 @@ run_id=""
 run_url=""
 for _ in 1 2 3 4 5 6; do
     run_json=$(gh run list --branch "$branch" --limit 1 --json databaseId,url,name 2>/dev/null)
-    run_id=$(echo "$run_json" | grep -o '"databaseId":[0-9]*' | grep -o '[0-9]*')
-    run_url=$(echo "$run_json" | grep -o '"url":"[^"]*"' | head -1 | cut -d'"' -f4)
+    run_id=$(printf '%s' "$run_json" | grep -o '"databaseId":[0-9]*' | grep -o '[0-9]*' | head -1)
+    run_url=$(printf '%s' "$run_json" | grep -o '"url":"[^"]*"' | head -1 | cut -d'"' -f4)
     [ -n "$run_id" ] && break
     sleep 5
 done

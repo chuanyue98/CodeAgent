@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 input=$(cat)
-echo "$input" | grep -q 'git commit' || exit 0
+printf '%s' "$input" | grep -q '"tool_name":[[:space:]]*"Bash"' || exit 0
+printf '%s' "$input" | grep -q 'git commit' || exit 0
 
 if ! uv run ruff check . 1>&2; then
     echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"ruff check 未通过，请修复后再提交"}}'
