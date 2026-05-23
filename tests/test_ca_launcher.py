@@ -21,9 +21,7 @@ def mock_config(tmp_path):
 def test_load_config_default(tmp_path, monkeypatch):
     # Test loading when config.json does not exist
     monkeypatch.chdir(tmp_path)
-    # Patch Path.resolve().parent to point to tmp_path
-    with patch("ca_launcher.Path") as mock_path:
-        mock_path.return_value.resolve.return_value.parent = tmp_path
+    with patch("ca_launcher._project_root", return_value=tmp_path):
         config = ca_launcher.load_config()
         assert config["default_mode"] == "local"
         assert config["proxy"]["port"] == 1087
@@ -32,8 +30,7 @@ def test_load_config_default(tmp_path, monkeypatch):
 def test_load_config_custom(mock_config, monkeypatch):
     # Test loading custom config.json
     monkeypatch.chdir(mock_config.parent)
-    with patch("ca_launcher.Path") as mock_path:
-        mock_path.return_value.resolve.return_value.parent = mock_config.parent
+    with patch("ca_launcher._project_root", return_value=mock_config.parent):
         config = ca_launcher.load_config()
         assert config["default_mode"] == "remote"
         assert config["proxy"]["host"] == "1.2.3.4"
@@ -67,6 +64,21 @@ def test_build_proxy_env():
         assert port == 3066
         assert scheme == "socks5"
         assert env["HTTP_PROXY"] == "socks5://myproxy:3066"
+
+
+def test_project_root_prefers_current_workspace(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    (workspace / "core").mkdir(parents=True)
+    (workspace / "engines").mkdir()
+    (workspace / "web" / "frontend").mkdir(parents=True)
+    (workspace / "web" / "frontend" / "package.json").write_text("{}")
+    (workspace / "pyproject.toml").write_text("[project]\nname='demo'\n")
+    nested = workspace / "docs" / "guides"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
+
+    with patch("ca_launcher._installed_root", return_value=tmp_path / "installed"):
+        assert ca_launcher._project_root() == workspace
 
 
 def test_main_help(capsys, monkeypatch):

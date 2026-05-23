@@ -18,8 +18,29 @@ UI_DEV_SERVER_START_TIMEOUT = 15
 configure_console_encoding()
 
 
+def _installed_root():
+    return Path(__file__).resolve().parent
+
+
+def _looks_like_project_root(path: Path):
+    return (
+        (path / "pyproject.toml").exists()
+        and (path / "core").is_dir()
+        and (path / "engines").is_dir()
+        and (path / "web" / "frontend" / "package.json").exists()
+    )
+
+
+def _project_root():
+    cwd = Path.cwd().resolve()
+    for candidate in (cwd, *cwd.parents):
+        if _looks_like_project_root(candidate):
+            return candidate
+    return _installed_root()
+
+
 def load_config():
-    root = Path(__file__).resolve().parent
+    root = _project_root()
     config_path = root / "config.json"
     default_config = {
         "default_mode": "local",
@@ -58,7 +79,7 @@ def _is_ui_dev_server_running(host=UI_DEV_SERVER_HOST, port=UI_DEV_SERVER_PORT):
 
 
 def _frontend_root():
-    return Path(__file__).resolve().parent / "web" / "frontend"
+    return _project_root() / "web" / "frontend"
 
 
 def _frontend_dist_exists():
@@ -155,7 +176,7 @@ def build_proxy_env(config):
 def run_ui_command():
     try:
         # Ensure project root is in sys.path
-        root = Path(__file__).resolve().parent
+        root = _project_root()
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
 
@@ -221,7 +242,7 @@ def run_ui_command():
 
 def main():
     config = load_config()
-    root = Path(__file__).resolve().parent
+    root = _project_root()
 
     # 2. 正常引擎启动逻辑
     engine_script_map = {
