@@ -126,7 +126,19 @@ async def health_check():
     return {"status": "ok"}
 
 
-if FRONTEND_DIST.exists():
+if not FRONTEND_DIST.exists():
+
+    @app.get("/", include_in_schema=False)
+    async def api_root():
+        return {
+            "name": "CodeAgent Web UI API",
+            "status": "ok",
+            "ui": "http://127.0.0.1:5173",
+            "health": "/api/health",
+        }
+
+
+else:
     from fastapi.responses import FileResponse
 
     assets_dir = FRONTEND_DIST / "assets"

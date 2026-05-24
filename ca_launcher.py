@@ -121,6 +121,25 @@ def _start_ui_dev_server():
     return False
 
 
+def _can_open_browser():
+    if sys.platform.startswith(("win", "darwin")):
+        return True
+    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
+
+def _open_browser(url):
+    if not _can_open_browser():
+        print(f"🌐 Open the UI in your browser: {url}")
+        return False
+
+    import webbrowser
+
+    if not webbrowser.open(url):
+        print(f"🌐 Open the UI in your browser: {url}")
+        return False
+    return True
+
+
 def _extract_proxy_candidates(proxy_cfg):
     if isinstance(proxy_cfg, list):
         return [
@@ -162,7 +181,6 @@ def run_ui_command():
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
 
-        import webbrowser
         import uvicorn
         from core.web.server import app
     except ModuleNotFoundError as exc:
@@ -213,7 +231,7 @@ def run_ui_command():
         url = f"http://127.0.0.1:{port}"
         print(f"🚀 Starting Web UI at {url}...")
 
-    webbrowser.open(url)
+    _open_browser(url)
 
     try:
         uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")

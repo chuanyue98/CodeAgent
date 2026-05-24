@@ -55,6 +55,16 @@ async def test_health_check():
 
 
 @pytest.mark.asyncio
+async def test_api_root_without_built_frontend():
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get("/")
+    assert response.status_code == 200
+    assert response.json()["ui"] == "http://127.0.0.1:5173"
+
+
+@pytest.mark.asyncio
 async def test_get_hooks(mock_env):
     # Setup a mock hook with correct metadata.json name
     hook_dir = mock_env / "hooks" / "base" / "test-hook"

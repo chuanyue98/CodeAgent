@@ -84,11 +84,10 @@ def test_main_ui_command(monkeypatch):
 
 
 def test_run_ui_command_uses_existing_vite_server(capsys):
-    mock_webbrowser = MagicMock()
+    mock_open_browser = MagicMock()
     mock_uvicorn = MagicMock()
     mock_server = MagicMock(app=object())
     fake_modules = {
-        "webbrowser": mock_webbrowser,
         "uvicorn": mock_uvicorn,
         "core.web.server": mock_server,
     }
@@ -96,9 +95,10 @@ def test_run_ui_command_uses_existing_vite_server(capsys):
     with patch.dict(sys.modules, fake_modules):
         with patch("ca_launcher._frontend_source_exists", return_value=True):
             with patch("ca_launcher._is_ui_dev_server_running", return_value=True):
-                assert ca_launcher.run_ui_command() == 0
+                with patch("ca_launcher._open_browser", mock_open_browser):
+                    assert ca_launcher.run_ui_command() == 0
 
-    mock_webbrowser.open.assert_called_once_with("http://127.0.0.1:5173")
+    mock_open_browser.assert_called_once_with("http://127.0.0.1:5173")
     mock_uvicorn.run.assert_called_once_with(
         mock_server.app, host="127.0.0.1", port=8000, log_level="info"
     )
@@ -107,11 +107,10 @@ def test_run_ui_command_uses_existing_vite_server(capsys):
 
 
 def test_run_ui_command_starts_vite_server_when_available(capsys):
-    mock_webbrowser = MagicMock()
+    mock_open_browser = MagicMock()
     mock_uvicorn = MagicMock()
     mock_server = MagicMock(app=object())
     fake_modules = {
-        "webbrowser": mock_webbrowser,
         "uvicorn": mock_uvicorn,
         "core.web.server": mock_server,
     }
@@ -122,10 +121,11 @@ def test_run_ui_command_starts_vite_server_when_available(capsys):
                 with patch(
                     "ca_launcher._start_ui_dev_server", return_value=True
                 ) as mock_start:
-                    assert ca_launcher.run_ui_command() == 0
+                    with patch("ca_launcher._open_browser", mock_open_browser):
+                        assert ca_launcher.run_ui_command() == 0
                     mock_start.assert_called_once()
 
-    mock_webbrowser.open.assert_called_once_with("http://127.0.0.1:5173")
+    mock_open_browser.assert_called_once_with("http://127.0.0.1:5173")
     mock_uvicorn.run.assert_called_once_with(
         mock_server.app, host="127.0.0.1", port=8000, log_level="info"
     )
@@ -134,11 +134,10 @@ def test_run_ui_command_starts_vite_server_when_available(capsys):
 
 
 def test_run_ui_command_falls_back_to_dist_when_vite_start_fails(capsys):
-    mock_webbrowser = MagicMock()
+    mock_open_browser = MagicMock()
     mock_uvicorn = MagicMock()
     mock_server = MagicMock(app=object())
     fake_modules = {
-        "webbrowser": mock_webbrowser,
         "uvicorn": mock_uvicorn,
         "core.web.server": mock_server,
     }
@@ -151,9 +150,10 @@ def test_run_ui_command_falls_back_to_dist_when_vite_start_fails(capsys):
                         with patch(
                             "ca_launcher.find_available_port", return_value=8123
                         ):
-                            assert ca_launcher.run_ui_command() == 0
+                            with patch("ca_launcher._open_browser", mock_open_browser):
+                                assert ca_launcher.run_ui_command() == 0
 
-    mock_webbrowser.open.assert_called_once_with("http://127.0.0.1:8123")
+    mock_open_browser.assert_called_once_with("http://127.0.0.1:8123")
     mock_uvicorn.run.assert_called_once_with(
         mock_server.app, host="127.0.0.1", port=8123, log_level="info"
     )
