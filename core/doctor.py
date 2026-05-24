@@ -78,9 +78,12 @@ def check_python(section: Section) -> None:
 
 
 def check_engines(section: Section) -> None:
+    is_windows = sys.platform == "win32"
     for engine, candidates in ENGINE_BINARIES.items():
         found = None
         for name in candidates:
+            if not is_windows and name.lower().endswith((".cmd", ".bat", ".exe")):
+                continue
             found = shutil.which(name)
             if found:
                 break

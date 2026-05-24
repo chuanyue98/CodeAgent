@@ -29,7 +29,10 @@ ENGINE_DISPLAY_NAMES: dict[str, str] = {
 
 
 def _resolve_cli(candidates: Iterable[str], path: str | None) -> str | None:
+    is_windows = sys.platform == "win32"
     for candidate in candidates:
+        if not is_windows and candidate.lower().endswith((".cmd", ".bat", ".exe")):
+            continue
         resolved = shutil.which(candidate, path=path)
         if resolved:
             return resolved
