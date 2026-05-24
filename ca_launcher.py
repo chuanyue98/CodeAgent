@@ -73,7 +73,10 @@ def _frontend_source_exists():
 
 
 def _ui_dev_server_command():
-    npm_cmd = shutil.which("npm.cmd") or shutil.which("npm")
+    if sys.platform == "win32":
+        npm_cmd = shutil.which("npm.cmd") or shutil.which("npm")
+    else:
+        npm_cmd = shutil.which("npm")
     if not npm_cmd:
         return None
     return [
