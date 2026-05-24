@@ -82,7 +82,9 @@ def check_engines(section: Section) -> None:
     for engine, candidates in ENGINE_BINARIES.items():
         found = None
         for name in candidates:
-            if not is_windows and (name.endswith(".cmd") or name.endswith(".bat") or name.endswith(".exe")):
+            if not is_windows and (
+                name.endswith(".cmd") or name.endswith(".bat") or name.endswith(".exe")
+            ):
                 continue
             found = shutil.which(name)
             if found:
