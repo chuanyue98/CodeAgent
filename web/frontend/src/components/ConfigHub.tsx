@@ -33,6 +33,7 @@ const ConfigHub: React.FC = () => {
     if (config) {
       const cloned = deepClone(config);
       if (!cloned.proxy) cloned.proxy = [];
+      else if (!Array.isArray(cloned.proxy)) cloned.proxy = [cloned.proxy];
       if (!cloned.paths) cloned.paths = {};
 
       // eslint-disable-next-line react-hooks/set-state-in-effect

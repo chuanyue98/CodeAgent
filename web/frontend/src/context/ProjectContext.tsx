@@ -60,6 +60,8 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       if (configRes.ok) {
         const configData = await configRes.json();
         setConfig(configData as Config);
+      } else {
+        setConfig({});
       }
 
       const projectsRes = await fetch('/api/projects');
@@ -101,6 +103,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       }
     } catch (error) {
       console.error('Failed to refresh project context:', error);
+      setConfig({});
     }
   }, [currentGroup]);
 
