@@ -81,6 +81,13 @@ async def test_spa_root_with_built_frontend(tmp_path):
     assert "text/html" in response.headers["content-type"]
     assert "root" in response.text
 
+    async with AsyncClient(
+        transport=ASGITransport(app=spa_app), base_url="http://test"
+    ) as ac:
+        api_response = await ac.get("/api/nonexistent")
+
+    assert api_response.status_code == 404
+
 
 @pytest.mark.asyncio
 async def test_get_hooks(mock_env):

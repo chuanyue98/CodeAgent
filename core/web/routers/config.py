@@ -12,6 +12,11 @@ class ProjectPayload(BaseModel):
     group: str = Field(min_length=1)
 
 
+class ProxyPayload(BaseModel):
+    host: str = Field(min_length=1)
+    port: int = Field(gt=0, le=65535)
+
+
 class GroupDefinitionPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -23,6 +28,14 @@ class GroupDefinitionPayload(BaseModel):
 
 class ConfigPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
+
+    default_mode: str | None = None
+    default_group: str | None = None
+    language: str | None = None
+    proxy: ProxyPayload | list[ProxyPayload] | None = None
+    paths: dict[str, str] | None = None
+    project_registry: list[ProjectPayload] | None = None
+    groups: dict[str, GroupDefinitionPayload] | None = None
 
 
 def get_config_path():
@@ -88,17 +101,17 @@ async def update_group(group_name: str, definition: GroupDefinitionPayload):
 
 @router.delete("/groups/{group_name}")
 async def delete_group(group_name: str):
+    service = ConfigService(get_config_path())
+    config, _ = service.get_config()
+    groups = config.get("groups", {})
+    if group_name not in groups:
+        raise HTTPException(status_code=404, detail="Group not found")
+
     try:
-        service = ConfigService(get_config_path())
-        config, _ = service.get_config()
-        if "groups" in config and group_name in config["groups"]:
-            del config["groups"][group_name]
-        else:
-            raise HTTPException(status_code=404, detail="Group not found")
+        del groups[group_name]
+        config["groups"] = groups
         service.update_config(config)
         return {"status": "success", "groups": config.get("groups", {})}
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -117,7 +130,7 @@ async def get_config():
 async def update_config(config: ConfigPayload = Body(...)):
     try:
         service = ConfigService(get_config_path())
-        service.update_config(config.model_dump())
+        service.update_config(config.model_dump(exclude_none=True))
         return {"status": "success", "message": "Configuration updated"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error writing config: {str(e)}")

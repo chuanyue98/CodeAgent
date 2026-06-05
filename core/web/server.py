@@ -2,7 +2,7 @@ import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from core.prompt_scanner import DEFAULT_GROUP_PROMPTS, PromptScanner
@@ -146,6 +146,8 @@ def create_app(frontend_dist: Path = FRONTEND_DIST) -> FastAPI:
 
         @app.get("/{full_path:path}", include_in_schema=False)
         async def serve_spa(full_path: str):
+            if full_path == "api" or full_path.startswith("api/"):
+                raise HTTPException(status_code=404, detail="Not Found")
             return FileResponse(frontend_dist / "index.html")
 
     return app
