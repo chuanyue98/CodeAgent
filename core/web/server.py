@@ -1,5 +1,6 @@
 import json
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -108,43 +109,46 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="CodeAgent Web UI", lifespan=lifespan)
+def create_app(frontend_dist: Path = FRONTEND_DIST) -> FastAPI:
+    app = FastAPI(title="CodeAgent Web UI", lifespan=lifespan)
 
-# Mount modular routers
-app.include_router(analytics.router)
-app.include_router(config.router)
-app.include_router(hooks.router)
-app.include_router(launch.router)
-app.include_router(plugins.router)
-app.include_router(prompts.router)
-app.include_router(skills.router)
-app.include_router(tasks.router)
+    # Mount modular routers
+    app.include_router(analytics.router)
+    app.include_router(config.router)
+    app.include_router(hooks.router)
+    app.include_router(launch.router)
+    app.include_router(plugins.router)
+    app.include_router(prompts.router)
+    app.include_router(skills.router)
+    app.include_router(tasks.router)
+
+    @app.get("/api/health")
+    async def health_check():
+        return {"status": "ok"}
+
+    if not frontend_dist.exists():
+
+        @app.get("/", include_in_schema=False)
+        async def api_root():
+            return {
+                "name": "CodeAgent Web UI API",
+                "status": "ok",
+                "ui": "http://127.0.0.1:5173",
+                "health": "/api/health",
+            }
+
+    else:
+        from fastapi.responses import FileResponse
+
+        assets_dir = frontend_dist / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def serve_spa(full_path: str):
+            return FileResponse(frontend_dist / "index.html")
+
+    return app
 
 
-@app.get("/api/health")
-async def health_check():
-    return {"status": "ok"}
-
-
-if not FRONTEND_DIST.exists():
-
-    @app.get("/", include_in_schema=False)
-    async def api_root():
-        return {
-            "name": "CodeAgent Web UI API",
-            "status": "ok",
-            "ui": "http://127.0.0.1:5173",
-            "health": "/api/health",
-        }
-
-
-else:
-    from fastapi.responses import FileResponse
-
-    assets_dir = FRONTEND_DIST / "assets"
-    if assets_dir.exists():
-        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
-
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_spa(full_path: str):
-        return FileResponse(FRONTEND_DIST / "index.html")
+app = create_app()

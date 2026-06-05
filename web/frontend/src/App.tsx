@@ -1,16 +1,17 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket } from 'lucide-react';
-import SkillGallery from './components/SkillGallery';
-import ConfigHub from './components/ConfigHub';
-import TaskDashboard from './components/TaskDashboard';
-import HooksGallery from './components/HooksGallery';
-import PluginGallery from './components/PluginGallery';
-import PromptsGallery from './components/PromptsGallery';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ManifestDrawer from './components/ManifestDrawer';
-import Analytics from './components/Analytics';
-import LaunchPad from './components/LaunchPad';
+
+const SkillGallery = lazy(() => import('./components/SkillGallery'));
+const ConfigHub = lazy(() => import('./components/ConfigHub'));
+const TaskDashboard = lazy(() => import('./components/TaskDashboard'));
+const HooksGallery = lazy(() => import('./components/HooksGallery'));
+const PluginGallery = lazy(() => import('./components/PluginGallery'));
+const PromptsGallery = lazy(() => import('./components/PromptsGallery'));
+const Analytics = lazy(() => import('./components/Analytics'));
+const LaunchPad = lazy(() => import('./components/LaunchPad'));
 
 const navItems = [
   { path: '/launch', label: 'Launch', icon: Rocket },
@@ -92,17 +93,25 @@ function App() {
           <ProjectSwitcher />
         </header>
         <div className="flex-1 min-h-0 overflow-y-auto pr-2 custom-scrollbar">
-          <Routes>
-            <Route path="/" element={<Navigate to="/launch" replace />} />
-            <Route path="/launch" element={<LaunchPad />} />
-            <Route path="/skills" element={<SkillGallery />} />
-            <Route path="/prompts" element={<PromptsGallery />} />
-            <Route path="/hooks" element={<HooksGallery />} />
-            <Route path="/plugins" element={<PluginGallery />} />
-            <Route path="/config" element={<ConfigHub />} />
-            <Route path="/dashboard" element={<TaskDashboard />} />
-            <Route path="/analytics" element={<Analytics />} />
-          </Routes>
+          <Suspense
+            fallback={
+              <div className="flex h-48 items-center justify-center text-sm font-medium text-slate-400">
+                Loading...
+              </div>
+            }
+          >
+            <Routes>
+              <Route path="/" element={<Navigate to="/launch" replace />} />
+              <Route path="/launch" element={<LaunchPad />} />
+              <Route path="/skills" element={<SkillGallery />} />
+              <Route path="/prompts" element={<PromptsGallery />} />
+              <Route path="/hooks" element={<HooksGallery />} />
+              <Route path="/plugins" element={<PluginGallery />} />
+              <Route path="/config" element={<ConfigHub />} />
+              <Route path="/dashboard" element={<TaskDashboard />} />
+              <Route path="/analytics" element={<Analytics />} />
+            </Routes>
+          </Suspense>
         </div>
       </main>
 

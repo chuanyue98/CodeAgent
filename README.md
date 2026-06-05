@@ -35,7 +35,14 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 
 ### Prerequisites
 - Python 3.13+
+- [Bun](https://bun.sh/) for Web UI development and CI parity.
 - [Optional] `opencode-ai` installed via npm for the OpenCode engine.
+
+### Installing Dependencies
+```bash
+uv sync --all-groups
+cd web/frontend && bun install --frozen-lockfile
+```
 
 ### Launching Your Engine
 CodeAgent automatically injects your private standards based on the current project directory.
@@ -46,6 +53,13 @@ python ca_launcher.py gemini "Refactor this" # Execute a quick task with Gemini
 python ca_launcher.py claude -t refactor     # Run a pre-defined refactor task with Claude
 python ca_launcher.py ui                     # Start the Web UI & Analytics Dashboard
 python ca_launcher.py doctor --fix           # Self-check and repair the environment
+```
+
+### Quality Checks
+```bash
+uv run ruff check ca_launcher.py core engines tests
+uv run pytest -q
+cd web/frontend && bun run lint && bun run test && bun run build
 ```
 
 ---

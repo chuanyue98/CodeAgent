@@ -2,7 +2,7 @@ import pytest
 import json
 from httpx import ASGITransport, AsyncClient
 from core.web import server
-from core.web.server import app
+from core.web.server import app, create_app
 
 
 @pytest.fixture
@@ -55,13 +55,31 @@ async def test_health_check():
 
 
 @pytest.mark.asyncio
-async def test_api_root_without_built_frontend():
+async def test_api_root_without_built_frontend(tmp_path):
+    api_only_app = create_app(frontend_dist=tmp_path / "missing-dist")
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=api_only_app), base_url="http://test"
     ) as ac:
         response = await ac.get("/")
     assert response.status_code == 200
     assert response.json()["ui"] == "http://127.0.0.1:5173"
+
+
+@pytest.mark.asyncio
+async def test_spa_root_with_built_frontend(tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<!doctype html><div id='root'></div>")
+
+    spa_app = create_app(frontend_dist=dist)
+    async with AsyncClient(
+        transport=ASGITransport(app=spa_app), base_url="http://test"
+    ) as ac:
+        response = await ac.get("/")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "root" in response.text
 
 
 @pytest.mark.asyncio
@@ -178,6 +196,16 @@ async def test_projects_api_crud(mock_env):
 
 
 @pytest.mark.asyncio
+async def test_projects_api_rejects_invalid_payload(mock_env):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.post("/api/projects", json={"path": "/missing-group"})
+
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_groups_api_crud(mock_env):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -196,6 +224,16 @@ async def test_groups_api_crud(mock_env):
         assert resp.status_code == 200
         groups = resp.json()["groups"]
         assert "new-group" not in groups
+
+
+@pytest.mark.asyncio
+async def test_delete_missing_group_returns_404(mock_env):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.delete("/api/groups/missing-group")
+
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
