@@ -84,6 +84,9 @@ def test_engine_get_current_project_group(mock_engine, tmp_path, monkeypatch):
     monkeypatch.chdir(other_dir)
     assert mock_engine.get_current_project_group() == "common"
 
+    monkeypatch.setenv("CA_PROJECT_GROUP", "forced-group")
+    assert mock_engine.get_current_project_group() == "forced-group"
+
 
 def test_engine_temp_prompt_lifecycle(mock_engine):
     prompt_content = "Hello CodeAgent"

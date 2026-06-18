@@ -30,25 +30,37 @@ class TaskRunner:
         self.active_runs: Dict[str, TaskRunStatus] = {}
         self._processes: Dict[str, subprocess.Popen] = {}
         self.log_dir = self.root_dir / ".ca_task_logs"
-        self.log_dir.mkdir(exist_ok=True)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
 
     def run_task(
-        self, task_name: str, engine: str, group: str = "common"
+        self,
+        task_name: str,
+        engine: str,
+        group: str = "common",
+        tasks_root: Path | None = None,
     ) -> TaskRunStatus:
         """Starts a task in the background using the specified engine."""
         import time
 
         if not _SAFE_NAME_RE.match(task_name):
             raise ValueError(f"Invalid task name: {task_name!r}")
+        if not _SAFE_NAME_RE.match(group):
+            raise ValueError(f"Invalid group name: {group!r}")
+        if engine not in {"claude", "gemini", "opencode", "codex"}:
+            raise ValueError(f"Invalid engine: {engine!r}")
 
-        task_id = f"{task_name}_{int(time.time())}"
+        task_id = f"{task_name}_{time.time_ns()}"
         log_file = self.log_dir / f"{task_id}.log"
         if not log_file.resolve().is_relative_to(self.log_dir.resolve()):
             raise ValueError("Log path escapes log directory")
 
-        # Build command: python ca_launcher.py {engine} {task_name} -y
+        # Build command: python ca_launcher.py {engine} -t {task_name} -y
         launcher = self.root_dir / "ca_launcher.py"
-        cmd = [sys.executable, str(launcher), engine, task_name, "-y"]
+        cmd = [sys.executable, str(launcher), engine, "-t", task_name, "-y"]
+        env = os.environ.copy()
+        env["CA_PROJECT_GROUP"] = group
+        if tasks_root is not None:
+            env["CA_TASKS_ROOT"] = str(tasks_root.resolve())
 
         # Use subprocess.Popen for background execution
         # Redirect stdout and stderr to the log file
@@ -60,8 +72,9 @@ class TaskRunner:
                     stdout=f,
                     stderr=subprocess.STDOUT,
                     stdin=subprocess.DEVNULL,
+                    env=env,
                     start_new_session=True if sys.platform != "win32" else False,
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                    creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
                     if sys.platform == "win32"
                     else 0,
                 )
@@ -78,7 +91,7 @@ class TaskRunner:
             self._processes[task_id] = process
             return status
         except Exception as e:
-            return TaskRunStatus(
+            status = TaskRunStatus(
                 task_id=task_id,
                 engine=engine,
                 pid=None,
@@ -86,6 +99,8 @@ class TaskRunner:
                 log_path=str(log_file),
                 start_time=time.time(),
             )
+            self.active_runs[task_id] = status
+            return status
 
     def list_runs(self) -> List[TaskRunStatus]:
         """Returns all tracked task runs, updating their status first."""
@@ -103,18 +118,20 @@ class TaskRunner:
         if run.status != "running" or run.pid is None:
             return run
 
-        # Check if process is still alive
-        if not self._is_process_running(run.pid):
-            proc = self._processes.get(task_id)
-            rc = proc.poll() if proc is not None else None
+        proc = self._processes.get(task_id)
+        rc = proc.poll() if proc is not None else None
+        if rc is not None:
             run.status = "completed" if rc == 0 else "failed"
+            self._processes.pop(task_id, None)
+        elif proc is None and not self._is_process_running(run.pid):
+            run.status = "failed"
 
         return run
 
     def stop_task(self, task_id: str) -> bool:
         """Terminates a background task."""
         run = self.active_runs.get(task_id)
-        if not run or run.pid is None:
+        if not run or run.pid is None or run.status != "running":
             return False
 
         try:
@@ -124,6 +141,12 @@ class TaskRunner:
                 )
             else:
                 os.killpg(os.getpgid(run.pid), signal.SIGTERM)
+            proc = self._processes.pop(task_id, None)
+            if proc is not None:
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    pass
             run.status = "stopped"
             return True
         except Exception:

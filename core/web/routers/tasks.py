@@ -85,8 +85,13 @@ async def run_task(
     group: str = Body("common", embed=True),
 ):
     """Launches a task in the background with the selected engine."""
-    status = _runner.run_task(name, engine, group)
-    return status
+    task_service = TaskService(get_tasks_root())
+    if task_service.get_task(name) is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    try:
+        return _runner.run_task(name, engine, group, tasks_root=get_tasks_root())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/engines")

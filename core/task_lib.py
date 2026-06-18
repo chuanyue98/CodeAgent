@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, Union
@@ -37,13 +39,35 @@ def get_tasks_dir(directory: Union[str, Path] = TASKS_DIR) -> Path:
     Returns:
         The absolute Path object for the tasks directory.
     """
-    script_dir = Path(__file__).resolve().parent
     dir_path = Path(directory)
 
-    if not dir_path.is_absolute():
-        dir_path = script_dir / dir_path
+    if dir_path.is_absolute():
+        return dir_path
 
-    return dir_path
+    if str(directory) == TASKS_DIR:
+        env_root = os.environ.get("CA_TASKS_ROOT")
+        if env_root:
+            return Path(env_root).expanduser().resolve()
+
+        codeagent_root = Path(__file__).resolve().parent.parent
+        config_path = codeagent_root / "config.json"
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8-sig"))
+            resource_root = config.get("paths", {}).get("resource_root")
+            if resource_root:
+                expanded = str(resource_root).replace(
+                    "$CODEAGENT", codeagent_root.as_posix()
+                )
+                resolved_root = Path(expanded).expanduser()
+                if not resolved_root.is_absolute():
+                    resolved_root = codeagent_root / resolved_root
+                return (resolved_root / TASKS_DIR).resolve()
+        except (OSError, json.JSONDecodeError, TypeError):
+            pass
+
+        return codeagent_root / TASKS_DIR
+
+    return (Path.cwd() / dir_path).resolve()
 
 
 def set_additional_template_search_paths(paths: Iterable[Union[str, Path]]) -> None:
@@ -573,8 +597,11 @@ def load_multiple_tasks(
 
         if isinstance(result, tuple):
             prompt, path = result
-            prompts.append(prompt)
-            files.append(path)
+            if isinstance(prompt, str) and isinstance(path, Path):
+                prompts.append(prompt)
+                files.append(path)
+            else:
+                raise TypeError("Expected a single task prompt and path")
         else:
             prompts.append(str(result))
 

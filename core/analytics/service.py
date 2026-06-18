@@ -13,6 +13,7 @@ from core.analytics.history import (
     append_history,
     get_last_timestamps,
     load_history,
+    save_history,
 )
 from core.analytics.models import RawUsageEntry
 from core.analytics.pricing import get_rates
@@ -32,13 +33,26 @@ def _collect_all() -> List[RawUsageEntry]:
     new_entries: List[RawUsageEntry] = []
     new_entries.extend(scan_claude_usage(since_timestamp=last_ts.get("claude", "")))
     new_entries.extend(scan_gemini_usage(since_timestamp=last_ts.get("gemini", "")))
-    new_entries.extend(scan_codex_usage(since_timestamp=last_ts.get("codex", "")))
     new_entries.extend(scan_opencode_usage(since_timestamp=last_ts.get("opencode", "")))
+
+    # Codex exposes a mutable session-level token total keyed by thread ID. Its
+    # creation timestamp does not change as usage grows, so timestamp-only
+    # incremental collection permanently misses later token updates. Re-scan
+    # Codex snapshots and replace matching historical sessions instead.
+    codex_snapshots = scan_codex_usage()
+    codex_by_session = {
+        entry.session_id: entry for entry in history if entry.target == "codex"
+    }
+    codex_by_session.update({entry.session_id: entry for entry in codex_snapshots})
+    non_codex_history = [entry for entry in history if entry.target != "codex"]
+    history = non_codex_history + list(codex_by_session.values())
 
     # 3. Save new entries to history file
     if new_entries:
         append_history(new_entries)
         history.extend(new_entries)
+    if codex_snapshots:
+        save_history(history)
 
     return history
 

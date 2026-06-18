@@ -29,8 +29,8 @@ class HookScanner:
             - A dictionary mapping category names to dictionaries of hook metadata.
             - A list of warning strings encountered during scanning.
         """
-        result = {}
-        warnings = []
+        result: Dict[str, Dict[str, Any]] = {}
+        warnings: list[str] = []
         # Iterate in reverse order so that hooks in earlier roots override later ones
         for root in reversed(self.hooks_roots):
             if not root.exists():

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import List
+from typing import Callable, List
 
 VERSION = "0.2"
 
@@ -182,7 +182,7 @@ def main() -> None:
     """Main entry point for the command-line interface."""
     import sys
 
-    prompts = {
+    prompts: dict[str, Callable[..., str]] = {
         "general": prompt_general,
         "review": prompt_review,
     }

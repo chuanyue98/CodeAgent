@@ -61,7 +61,10 @@ async def test_api_root_without_built_frontend():
     ) as ac:
         response = await ac.get("/")
     assert response.status_code == 200
-    assert response.json()["ui"] == "http://127.0.0.1:5173"
+    if server.FRONTEND_DIST.exists():
+        assert "text/html" in response.headers["content-type"]
+    else:
+        assert response.json()["ui"] == "http://127.0.0.1:5173"
 
 
 @pytest.mark.asyncio
@@ -197,6 +200,9 @@ async def test_groups_api_crud(mock_env):
         groups = resp.json()["groups"]
         assert "new-group" not in groups
 
+        resp = await ac.delete("/api/groups/missing-group")
+        assert resp.status_code == 404
+
 
 @pytest.mark.asyncio
 async def test_config_api(mock_env):
@@ -217,6 +223,28 @@ async def test_config_api(mock_env):
         # Verify
         resp = await ac.get("/api/config")
         assert resp.json()["default_mode"] == "remote"
+
+
+@pytest.mark.asyncio
+async def test_malformed_config_returns_server_error(mock_env):
+    config_path = mock_env / "config.json"
+    config_path.write_text("{ malformed", encoding="utf-8")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.get("/api/config")
+
+    assert resp.status_code == 500
+    assert "Failed to parse config.json" in resp.json()["detail"]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        update_resp = await ac.post("/api/config", json={"replacement": True})
+
+    assert update_resp.status_code == 500
+    assert config_path.read_text(encoding="utf-8") == "{ malformed"
 
 
 def test_initialize_default_groups_logic(tmp_path, monkeypatch):

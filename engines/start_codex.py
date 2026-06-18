@@ -563,6 +563,8 @@ def main() -> None:
     task_prompt = handle_task_mode(args.task, file_suffix=TASK_FILE_SUFFIX)
     task_commands: List[str] = []
     if task_prompt is not None:
+        if not isinstance(task_prompt, str):
+            raise TypeError("Task mode returned an unexpected multi-task result")
         task_prompt, task_commands = extract_shell_first_blocks(task_prompt)
         if task_prompt:
             full_prompt = (

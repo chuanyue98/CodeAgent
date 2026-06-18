@@ -32,8 +32,8 @@ class PromptScanner:
             - A dictionary mapping group names to lists of prompt names (file stems).
             - A list of warning strings.
         """
-        result = {}
-        warnings = []
+        result: Dict[str, List[str]] = {}
+        warnings: List[str] = []
         if not self.prompt_root.exists():
             return result, warnings
 
@@ -67,7 +67,7 @@ def get_prompts_to_inject(
     config: dict,
     scanner: PromptScanner,
     project_type: str = "common",
-    extra_prompts: List[str] = None,
+    extra_prompts: List[str] | None = None,
 ) -> tuple[List[str], List[str]]:
     """Determines which prompt groups should be injected based on configuration.
 
@@ -88,7 +88,7 @@ def get_prompts_to_inject(
         project_type in groups_cfg and "prompts" in project_group_cfg
     )
 
-    def add_items(items: List[str] | None):
+    def add_items(items: List[str] | None) -> None:
         if not items:
             return
         for item in items:

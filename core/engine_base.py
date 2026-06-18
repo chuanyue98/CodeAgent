@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 from core.hook_scanner import HookScanner, get_hooks_to_inject
 from core.plugin_scanner import PluginScanner, get_plugins_to_mount
@@ -89,7 +89,15 @@ class BaseEngine:
         """Returns the resource root directory, respecting resource_root in config.json."""
         resource_root = self.full_config.get("paths", {}).get("resource_root")
         if resource_root:
-            resolved = (self.root_dir / resource_root).resolve()
+            expanded = str(resource_root).replace(
+                "$CODEAGENT", self.root_dir.as_posix()
+            )
+            resource_path = Path(expanded).expanduser()
+            resolved = (
+                resource_path
+                if resource_path.is_absolute()
+                else self.root_dir / resource_path
+            ).resolve()
             if resolved.is_dir():
                 return resolved
         return self.root_dir
@@ -292,6 +300,10 @@ class BaseEngine:
             str: The matched group name (e.g., 'codeagent', 'some-project'),
                  or the default group if no match is found.
         """
+        explicit_group = os.environ.get("CA_PROJECT_GROUP", "").strip()
+        if explicit_group:
+            return explicit_group
+
         cwd = Path.cwd().resolve()
         root = self.root_dir.resolve()
 
@@ -385,9 +397,15 @@ class BaseEngine:
             str: The assembled prompt string.
         """
         groups = self.get_prompts_to_inject()
-        prompt_fn = prompt_review if is_review else prompt_general
+        prompt_fn = cast(
+            Callable[..., str], prompt_review if is_review else prompt_general
+        )
 
-        return prompt_fn(task=task, groups=groups)
+        return prompt_fn(
+            task=task,
+            groups=groups,
+            prompt_root=self.prompt_scanner.prompt_root,
+        )
 
     def write_temp_prompt(self, prompt: str) -> str:
         """Writes the assembled prompt to a temporary file in the project root.

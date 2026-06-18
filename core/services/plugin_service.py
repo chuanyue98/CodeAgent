@@ -22,7 +22,7 @@ class PluginService:
             Each plugin detail includes: name, id, description, and readme.
         """
         scanned, warnings = self.scanner.scan()
-        detailed_plugins = {}
+        detailed_plugins: dict[str, list[dict[str, str]]] = {}
         for category, plugins in scanned.items():
             detailed_plugins[category] = []
             for plugin_name in plugins:
