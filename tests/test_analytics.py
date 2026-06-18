@@ -5,7 +5,7 @@ import pytest
 from core.analytics.models import RawUsageEntry
 from core.analytics.aggregator import aggregate
 from core.analytics.history import append_history, load_history, get_last_timestamps
-from core.analytics.service import get_analytics_data
+from core.analytics.service import _collect_all, get_analytics_data
 
 
 @pytest.fixture
@@ -133,3 +133,41 @@ def test_service_incremental_collection(
 
     # Verify history file was updated
     assert len(load_history()) == 2
+
+
+@patch("core.analytics.service.scan_claude_usage", return_value=[])
+@patch("core.analytics.service.scan_gemini_usage", return_value=[])
+@patch("core.analytics.service.scan_opencode_usage", return_value=[])
+@patch("core.analytics.service.scan_codex_usage")
+def test_codex_session_snapshot_is_replaced(
+    mock_codex, _mock_opencode, _mock_gemini, _mock_claude, mock_history_file
+):
+    append_history(
+        [
+            RawUsageEntry(
+                timestamp="2026-05-01T10:00:00Z",
+                session_id="codex-session",
+                model="gpt-5",
+                input_tokens=82,
+                output_tokens=18,
+                target="codex",
+            )
+        ]
+    )
+    mock_codex.return_value = [
+        RawUsageEntry(
+            timestamp="2026-05-01T10:00:00Z",
+            session_id="codex-session",
+            model="gpt-5",
+            input_tokens=164,
+            output_tokens=36,
+            target="codex",
+        )
+    ]
+
+    entries = _collect_all()
+
+    codex_entries = [entry for entry in entries if entry.target == "codex"]
+    assert len(codex_entries) == 1
+    assert codex_entries[0].input_tokens == 164
+    assert len(load_history()) == 1

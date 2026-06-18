@@ -26,8 +26,8 @@ class PluginScanner:
             - A dictionary mapping category names to dictionaries of plugin metadata.
             - A list of warning strings.
         """
-        result = {}
-        warnings = []
+        result: Dict[str, Dict[str, Any]] = {}
+        warnings: List[str] = []
         if not self.plugins_root.exists():
             return result, warnings
 

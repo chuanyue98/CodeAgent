@@ -121,9 +121,24 @@ def test_assemble_prompt_basic(tmp_path, monkeypatch):
     monkeypatch.setattr(
         core.engine_base,
         "prompt_general",
-        lambda task, groups, extra_contents=None: f"Base Prompt Groups={groups}",
+        lambda task, groups, extra_contents=None, prompt_root=None: (
+            f"Base Prompt Groups={groups}"
+        ),
     )
 
     prompt = engine.assemble_prompt()
     assert "Base Prompt" in prompt
     assert "Groups=['base']" in prompt
+
+
+def test_assemble_prompt_uses_scanner_resource_root(tmp_path, monkeypatch):
+    engine = DummyEngine()
+    prompt_root = tmp_path / "prompt"
+    group_dir = prompt_root / "custom"
+    group_dir.mkdir(parents=True)
+    (group_dir / "rules.md").write_text("EXTERNAL_PROMPT_MARKER", encoding="utf-8")
+
+    engine.prompt_scanner.prompt_root = prompt_root
+    monkeypatch.setattr(engine, "get_prompts_to_inject", lambda: ["custom"])
+
+    assert "EXTERNAL_PROMPT_MARKER" in engine.assemble_prompt()

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, List
@@ -46,6 +48,28 @@ def append_history(new_entries: List[RawUsageEntry]) -> None:
                 f.write(json.dumps(asdict(e), ensure_ascii=False) + "\n")
     except OSError:
         pass
+
+
+def save_history(entries: List[RawUsageEntry]) -> None:
+    """Atomically replaces the history file with the supplied entries."""
+    path = _history_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        text=True,
+    )
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            for entry in entries:
+                f.write(json.dumps(asdict(entry), ensure_ascii=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, path)
+    except OSError:
+        temp_path.unlink(missing_ok=True)
 
 
 def get_last_timestamps() -> Dict[str, str]:

@@ -34,6 +34,9 @@ jobs:
       - name: Format check (ruff)
         run: uv run ruff format --check ca_launcher.py core engines tests
 
+      - name: Type check (mypy)
+        run: uv run mypy core engines ca_launcher.py
+
       - name: Test
         run: uv run pytest --tb=short -q --cov --cov-report=term-missing
 
@@ -60,6 +63,9 @@ jobs:
 
       - name: Test (Vitest)
         run: bun run test
+
+      - name: Dependency audit
+        run: bun audit --production
 
       - name: Build (tsc + Vite)
         run: bun run build

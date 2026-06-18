@@ -11,7 +11,13 @@ def _config_resource_root() -> Path:
         with open(config_path, "r", encoding="utf-8-sig") as f:
             resource_root = json.load(f).get("paths", {}).get("resource_root")
         if resource_root:
-            resolved = (ROOT_DIR / resource_root).resolve()
+            expanded = str(resource_root).replace("$CODEAGENT", ROOT_DIR.as_posix())
+            resource_path = Path(expanded).expanduser()
+            resolved = (
+                resource_path
+                if resource_path.is_absolute()
+                else ROOT_DIR / resource_path
+            ).resolve()
             if resolved.is_dir():
                 return resolved
     except Exception:

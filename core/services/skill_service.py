@@ -1,4 +1,4 @@
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pathlib import Path
 from core.skill_scanner import SkillScanner
 
@@ -23,7 +23,7 @@ class SkillService:
             Each skill detail includes: name, id, description, and readme (content).
         """
         scanned, warnings = self.scanner.scan()
-        detailed_skills = {}
+        detailed_skills: dict[str, list[dict[str, object]]] = {}
         for category, skills in scanned.items():
             detailed_skills[category] = []
             for skill_name in skills:

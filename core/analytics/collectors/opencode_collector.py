@@ -33,7 +33,9 @@ def _safe_float(value: object) -> float:
         float: The converted float value, or 0.0 if conversion fails.
     """
     try:
-        return float(value) if value is not None else 0.0
+        if isinstance(value, (str, bytes, int, float)):
+            return float(value)
+        return 0.0
     except (TypeError, ValueError):
         return 0.0
 

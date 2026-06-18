@@ -25,6 +25,13 @@ def test_config_service_malformed_json(tmp_path):
     assert len(warnings) > 0
     assert "Failed to parse config.json" in warnings[0]
 
+    try:
+        service.update_config({"replacement": True})
+    except ValueError as exc:
+        assert "Refusing to overwrite malformed configuration" in str(exc)
+    else:
+        raise AssertionError("Malformed configuration should not be overwritten")
+
 
 def test_config_service_utf8_bom(tmp_path):
     config_path = tmp_path / "config.json"
