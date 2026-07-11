@@ -4,6 +4,7 @@ import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, R
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ManifestDrawer from './components/ManifestDrawer';
 import SystemPage from './pages/SystemPage';
+import SystemPanel from './components/SystemPanel';
 
 const SkillGallery = lazy(() => import('./components/SkillGallery'));
 const ConfigHub = lazy(() => import('./components/ConfigHub'));
@@ -96,7 +97,7 @@ function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-hidden relative flex flex-col gap-4">
+      <main className="flex-1 overflow-hidden relative flex flex-col gap-4 pb-8">
         <header className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-800">{pageLabel}</h2>
           <ProjectSwitcher />
@@ -122,6 +123,7 @@ function App() {
       </main>
 
       <ManifestDrawer />
+      <SystemPanel />
     </div>
   );
 }
