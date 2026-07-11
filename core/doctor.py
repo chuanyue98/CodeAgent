@@ -487,9 +487,6 @@ def get_doctor_sections(fix: bool = False) -> list[Section]:
         print("  Done. Re-run 'ca doctor' to verify.")
         print()
 
-    if fix:
-        stale = check_stale_injections(s5)
-
     return [s1, s2, s3, s4, s5]
 
 
