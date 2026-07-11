@@ -21,6 +21,8 @@ export default function SystemPanel() {
     return () => clearInterval(interval);
   }, []);
 
+  if (!metrics) return null;
+
   if (error && !metrics) return (
     <div className="fixed bottom-0 left-0 right-0 z-50">
       <div className="glass-card border-t border-red-100 px-4 py-2 flex items-center justify-between">
