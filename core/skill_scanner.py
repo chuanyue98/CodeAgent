@@ -79,19 +79,24 @@ def get_skills_to_mount(
     Returns:
         A list of unique skill identifiers to mount.
     """
-    result = set()
+    result: list[str] = []
+
+    def _add(items):
+        for item in items:
+            if item not in result:
+                result.append(item)
 
     # 1. Read from config.groups[project_type].skills (Configuration managed by Web UI)
     group_skills = config.get("groups", {}).get(project_type, {}).get("skills", [])
-    result.update(group_skills)
+    _add(group_skills)
 
     # 2. Compatibility with legacy config.skills.project_skills format
     legacy = config.get("skills", {}).get("project_skills", {}).get(project_type, [])
-    result.update(legacy)
+    _add(legacy)
 
     # 3. Extra skills passed by the caller
     if extra_skills:
-        result.update(extra_skills)
+        _add(extra_skills)
 
     # 4. Automatically load skills from the local 'skills/' subdirectory
     cwd = Path.cwd()
@@ -100,6 +105,6 @@ def get_skills_to_mount(
         if local_skills.exists():
             for item in local_skills.iterdir():
                 if item.is_dir():
-                    result.add(item.name)
+                    _add([item.name])
 
-    return list(result)
+    return result
