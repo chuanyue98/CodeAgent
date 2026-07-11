@@ -1,3 +1,4 @@
+import asyncio
 import json
 from contextlib import asynccontextmanager
 
@@ -7,6 +8,9 @@ from fastapi.staticfiles import StaticFiles
 from core.prompt_scanner import DEFAULT_GROUP_PROMPTS, PromptScanner
 from core.skill_scanner import SkillScanner
 from core.plugin_scanner import PluginScanner
+from core.services.config_service import ConfigService
+from core.services.schedule_service import ScheduleService
+from core.services.scheduler_loop import scheduler_tick_loop
 from core.web.routers import (
     analytics,
     chat,
@@ -15,12 +19,16 @@ from core.web.routers import (
     hooks,
     launch,
     logs,
+    mcp,
     plugins,
     prompts,
+    schedules,
     skills,
     system,
     tasks,
 )
+from core.web.routers.config import get_config_path
+from core.web.routers.tasks import _runner as _task_runner, get_tasks_root
 from core.web.resource_paths import ROOT_DIR, resolve_resource_path
 
 CONFIG_PATH = ROOT_DIR / "config.json"
@@ -109,7 +117,16 @@ def initialize_default_groups() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize_default_groups()
+    schedule_service = ScheduleService(ConfigService(get_config_path()))
+    scheduler_task = asyncio.create_task(
+        scheduler_tick_loop(schedule_service, _task_runner, get_tasks_root)
+    )
     yield
+    scheduler_task.cancel()
+    try:
+        await scheduler_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(title="CodeAgent Web UI", lifespan=lifespan)
@@ -122,8 +139,10 @@ app.include_router(history.router)
 app.include_router(hooks.router)
 app.include_router(launch.router)
 app.include_router(logs.router)
+app.include_router(mcp.router)
 app.include_router(plugins.router)
 app.include_router(prompts.router)
+app.include_router(schedules.router)
 app.include_router(skills.router)
 app.include_router(system.router)
 app.include_router(tasks.router)
