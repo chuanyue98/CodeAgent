@@ -40,7 +40,8 @@ async def tick_once(
     can't take down the loop for every other schedule.
     """
     now = time.time()
-    for record in schedule_service.list_schedules():
+    schedules = await asyncio.to_thread(schedule_service.list_schedules)
+    for record in schedules:
         if not record.get("enabled"):
             continue
         next_run_at = record.get("next_run_at")
@@ -48,17 +49,27 @@ async def tick_once(
             continue
 
         tasks_root = get_tasks_root()
-        if TaskService(tasks_root).get_task(record["task_name"]) is None:
-            schedule_service.record_run(record["id"], "task_not_found")
+        task_exists = await asyncio.to_thread(
+            lambda: TaskService(tasks_root).get_task(record["task_name"]) is not None
+        )
+        if not task_exists:
+            await asyncio.to_thread(
+                schedule_service.record_run, record["id"], "task_not_found"
+            )
             continue
 
         try:
-            task_runner.run_task(
+            await asyncio.to_thread(
+                task_runner.run_task,
                 record["task_name"],
                 record["engine"],
                 record["group"],
                 tasks_root=tasks_root,
             )
-            schedule_service.record_run(record["id"], "started")
+            await asyncio.to_thread(
+                schedule_service.record_run, record["id"], "started"
+            )
         except ValueError as exc:
-            schedule_service.record_run(record["id"], f"failed: {exc}")
+            await asyncio.to_thread(
+                schedule_service.record_run, record["id"], f"failed: {exc}"
+            )

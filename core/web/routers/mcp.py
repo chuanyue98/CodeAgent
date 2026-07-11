@@ -36,7 +36,7 @@ class AddMcpServerRequest(BaseModel):
 
 
 @router.get("/{engine}")
-async def list_mcp_servers(
+def list_mcp_servers(
     engine: str,
     project: str = Query(..., description="Project directory path"),
 ) -> list[dict]:
@@ -48,7 +48,7 @@ async def list_mcp_servers(
 
 
 @router.post("/{engine}")
-async def add_mcp_server(engine: str, req: AddMcpServerRequest) -> dict:
+def add_mcp_server(engine: str, req: AddMcpServerRequest) -> dict:
     """Adds an MCP server via the engine's own CLI."""
     try:
         mcp_service.add_server(
@@ -68,7 +68,7 @@ async def add_mcp_server(engine: str, req: AddMcpServerRequest) -> dict:
 
 
 @router.delete("/{engine}/{name}")
-async def remove_mcp_server(
+def remove_mcp_server(
     engine: str,
     name: str,
     project: str = Query(..., description="Project directory path"),

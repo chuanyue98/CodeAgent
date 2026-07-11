@@ -92,6 +92,11 @@ class ScheduleService:
                 if not croniter.is_valid(new_cron_expr):
                     raise ValueError(f"Invalid cron expression: {new_cron_expr!r}")
                 record["next_run_at"] = _compute_next_run(new_cron_expr)
+            elif fields.get("enabled") is True and not record.get("enabled"):
+                # Re-enabling a schedule that sat disabled long enough for its
+                # old next_run_at to lapse would otherwise fire immediately on
+                # the next tick — recompute from now instead.
+                record["next_run_at"] = _compute_next_run(record["cron_expr"])
             for key in ("cron_expr", "enabled", "task_name", "engine", "group"):
                 if fields.get(key) is not None:
                     record[key] = fields[key]
@@ -109,11 +114,16 @@ class ScheduleService:
         config[_SCHEDULES_KEY] = new_schedules
         self.config_service.update_config(config)
 
-    def record_run(self, schedule_id: str, status: str) -> None:
-        """Persists the outcome of a fired schedule and advances next_run_at.
+    def record_run(
+        self, schedule_id: str, status: str, advance_schedule: bool = True
+    ) -> None:
+        """Persists the outcome of a fired schedule.
 
-        Called by the scheduler tick loop after each fire attempt (and by
-        the manual "run now" endpoint), not by the CRUD endpoints.
+        Called by the scheduler tick loop after each fire attempt (with
+        ``advance_schedule=True``, moving ``next_run_at`` forward per the
+        cron expression) and by the manual "run now" endpoint (with
+        ``advance_schedule=False`` — an ad-hoc run shouldn't perturb the
+        schedule's regular timing). Not called by the CRUD endpoints.
         """
         config = self._load()
         schedules = config.get(_SCHEDULES_KEY, [])
@@ -121,7 +131,8 @@ class ScheduleService:
             if record["id"] == schedule_id:
                 record["last_run_at"] = time.time()
                 record["last_run_status"] = status
-                record["next_run_at"] = _compute_next_run(record["cron_expr"])
+                if advance_schedule:
+                    record["next_run_at"] = _compute_next_run(record["cron_expr"])
                 config[_SCHEDULES_KEY] = schedules
                 self.config_service.update_config(config)
                 return

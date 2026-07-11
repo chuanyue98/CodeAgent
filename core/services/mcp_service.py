@@ -34,7 +34,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 _VALID_ENGINES = {"claude", "codex", "gemini", "opencode"}
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
@@ -143,9 +143,24 @@ def _normalize_entry(name: str, scope: str, cfg: dict) -> dict:
 # --- Per-engine reads --------------------------------------------------
 
 
+def _server_entries(container: object) -> list[tuple[str, Any]]:
+    """Defensively coerces a config file's server-map value into
+    (name, cfg) pairs, tolerating a malformed config where the expected
+    key isn't actually a mapping (e.g. hand-edited into a list or scalar).
+
+    ``cfg`` is left untyped (``Any``) rather than ``dict`` — codex's caller
+    needs it to still be a tomlkit ``Table`` so ``.unwrap()`` works.
+    """
+    if not hasattr(container, "items"):
+        return []
+    return list(container.items())  # type: ignore[attr-defined]
+
+
 def _list_claude(project: Path) -> list[dict]:
     servers = _read_json(_claude_mcp_path(project)).get("mcpServers", {})
-    return [_normalize_entry(name, "project", cfg) for name, cfg in servers.items()]
+    return [
+        _normalize_entry(name, "project", cfg) for name, cfg in _server_entries(servers)
+    ]
 
 
 def _list_codex() -> list[dict]:
@@ -160,18 +175,23 @@ def _list_codex() -> list[dict]:
         return []
     servers = doc.get("mcp_servers", {})
     return [
-        _normalize_entry(name, "global", cfg.unwrap()) for name, cfg in servers.items()
+        _normalize_entry(name, "global", cfg.unwrap())
+        for name, cfg in _server_entries(servers)
     ]
 
 
 def _list_gemini(project: Path) -> list[dict]:
     servers = _read_json(_gemini_settings_path(project)).get("mcpServers", {})
-    return [_normalize_entry(name, "project", cfg) for name, cfg in servers.items()]
+    return [
+        _normalize_entry(name, "project", cfg) for name, cfg in _server_entries(servers)
+    ]
 
 
 def _list_opencode() -> list[dict]:
     servers = _read_json(_opencode_config_path()).get("mcp", {})
-    return [_normalize_entry(name, "global", cfg) for name, cfg in servers.items()]
+    return [
+        _normalize_entry(name, "global", cfg) for name, cfg in _server_entries(servers)
+    ]
 
 
 def list_servers(engine: str, project_path: str) -> list[dict]:
@@ -194,13 +214,18 @@ def _run_cli(cmd: list[str], cwd: str) -> None:
     executable = shutil.which(cmd[0])
     if executable is None:
         raise RuntimeError(f"{cmd[0]!r} CLI not found on PATH")
-    result = subprocess.run(
-        [executable, *cmd[1:]],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        timeout=20,
-    )
+    try:
+        result = subprocess.run(
+            [executable, *cmd[1:]],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"{cmd[0]} timed out after 20 seconds") from exc
+    except OSError as exc:
+        raise RuntimeError(f"Failed to run {cmd[0]}: {exc}") from exc
     if result.returncode != 0:
         message = (result.stderr or result.stdout or "").strip()
         raise RuntimeError(message or f"{cmd[0]} exited with code {result.returncode}")

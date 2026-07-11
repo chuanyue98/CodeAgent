@@ -51,13 +51,13 @@ class UpdateScheduleRequest(BaseModel):
 
 
 @router.get("/schedules")
-async def list_schedules() -> list[dict]:
+def list_schedules() -> list[dict]:
     """Lists all cron schedules."""
     return _service().list_schedules()
 
 
 @router.post("/schedules")
-async def create_schedule(req: CreateScheduleRequest) -> dict:
+def create_schedule(req: CreateScheduleRequest) -> dict:
     """Creates a new cron schedule targeting an existing file-based Task."""
     try:
         return _service().create_schedule(
@@ -68,7 +68,7 @@ async def create_schedule(req: CreateScheduleRequest) -> dict:
 
 
 @router.patch("/schedules/{schedule_id}")
-async def update_schedule(schedule_id: str, req: UpdateScheduleRequest) -> dict:
+def update_schedule(schedule_id: str, req: UpdateScheduleRequest) -> dict:
     """Updates a schedule's fields (e.g. toggling enabled, editing cron_expr)."""
     try:
         return _service().update_schedule(
@@ -81,7 +81,7 @@ async def update_schedule(schedule_id: str, req: UpdateScheduleRequest) -> dict:
 
 
 @router.delete("/schedules/{schedule_id}")
-async def delete_schedule(schedule_id: str) -> dict:
+def delete_schedule(schedule_id: str) -> dict:
     """Deletes a schedule."""
     try:
         _service().delete_schedule(schedule_id)
@@ -91,7 +91,7 @@ async def delete_schedule(schedule_id: str) -> dict:
 
 
 @router.post("/schedules/{schedule_id}/run-now")
-async def run_now(schedule_id: str) -> dict:
+def run_now(schedule_id: str) -> dict:
     """Fires a schedule's task immediately, outside its normal cron timing."""
     service = _service()
     record = service.get_schedule(schedule_id)
@@ -108,5 +108,5 @@ async def run_now(schedule_id: str) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    service.record_run(schedule_id, "started")
+    service.record_run(schedule_id, "started", advance_schedule=False)
     return status.__dict__

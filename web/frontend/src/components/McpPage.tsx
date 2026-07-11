@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Server, Plus, Trash2, AlertCircle, Info } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { fetchMcpServers, addMcpServer, removeMcpServer, type McpServer } from '../api/mcp';
@@ -39,7 +39,10 @@ export default function McpPage() {
   const [envText, setEnvText] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const groupProjects = projects.filter(p => p.group === currentGroup);
+  const groupProjects = useMemo(
+    () => projects.filter(p => p.group === currentGroup),
+    [projects, currentGroup],
+  );
 
   useEffect(() => {
     fetch('/api/engines')
