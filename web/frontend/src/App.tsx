@@ -1,8 +1,9 @@
 import { lazy, Suspense, useState } from 'react';
 import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket, Terminal, FileText } from 'lucide-react';
+import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket, Terminal, FileText, Cpu } from 'lucide-react';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ManifestDrawer from './components/ManifestDrawer';
+import SystemPage from './pages/SystemPage';
 
 const SkillGallery = lazy(() => import('./components/SkillGallery'));
 const ConfigHub = lazy(() => import('./components/ConfigHub'));
@@ -26,6 +27,7 @@ const navItems = [
   { path: '/logs', label: 'Logs', icon: Terminal },
   { path: '/analytics', label: 'Analytics', icon: TrendingUp },
   { path: '/sessions', label: 'Sessions', icon: FileText },
+  { path: '/system', label: 'System', icon: Cpu },
 ] as const;
 
 const PAGE_LABELS: Record<string, string> = {
@@ -39,6 +41,7 @@ const PAGE_LABELS: Record<string, string> = {
   '/logs': 'Logs',
   '/analytics': 'Analytics',
   '/sessions': 'Sessions',
+  '/system': 'System',
 };
 
 function App() {
@@ -112,6 +115,7 @@ function App() {
               <Route path="/logs" element={<LogViewer />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/sessions" element={<SessionsPage />} />
+              <Route path="/system" element={<SystemPage />} />
             </Routes>
           </Suspense>
         </div>
