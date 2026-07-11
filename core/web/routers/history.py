@@ -21,6 +21,8 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
@@ -63,7 +65,9 @@ async def list_sessions(
     Returns:
         dict: {"sessions": [...], "count": N}
     """
-    sessions = find_all_sessions(project, engine=engine)[:limit]
+    sessions = (await asyncio.to_thread(find_all_sessions, project, engine=engine))[
+        :limit
+    ]
     return {
         "sessions": [s.to_summary_dict() for s in sessions],
         "count": len(sessions),
@@ -100,7 +104,7 @@ async def get_audit_events(
     Returns:
         dict: {"events": [...], "count": N}
     """
-    sessions = find_all_sessions(project, engine=engine)
+    sessions = await asyncio.to_thread(find_all_sessions, project, engine=engine)
     events = build_audit_events(sessions)
 
     if since:

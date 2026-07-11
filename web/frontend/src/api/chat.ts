@@ -105,7 +105,7 @@ export function useChatTurnStream(turnId: string | null) {
     eventSource.addEventListener('message', (event: MessageEvent) => {
       try {
         const parsed = JSON.parse(event.data);
-        if (parsed.error) {
+        if (parsed && typeof parsed === 'object' && parsed.error) {
           setError(parsed.error);
           eventSource.close();
           return;

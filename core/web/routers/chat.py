@@ -112,10 +112,14 @@ async def stream_chat_turn(turn_id: str):
                 return
 
             if current_size != last_size:
+
+                def _read_new_bytes(p: Path = path, offset: int = last_size) -> str:
+                    with open(p, "r", encoding="utf-8") as fh:
+                        fh.seek(offset)
+                        return fh.read()
+
                 try:
-                    with open(path, "r", encoding="utf-8") as fh:
-                        fh.seek(last_size)
-                        new_data = fh.read()
+                    new_data = await asyncio.to_thread(_read_new_bytes)
                 except Exception:
                     yield 'data: {"error": "read failed"}\n\n'
                     return
@@ -134,6 +138,9 @@ async def stream_chat_turn(turn_id: str):
                 and current_status.status != "running"
                 and current_size == last_size
             ):
+                trailing = buffer.strip()
+                if trailing:
+                    yield f"data: {trailing}\n\n"
                 done_payload = {
                     "status": current_status.status,
                     "session_id": current_status.session_id,

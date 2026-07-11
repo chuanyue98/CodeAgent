@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Send, MessageSquare, Plus, AlertCircle, Loader2, RotateCcw } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import {
@@ -83,11 +83,22 @@ export default function ChatPage() {
   const [turnId, setTurnId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const pendingTextRef = useRef('');
-  const [pendingText, setPendingText] = useState('');
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const { events, done, error: streamError } = useChatTurnStream(turnId);
+
+  // Each event carries the *full* text for its step (not a delta — see
+  // extractAssistantText), so the latest text-bearing event is always the
+  // complete in-progress answer. Computing this during render (rather than
+  // via a useEffect + ref) means it can never observe a stale events array
+  // from a previous turn.
+  const pendingText = useMemo(() => {
+    for (let i = events.length - 1; i >= 0; i--) {
+      const text = extractAssistantText(selectedEngine, events[i]);
+      if (text) return text;
+    }
+    return '';
+  }, [events, selectedEngine]);
 
   const currentEngine = engines.find(e => e.id === selectedEngine);
 
@@ -143,48 +154,33 @@ export default function ChatPage() {
             .map(m => ({ role: m.role as 'user' | 'assistant', text: m.content || '' })),
         );
       } else {
+        setError('Failed to load session history');
         setMessages([]);
       }
     } catch {
+      setError('Failed to load session history');
       setMessages([]);
     }
   };
 
-  // Track the latest full text per in-flight turn (each event carries the
-  // full step text, not a delta — see extractAssistantText).
-  useEffect(() => {
-    if (!turnId || events.length === 0) return;
-    for (let i = events.length - 1; i >= 0; i--) {
-      const text = extractAssistantText(selectedEngine, events[i]);
-      if (text) {
-        pendingTextRef.current = text;
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setPendingText(text);
-        break;
-      }
-    }
-  }, [events, turnId, selectedEngine]);
-
   useEffect(() => {
     if (!done) return;
-    const finalText = pendingTextRef.current;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages(prev => {
       if (done.status !== 'completed') {
         return [...prev, { role: 'error', text: `Turn ${done.status}` }];
       }
-      if (finalText) {
-        return [...prev, { role: 'assistant', text: finalText }];
+      if (pendingText) {
+        return [...prev, { role: 'assistant', text: pendingText }];
       }
       return prev;
     });
     if (done.session_id) {
       setActiveSessionId(done.session_id);
     }
-    pendingTextRef.current = '';
-    setPendingText('');
     setTurnId(null);
     setSending(false);
-  }, [done]);
+  }, [done, pendingText]);
 
   useEffect(() => {
     if (streamError) {
