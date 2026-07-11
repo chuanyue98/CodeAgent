@@ -1,6 +1,9 @@
 import os
-from fastapi import APIRouter, Body, HTTPException
 from pathlib import Path
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
+
 from core.services.config_service import ConfigService
 
 router = APIRouter(prefix="/api")
@@ -22,6 +25,41 @@ def _load_config(service: ConfigService) -> dict:
     return config
 
 
+# ── Pydantic request models ──────────────────────────────────────────────────
+
+
+class ProjectPayload(BaseModel):
+    path: str = Field(min_length=1)
+    group: str = Field(min_length=1)
+
+
+class ProxyPayload(BaseModel):
+    host: str = Field(min_length=1)
+    port: int = Field(gt=0, le=65535)
+
+
+class GroupDefinitionPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    skills: list[str] = Field(default_factory=list)
+    prompts: list[str] = Field(default_factory=list)
+    hooks: list[str] = Field(default_factory=list)
+    plugins: list[str] = Field(default_factory=list)
+
+
+class ConfigPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    default_mode: str | None = None
+    language: str | None = None
+    proxy: ProxyPayload | None = None
+    groups: dict[str, GroupDefinitionPayload] | None = None
+    project_registry: list[dict] | None = None
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+
 @router.get("/projects")
 async def list_projects():
     service = ConfigService(get_config_path())
@@ -30,12 +68,10 @@ async def list_projects():
 
 
 @router.post("/projects")
-async def add_project(project: dict = Body(...)):
-    if not project.get("path") or not project.get("group"):
-        raise HTTPException(status_code=400, detail="Path and group are required")
+async def add_project(payload: ProjectPayload):
     try:
         service = ConfigService(get_config_path())
-        registry = service.add_project(project["path"], project["group"])
+        registry = service.add_project(payload.path, payload.group)
         return {"status": "success", "registry": registry}
     except HTTPException:
         raise
@@ -63,15 +99,20 @@ async def list_groups():
 
 
 @router.post("/groups/{group_name}")
-async def update_group(group_name: str, definition: dict = Body(...)):
+async def update_group(group_name: str, definition: GroupDefinitionPayload):
     try:
         service = ConfigService(get_config_path())
         config = _load_config(service)
         if "groups" not in config:
             config["groups"] = {}
-        config["groups"][group_name] = definition
+        group_data = definition.model_dump()
+        config["groups"][group_name] = group_data
         service.update_config(config)
-        return {"status": "success", "group": group_name, "definition": definition}
+        return {
+            "status": "success",
+            "group": group_name,
+            "definition": group_data,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -105,7 +146,7 @@ async def get_config():
 
 
 @router.post("/config")
-async def update_config(config: dict = Body(...)):
+async def update_config(config: dict):
     try:
         service = ConfigService(get_config_path())
         service.update_config(config)

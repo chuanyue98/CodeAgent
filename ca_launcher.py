@@ -94,6 +94,21 @@ def _frontend_source_exists():
 
 
 def _ui_dev_server_command():
+    """Return the command to start the Vite dev server via bun (preferred) or npm (fallback)."""
+    bun_cmd = shutil.which("bun")
+    if bun_cmd:
+        return [
+            bun_cmd,
+            "run",
+            "dev",
+            "--",
+            "--host",
+            UI_DEV_SERVER_HOST,
+            "--port",
+            str(UI_DEV_SERVER_PORT),
+        ]
+
+    # Fallback to npm if bun is not installed
     if sys.platform == "win32":
         npm_cmd = shutil.which("npm.cmd") or shutil.which("npm")
     else:
@@ -245,7 +260,7 @@ def run_ui_command():
         if not _frontend_dist_exists():
             print(
                 "❌ Built Web UI not found at web/frontend/dist, and source mode is unavailable.\n"
-                "Run `npm install` in web/frontend or build the frontend first."
+                "Run `bun install` in web/frontend or build the frontend first."
             )
             return 1
         port = find_available_port(UI_API_PORT)

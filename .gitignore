@@ -51,3 +51,5 @@ prompt_debug*.json
 config.json
 
 gha-creds-*.json
+build/
+*.png
