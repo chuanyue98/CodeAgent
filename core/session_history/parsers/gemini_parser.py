@@ -217,7 +217,7 @@ def _extract_gemini_response(
 
 
 def find_gemini_sessions(
-    project_path: str, home: Optional[Path] = None
+    project_path: Optional[str] = None, home: Optional[Path] = None
 ) -> list[UnifiedSession]:
     """Finds all Gemini sessions for a given project path.
 
@@ -226,7 +226,8 @@ def find_gemini_sessions(
     component of the provided ``project_path``.
 
     Args:
-        project_path: The project directory to match against.
+        project_path: The project directory to match against. If None,
+            sessions from every project are returned unfiltered.
         home: Optional home directory override.
 
     Returns:
@@ -237,13 +238,13 @@ def find_gemini_sessions(
         return []
 
     # Gemini uses the project folder name (last component) as the directory
-    target_name = Path(project_path).name.lower()
+    target_name = Path(project_path).name.lower() if project_path is not None else None
     sessions: list[UnifiedSession] = []
 
     for project_dir in base.iterdir():
         if not project_dir.is_dir():
             continue
-        if project_dir.name.lower() != target_name:
+        if target_name is not None and project_dir.name.lower() != target_name:
             continue
 
         chats_dir = project_dir / "chats"

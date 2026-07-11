@@ -4,6 +4,10 @@ Endpoints:
   GET  /api/history?project=<path>&engine=<engine>
       List session summaries across all (or one) engine(s)
 
+  GET  /api/history/audit?engine=&project=&since=&until=&limit=
+      Flattened, time-sorted message/tool-call event timeline across
+      sessions (and, if project is omitted, across all projects)
+
   GET  /api/history/{engine}/{session_id}?project=<path>
       Get full session detail with all messages
 
@@ -20,6 +24,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
+from core.session_history.audit import build_audit_events
 from core.session_history.session_finder import (
     find_all_sessions,
     find_session_by_id,
@@ -56,6 +61,46 @@ async def list_sessions(
         "sessions": [s.to_summary_dict() for s in sessions],
         "count": len(sessions),
     }
+
+
+@router.get("/history/audit")
+async def get_audit_events(
+    engine: str | None = Query(None, description="Filter by engine"),
+    project: str | None = Query(
+        None, description="Filter by project directory path; omit to search all projects"
+    ),
+    since: str | None = Query(None, description="ISO 8601 lower bound (inclusive)"),
+    until: str | None = Query(None, description="ISO 8601 upper bound (inclusive)"),
+    limit: int = Query(500, ge=1, le=5000, description="Maximum number of events to return"),
+) -> dict:
+    """Returns a flattened, time-sorted message/tool-call event timeline.
+
+    This is a message/tool-call history across engines and sessions — it is
+    NOT an approval or permission log; no such data exists in the underlying
+    session parsers.
+
+    Args:
+        engine: Optional engine filter ("claude", "codex", "gemini", "opencode").
+        project: Optional project directory path filter. Omit to search
+            across every project the user has session history for.
+        since: Optional ISO 8601 lower bound on event timestamp (inclusive).
+        until: Optional ISO 8601 upper bound on event timestamp (inclusive).
+        limit: Maximum number of events to return after filtering.
+
+    Returns:
+        dict: {"events": [...], "count": N}
+    """
+    sessions = find_all_sessions(project, engine=engine)
+    events = build_audit_events(sessions)
+
+    if since:
+        events = [e for e in events if e["timestamp"] >= since]
+    if until:
+        events = [e for e in events if e["timestamp"] <= until]
+
+    events = events[:limit]
+
+    return {"events": events, "count": len(events)}
 
 
 @router.get("/history/{engine}/{session_id}")
