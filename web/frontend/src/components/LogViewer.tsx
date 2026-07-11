@@ -29,6 +29,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
 
   useEffect(() => {
     if (!selectedTaskId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     fetchLogFile(selectedTaskId).then(res => {
       setInitialContent(res.content);

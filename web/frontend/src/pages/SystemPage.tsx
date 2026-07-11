@@ -1,14 +1,7 @@
 import { useState, useEffect } from 'react';
-import { AlertCircle, CheckCircle, AlertTriangle, XCircle, RefreshCw, Clock, HardDrive, FileText } from 'lucide-react';
+import { AlertCircle, CheckCircle, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
 import { fetchSystemHealth, fetchSystemMetrics, type SystemHealth, type SystemMetrics } from '../api/system';
 import LogViewer from '../components/LogViewer';
-
-const STATUS_COLOR: Record<string, string> = {
-  '[OK]': 'text-green-600',
-  '[!] ': 'text-yellow-600',
-  '[X] ': 'text-red-600',
-  '[i] ': 'text-blue-600',
-};
 
 function StatusIcon({ status }: { status: string }) {
   if (status === '[OK]') return <CheckCircle className="w-4 h-4 text-green-600" />;
@@ -51,6 +44,7 @@ export default function SystemPage() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, []);
 
   if (loading) {

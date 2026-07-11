@@ -32,6 +32,7 @@ export function useLogStream(taskId: string | null) {
   useEffect(() => {
     if (!taskId) return;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLines([]);
     setError(null);
     setConnected(false);

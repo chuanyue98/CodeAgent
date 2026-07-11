@@ -30,12 +30,14 @@ def _list_log_files() -> list[dict]:
     for f in sorted(CA_TASK_LOGS_DIR.glob("*.log")):
         try:
             stat = f.stat()
-            files.append({
-                "task_id": f.stem,
-                "name": f.name,
-                "size": stat.st_size,
-                "modified": int(stat.st_mtime),
-            })
+            files.append(
+                {
+                    "task_id": f.stem,
+                    "name": f.name,
+                    "size": stat.st_size,
+                    "modified": int(stat.st_mtime),
+                }
+            )
         except OSError:
             pass
     return files
@@ -82,7 +84,7 @@ async def stream_log_file(task_id: str):
             try:
                 current_size = path.stat().st_size
             except OSError:
-                yield "data: {\"error\": \"file removed\"}\n\n"
+                yield 'data: {"error": "file removed"}\n\n'
                 break
 
             if current_size != last_size:
@@ -93,7 +95,7 @@ async def stream_log_file(task_id: str):
                         if new_data:
                             yield f"data: {json.dumps({'content': new_data, 'size': current_size})}\n\n"
                 except Exception:
-                    yield "data: {\"error\": \"read failed\"}\n\n"
+                    yield 'data: {"error": "read failed"}\n\n'
                     break
                 last_size = current_size
 
