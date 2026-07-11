@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, ChevronDown, ChevronUp, Clock, DollarSign, FileText } from 'lucide-react';
+import { Search, Filter, ChevronDown, ChevronUp, Clock, DollarSign, FileText, AlertCircle } from 'lucide-react';
 import { fetchSessions, type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
 
 type SortKey = 'lastActivity' | 'cost' | 'tokens';
@@ -142,7 +142,18 @@ export default function SessionsPage() {
           {filtered.map(session => {
             const isExpanded = expandedId === session.sessionId;
             const totalTokens = session.inputTokens + session.outputTokens;
-            return (
+  if (error) {
+    return (
+      <div className="p-8 flex items-center justify-center">
+        <div className="glass-card p-5 flex items-center gap-3 bg-red-50/60 border-red-100">
+          <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+          <span className="font-medium text-red-600 text-sm">{error}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
               <div
                 key={session.sessionId}
                 className="border border-slate-100 rounded-xl p-4 hover:bg-slate-50/60 transition-colors"
