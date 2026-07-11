@@ -10,6 +10,8 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedEngines, setSelectedEngines] = useState<string[]>([]);
+  const [dateStart, setDateStart] = useState('');
+  const [dateEnd, setDateEnd] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('lastActivity');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -45,15 +47,25 @@ export default function SessionsPage() {
     if (selectedEngines.length > 0) {
       result = result.filter(s => selectedEngines.includes(s.target));
     }
+    if (dateStart) {
+      result = result.filter(s => s.lastActivity >= dateStart);
+    }
+    if (dateEnd) {
+      result = result.filter(s => s.lastActivity <= dateEnd + 'T23:59:59');
+    }
     result = [...result].sort((a, b) => {
       let cmp = 0;
-      if (sortKey === 'lastActivity') cmp = new Date(a.lastActivity).getTime() - new Date(b.lastActivity).getTime();
+      if (sortKey === 'lastActivity') {
+        const ta = new Date(a.lastActivity).getTime() || 0;
+        const tb = new Date(b.lastActivity).getTime() || 0;
+        cmp = ta - tb;
+      }
       else if (sortKey === 'cost') cmp = a.cost - b.cost;
       else if (sortKey === 'tokens') cmp = (a.inputTokens + a.outputTokens) - (b.inputTokens + b.outputTokens);
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return result;
-  }, [sessions, search, selectedEngines, sortKey, sortDir]);
+  }, [sessions, search, selectedEngines, dateStart, dateEnd, sortKey, sortDir]);
 
   const toggleEngine = (engine: string) => {
     setSelectedEngines(prev =>
@@ -102,6 +114,24 @@ export default function SessionsPage() {
               onChange={e => setSearch(e.target.value)}
               placeholder="Project or session..."
               className="w-full pl-7 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs text-slate-400 font-medium block mb-1">Date Range</label>
+          <div className="flex gap-2">
+            <input
+              type="date"
+              value={dateStart}
+              onChange={e => setDateStart(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
+            />
+            <input
+              type="date"
+              value={dateEnd}
+              onChange={e => setDateEnd(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
             />
           </div>
         </div>
