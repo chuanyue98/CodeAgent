@@ -74,6 +74,17 @@ export default function SessionsPage() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="glass-card p-5 flex items-center gap-3 bg-red-50/60 border-red-100">
+          <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+          <span className="font-medium text-red-600 text-sm">{error}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex gap-4 h-full">
       <div className="w-56 shrink-0 glass-card p-4 space-y-4">
@@ -142,18 +153,7 @@ export default function SessionsPage() {
           {filtered.map(session => {
             const isExpanded = expandedId === session.sessionId;
             const totalTokens = session.inputTokens + session.outputTokens;
-  if (error) {
-    return (
-      <div className="p-8 flex items-center justify-center">
-        <div className="glass-card p-5 flex items-center gap-3 bg-red-50/60 border-red-100">
-          <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
-          <span className="font-medium text-red-600 text-sm">{error}</span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
+            return (
               <div
                 key={session.sessionId}
                 className="border border-slate-100 rounded-xl p-4 hover:bg-slate-50/60 transition-colors"

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket, Terminal } from 'lucide-react';
+import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket, Terminal, FileText } from 'lucide-react';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ManifestDrawer from './components/ManifestDrawer';
 
@@ -25,7 +25,7 @@ const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: Activity },
   { path: '/logs', label: 'Logs', icon: Terminal },
   { path: '/analytics', label: 'Analytics', icon: TrendingUp },
-  { path: '/sessions', label: 'Sessions', icon: Terminal },
+  { path: '/sessions', label: 'Sessions', icon: FileText },
 ] as const;
 
 const PAGE_LABELS: Record<string, string> = {
