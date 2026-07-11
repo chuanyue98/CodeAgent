@@ -13,9 +13,9 @@ export default function SystemPanel() {
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    fetchSystemMetrics().then(setMetrics).catch(() => {});
+    fetchSystemMetrics().then(setMetrics).catch((err) => { console.error('Failed to fetch metrics:', err); });
     const interval = setInterval(() => {
-      fetchSystemMetrics().then(setMetrics).catch(() => {});
+      fetchSystemMetrics().then(setMetrics).catch((err) => { console.error('Failed to fetch metrics:', err); });
     }, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -30,10 +30,10 @@ export default function SystemPanel() {
             <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${colorFor(metrics.cpu_percent, [70, 90])}`}>
               <Cpu className="w-3 h-3" />{metrics.cpu_percent.toFixed(0)}%
             </span>
-            <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${colorFor(metrics.memory_percent, [75, 90])}`}>
+            <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${colorFor(metrics.memory_percent, [70, 90])}`}>
               <Clock className="w-3 h-3" />{metrics.memory_percent.toFixed(0)}%
             </span>
-            <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${colorFor(metrics.disk_percent, [80, 95])}`}>
+            <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${colorFor(metrics.disk_percent, [70, 90])}`}>
               <HardDrive className="w-3 h-3" />{metrics.disk_percent.toFixed(0)}%
             </span>
             <span className="text-slate-400 flex items-center gap-1">
