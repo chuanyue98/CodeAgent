@@ -150,7 +150,7 @@ class BaseEngine:
                 result.append(name)
             return result
 
-        return list(set(resolve(selected_group_name)))
+        return list(dict.fromkeys(resolve(selected_group_name)))
 
     def _get_mapped_config_value(
         self,
