@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 # 确保能找到 core 模块
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -40,6 +40,29 @@ class ClaudeEngine(BaseEngine):
             plugin_dir = plugin_meta.get("_plugin_dir")
             if plugin_dir:
                 cmd.extend(["--plugin-dir", plugin_dir])
+        cmd.append(message)
+        return cmd
+
+    def build_chat_command(
+        self, message: str, session_id: Optional[str] = None
+    ) -> List[str]:
+        """Builds a headless, structured-output command for one ChatPage turn.
+
+        Verified live (see docs/chatpage-cli-spike-results.md spike): the
+        session id returned in the stream-json ``result``/``system`` events can
+        be passed back via ``-r`` to resume with full prior context.
+        """
+        cmd = [
+            self.CLAUDE_COMMAND,
+            "-p",
+            "--output-format",
+            "stream-json",
+            "--include-partial-messages",
+            "--verbose",
+            self.CLAUDE_SKIP_PERMISSIONS_FLAG,
+        ]
+        if session_id:
+            cmd.extend(["-r", session_id])
         cmd.append(message)
         return cmd
 
