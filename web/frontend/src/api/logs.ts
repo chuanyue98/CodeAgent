@@ -39,7 +39,7 @@ export function useLogStream(taskId: string | null) {
     const url = `/api/logs/${encodeURIComponent(taskId)}/stream`;
     const eventSource = new EventSource(url);
 
-    eventSource.onopen = () => setConnected(true);
+    eventSource.onopen = () => { setConnected(true); setError(null); };
     eventSource.onerror = () => {
       setConnected(false);
       setError('Connection lost. Retrying...');

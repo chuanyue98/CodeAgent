@@ -9,11 +9,22 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [filesError, setFilesError] = useState<string | null>(null);
 
   const { lines: streamLines, error, connected } = useLogStream(selectedTaskId);
 
   useEffect(() => {
-    fetchLogFiles().then(setFiles).catch(() => {});
+    const load = async () => {
+      try {
+        await fetchLogFiles().then(setFiles);
+        setFilesError(null);
+      } catch (e) {
+        setFilesError(e instanceof Error ? e.message : 'Failed to load log files');
+      }
+    };
+    load();
+    const id = setInterval(load, 10000);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -67,6 +78,9 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
 
       <div className="flex flex-1 min-h-0">
         <div className="w-48 border-r border-slate-100 overflow-y-auto p-2 space-y-1">
+          {filesError && (
+            <p className="text-xs text-red-600 px-2">{filesError}</p>
+          )}
           {files?.map(f => (
             <button
               key={f.task_id}

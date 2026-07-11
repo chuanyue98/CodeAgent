@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from core.doctor import get_doctor_sections
 router = APIRouter(prefix="/api/system", tags=["system"])
 
 
-def _serialize_sections(sections) -> list[dict]:
+def _serialize_sections(sections: list) -> list[dict]:
     return [
         {
             "title": section.title,
@@ -41,7 +42,7 @@ async def get_health():
 @router.get("/metrics")
 async def get_metrics():
     try:
-        cpu = psutil.cpu_percent(interval=0.1)
+        cpu = await asyncio.to_thread(psutil.cpu_percent, 0.1)
         mem = psutil.virtual_memory()
         disk = psutil.disk_usage("/")
         uptime = time.time() - psutil.boot_time()

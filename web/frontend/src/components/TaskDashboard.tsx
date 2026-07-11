@@ -16,6 +16,7 @@ import {
   StopCircle,
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import LogViewer from './LogViewer';
 
 interface Stage {
   name: string;
@@ -275,16 +276,14 @@ function TaskDetail({
             </>
           )}
 
-          {activeRun && task.logs && (
+          {activeRunId && (
             <section className="space-y-3">
               <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                 <Terminal className="w-4 h-4" />
                 Execution Logs
               </h2>
-              <div className="glass-card bg-slate-900 border-slate-800 p-4 rounded-xl overflow-hidden">
-                <pre className="text-[11px] font-mono text-emerald-400/90 whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto custom-scrollbar-dark">
-                  {task.logs}
-                </pre>
+              <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 400 }}>
+                <LogViewer taskId={activeRunId} />
               </div>
             </section>
           )}

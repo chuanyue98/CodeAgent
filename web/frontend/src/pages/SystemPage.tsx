@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, AlertTriangle, XCircle, RefreshCw, Clock, HardDrive, FileText } from 'lucide-react';
 import { fetchSystemHealth, fetchSystemMetrics, type SystemHealth, type SystemMetrics } from '../api/system';
+import LogViewer from '../components/LogViewer';
 
 const STATUS_COLOR: Record<string, string> = {
   '[OK]': 'text-green-600',
@@ -116,6 +117,9 @@ export default function SystemPage() {
           </div>
         </div>
       ))}
+
+      {/* Log viewer */}
+      <LogViewer />
     </div>
   );
 }

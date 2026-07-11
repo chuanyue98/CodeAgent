@@ -10,17 +10,25 @@ function colorFor(value: number, thresholds: [number, number]): string {
 
 export default function SystemPanel() {
   const [metrics, setMetrics] = useState<SystemMetrics>();
+  const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    fetchSystemMetrics().then(setMetrics).catch((err) => { console.error('Failed to fetch metrics:', err); });
+    fetchSystemMetrics().then(setMetrics).catch((err) => { setError(err instanceof Error ? err.message : 'Failed to load metrics'); });
     const interval = setInterval(() => {
-      fetchSystemMetrics().then(setMetrics).catch((err) => { console.error('Failed to fetch metrics:', err); });
+      fetchSystemMetrics().then(setMetrics).catch((err) => { setError(err instanceof Error ? err.message : 'Failed to load metrics'); });
     }, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  if (!metrics) return null;
+  if (error && !metrics) return (
+    <div className="fixed bottom-0 left-0 right-0 z-50">
+      <div className="glass-card border-t border-red-100 px-4 py-2 flex items-center justify-between">
+        <span className="text-xs text-red-600">{error}</span>
+        <button onClick={() => setError(null)} className="text-xs text-red-600 hover:underline">Retry</button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50">

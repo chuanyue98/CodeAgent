@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections import deque
 from pathlib import Path
 
@@ -90,7 +91,7 @@ async def stream_log_file(task_id: str):
                         fh.seek(last_size)
                         new_data = fh.read()
                         if new_data:
-                            yield f"data: {{\"content\": {repr(new_data)}, \"size\": {current_size}}}\n\n"
+                            yield f"data: {json.dumps({'content': new_data, 'size': current_size})}\n\n"
                 except Exception:
                     yield "data: {\"error\": \"read failed\"}\n\n"
                     break
