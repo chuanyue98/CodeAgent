@@ -1,7 +1,6 @@
 """Tests for cross-engine session history parsing, conversion, and API."""
 
 import json
-import pytest
 from pathlib import Path
 
 from core.session_history.models import (

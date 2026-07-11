@@ -344,7 +344,7 @@ def main():
                 title = s.title or s.first_user_message[:60] or "(no title)"
                 print(f"  [{i+1}] {s.engine.value:8s} | {s.started_at[:19]:19s} | {s.message_count:3d} msgs | {title}")
                 print(f"       ID: {s.session_id}")
-            print(f"\nUse: ca history show <engine> <session_id>")
+            print("\nUse: ca history show <engine> <session_id>")
 
         elif sub == "show":
             if len(filtered_args) < 4:
@@ -397,11 +397,11 @@ def main():
                 if target_engine == "claude":
                     print(f"   Resume with: claude -r {new_id}")
                 elif target_engine == "codex":
-                    print(f"   Resume with: codex continue")
+                    print("   Resume with: codex continue")
                 elif target_engine == "gemini":
-                    print(f"   Resume with: gemini (select from history)")
+                    print("   Resume with: gemini (select from history)")
                 elif target_engine == "opencode":
-                    print(f"   Resume with: opencode (select from history)")
+                    print("   Resume with: opencode (select from history)")
             except Exception as e:
                 print(f"❌ Conversion failed: {e}")
 

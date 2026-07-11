@@ -74,8 +74,6 @@ def write_codex_session(session: UnifiedSession) -> str:
     lines.append(json.dumps(meta, ensure_ascii=False))
 
     # Write each message as event_msg + response_item
-    turn_id = str(uuid.uuid4())
-
     for msg in session.messages:
         if msg.role == "user":
             # event_msg: user_message

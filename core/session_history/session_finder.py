@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from core.session_history.models import EngineType, UnifiedSession
+from core.session_history.models import UnifiedSession
 from core.session_history.parsers import (
     find_claude_sessions,
     find_codex_sessions,
