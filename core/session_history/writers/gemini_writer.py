@@ -10,7 +10,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.session_history.models import UnifiedSession
@@ -101,7 +101,7 @@ def write_gemini_session(session: UnifiedSession) -> str:
                     }
                 )
 
-            msg_row = {
+            msg_row: dict[str, Any] = {
                 "id": str(uuid.uuid4()),
                 "timestamp": msg.timestamp or now,
                 "type": "gemini",

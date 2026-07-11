@@ -14,7 +14,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.session_history.models import UnifiedSession
@@ -119,23 +119,24 @@ def write_claude_session(session: UnifiedSession) -> str:
             if not content_blocks:
                 continue
 
+            message: dict[str, Any] = {
+                "model": msg.model or session.model or "claude-sonnet-4-20250514",
+                "id": f"msg_{uuid.uuid4().hex[:24]}",
+                "type": "message",
+                "role": "assistant",
+                "content": content_blocks,
+                "stop_reason": "end_turn",
+                "stop_sequence": None,
+                "usage": {
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                },
+            }
             row = {
                 "parentUuid": prev_uuid,
                 "isSidechain": False,
                 "type": "assistant",
-                "message": {
-                    "model": msg.model or session.model or "claude-sonnet-4-20250514",
-                    "id": f"msg_{uuid.uuid4().hex[:24]}",
-                    "type": "message",
-                    "role": "assistant",
-                    "content": content_blocks,
-                    "stop_reason": "end_turn",
-                    "stop_sequence": None,
-                    "usage": {
-                        "input_tokens": 0,
-                        "output_tokens": 0,
-                    },
-                },
+                "message": message,
                 "uuid": msg_uuid,
                 "timestamp": msg.timestamp or now,
                 "sessionId": new_session_id,

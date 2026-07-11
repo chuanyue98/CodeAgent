@@ -137,18 +137,34 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
     except Exception as e:
         return {"error": f"Conversion failed: {e}"}
 
-    # Launch the engine — reuse the existing launch mechanism
-    from core.services.runner_service import TaskRunner
+    # Launch the engine in a terminal (same mechanism as /api/launch)
+    import shlex
+    import shutil
+    import subprocess
+    import sys
+    from pathlib import Path
 
-    runner = TaskRunner()
-    result = runner.launch_engine(
-        engine=req.target_engine,
-        project_path=req.project_path,
-        resume_session_id=new_id,
-    )
+    _CA_LAUNCHER = Path(__file__).resolve().parents[3] / "ca_launcher.py"
+    cmd = [sys.executable, str(_CA_LAUNCHER), req.target_engine]
+
+    if sys.platform == "win32":
+        subprocess.Popen(["cmd", "/c", "start", "cmd", "/k"] + cmd)
+    elif sys.platform == "darwin":
+        script = f'tell app "Terminal" to do script "cd {shlex.quote(Path.cwd().as_posix())} && {shlex.join(cmd)}"'
+        subprocess.Popen(["osascript", "-e", script])
+    else:
+        for terminal in ["gnome-terminal", "konsole", "xterm"]:
+            if shutil.which(terminal):
+                args = (
+                    [terminal, "--"]
+                    if terminal == "gnome-terminal"
+                    else [terminal, "-e"]
+                )
+                subprocess.Popen(args + cmd)
+                break
+
     return {
         "status": "launched",
         "new_session_id": new_id,
         "target_engine": req.target_engine,
-        "launch_result": result,
     }

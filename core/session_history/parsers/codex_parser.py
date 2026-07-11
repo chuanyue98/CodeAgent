@@ -184,8 +184,8 @@ def parse_codex_session(file_path: Path) -> Optional[UnifiedSession]:
                         if len(args_str) > 200:
                             args_str = args_str[:200] + "..."
 
-                        tc = ToolCallSummary(name=name, args_preview=args_str)
-                        pending_tool_calls.append(tc)
+                        new_tc = ToolCallSummary(name=name, args_preview=args_str)
+                        pending_tool_calls.append(new_tc)
                         call_id = payload.get("call_id", "")
                         if call_id:
                             call_id_to_index[call_id] = len(pending_tool_calls) - 1
