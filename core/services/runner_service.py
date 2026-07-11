@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -10,6 +12,15 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
+
+# Field name each engine's JSON(L) output uses for its session identifier.
+# codex calls it "thread_id"; the other three call it "session_id"/"sessionID".
+_CHAT_SESSION_ID_FIELDS: Dict[str, tuple[str, ...]] = {
+    "claude": ("session_id",),
+    "codex": ("thread_id",),
+    "opencode": ("sessionID",),
+    "gemini": ("session_id", "sessionId"),
+}
 
 
 @dataclass
@@ -20,6 +31,7 @@ class TaskRunStatus:
     status: str  # "running", "completed", "failed", "stopped"
     log_path: str
     start_time: float
+    session_id: Optional[str] = None
 
 
 class TaskRunner:
@@ -102,6 +114,129 @@ class TaskRunner:
             self.active_runs[task_id] = status
             return status
 
+    def run_chat_turn(
+        self,
+        engine: str,
+        message: str,
+        session_id: Optional[str] = None,
+        group: str = "common",
+    ) -> TaskRunStatus:
+        """Starts one headless, non-interactive ChatPage turn in the background.
+
+        Unlike ``run_task``, this calls each engine's ``build_chat_command()``
+        directly (bypassing ca_launcher.py's skill/hook/plugin injection —
+        see docs/chatpage-cli-spike-results.md for why that's out of scope
+        for v1) and writes structured JSON(L) output to a distinct
+        ``.jsonl`` log so ``logs.py``'s ``*.log`` glob doesn't pick it up.
+        """
+        import time
+
+        if engine not in {"claude", "gemini", "opencode", "codex"}:
+            raise ValueError(f"Invalid engine: {engine!r}")
+        if not message or not message.strip():
+            raise ValueError("message must not be empty")
+
+        engine_obj = self._build_engine(engine)
+        cmd = engine_obj.build_chat_command(message, session_id=session_id)
+
+        turn_id = f"chat_{engine}_{time.time_ns()}"
+        log_file = self.log_dir / f"{turn_id}.jsonl"
+        if not log_file.resolve().is_relative_to(self.log_dir.resolve()):
+            raise ValueError("Log path escapes log directory")
+
+        env = engine_obj.env_manager.get_env()
+        env["CA_PROJECT_GROUP"] = group
+
+        resolved_cmd = list(cmd)
+        executable = shutil.which(resolved_cmd[0], path=env.get("PATH"))
+        if executable:
+            resolved_cmd[0] = executable
+
+        try:
+            with open(log_file, "w", encoding="utf-8") as f:
+                process = subprocess.Popen(
+                    resolved_cmd,
+                    cwd=str(Path.cwd()),
+                    stdout=f,
+                    stderr=subprocess.STDOUT,
+                    stdin=subprocess.DEVNULL,
+                    env=env,
+                    start_new_session=True if sys.platform != "win32" else False,
+                    creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                    if sys.platform == "win32"
+                    else 0,
+                )
+
+            status = TaskRunStatus(
+                task_id=turn_id,
+                engine=engine,
+                pid=process.pid,
+                status="running",
+                log_path=str(log_file),
+                start_time=time.time(),
+            )
+            self.active_runs[turn_id] = status
+            self._processes[turn_id] = process
+            return status
+        except Exception as e:
+            status = TaskRunStatus(
+                task_id=turn_id,
+                engine=engine,
+                pid=None,
+                status=f"failed: {e}",
+                log_path=str(log_file),
+                start_time=time.time(),
+            )
+            self.active_runs[turn_id] = status
+            return status
+
+    def _build_engine(self, engine: str):
+        """Lazily imports and instantiates the given engine's controller class.
+
+        Lazy per-call imports avoid a core -> engines -> core import cycle
+        (engines/start_*.py import from core.engine_base).
+        """
+        if engine == "claude":
+            from engines.start_claude_code import ClaudeEngine
+
+            return ClaudeEngine()
+        if engine == "codex":
+            from engines.start_codex import CodexEngine
+
+            return CodexEngine()
+        if engine == "opencode":
+            from engines.start_opencode import OpenCodeEngine
+
+            return OpenCodeEngine()
+        if engine == "gemini":
+            from engines.start_gemini import GeminiEngine
+
+            return GeminiEngine()
+        raise ValueError(f"Invalid engine: {engine!r}")
+
+    def _extract_chat_session_id(self, engine: str, log_path: Path) -> Optional[str]:
+        """Scans a completed chat turn's JSONL log for the engine-reported session id."""
+        fields = _CHAT_SESSION_ID_FIELDS.get(engine, ())
+        if not fields:
+            return None
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    for field in fields:
+                        value = event.get(field)
+                        if value:
+                            return str(value)
+        except OSError:
+            return None
+        return None
+
     def list_runs(self) -> List[TaskRunStatus]:
         """Returns all tracked task runs, updating their status first."""
         # Update statuses for all running tasks
@@ -123,6 +258,10 @@ class TaskRunner:
         if rc is not None:
             run.status = "completed" if rc == 0 else "failed"
             self._processes.pop(task_id, None)
+            if run.session_id is None and run.log_path.endswith(".jsonl"):
+                run.session_id = self._extract_chat_session_id(
+                    run.engine, Path(run.log_path)
+                )
         elif proc is None and not self._is_process_running(run.pid):
             run.status = "failed"
 

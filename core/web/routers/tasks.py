@@ -96,27 +96,38 @@ async def run_task(
 
 @router.get("/engines")
 async def list_engines():
-    """Lists available AI engines."""
+    """Lists available AI engines.
+
+    ``supportsResume`` reflects ChatPage's ability to continue an existing
+    session with prior context intact, verified live per engine — see
+    docs/chatpage-cli-spike-results.md. Gemini's individual-tier Code Assist
+    client is currently sunset (``IneligibleTierError``), so its resume path
+    was never confirmed and stays disabled here rather than assumed.
+    """
     # This could be more dynamic by checking shutil.which for binaries
     return [
         {
             "id": "gemini",
             "name": "Gemini CLI",
             "description": "Google AI Engineering Driver",
+            "supportsResume": False,
         },
         {
             "id": "claude",
             "name": "Claude Code",
             "description": "Anthropic High-Reasoning Driver",
+            "supportsResume": True,
         },
         {
             "id": "opencode",
             "name": "OpenCode AI",
             "description": "Local npm CLI with TUI",
+            "supportsResume": True,
         },
         {
             "id": "codex",
             "name": "OpenAI Codex",
             "description": "OpenAI Engineering Driver",
+            "supportsResume": True,
         },
     ]

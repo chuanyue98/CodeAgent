@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket, Terminal, FileText, Cpu, History } from 'lucide-react';
+import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket, Terminal, FileText, Cpu, History, MessageSquare } from 'lucide-react';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ManifestDrawer from './components/ManifestDrawer';
 import SystemPanel from './components/SystemPanel';
@@ -17,9 +17,11 @@ const LaunchPad = lazy(() => import('./components/LaunchPad'));
 const LogViewer = lazy(() => import('./components/LogViewer'));
 const SessionsPage = lazy(() => import('./components/SessionsPage'));
 const AuditTrail = lazy(() => import('./components/AuditTrail'));
+const ChatPage = lazy(() => import('./components/ChatPage'));
 
 const navItems = [
   { path: '/launch', label: 'Launch', icon: Rocket },
+  { path: '/chat', label: 'Chat', icon: MessageSquare },
   { path: '/skills', label: 'Skills', icon: Box },
   { path: '/prompts', label: 'Prompts', icon: GitBranch },
   { path: '/hooks', label: 'Hooks', icon: Anchor },
@@ -35,6 +37,7 @@ const navItems = [
 
 const PAGE_LABELS: Record<string, string> = {
   '/launch': 'Launch',
+  '/chat': 'Chat',
   '/skills': 'Skills',
   '/prompts': 'Prompts',
   '/hooks': 'Hooks',
@@ -110,6 +113,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Navigate to="/launch" replace />} />
               <Route path="/launch" element={<LaunchPad />} />
+              <Route path="/chat" element={<ChatPage />} />
               <Route path="/skills" element={<SkillGallery />} />
               <Route path="/prompts" element={<PromptsGallery />} />
               <Route path="/hooks" element={<HooksGallery />} />

@@ -8,7 +8,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 # 确保能找到 core 模块
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -199,6 +199,20 @@ export default async ({{ client }}) => {{
 
         # 交互模式：在当前目录启动 TUI 并注入初始提示词
         return [self.OPENCODE_COMMAND, ".", "--prompt", message]
+
+    def build_chat_command(
+        self, message: str, session_id: Optional[str] = None
+    ) -> List[str]:
+        """Builds a headless JSON command for one ChatPage turn.
+
+        Verified live (see docs/chatpage-cli-spike-results.md spike):
+        ``-s/--session <id>`` resumes with full prior context, and ``--auto``
+        is the skip-approval flag (undocumented in the original design table).
+        """
+        cmd = [self.OPENCODE_COMMAND, "run", message, "--format", "json", "--auto"]
+        if session_id:
+            cmd.extend(["-s", session_id])
+        return cmd
 
 
 def main():

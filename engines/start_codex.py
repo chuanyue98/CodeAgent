@@ -63,6 +63,32 @@ class CodexEngine(BaseEngine):
             message,
         ]
 
+    def build_chat_command(
+        self, message: str, session_id: Optional[str] = None
+    ) -> List[str]:
+        """Builds a headless JSON command for one ChatPage turn.
+
+        Verified live (see docs/chatpage-cli-spike-results.md spike):
+        ``codex exec resume <thread_id>`` carries full prior context forward.
+        """
+        if session_id:
+            return [
+                CODEX_COMMAND,
+                CODEX_EXEC_SUBCOMMAND,
+                "resume",
+                session_id,
+                "--json",
+                CODEX_SKIP_PERMISSIONS_FLAG,
+                message,
+            ]
+        return [
+            CODEX_COMMAND,
+            CODEX_EXEC_SUBCOMMAND,
+            "--json",
+            CODEX_SKIP_PERMISSIONS_FLAG,
+            message,
+        ]
+
     def _get_plugin_link_dir(self) -> Path:
         return (Path.home() / ".codex" / "plugins").absolute()
 

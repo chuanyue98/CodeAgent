@@ -140,3 +140,29 @@ async def test_audit_events_no_sessions(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"events": [], "count": 0}
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_without_project_searches_all_projects(two_project_history):
+    """ChatPage's 'continue session' picker relies on this (no project filter)."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get("/api/history")
+
+    assert response.status_code == 200
+    data = response.json()
+    session_ids = {s["session_id"] for s in data["sessions"]}
+    assert session_ids == {"sess-a", "sess-b"}
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_still_scopes_to_project_when_given(two_project_history):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get("/api/history", params={"project": "E:/demo/project-a"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert {s["session_id"] for s in data["sessions"]} == {"sess-a"}

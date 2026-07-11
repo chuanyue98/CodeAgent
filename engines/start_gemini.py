@@ -8,7 +8,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 # 确保能找到 core 模块
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -55,6 +55,35 @@ class GeminiEngine(BaseEngine):
 
         cmd.append(message)
         return cmd
+
+    def build_chat_command(
+        self, message: str, session_id: Optional[str] = None
+    ) -> List[str]:
+        """Builds a headless JSON command for one ChatPage turn (new session only).
+
+        Resume-by-session-id is intentionally unsupported: the CLI spike hit
+        ``IneligibleTierError`` (Google sunset the individual-tier Gemini Code
+        Assist client this CLI authenticates against — see
+        docs/chatpage-cli-spike-results.md), so ``-r``/``--resume`` was
+        never confirmed to carry context forward. Raise rather than silently
+        no-op so callers don't build a UI that appears to resume but doesn't.
+        """
+        if session_id:
+            raise ValueError(
+                "Gemini CLI session resume is unverified (blocked by "
+                "IneligibleTierError on the individual tier) and is disabled "
+                "in ChatPage v1."
+            )
+        return [
+            "gemini",
+            "-p",
+            message,
+            "-o",
+            "json",
+            "--approval-mode",
+            "yolo",
+            "--skip-trust",
+        ]
 
     def run_engine(self, cmd: List[str], env: dict):
         """执行引擎命令"""

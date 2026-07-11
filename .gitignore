@@ -50,6 +50,9 @@ prompt_debug*.json
 .codex/
 config.json
 
+# Task/chat run logs (written by TaskRunner at runtime)
+.ca_task_logs/
+
 gha-creds-*.json
 build/
 *.png

@@ -21,6 +21,8 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
@@ -44,19 +46,28 @@ class ConvertRequest(BaseModel):
 
 @router.get("/history")
 async def list_sessions(
-    project: str = Query(..., description="Project directory path"),
+    project: str | None = Query(
+        None, description="Project directory path; omit to search all projects"
+    ),
     engine: str | None = Query(None, description="Filter by engine"),
+    limit: int = Query(
+        500, ge=1, le=5000, description="Maximum number of sessions to return"
+    ),
 ) -> dict:
     """Lists session summaries across all engines for a project.
 
     Args:
-        project: The project directory path to search.
+        project: Optional project directory path filter. Omit to search
+            across every project the user has session history for.
         engine: Optional engine filter ("claude", "codex", "gemini", "opencode").
+        limit: Maximum number of sessions to return.
 
     Returns:
         dict: {"sessions": [...], "count": N}
     """
-    sessions = find_all_sessions(project, engine=engine)
+    sessions = (await asyncio.to_thread(find_all_sessions, project, engine=engine))[
+        :limit
+    ]
     return {
         "sessions": [s.to_summary_dict() for s in sessions],
         "count": len(sessions),
@@ -93,7 +104,7 @@ async def get_audit_events(
     Returns:
         dict: {"events": [...], "count": N}
     """
-    sessions = find_all_sessions(project, engine=engine)
+    sessions = await asyncio.to_thread(find_all_sessions, project, engine=engine)
     events = build_audit_events(sessions)
 
     if since:
