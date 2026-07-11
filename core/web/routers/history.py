@@ -1,0 +1,150 @@
+"""Web API router for cross-engine session history browsing.
+
+Endpoints:
+  GET  /api/history?project=<path>&engine=<engine>
+      List session summaries across all (or one) engine(s)
+
+  GET  /api/history/{engine}/{session_id}?project=<path>
+      Get full session detail with all messages
+
+  POST /api/history/convert
+      Convert a session from one engine format to another and write it
+      to the target engine's session storage
+
+  POST /api/history/convert-and-launch
+      Convert a session and then launch the target engine with it
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Query
+from pydantic import BaseModel
+
+from core.session_history.session_finder import (
+    find_all_sessions,
+    find_session_by_id,
+)
+
+router = APIRouter(prefix="/api")
+
+
+class ConvertRequest(BaseModel):
+    """Request body for cross-engine session conversion."""
+
+    source_engine: str
+    session_id: str
+    target_engine: str
+    project_path: str
+
+
+@router.get("/history")
+async def list_sessions(
+    project: str = Query(..., description="Project directory path"),
+    engine: str | None = Query(None, description="Filter by engine"),
+) -> dict:
+    """Lists session summaries across all engines for a project.
+
+    Args:
+        project: The project directory path to search.
+        engine: Optional engine filter ("claude", "codex", "gemini", "opencode").
+
+    Returns:
+        dict: {"sessions": [...], "count": N}
+    """
+    sessions = find_all_sessions(project, engine=engine)
+    return {
+        "sessions": [s.to_summary_dict() for s in sessions],
+        "count": len(sessions),
+    }
+
+
+@router.get("/history/{engine}/{session_id}")
+async def get_session_detail(
+    engine: str,
+    session_id: str,
+    project: str = Query(..., description="Project directory path"),
+) -> dict:
+    """Gets the full detail of a specific session including all messages.
+
+    Args:
+        engine: The engine type.
+        session_id: The session ID.
+        project: The project directory path.
+
+    Returns:
+        dict: Full session data with messages, or 404 if not found.
+    """
+    session = find_session_by_id(session_id, engine, project)
+    if not session:
+        return {"error": "Session not found", "session_id": session_id, "engine": engine}
+    return session.to_full_dict()
+
+
+@router.post("/history/convert")
+async def convert_session(req: ConvertRequest) -> dict:
+    """Converts a session from one engine format to another.
+
+    Reads the source session, converts it to the target engine's native
+    format, and writes it to the target engine's session storage directory.
+
+    Args:
+        req: The conversion request.
+
+    Returns:
+        dict: {"status": "ok", "new_session_id": "...", "target_engine": "..."}
+    """
+    # Import here to avoid circular dependencies and only load when needed
+    from core.session_history.writers import write_session
+
+    session = find_session_by_id(req.session_id, req.source_engine, req.project_path)
+    if not session:
+        return {"error": "Source session not found", "session_id": req.session_id}
+
+    try:
+        new_id = write_session(session, req.target_engine)
+        return {
+            "status": "ok",
+            "new_session_id": new_id,
+            "target_engine": req.target_engine,
+            "message": f"Session converted to {req.target_engine}. Use '{req.target_engine} continue' or equivalent to resume.",
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.post("/history/convert-and-launch")
+async def convert_and_launch(req: ConvertRequest) -> dict:
+    """Converts a session and launches the target engine.
+
+    Args:
+        req: The conversion + launch request.
+
+    Returns:
+        dict: Launch result with converted session info.
+    """
+    from core.session_history.writers import write_session
+
+    session = find_session_by_id(req.session_id, req.source_engine, req.project_path)
+    if not session:
+        return {"error": "Source session not found"}
+
+    try:
+        new_id = write_session(session, req.target_engine)
+    except Exception as e:
+        return {"error": f"Conversion failed: {e}"}
+
+    # Launch the engine — reuse the existing launch mechanism
+    from core.services.runner_service import TaskRunner
+
+    runner = TaskRunner()
+    result = runner.launch_engine(
+        engine=req.target_engine,
+        project_path=req.project_path,
+        resume_session_id=new_id,
+    )
+    return {
+        "status": "launched",
+        "new_session_id": new_id,
+        "target_engine": req.target_engine,
+        "launch_result": result,
+    }

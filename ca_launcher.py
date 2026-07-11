@@ -301,6 +301,10 @@ def main():
         print("  doctor        Run health self-check")
         print("  doctor --fix  Run health self-check and auto-repair issues")
         print("  new [name]    Create a new task draft in tasks/[name].md")
+        print("  history       List all sessions for this project (all engines)")
+        print("  history list  List sessions (use --engine <name> to filter)")
+        print("  history show <engine> <id>  Show full session content")
+        print("  history convert <src> <id> <target>  Convert session between engines")
         return
 
     # 0a. Handle 'doctor' command
@@ -314,6 +318,100 @@ def main():
     # 0b. Handle 'ui' command
     if filtered_args and filtered_args[0] == "ui":
         return run_ui_command()
+
+    # 0c. Handle 'history' command
+    if filtered_args and filtered_args[0] == "history":
+        sys.path.insert(0, str(root))
+        from core.session_history.session_finder import find_all_sessions, find_session_by_id
+
+        sub = filtered_args[1] if len(filtered_args) > 1 else "list"
+        project_path = str(Path.cwd())
+
+        if sub == "list":
+            engine_filter = None
+            if "--engine" in filtered_args:
+                idx = filtered_args.index("--engine")
+                if idx + 1 < len(filtered_args):
+                    engine_filter = filtered_args[idx + 1]
+
+            sessions = find_all_sessions(project_path, engine=engine_filter)
+            if not sessions:
+                print("📝 No sessions found for this project.")
+                return
+
+            print(f"📋 Found {len(sessions)} session(s) for {project_path}:\n")
+            for i, s in enumerate(sessions):
+                title = s.title or s.first_user_message[:60] or "(no title)"
+                print(f"  [{i+1}] {s.engine.value:8s} | {s.started_at[:19]:19s} | {s.message_count:3d} msgs | {title}")
+                print(f"       ID: {s.session_id}")
+            print(f"\nUse: ca history show <engine> <session_id>")
+
+        elif sub == "show":
+            if len(filtered_args) < 4:
+                print("Usage: ca history show <engine> <session_id>")
+                return
+            engine = filtered_args[2]
+            session_id = filtered_args[3]
+            session = find_session_by_id(session_id, engine, project_path)
+            if not session:
+                print(f"❌ Session not found: {engine}/{session_id}")
+                return
+
+            print(f"{'='*60}")
+            print(f"Engine:    {session.engine.value}")
+            print(f"Session:   {session.session_id}")
+            print(f"Started:   {session.started_at}")
+            print(f"Messages:  {session.message_count}")
+            print(f"Model:     {session.model or '(unknown)'}")
+            print(f"{'='*60}\n")
+
+            for msg in session.messages:
+                role_label = "👤 USER" if msg.role == "user" else "🤖 ASSISTANT"
+                print(f"[{msg.timestamp[:19] if msg.timestamp else ''}] {role_label}")
+                if msg.content:
+                    # Truncate very long messages for terminal display
+                    text = msg.content if len(msg.content) <= 500 else msg.content[:500] + "..."
+                    print(text)
+                for tc in msg.tool_calls:
+                    print(f"  🔧 {tc.name}({tc.args_preview[:80]})" if tc.args_preview else f"  🔧 {tc.name}")
+                print()
+
+        elif sub == "convert":
+            if len(filtered_args) < 5:
+                print("Usage: ca history convert <source_engine> <session_id> <target_engine>")
+                return
+            src_engine = filtered_args[2]
+            session_id = filtered_args[3]
+            target_engine = filtered_args[4]
+
+            session = find_session_by_id(session_id, src_engine, project_path)
+            if not session:
+                print(f"❌ Session not found: {src_engine}/{session_id}")
+                return
+
+            from core.session_history.writers import write_session
+            try:
+                new_id = write_session(session, target_engine)
+                print(f"✅ Converted {src_engine} → {target_engine}")
+                print(f"   New session ID: {new_id}")
+                if target_engine == "claude":
+                    print(f"   Resume with: claude -r {new_id}")
+                elif target_engine == "codex":
+                    print(f"   Resume with: codex continue")
+                elif target_engine == "gemini":
+                    print(f"   Resume with: gemini (select from history)")
+                elif target_engine == "opencode":
+                    print(f"   Resume with: opencode (select from history)")
+            except Exception as e:
+                print(f"❌ Conversion failed: {e}")
+
+        else:
+            print("Usage: ca history [list|show|convert]")
+            print("  list                          List all sessions for this project")
+            print("  list --engine <name>          Filter by engine")
+            print("  show <engine> <session_id>    Show full session content")
+            print("  convert <src> <id> <target>   Convert session to another engine format")
+        return
 
     # 1. 处理 'new' 语义：它本质上是使用 opencode 启动一个带 interview 任务的会话
     if filtered_args and filtered_args[0] == "new":

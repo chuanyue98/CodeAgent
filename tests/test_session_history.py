@@ -1,0 +1,297 @@
+"""Tests for cross-engine session history parsing, conversion, and API."""
+
+import json
+import pytest
+from pathlib import Path
+
+from core.session_history.models import (
+    EngineType,
+    ToolCallSummary,
+    UnifiedMessage,
+    UnifiedSession,
+)
+from core.session_history.parsers.claude_parser import parse_claude_session, _decode_claude_project_path
+from core.session_history.parsers.codex_parser import parse_codex_session
+from core.session_history.parsers.gemini_parser import parse_gemini_session
+
+
+# ─── UnifiedSession model tests ───────────────────────────────────────
+
+def test_unified_session_basic():
+    session = UnifiedSession(
+        session_id="test-123",
+        engine=EngineType.CLAUDE,
+        project_path="E:/demo/test",
+        started_at="2026-07-11T10:00:00.000Z",
+        ended_at="2026-07-11T11:00:00.000Z",
+        messages=[
+            UnifiedMessage(role="user", content="Hello"),
+            UnifiedMessage(role="assistant", content="Hi there"),
+        ],
+        title="Test Session",
+        model="claude-sonnet-4",
+    )
+    assert session.message_count == 2
+    assert session.first_user_message == "Hello"
+    summary = session.to_summary_dict()
+    assert summary["engine"] == "claude"
+    assert summary["message_count"] == 2
+    assert summary["title"] == "Test Session"
+    full = session.to_full_dict()
+    assert len(full["messages"]) == 2
+    assert full["messages"][0]["role"] == "user"
+
+
+def test_unified_session_no_title_generates_from_first_message():
+    session = UnifiedSession(
+        messages=[UnifiedMessage(role="user", content="Fix the auth bug in middleware")]
+    )
+    title = session.generate_title()
+    assert "Fix the auth bug" in title
+
+
+def test_tool_call_summary():
+    tc = ToolCallSummary(name="read_file", args_preview='{"path": "src/main.py"}', result_preview="file contents")
+    assert tc.name == "read_file"
+    d = UnifiedMessage(role="assistant", content="", tool_calls=[tc]).to_dict()
+    assert d["tool_calls"][0]["name"] == "read_file"
+
+
+# ─── Claude parser tests ──────────────────────────────────────────────
+
+def test_decode_claude_project_path_windows():
+    assert _decode_claude_project_path("E--demo-CodeAgent") == "E:/demo/CodeAgent"
+    assert _decode_claude_project_path("C--Users-Administrator") == "C:/Users/Administrator"
+
+
+def test_parse_claude_session(tmp_path):
+    """Test parsing a minimal Claude JSONL session file."""
+    session_dir = tmp_path / ".claude" / "projects" / "E--demo-test"
+    session_dir.mkdir(parents=True)
+    session_file = session_dir / "abc123.jsonl"
+
+    lines = [
+        json.dumps({
+            "type": "ai-title",
+            "aiTitle": "Debug auth flow",
+        }),
+        json.dumps({
+            "type": "user",
+            "message": {"role": "user", "content": "Help me debug the auth"},
+            "uuid": "msg-1",
+            "timestamp": "2026-07-10T10:00:00.000Z",
+            "cwd": "E:\\demo\\test",
+            "sessionId": "abc123",
+        }),
+        json.dumps({
+            "type": "assistant",
+            "message": {
+                "model": "claude-sonnet-4",
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "I'll look at the auth middleware."},
+                    {"type": "tool_use", "id": "tool-1", "name": "read_file", "input": {"path": "src/auth.ts"}},
+                ],
+                "stop_reason": "tool_use",
+            },
+            "uuid": "msg-2",
+            "timestamp": "2026-07-10T10:00:05.000Z",
+            "sessionId": "abc123",
+        }),
+        json.dumps({
+            "type": "user",
+            "message": {"role": "user", "content": "The issue is in token refresh"},
+            "uuid": "msg-3",
+            "timestamp": "2026-07-10T10:01:00.000Z",
+            "sessionId": "abc123",
+        }),
+    ]
+    session_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    session = parse_claude_session(session_file)
+
+    assert session is not None
+    assert session.session_id == "abc123"
+    assert session.engine == EngineType.CLAUDE
+    assert session.title == "Debug auth flow"
+    assert session.model == "claude-sonnet-4"
+    assert session.message_count == 3
+    assert session.messages[0].role == "user"
+    assert session.messages[0].content == "Help me debug the auth"
+    assert session.messages[1].role == "assistant"
+    assert "auth middleware" in session.messages[1].content
+    assert len(session.messages[1].tool_calls) == 1
+    assert session.messages[1].tool_calls[0].name == "read_file"
+
+
+def test_parse_claude_empty_file(tmp_path):
+    """Empty or non-existent files return None."""
+    assert parse_claude_session(tmp_path / "nonexistent.jsonl") is None
+
+
+# ─── Codex parser tests ───────────────────────────────────────────────
+
+def test_parse_codex_session(tmp_path):
+    """Test parsing a minimal Codex JSONL session file."""
+    session_dir = tmp_path / ".codex" / "sessions" / "2026" / "07" / "11"
+    session_dir.mkdir(parents=True)
+    session_file = session_dir / "rollout-2026-07-11T10-00-00-abc123.jsonl"
+
+    lines = [
+        json.dumps({
+            "timestamp": "2026-07-11T10:00:00.000Z",
+            "type": "session_meta",
+            "payload": {
+                "id": "abc123",
+                "cwd": "E:\\demo\\test",
+                "cli_version": "0.132.0",
+            },
+        }),
+        json.dumps({
+            "timestamp": "2026-07-11T10:00:01.000Z",
+            "type": "turn_context",
+            "payload": {"model": "gpt-5.4-mini"},
+        }),
+        json.dumps({
+            "timestamp": "2026-07-11T10:00:02.000Z",
+            "type": "event_msg",
+            "payload": {"type": "user_message", "message": "Fix the N+1 query"},
+        }),
+        json.dumps({
+            "timestamp": "2026-07-11T10:00:03.000Z",
+            "type": "event_msg",
+            "payload": {"type": "agent_message", "message": "I'll optimize the query.", "phase": "final"},
+        }),
+    ]
+    session_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    session = parse_codex_session(session_file)
+
+    assert session is not None
+    assert session.engine == EngineType.CODEX
+    assert session.project_path == "E:\\demo\\test"
+    assert session.model == "gpt-5.4-mini"
+    assert session.message_count == 2
+    assert session.messages[0].role == "user"
+    assert session.messages[0].content == "Fix the N+1 query"
+    assert session.messages[1].role == "assistant"
+    assert "optimize" in session.messages[1].content
+
+
+# ─── Gemini parser tests ──────────────────────────────────────────────
+
+def test_parse_gemini_session(tmp_path):
+    """Test parsing a minimal Gemini JSONL session file."""
+    chats_dir = tmp_path / ".gemini" / "tmp" / "test" / "chats"
+    chats_dir.mkdir(parents=True)
+    session_file = chats_dir / "session-2026-07-11T10-00-abc12345.jsonl"
+
+    lines = [
+        json.dumps({
+            "sessionId": "gem-123",
+            "startTime": "2026-07-11T10:00:00.000Z",
+            "lastUpdated": "2026-07-11T10:05:00.000Z",
+            "kind": "main",
+        }),
+        json.dumps({
+            "id": "msg-1",
+            "timestamp": "2026-07-11T10:00:01.000Z",
+            "type": "user",
+            "content": [{"text": "Explain the architecture"}],
+        }),
+        json.dumps({
+            "id": "msg-2",
+            "timestamp": "2026-07-11T10:00:10.000Z",
+            "type": "gemini",
+            "content": "The architecture uses a layered design.",
+            "model": "gemini-2.5-pro",
+            "toolCalls": [],
+            "tokens": {"input": 100, "output": 50, "total": 150},
+        }),
+    ]
+    session_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    session = parse_gemini_session(session_file)
+
+    assert session is not None
+    assert session.engine == EngineType.GEMINI
+    assert session.model == "gemini-2.5-pro"
+    assert session.message_count == 2
+    assert session.messages[0].content == "Explain the architecture"
+    assert "layered design" in session.messages[1].content
+
+
+# ─── Round-trip conversion test ───────────────────────────────────────
+
+def test_claude_to_codex_round_trip(tmp_path, monkeypatch):
+    """Test converting a Claude session to Codex format and parsing it back."""
+    # Create a Claude session file
+    claude_dir = tmp_path / ".claude" / "projects" / "E--demo-test"
+    claude_dir.mkdir(parents=True)
+    claude_file = claude_dir / "orig-session.jsonl"
+
+    lines = [
+        json.dumps({
+            "type": "user",
+            "message": {"role": "user", "content": "Write a hello world"},
+            "uuid": "u1",
+            "timestamp": "2026-07-10T10:00:00.000Z",
+            "cwd": "E:\\demo\\test",
+            "sessionId": "orig-session",
+        }),
+        json.dumps({
+            "type": "assistant",
+            "message": {
+                "model": "claude-sonnet-4",
+                "role": "assistant",
+                "content": [{"type": "text", "text": "print('Hello, World!')"}],
+                "stop_reason": "end_turn",
+            },
+            "uuid": "a1",
+            "timestamp": "2026-07-10T10:00:05.000Z",
+            "sessionId": "orig-session",
+        }),
+    ]
+    claude_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    # Parse the Claude session
+    from core.session_history.parsers.claude_parser import parse_claude_session
+    session = parse_claude_session(claude_file)
+    assert session is not None
+    assert session.message_count == 2
+
+    # Override home directory for the writer
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    # Write as Codex format
+    from core.session_history.writers.codex_writer import write_codex_session
+    new_id = write_codex_session(session)
+    assert new_id
+
+    # Find and parse the written Codex file
+    codex_sessions_dir = tmp_path / ".codex" / "sessions"
+    codex_files = list(codex_sessions_dir.rglob("*.jsonl"))
+    assert len(codex_files) == 1
+
+    from core.session_history.parsers.codex_parser import parse_codex_session
+    codex_session = parse_codex_session(codex_files[0])
+
+    assert codex_session is not None
+    assert codex_session.engine == EngineType.CODEX
+    assert codex_session.message_count >= 2
+    # Check that the user message survived the round-trip
+    user_msgs = [m for m in codex_session.messages if m.role == "user"]
+    assert any("hello world" in m.content.lower() for m in user_msgs)
+    # Check that the assistant message survived
+    assistant_msgs = [m for m in codex_session.messages if m.role == "assistant"]
+    assert any("Hello, World" in m.content for m in assistant_msgs)
+
+
+# ─── Session finder tests ─────────────────────────────────────────────
+
+def test_find_all_sessions_empty(tmp_path, monkeypatch):
+    """When no sessions exist, returns empty list."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    from core.session_history.session_finder import find_all_sessions
+    sessions = find_all_sessions("E:/demo/nonexistent")
+    assert sessions == []
