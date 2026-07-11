@@ -1,0 +1,120 @@
+from __future__ import annotations
+
+import time
+
+import pytest
+
+from core.services.config_service import ConfigService
+from core.services.schedule_service import ScheduleService
+from core.services.scheduler_loop import tick_once
+
+
+class _FakeTaskRunner:
+    def __init__(self, raise_error: bool = False):
+        self.calls: list[tuple] = []
+        self._raise_error = raise_error
+
+    def run_task(self, task_name, engine, group, tasks_root=None):
+        self.calls.append((task_name, engine, group))
+        if self._raise_error:
+            raise ValueError("boom")
+        return None
+
+
+@pytest.fixture
+def schedule_service(tmp_path):
+    return ScheduleService(ConfigService(tmp_path / "config.json"))
+
+
+@pytest.fixture
+def tasks_root(tmp_path):
+    root = tmp_path / "tasks"
+    root.mkdir()
+    (root / "nightly-review.md").write_text("# Nightly Review\n", encoding="utf-8")
+    return root
+
+
+@pytest.mark.asyncio
+async def test_tick_fires_due_schedule(schedule_service, tasks_root):
+    record = schedule_service.create_schedule(
+        "nightly-review", "claude", "common", "* * * * *"
+    )
+    # Manually backdate next_run_at to make it due, regardless of the cron
+    # expression's real next fire time.
+    config, _ = schedule_service.config_service.get_config()
+    config["schedules"][0]["next_run_at"] = time.time() - 1
+    schedule_service.config_service.update_config(config)
+
+    runner = _FakeTaskRunner()
+    await tick_once(schedule_service, runner, lambda: tasks_root)
+
+    assert runner.calls == [("nightly-review", "claude", "common")]
+    updated = schedule_service.get_schedule(record["id"])
+    assert updated["last_run_status"] == "started"
+    assert updated["last_run_at"] is not None
+    assert updated["next_run_at"] > time.time()
+
+
+@pytest.mark.asyncio
+async def test_tick_skips_disabled_schedule(schedule_service, tasks_root):
+    record = schedule_service.create_schedule(
+        "nightly-review", "claude", "common", "* * * * *", enabled=False
+    )
+    config, _ = schedule_service.config_service.get_config()
+    config["schedules"][0]["next_run_at"] = time.time() - 1
+    schedule_service.config_service.update_config(config)
+
+    runner = _FakeTaskRunner()
+    await tick_once(schedule_service, runner, lambda: tasks_root)
+
+    assert runner.calls == []
+    assert schedule_service.get_schedule(record["id"])["last_run_status"] is None
+
+
+@pytest.mark.asyncio
+async def test_tick_skips_not_yet_due_schedule(schedule_service, tasks_root):
+    record = schedule_service.create_schedule(
+        "nightly-review", "claude", "common", "0 0 1 1 *"
+    )  # once a year — not due now
+
+    runner = _FakeTaskRunner()
+    await tick_once(schedule_service, runner, lambda: tasks_root)
+
+    assert runner.calls == []
+    assert schedule_service.get_schedule(record["id"])["last_run_status"] is None
+
+
+@pytest.mark.asyncio
+async def test_tick_marks_missing_task_without_crashing(schedule_service, tasks_root):
+    record = schedule_service.create_schedule(
+        "does-not-exist", "claude", "common", "* * * * *"
+    )
+    config, _ = schedule_service.config_service.get_config()
+    config["schedules"][0]["next_run_at"] = time.time() - 1
+    schedule_service.config_service.update_config(config)
+
+    runner = _FakeTaskRunner()
+    await tick_once(schedule_service, runner, lambda: tasks_root)
+
+    assert runner.calls == []
+    assert (
+        schedule_service.get_schedule(record["id"])["last_run_status"]
+        == "task_not_found"
+    )
+
+
+@pytest.mark.asyncio
+async def test_tick_records_failure_without_crashing(schedule_service, tasks_root):
+    record = schedule_service.create_schedule(
+        "nightly-review", "claude", "common", "* * * * *"
+    )
+    config, _ = schedule_service.config_service.get_config()
+    config["schedules"][0]["next_run_at"] = time.time() - 1
+    schedule_service.config_service.update_config(config)
+
+    runner = _FakeTaskRunner(raise_error=True)
+    await tick_once(schedule_service, runner, lambda: tasks_root)
+
+    assert runner.calls == [("nightly-review", "claude", "common")]
+    status = schedule_service.get_schedule(record["id"])["last_run_status"]
+    assert status.startswith("failed:")

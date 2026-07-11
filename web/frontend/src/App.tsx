@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket, Terminal, FileText, Cpu, History, MessageSquare } from 'lucide-react';
+import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket, Terminal, FileText, Cpu, History, MessageSquare, Clock, Server } from 'lucide-react';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ManifestDrawer from './components/ManifestDrawer';
 import SystemPanel from './components/SystemPanel';
@@ -18,6 +18,8 @@ const LogViewer = lazy(() => import('./components/LogViewer'));
 const SessionsPage = lazy(() => import('./components/SessionsPage'));
 const AuditTrail = lazy(() => import('./components/AuditTrail'));
 const ChatPage = lazy(() => import('./components/ChatPage'));
+const CronPage = lazy(() => import('./components/CronPage'));
+const McpPage = lazy(() => import('./components/McpPage'));
 
 const navItems = [
   { path: '/launch', label: 'Launch', icon: Rocket },
@@ -26,8 +28,10 @@ const navItems = [
   { path: '/prompts', label: 'Prompts', icon: GitBranch },
   { path: '/hooks', label: 'Hooks', icon: Anchor },
   { path: '/plugins', label: 'Plugins', icon: Zap },
+  { path: '/mcp', label: 'MCP Servers', icon: Server },
   { path: '/config', label: 'Configuration', icon: Settings },
   { path: '/dashboard', label: 'Dashboard', icon: Activity },
+  { path: '/cron', label: 'Cron', icon: Clock },
   { path: '/logs', label: 'Logs', icon: Terminal },
   { path: '/analytics', label: 'Analytics', icon: TrendingUp },
   { path: '/sessions', label: 'Sessions', icon: FileText },
@@ -42,8 +46,10 @@ const PAGE_LABELS: Record<string, string> = {
   '/prompts': 'Prompts',
   '/hooks': 'Hooks',
   '/plugins': 'Plugins',
+  '/mcp': 'MCP Servers',
   '/config': 'Configuration',
   '/dashboard': 'Dashboard',
+  '/cron': 'Cron',
   '/logs': 'Logs',
   '/analytics': 'Analytics',
   '/sessions': 'Sessions',
@@ -118,8 +124,10 @@ function App() {
               <Route path="/prompts" element={<PromptsGallery />} />
               <Route path="/hooks" element={<HooksGallery />} />
               <Route path="/plugins" element={<PluginGallery />} />
+              <Route path="/mcp" element={<McpPage />} />
               <Route path="/config" element={<ConfigHub />} />
               <Route path="/dashboard" element={<TaskDashboard />} />
+              <Route path="/cron" element={<CronPage />} />
               <Route path="/logs" element={<LogViewer />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/sessions" element={<SessionsPage />} />
