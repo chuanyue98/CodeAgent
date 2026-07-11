@@ -43,7 +43,6 @@ export function useLogStream(taskId: string | null) {
     eventSource.onerror = () => {
       setConnected(false);
       setError('Connection lost. Retrying...');
-      eventSource.close();
     };
 
     eventSource.addEventListener('message', (event: MessageEvent) => {

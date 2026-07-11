@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Terminal, RefreshCw, AlertCircle, Wifi, WifiOff } from 'lucide-react';
+import { Terminal, AlertCircle, Wifi, WifiOff } from 'lucide-react';
 import { fetchLogFiles, fetchLogFile, useLogStream } from '../api/logs';
 
 export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }) {
