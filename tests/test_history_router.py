@@ -9,7 +9,9 @@ from httpx import ASGITransport, AsyncClient
 from core.web.server import app
 
 
-def _write_claude_session(base: Path, project_dir: str, session_id: str, timestamp: str, text: str):
+def _write_claude_session(
+    base: Path, project_dir: str, session_id: str, timestamp: str, text: str
+):
     session_dir = base / ".claude" / "projects" / project_dir
     session_dir.mkdir(parents=True)
     session_file = session_dir / f"{session_id}.jsonl"
@@ -52,10 +54,18 @@ def _write_claude_session(base: Path, project_dir: str, session_id: str, timesta
 def two_project_history(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     _write_claude_session(
-        tmp_path, "E--demo-project-a", "sess-a", "2026-07-10T10:00:00.000Z", "hello from a"
+        tmp_path,
+        "E--demo-project-a",
+        "sess-a",
+        "2026-07-10T10:00:00.000Z",
+        "hello from a",
     )
     _write_claude_session(
-        tmp_path, "E--demo-project-b", "sess-b", "2026-07-11T10:00:00.000Z", "hello from b"
+        tmp_path,
+        "E--demo-project-b",
+        "sess-b",
+        "2026-07-11T10:00:00.000Z",
+        "hello from b",
     )
     return tmp_path
 

@@ -257,7 +257,7 @@ def find_codex_sessions(
         if session:
             if normalized_target is not None:
                 normalized_cwd = (
-                    session.project_path.replace("\\", "/").lower().rstrip("/")
+                    (session.project_path or "").replace("\\", "/").lower().rstrip("/")
                 )
                 if normalized_cwd != normalized_target:
                     continue

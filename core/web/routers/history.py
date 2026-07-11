@@ -67,11 +67,14 @@ async def list_sessions(
 async def get_audit_events(
     engine: str | None = Query(None, description="Filter by engine"),
     project: str | None = Query(
-        None, description="Filter by project directory path; omit to search all projects"
+        None,
+        description="Filter by project directory path; omit to search all projects",
     ),
     since: str | None = Query(None, description="ISO 8601 lower bound (inclusive)"),
     until: str | None = Query(None, description="ISO 8601 upper bound (inclusive)"),
-    limit: int = Query(500, ge=1, le=5000, description="Maximum number of events to return"),
+    limit: int = Query(
+        500, ge=1, le=5000, description="Maximum number of events to return"
+    ),
 ) -> dict:
     """Returns a flattened, time-sorted message/tool-call event timeline.
 

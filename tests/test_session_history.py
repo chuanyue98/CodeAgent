@@ -351,7 +351,9 @@ def test_find_all_sessions_empty(tmp_path, monkeypatch):
     assert sessions == []
 
 
-def _write_claude_session(base: Path, project_dir: str, session_id: str, timestamp: str):
+def _write_claude_session(
+    base: Path, project_dir: str, session_id: str, timestamp: str
+):
     session_dir = base / ".claude" / "projects" / project_dir
     session_dir.mkdir(parents=True)
     session_file = session_dir / f"{session_id}.jsonl"
@@ -371,8 +373,12 @@ def test_find_all_sessions_no_project_filter(tmp_path):
     """With project_path=None, sessions from every project directory are returned."""
     from core.session_history.session_finder import find_all_sessions
 
-    _write_claude_session(tmp_path, "E--demo-project-a", "sess-a", "2026-07-10T10:00:00.000Z")
-    _write_claude_session(tmp_path, "E--demo-project-b", "sess-b", "2026-07-11T10:00:00.000Z")
+    _write_claude_session(
+        tmp_path, "E--demo-project-a", "sess-a", "2026-07-10T10:00:00.000Z"
+    )
+    _write_claude_session(
+        tmp_path, "E--demo-project-b", "sess-b", "2026-07-11T10:00:00.000Z"
+    )
 
     sessions = find_all_sessions(None, home=tmp_path, engine="claude")
     ids = {s.session_id for s in sessions}
@@ -385,8 +391,12 @@ def test_find_all_sessions_with_project_filter_still_scopes(tmp_path):
     """Passing an explicit project_path still filters to the matching project only."""
     from core.session_history.session_finder import find_all_sessions
 
-    _write_claude_session(tmp_path, "E--demo-project-a", "sess-a", "2026-07-10T10:00:00.000Z")
-    _write_claude_session(tmp_path, "E--demo-project-b", "sess-b", "2026-07-11T10:00:00.000Z")
+    _write_claude_session(
+        tmp_path, "E--demo-project-a", "sess-a", "2026-07-10T10:00:00.000Z"
+    )
+    _write_claude_session(
+        tmp_path, "E--demo-project-b", "sess-b", "2026-07-11T10:00:00.000Z"
+    )
 
     sessions = find_all_sessions("E:/demo/project-a", home=tmp_path, engine="claude")
     assert {s.session_id for s in sessions} == {"sess-a"}
@@ -404,14 +414,20 @@ def test_build_audit_events_flattens_messages_and_tool_calls():
         project_path="E:/demo/test",
         title="Debug session",
         messages=[
-            UnifiedMessage(role="user", content="hi", timestamp="2026-07-10T10:00:00.000Z"),
+            UnifiedMessage(
+                role="user", content="hi", timestamp="2026-07-10T10:00:00.000Z"
+            ),
             UnifiedMessage(
                 role="assistant",
                 content="doing it",
                 timestamp="2026-07-10T10:00:05.000Z",
                 tool_calls=[
-                    ToolCallSummary(name="read_file", args_preview="{}", result_preview="ok"),
-                    ToolCallSummary(name="write_file", args_preview="{}", result_preview="ok"),
+                    ToolCallSummary(
+                        name="read_file", args_preview="{}", result_preview="ok"
+                    ),
+                    ToolCallSummary(
+                        name="write_file", args_preview="{}", result_preview="ok"
+                    ),
                 ],
             ),
         ],
@@ -439,8 +455,12 @@ def test_build_audit_events_sorted_descending():
         session_id="s1",
         engine=EngineType.CLAUDE,
         messages=[
-            UnifiedMessage(role="user", content="first", timestamp="2026-07-10T10:00:00.000Z"),
-            UnifiedMessage(role="assistant", content="second", timestamp="2026-07-11T10:00:00.000Z"),
+            UnifiedMessage(
+                role="user", content="first", timestamp="2026-07-10T10:00:00.000Z"
+            ),
+            UnifiedMessage(
+                role="assistant", content="second", timestamp="2026-07-11T10:00:00.000Z"
+            ),
         ],
     )
 

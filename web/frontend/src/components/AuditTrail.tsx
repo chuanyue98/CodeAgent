@@ -52,10 +52,12 @@ export default function AuditTrail() {
       });
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(load, []);
 
   useEffect(() => {
     if (!drawerSession) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSessionDetail(null);
       return;
     }
@@ -78,8 +80,8 @@ export default function AuditTrail() {
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(e =>
-        e.project_path.toLowerCase().includes(q) ||
-        e.session_title.toLowerCase().includes(q) ||
+        (e.project_path ?? '').toLowerCase().includes(q) ||
+        (e.session_title ?? '').toLowerCase().includes(q) ||
         (e.content_preview ?? '').toLowerCase().includes(q) ||
         (e.tool_name ?? '').toLowerCase().includes(q)
       );
@@ -94,7 +96,7 @@ export default function AuditTrail() {
       result = result.filter(e => e.timestamp >= dateStart);
     }
     if (dateEnd) {
-      result = result.filter(e => e.timestamp <= dateEnd + 'T23:59:59');
+      result = result.filter(e => e.timestamp <= dateEnd + 'T23:59:59.999Z');
     }
     return result;
   }, [events, search, selectedEngines, selectedTypes, dateStart, dateEnd]);
