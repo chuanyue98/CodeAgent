@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, ChevronDown, ChevronUp, Clock, DollarSign, FileText, Cpu } from 'lucide-react';
+import { Search, Filter, ChevronDown, ChevronUp, Clock, DollarSign, FileText } from 'lucide-react';
 import { fetchSessions, type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
 
 type SortKey = 'lastActivity' | 'cost' | 'tokens';
@@ -14,11 +14,18 @@ export default function SessionsPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    fetchSessions(500).then(data => {
-      setSessions(data);
-      setLoading(false);
-    });
+    fetchSessions(500)
+      .then(data => {
+        setSessions(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+        setError('Failed to load sessions');
+      });
   }, []);
 
   const engines = useMemo(() => {
@@ -40,7 +47,7 @@ export default function SessionsPage() {
     }
     result = [...result].sort((a, b) => {
       let cmp = 0;
-      if (sortKey === 'lastActivity') cmp = a.lastActivity.localeCompare(b.lastActivity);
+      if (sortKey === 'lastActivity') cmp = new Date(a.lastActivity).getTime() - new Date(b.lastActivity).getTime();
       else if (sortKey === 'cost') cmp = a.cost - b.cost;
       else if (sortKey === 'tokens') cmp = (a.inputTokens + a.outputTokens) - (b.inputTokens + b.outputTokens);
       return sortDir === 'asc' ? cmp : -cmp;
