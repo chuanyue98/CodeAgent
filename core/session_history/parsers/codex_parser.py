@@ -226,7 +226,7 @@ def parse_codex_session(file_path: Path) -> Optional[UnifiedSession]:
 
 
 def find_codex_sessions(
-    project_path: str, home: Optional[Path] = None
+    project_path: Optional[str] = None, home: Optional[Path] = None
 ) -> list[UnifiedSession]:
     """Finds all Codex sessions for a given project path.
 
@@ -234,7 +234,8 @@ def find_codex_sessions(
     file contains a ``cwd`` field in ``session_meta`` that is used for matching.
 
     Args:
-        project_path: The project directory to match against.
+        project_path: The project directory to match against. If None,
+            sessions from every project are returned unfiltered.
         home: Optional home directory override.
 
     Returns:
@@ -244,15 +245,23 @@ def find_codex_sessions(
     if not base.exists():
         return []
 
-    normalized_target = project_path.replace("\\", "/").lower().rstrip("/")
+    normalized_target = (
+        project_path.replace("\\", "/").lower().rstrip("/")
+        if project_path is not None
+        else None
+    )
     sessions: list[UnifiedSession] = []
 
     for jsonl_file in base.rglob("*.jsonl"):
         session = parse_codex_session(jsonl_file)
         if session:
-            normalized_cwd = session.project_path.replace("\\", "/").lower().rstrip("/")
-            if normalized_cwd == normalized_target:
-                sessions.append(session)
+            if normalized_target is not None:
+                normalized_cwd = (
+                    (session.project_path or "").replace("\\", "/").lower().rstrip("/")
+                )
+                if normalized_cwd != normalized_target:
+                    continue
+            sessions.append(session)
 
     sessions.sort(key=lambda s: s.started_at, reverse=True)
     return sessions

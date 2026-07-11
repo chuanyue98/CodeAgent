@@ -19,14 +19,15 @@ from core.session_history.parsers import (
 
 
 def find_all_sessions(
-    project_path: str,
+    project_path: Optional[str] = None,
     home: Optional[Path] = None,
     engine: Optional[str] = None,
 ) -> list[UnifiedSession]:
     """Finds sessions across all AI engines for a given project path.
 
     Args:
-        project_path: The project directory to search for.
+        project_path: The project directory to search for. If None,
+            sessions from every project are returned unfiltered.
         home: Optional home directory override.
         engine: Optional filter — only return sessions from this engine
             (e.g. "claude", "codex", "gemini", "opencode").
@@ -79,7 +80,7 @@ def find_session_by_id(
 
 
 def get_session_summaries(
-    project_path: str,
+    project_path: Optional[str] = None,
     home: Optional[Path] = None,
     engine: Optional[str] = None,
 ) -> list[dict]:
@@ -89,7 +90,8 @@ def get_session_summaries(
     converts each result to a summary dict (without full messages).
 
     Args:
-        project_path: The project directory to search for.
+        project_path: The project directory to search for. If None,
+            sessions from every project are returned unfiltered.
         home: Optional home directory override.
         engine: Optional engine filter.
 

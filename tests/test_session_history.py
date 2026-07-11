@@ -349,3 +349,126 @@ def test_find_all_sessions_empty(tmp_path, monkeypatch):
 
     sessions = find_all_sessions("E:/demo/nonexistent")
     assert sessions == []
+
+
+def _write_claude_session(
+    base: Path, project_dir: str, session_id: str, timestamp: str
+):
+    session_dir = base / ".claude" / "projects" / project_dir
+    session_dir.mkdir(parents=True)
+    session_file = session_dir / f"{session_id}.jsonl"
+    line = json.dumps(
+        {
+            "type": "user",
+            "message": {"role": "user", "content": "hello"},
+            "uuid": "u1",
+            "timestamp": timestamp,
+            "sessionId": session_id,
+        }
+    )
+    session_file.write_text(line + "\n", encoding="utf-8")
+
+
+def test_find_all_sessions_no_project_filter(tmp_path):
+    """With project_path=None, sessions from every project directory are returned."""
+    from core.session_history.session_finder import find_all_sessions
+
+    _write_claude_session(
+        tmp_path, "E--demo-project-a", "sess-a", "2026-07-10T10:00:00.000Z"
+    )
+    _write_claude_session(
+        tmp_path, "E--demo-project-b", "sess-b", "2026-07-11T10:00:00.000Z"
+    )
+
+    sessions = find_all_sessions(None, home=tmp_path, engine="claude")
+    ids = {s.session_id for s in sessions}
+    assert ids == {"sess-a", "sess-b"}
+    # Most recent first
+    assert sessions[0].session_id == "sess-b"
+
+
+def test_find_all_sessions_with_project_filter_still_scopes(tmp_path):
+    """Passing an explicit project_path still filters to the matching project only."""
+    from core.session_history.session_finder import find_all_sessions
+
+    _write_claude_session(
+        tmp_path, "E--demo-project-a", "sess-a", "2026-07-10T10:00:00.000Z"
+    )
+    _write_claude_session(
+        tmp_path, "E--demo-project-b", "sess-b", "2026-07-11T10:00:00.000Z"
+    )
+
+    sessions = find_all_sessions("E:/demo/project-a", home=tmp_path, engine="claude")
+    assert {s.session_id for s in sessions} == {"sess-a"}
+
+
+# ─── Audit event tests ─────────────────────────────────────────────────
+
+
+def test_build_audit_events_flattens_messages_and_tool_calls():
+    from core.session_history.audit import build_audit_events
+
+    session = UnifiedSession(
+        session_id="s1",
+        engine=EngineType.CLAUDE,
+        project_path="E:/demo/test",
+        title="Debug session",
+        messages=[
+            UnifiedMessage(
+                role="user", content="hi", timestamp="2026-07-10T10:00:00.000Z"
+            ),
+            UnifiedMessage(
+                role="assistant",
+                content="doing it",
+                timestamp="2026-07-10T10:00:05.000Z",
+                tool_calls=[
+                    ToolCallSummary(
+                        name="read_file", args_preview="{}", result_preview="ok"
+                    ),
+                    ToolCallSummary(
+                        name="write_file", args_preview="{}", result_preview="ok"
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    events = build_audit_events([session])
+
+    # 1 message event + 1 message event + 2 tool_call events = 4
+    assert len(events) == 4
+    message_events = [e for e in events if e["event_type"] == "message"]
+    tool_call_events = [e for e in events if e["event_type"] == "tool_call"]
+    assert len(message_events) == 2
+    assert len(tool_call_events) == 2
+    assert {e["tool_name"] for e in tool_call_events} == {"read_file", "write_file"}
+    # Tool-call events inherit the parent message's timestamp
+    assert all(e["timestamp"] == "2026-07-10T10:00:05.000Z" for e in tool_call_events)
+    assert all(e["engine"] == "claude" for e in events)
+    assert all(e["session_title"] == "Debug session" for e in events)
+
+
+def test_build_audit_events_sorted_descending():
+    from core.session_history.audit import build_audit_events
+
+    session = UnifiedSession(
+        session_id="s1",
+        engine=EngineType.CLAUDE,
+        messages=[
+            UnifiedMessage(
+                role="user", content="first", timestamp="2026-07-10T10:00:00.000Z"
+            ),
+            UnifiedMessage(
+                role="assistant", content="second", timestamp="2026-07-11T10:00:00.000Z"
+            ),
+        ],
+    )
+
+    events = build_audit_events([session])
+    assert [e["content_preview"] for e in events] == ["second", "first"]
+
+
+def test_build_audit_events_empty_input():
+    from core.session_history.audit import build_audit_events
+
+    assert build_audit_events([]) == []

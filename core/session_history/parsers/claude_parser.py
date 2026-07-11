@@ -306,12 +306,13 @@ def _extract_assistant_content(msg: dict) -> tuple[str, list[ToolCallSummary]]:
 
 
 def find_claude_sessions(
-    project_path: str, home: Optional[Path] = None
+    project_path: Optional[str] = None, home: Optional[Path] = None
 ) -> list[UnifiedSession]:
     """Finds all Claude sessions for a given project path.
 
     Args:
-        project_path: The project directory to match against.
+        project_path: The project directory to match against. If None,
+            sessions from every project are returned unfiltered.
         home: Optional home directory override.
 
     Returns:
@@ -322,21 +323,25 @@ def find_claude_sessions(
         return []
 
     # Normalize the project path for comparison
-    normalized_target = project_path.replace("\\", "/")
+    normalized_target = (
+        project_path.replace("\\", "/") if project_path is not None else None
+    )
 
     sessions: list[UnifiedSession] = []
 
     for project_dir in base.iterdir():
         if not project_dir.is_dir():
             continue
-        if not _claude_dir_matches(project_dir.name, normalized_target):
+        if normalized_target is not None and not _claude_dir_matches(
+            project_dir.name, normalized_target
+        ):
             continue
 
         for jsonl_file in project_dir.glob("*.jsonl"):
             session = parse_claude_session(jsonl_file)
             if session:
                 # Use the actual project path from the first message's cwd if available
-                if (
+                if normalized_target is not None and (
                     not session.project_path
                     or session.project_path
                     == _decode_claude_project_path(project_dir.name)

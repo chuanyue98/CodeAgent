@@ -226,17 +226,17 @@ Python 56.9% + TypeScript 40.1%, WebSocket 实时通信, 读 `~/.hermes/` 数据
 ### P0 (当前差距最大，最应优先实现)
 
 1. **ChatPage** — 浏览器内对话，SSE 流式输出 + tool call 渲染
-2. **SessionsPage** — 双栏会话浏览 + 消息回放
-3. **System Health Panel** — 底部固定栏系统状态
+2. ~~**SessionsPage** — 双栏会话浏览 + 消息回放~~ ✅ 已完成 (PR #34, #32 — `SessionsPage.tsx`，跨引擎会话历史统一浏览)
+3. ~~**System Health Panel** — 底部固定栏系统状态~~ ✅ 已完成 (PR #34 — `SystemPage.tsx` / `SystemPanel.tsx`)
 4. **Audit Trail** — tool call 时间线
 
 ### P1 (提升明显，次优)
 
 5. **CronPage** — 定时任务调度 UI
-6. **LogsPage** — 日志查看
+6. ~~**LogsPage** — 日志查看~~ ✅ 已完成 (PR #34 — `LogViewer.tsx` + SSE 日志流)
 7. **EnvPage** — API Key 管理
 8. **PWA 支持**
-9. **WebSocket 实时推送** (替代轮询)
+9. ~~**WebSocket 实时推送** (替代轮询)~~ ⚠️ 部分完成 — PR #34 用 SSE 做了日志流，其余页面（TaskDashboard 多 run）仍是轮询
 10. **MCP Server Management**
 
 ### P2 (锦上添花)

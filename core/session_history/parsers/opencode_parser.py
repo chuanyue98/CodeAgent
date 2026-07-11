@@ -232,7 +232,7 @@ def parse_opencode_session(session_id: str, db_path: Path) -> Optional[UnifiedSe
 
 
 def find_opencode_sessions(
-    project_path: str, home: Optional[Path] = None
+    project_path: Optional[str] = None, home: Optional[Path] = None
 ) -> list[UnifiedSession]:
     """Finds all OpenCode sessions for a given project path.
 
@@ -240,7 +240,8 @@ def find_opencode_sessions(
     the ``directory`` field in the ``session`` table.
 
     Args:
-        project_path: The project directory to match against.
+        project_path: The project directory to match against. If None,
+            sessions from every project are returned unfiltered.
         home: Optional home directory override.
 
     Returns:
@@ -250,7 +251,11 @@ def find_opencode_sessions(
     if not db_path:
         return []
 
-    normalized_target = project_path.replace("\\", "/").lower().rstrip("/")
+    normalized_target = (
+        project_path.replace("\\", "/").lower().rstrip("/")
+        if project_path is not None
+        else None
+    )
     sessions: list[UnifiedSession] = []
 
     con = None
@@ -270,9 +275,10 @@ def find_opencode_sessions(
             con.close()
 
     for row in rows:
-        directory = (row["directory"] or "").replace("\\", "/").lower().rstrip("/")
-        if directory != normalized_target:
-            continue
+        if normalized_target is not None:
+            directory = (row["directory"] or "").replace("\\", "/").lower().rstrip("/")
+            if directory != normalized_target:
+                continue
 
         session = parse_opencode_session(row["id"], db_path)
         if session:
