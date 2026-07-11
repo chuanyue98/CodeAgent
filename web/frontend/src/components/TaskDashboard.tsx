@@ -276,14 +276,14 @@ function TaskDetail({
             </>
           )}
 
-          {activeRunId && (
+          {activeRun && (
             <section className="space-y-3">
               <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                 <Terminal className="w-4 h-4" />
                 Execution Logs
               </h2>
               <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 400 }}>
-                <LogViewer taskId={activeRunId} />
+                <LogViewer taskId={activeRun.task_id} />
               </div>
             </section>
           )}

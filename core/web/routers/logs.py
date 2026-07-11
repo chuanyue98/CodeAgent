@@ -24,7 +24,7 @@ def _resolve_log_path(task_id: str) -> Path | None:
 
 
 def _list_log_files() -> list[dict]:
-    files = []
+    files: list[dict] = []
     if not CA_TASK_LOGS_DIR.exists():
         return files
     for f in sorted(CA_TASK_LOGS_DIR.glob("*.log")):
