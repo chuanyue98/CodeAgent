@@ -3,8 +3,8 @@ import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket, Terminal, FileText, Cpu } from 'lucide-react';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ManifestDrawer from './components/ManifestDrawer';
-import SystemPage from './pages/SystemPage';
 import SystemPanel from './components/SystemPanel';
+const SystemPage = lazy(() => import('./pages/SystemPage'));
 
 const SkillGallery = lazy(() => import('./components/SkillGallery'));
 const ConfigHub = lazy(() => import('./components/ConfigHub'));

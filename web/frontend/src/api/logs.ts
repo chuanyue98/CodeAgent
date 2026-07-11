@@ -50,9 +50,11 @@ export function useLogStream(taskId: string | null) {
         const data = JSON.parse(event.data);
         if (data.content) {
           setLines(prev => {
-            const newLines = data.content.split('\n').filter((l: string) => l.trim());
-            return [...prev, ...newLines];
-          });
+          const newLines = data.content.split('\n').filter((l: string) => l.trim());
+          const MAX_LINES = 10000;
+          const trimmed = [...prev, ...newLines];
+          return trimmed.length > MAX_LINES ? trimmed.slice(trimmed.length - MAX_LINES) : trimmed;
+        });
         }
         if (data.error) {
           setError(data.error);

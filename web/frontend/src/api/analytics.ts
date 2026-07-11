@@ -31,15 +31,6 @@ export interface MonthlyUsage {
   modelBreakdowns: ModelBreakdown[];
 }
 
-export interface ModelBreakdown {
-  modelName: string;
-  inputTokens: number;
-  outputTokens: number;
-  cacheCreationTokens: number;
-  cacheReadTokens: number;
-  cost: number;
-}
-
 export interface SessionUsage {
   sessionId: string;
   target: string;
