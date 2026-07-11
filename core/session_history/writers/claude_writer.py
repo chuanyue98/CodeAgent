@@ -63,7 +63,11 @@ def write_claude_session(session: UnifiedSession) -> str:
     claude_projects.mkdir(parents=True, exist_ok=True)
 
     file_path = claude_projects / f"{new_session_id}.jsonl"
-    cwd = session.project_path.replace("/", "\\") if re.match(r"^[A-Za-z]:", session.project_path) else session.project_path
+    cwd = (
+        session.project_path.replace("/", "\\")
+        if re.match(r"^[A-Za-z]:", session.project_path)
+        else session.project_path
+    )
 
     lines: list[str] = []
     now = _now_iso()
@@ -103,12 +107,14 @@ def write_claude_session(session: UnifiedSession) -> str:
             if msg.content:
                 content_blocks.append({"type": "text", "text": msg.content})
             for tc in msg.tool_calls:
-                content_blocks.append({
-                    "type": "tool_use",
-                    "id": f"toolu_{uuid.uuid4().hex[:24]}",
-                    "name": tc.name,
-                    "input": json.loads(tc.args_preview) if tc.args_preview else {},
-                })
+                content_blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": f"toolu_{uuid.uuid4().hex[:24]}",
+                        "name": tc.name,
+                        "input": json.loads(tc.args_preview) if tc.args_preview else {},
+                    }
+                )
 
             if not content_blocks:
                 continue

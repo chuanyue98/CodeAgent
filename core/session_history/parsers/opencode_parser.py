@@ -65,9 +65,7 @@ def _find_opencode_db(home: Optional[Path] = None) -> Optional[Path]:
     return None
 
 
-def parse_opencode_session(
-    session_id: str, db_path: Path
-) -> Optional[UnifiedSession]:
+def parse_opencode_session(session_id: str, db_path: Path) -> Optional[UnifiedSession]:
     """Parses a single OpenCode session from the SQLite database.
 
     Args:
@@ -161,7 +159,9 @@ def parse_opencode_session(
                     tool_name = part_data.get("tool", "")
                     state = part_data.get("state", {})
                     input_data = state.get("input", {})
-                    args_str = json.dumps(input_data, ensure_ascii=False) if input_data else ""
+                    args_str = (
+                        json.dumps(input_data, ensure_ascii=False) if input_data else ""
+                    )
                     if len(args_str) > 200:
                         args_str = args_str[:200] + "..."
 
@@ -173,11 +173,13 @@ def parse_opencode_session(
                         out_str = json.dumps(output, ensure_ascii=False)
                         result_preview = out_str[:200]
 
-                    tool_calls.append(ToolCallSummary(
-                        name=tool_name,
-                        args_preview=args_str,
-                        result_preview=result_preview,
-                    ))
+                    tool_calls.append(
+                        ToolCallSummary(
+                            name=tool_name,
+                            args_preview=args_str,
+                            result_preview=result_preview,
+                        )
+                    )
 
             content = "\n".join(text_parts).strip()
 
@@ -197,13 +199,15 @@ def parse_opencode_session(
                     content = "\n".join(parts).strip()
 
             if content or tool_calls:
-                messages.append(UnifiedMessage(
-                    role=role,
-                    content=content,
-                    timestamp=timestamp,
-                    tool_calls=tool_calls,
-                    model=model_str if role == "assistant" else "",
-                ))
+                messages.append(
+                    UnifiedMessage(
+                        role=role,
+                        content=content,
+                        timestamp=timestamp,
+                        tool_calls=tool_calls,
+                        model=model_str if role == "assistant" else "",
+                    )
+                )
 
         con.close()
 

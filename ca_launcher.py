@@ -322,7 +322,10 @@ def main():
     # 0c. Handle 'history' command
     if filtered_args and filtered_args[0] == "history":
         sys.path.insert(0, str(root))
-        from core.session_history.session_finder import find_all_sessions, find_session_by_id
+        from core.session_history.session_finder import (
+            find_all_sessions,
+            find_session_by_id,
+        )
 
         sub = filtered_args[1] if len(filtered_args) > 1 else "list"
         project_path = str(Path.cwd())
@@ -342,7 +345,9 @@ def main():
             print(f"📋 Found {len(sessions)} session(s) for {project_path}:\n")
             for i, s in enumerate(sessions):
                 title = s.title or s.first_user_message[:60] or "(no title)"
-                print(f"  [{i+1}] {s.engine.value:8s} | {s.started_at[:19]:19s} | {s.message_count:3d} msgs | {title}")
+                print(
+                    f"  [{i + 1}] {s.engine.value:8s} | {s.started_at[:19]:19s} | {s.message_count:3d} msgs | {title}"
+                )
                 print(f"       ID: {s.session_id}")
             print("\nUse: ca history show <engine> <session_id>")
 
@@ -357,28 +362,38 @@ def main():
                 print(f"❌ Session not found: {engine}/{session_id}")
                 return
 
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
             print(f"Engine:    {session.engine.value}")
             print(f"Session:   {session.session_id}")
             print(f"Started:   {session.started_at}")
             print(f"Messages:  {session.message_count}")
             print(f"Model:     {session.model or '(unknown)'}")
-            print(f"{'='*60}\n")
+            print(f"{'=' * 60}\n")
 
             for msg in session.messages:
                 role_label = "👤 USER" if msg.role == "user" else "🤖 ASSISTANT"
                 print(f"[{msg.timestamp[:19] if msg.timestamp else ''}] {role_label}")
                 if msg.content:
                     # Truncate very long messages for terminal display
-                    text = msg.content if len(msg.content) <= 500 else msg.content[:500] + "..."
+                    text = (
+                        msg.content
+                        if len(msg.content) <= 500
+                        else msg.content[:500] + "..."
+                    )
                     print(text)
                 for tc in msg.tool_calls:
-                    print(f"  🔧 {tc.name}({tc.args_preview[:80]})" if tc.args_preview else f"  🔧 {tc.name}")
+                    print(
+                        f"  🔧 {tc.name}({tc.args_preview[:80]})"
+                        if tc.args_preview
+                        else f"  🔧 {tc.name}"
+                    )
                 print()
 
         elif sub == "convert":
             if len(filtered_args) < 5:
-                print("Usage: ca history convert <source_engine> <session_id> <target_engine>")
+                print(
+                    "Usage: ca history convert <source_engine> <session_id> <target_engine>"
+                )
                 return
             src_engine = filtered_args[2]
             session_id = filtered_args[3]
@@ -390,6 +405,7 @@ def main():
                 return
 
             from core.session_history.writers import write_session
+
             try:
                 new_id = write_session(session, target_engine)
                 print(f"✅ Converted {src_engine} → {target_engine}")
@@ -410,7 +426,9 @@ def main():
             print("  list                          List all sessions for this project")
             print("  list --engine <name>          Filter by engine")
             print("  show <engine> <session_id>    Show full session content")
-            print("  convert <src> <id> <target>   Convert session to another engine format")
+            print(
+                "  convert <src> <id> <target>   Convert session to another engine format"
+            )
         return
 
     # 1. 处理 'new' 语义：它本质上是使用 opencode 启动一个带 interview 任务的会话

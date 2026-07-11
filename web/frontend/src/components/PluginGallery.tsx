@@ -159,19 +159,19 @@ const PluginGallery: React.FC = () => {
         {selectedPlugin ? (
           /* Plugin Detail View */
           <div className="flex-1 glass-card flex flex-col overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-slate-50/30 backdrop-blur-sm">
+            <div className="p-6 border-b border-slate-200 flex items-center gap-4 bg-white">
               <button
                 onClick={() => setSelectedPlugin(null)}
-                className="p-2 hover:bg-slate-100 rounded-xl transition-all border border-slate-100"
+                className="p-2 hover:bg-slate-100 rounded-xl transition-all border border-slate-200"
               >
                 <ChevronRight className="w-5 h-5 rotate-180" />
               </button>
               <div className="flex-1">
                 <span className="text-[10px] uppercase tracking-widest text-primary font-bold">Plugin Detail</span>
-                <h1 className="text-2xl font-semibold tracking-tight">{selectedPlugin.name}</h1>
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{selectedPlugin.name}</h1>
               </div>
-              <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-xs font-semibold text-slate-500">Active in {currentGroup}</span>
+              <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-xl border border-slate-200">
+                <span className="text-xs font-semibold text-slate-600">Active in {currentGroup}</span>
                 <button
                   onClick={(e) => togglePluginStatus(selectedPlugin.id, e)}
                   className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
@@ -186,24 +186,24 @@ const PluginGallery: React.FC = () => {
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-8 prose prose-slate prose-cyan max-w-none font-sans">
+            <div className="flex-1 overflow-y-auto p-8 bg-white prose prose-slate max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-li:text-slate-700 prose-strong:text-slate-900">
               <ReactMarkdown
                 components={{
                   code({className, children, ...props}) {
                     const isCodeBlock = className && className.startsWith('language-');
                     return isCodeBlock ? (
-                      <code className={`${className} font-mono bg-slate-50 px-1.5 py-0.5 rounded text-primary`} {...props}>
+                      <code className={`${className} font-mono`} {...props}>
                         {children}
                       </code>
                     ) : (
-                      <code className="font-mono bg-slate-50 px-1.5 py-0.5 rounded text-primary" {...props}>
+                      <code className="font-mono bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-cyan-700 text-[0.875em]" {...props}>
                         {children}
                       </code>
                     );
                   },
                   pre({children, ...props}) {
                     return (
-                      <pre className="!bg-slate-900 !text-slate-100 p-4 rounded-xl shadow-inner border border-slate-800" {...props}>
+                      <pre className="!bg-slate-900 !text-slate-100 p-5 rounded-xl shadow-inner border border-slate-700 overflow-x-auto" {...props}>
                         {children}
                       </pre>
                     )

@@ -76,7 +76,11 @@ async def get_session_detail(
     """
     session = find_session_by_id(session_id, engine, project)
     if not session:
-        return {"error": "Session not found", "session_id": session_id, "engine": engine}
+        return {
+            "error": "Session not found",
+            "session_id": session_id,
+            "engine": engine,
+        }
     return session.to_full_dict()
 
 

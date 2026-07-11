@@ -76,7 +76,10 @@ def _claude_dir_matches(dir_name: str, target_path: str) -> bool:
     m_target = re.match(r"^([A-Za-z]):/(.*)$", target)
     if not m_target:
         # Not a Windows drive path — fall back to exact dash-stripped comparison
-        return dir_name.replace("-", "").lower() == target.replace("/", "").replace("-", "").lower()
+        return (
+            dir_name.replace("-", "").lower()
+            == target.replace("/", "").replace("-", "").lower()
+        )
 
     target_drive, target_rest = m_target.groups()
     target_segments = target_rest.split("/")
@@ -84,7 +87,10 @@ def _claude_dir_matches(dir_name: str, target_path: str) -> bool:
     # Parse dir name
     m_dir = re.match(r"^([A-Za-z])--(.*)$", dir_name)
     if not m_dir:
-        return dir_name.replace("-", "").lower() == target.replace("/", "").replace("-", "").lower()
+        return (
+            dir_name.replace("-", "").lower()
+            == target.replace("/", "").replace("-", "").lower()
+        )
 
     dir_drive, dir_rest = m_dir.groups()
     if dir_drive.lower() != target_drive.lower():
@@ -183,24 +189,28 @@ def parse_claude_session(file_path: Path) -> Optional[UnifiedSession]:
                 if row_type == "user":
                     content = _extract_user_content(msg)
                     if content:
-                        messages.append(UnifiedMessage(
-                            role="user",
-                            content=content,
-                            timestamp=timestamp,
-                        ))
+                        messages.append(
+                            UnifiedMessage(
+                                role="user",
+                                content=content,
+                                timestamp=timestamp,
+                            )
+                        )
 
                 elif row_type == "assistant":
                     text, tool_calls = _extract_assistant_content(msg)
                     if msg.get("model") and not model:
                         model = msg["model"]
                     if text or tool_calls:
-                        messages.append(UnifiedMessage(
-                            role="assistant",
-                            content=text,
-                            timestamp=timestamp,
-                            tool_calls=tool_calls,
-                            model=model,
-                        ))
+                        messages.append(
+                            UnifiedMessage(
+                                role="assistant",
+                                content=text,
+                                timestamp=timestamp,
+                                tool_calls=tool_calls,
+                                model=model,
+                            )
+                        )
 
     except OSError:
         return None
@@ -284,10 +294,12 @@ def _extract_assistant_content(msg: dict) -> tuple[str, list[ToolCallSummary]]:
             args_str = json.dumps(input_data, ensure_ascii=False) if input_data else ""
             if len(args_str) > 200:
                 args_str = args_str[:200] + "..."
-            tool_calls.append(ToolCallSummary(
-                name=name,
-                args_preview=args_str,
-            ))
+            tool_calls.append(
+                ToolCallSummary(
+                    name=name,
+                    args_preview=args_str,
+                )
+            )
 
     return "\n".join(text_parts).strip(), tool_calls
 
@@ -323,7 +335,11 @@ def find_claude_sessions(
             session = parse_claude_session(jsonl_file)
             if session:
                 # Use the actual project path from the first message's cwd if available
-                if not session.project_path or session.project_path == _decode_claude_project_path(project_dir.name):
+                if (
+                    not session.project_path
+                    or session.project_path
+                    == _decode_claude_project_path(project_dir.name)
+                ):
                     session.project_path = normalized_target
                 sessions.append(session)
 

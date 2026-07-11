@@ -100,11 +100,13 @@ def parse_codex_session(file_path: Path) -> Optional[UnifiedSession]:
                     if sub_type == "user_message":
                         text = payload.get("message", "").strip()
                         if text:
-                            messages.append(UnifiedMessage(
-                                role="user",
-                                content=text,
-                                timestamp=timestamp,
-                            ))
+                            messages.append(
+                                UnifiedMessage(
+                                    role="user",
+                                    content=text,
+                                    timestamp=timestamp,
+                                )
+                            )
                             if not started_at:
                                 started_at = timestamp
                             ended_at = timestamp
@@ -114,16 +116,20 @@ def parse_codex_session(file_path: Path) -> Optional[UnifiedSession]:
                         phase = payload.get("phase", "final")
                         text = payload.get("message", "").strip()
                         if text and phase == "final":
-                            messages.append(UnifiedMessage(
-                                role="assistant",
-                                content=text,
-                                timestamp=timestamp,
-                                model=model,
-                            ))
+                            messages.append(
+                                UnifiedMessage(
+                                    role="assistant",
+                                    content=text,
+                                    timestamp=timestamp,
+                                    model=model,
+                                )
+                            )
                             ended_at = timestamp
 
                     elif sub_type == "task_complete":
-                        ended_at = _ms_to_iso(payload.get("completed_at", 0)) or timestamp
+                        ended_at = (
+                            _ms_to_iso(payload.get("completed_at", 0)) or timestamp
+                        )
 
                 elif row_type == "response_item":
                     sub_type = payload.get("type", "")
@@ -151,13 +157,15 @@ def parse_codex_session(file_path: Path) -> Optional[UnifiedSession]:
                             if phase == "final" and text:
                                 # Attach any pending tool calls
                                 tc = pending_tool_calls[:] if pending_tool_calls else []
-                                messages.append(UnifiedMessage(
-                                    role="assistant",
-                                    content=text,
-                                    timestamp=timestamp,
-                                    tool_calls=tc,
-                                    model=model,
-                                ))
+                                messages.append(
+                                    UnifiedMessage(
+                                        role="assistant",
+                                        content=text,
+                                        timestamp=timestamp,
+                                        tool_calls=tc,
+                                        model=model,
+                                    )
+                                )
                                 pending_tool_calls.clear()
                                 call_id_to_index.clear()
                                 ended_at = timestamp
@@ -169,7 +177,9 @@ def parse_codex_session(file_path: Path) -> Optional[UnifiedSession]:
                             args_obj = json.loads(args_raw) if args_raw else {}
                             args_str = json.dumps(args_obj, ensure_ascii=False)
                         except (json.JSONDecodeError, TypeError):
-                            args_str = args_raw[:200] if isinstance(args_raw, str) else ""
+                            args_str = (
+                                args_raw[:200] if isinstance(args_raw, str) else ""
+                            )
 
                         if len(args_str) > 200:
                             args_str = args_str[:200] + "..."

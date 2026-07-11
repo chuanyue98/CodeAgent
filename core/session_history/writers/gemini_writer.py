@@ -65,12 +65,14 @@ def write_gemini_session(session: UnifiedSession) -> str:
         if msg.role == "user":
             msg_row = {
                 "$set": {
-                    "messages": [{
-                        "id": str(uuid.uuid4()),
-                        "timestamp": msg.timestamp or now,
-                        "type": "user",
-                        "content": [{"text": msg.content}],
-                    }],
+                    "messages": [
+                        {
+                            "id": str(uuid.uuid4()),
+                            "timestamp": msg.timestamp or now,
+                            "type": "user",
+                            "content": [{"text": msg.content}],
+                        }
+                    ],
                     "lastUpdated": msg.timestamp or now,
                 }
             }
@@ -79,14 +81,25 @@ def write_gemini_session(session: UnifiedSession) -> str:
         elif msg.role == "assistant":
             tool_calls = []
             for tc in msg.tool_calls:
-                tool_calls.append({
-                    "id": f"call_{uuid.uuid4().hex[:24]}",
-                    "name": tc.name,
-                    "args": json.loads(tc.args_preview) if tc.args_preview else {},
-                    "result": [{"functionResponse": {"name": tc.name, "response": {"output": tc.result_preview}}}] if tc.result_preview else [],
-                    "status": "success" if tc.result_preview else "unknown",
-                    "timestamp": msg.timestamp or now,
-                })
+                tool_calls.append(
+                    {
+                        "id": f"call_{uuid.uuid4().hex[:24]}",
+                        "name": tc.name,
+                        "args": json.loads(tc.args_preview) if tc.args_preview else {},
+                        "result": [
+                            {
+                                "functionResponse": {
+                                    "name": tc.name,
+                                    "response": {"output": tc.result_preview},
+                                }
+                            }
+                        ]
+                        if tc.result_preview
+                        else [],
+                        "status": "success" if tc.result_preview else "unknown",
+                        "timestamp": msg.timestamp or now,
+                    }
+                )
 
             msg_row = {
                 "id": str(uuid.uuid4()),

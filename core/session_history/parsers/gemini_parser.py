@@ -75,11 +75,13 @@ def parse_gemini_session(file_path: Path) -> Optional[UnifiedSession]:
                 if msg_type == "user":
                     content = _extract_gemini_user_content(row)
                     if content:
-                        messages.append(UnifiedMessage(
-                            role="user",
-                            content=content,
-                            timestamp=timestamp,
-                        ))
+                        messages.append(
+                            UnifiedMessage(
+                                role="user",
+                                content=content,
+                                timestamp=timestamp,
+                            )
+                        )
                         if not started_at:
                             started_at = timestamp
                         ended_at = timestamp
@@ -89,13 +91,15 @@ def parse_gemini_session(file_path: Path) -> Optional[UnifiedSession]:
                     if mdl and not model:
                         model = mdl
                     if content or tool_calls:
-                        messages.append(UnifiedMessage(
-                            role="assistant",
-                            content=content,
-                            timestamp=timestamp,
-                            tool_calls=tool_calls,
-                            model=model,
-                        ))
+                        messages.append(
+                            UnifiedMessage(
+                                role="assistant",
+                                content=content,
+                                timestamp=timestamp,
+                                tool_calls=tool_calls,
+                                model=model,
+                            )
+                        )
                         ended_at = timestamp
 
     except OSError:
@@ -195,13 +199,17 @@ def _extract_gemini_response(
                     if isinstance(r, dict) and "functionResponse" in r:
                         resp = r["functionResponse"].get("response", {})
                         result_str = json.dumps(resp, ensure_ascii=False)
-                        result_preview = result_str[:200] if len(result_str) > 200 else result_str
+                        result_preview = (
+                            result_str[:200] if len(result_str) > 200 else result_str
+                        )
                         break
-            tool_calls.append(ToolCallSummary(
-                name=name,
-                args_preview=args_str,
-                result_preview=result_preview,
-            ))
+            tool_calls.append(
+                ToolCallSummary(
+                    name=name,
+                    args_preview=args_str,
+                    result_preview=result_preview,
+                )
+            )
 
     model = row.get("model", "")
 

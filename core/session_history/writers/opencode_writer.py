@@ -66,10 +66,12 @@ def write_opencode_session(session: UnifiedSession) -> str:
     project_id = f"pro_{hash(session.project_path) & 0xFFFFFFFFFFFFFFFF:016x}"
 
     # Model JSON
-    model_json = json.dumps({
-        "id": session.model or "unknown",
-        "providerID": "converted",
-    })
+    model_json = json.dumps(
+        {
+            "id": session.model or "unknown",
+            "providerID": "converted",
+        }
+    )
 
     con = sqlite3.connect(str(db_path))
 
@@ -122,7 +124,13 @@ def write_opencode_session(session: UnifiedSession) -> str:
             con.execute(
                 """INSERT INTO message (id, session_id, time_created, time_updated, data)
                    VALUES (?, ?, ?, ?, ?)""",
-                (msg_id, new_session_id, msg_time, msg_time, json.dumps(msg_data, ensure_ascii=False)),
+                (
+                    msg_id,
+                    new_session_id,
+                    msg_time,
+                    msg_time,
+                    json.dumps(msg_data, ensure_ascii=False),
+                ),
             )
 
             # Insert text part
@@ -131,8 +139,14 @@ def write_opencode_session(session: UnifiedSession) -> str:
                 con.execute(
                     """INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
                        VALUES (?, ?, ?, ?, ?, ?)""",
-                    (f"prt_{uuid.uuid4().hex[:24]}", msg_id, new_session_id, msg_time, msg_time,
-                     json.dumps(part_data, ensure_ascii=False)),
+                    (
+                        f"prt_{uuid.uuid4().hex[:24]}",
+                        msg_id,
+                        new_session_id,
+                        msg_time,
+                        msg_time,
+                        json.dumps(part_data, ensure_ascii=False),
+                    ),
                 )
 
             # Insert tool call parts
@@ -155,8 +169,14 @@ def write_opencode_session(session: UnifiedSession) -> str:
                 con.execute(
                     """INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
                        VALUES (?, ?, ?, ?, ?, ?)""",
-                    (f"prt_{uuid.uuid4().hex[:24]}", msg_id, new_session_id, msg_time, msg_time,
-                     json.dumps(tool_part, ensure_ascii=False)),
+                    (
+                        f"prt_{uuid.uuid4().hex[:24]}",
+                        msg_id,
+                        new_session_id,
+                        msg_time,
+                        msg_time,
+                        json.dumps(tool_part, ensure_ascii=False),
+                    ),
                 )
 
         con.commit()

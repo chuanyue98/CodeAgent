@@ -48,7 +48,9 @@ def write_codex_session(session: UnifiedSession) -> str:
     # Build file path
     today = datetime.now(tz=timezone.utc)
     sessions_dir = Path.home() / ".codex" / "sessions"
-    day_dir = sessions_dir / f"{today.year:04d}" / f"{today.month:02d}" / f"{today.day:02d}"
+    day_dir = (
+        sessions_dir / f"{today.year:04d}" / f"{today.month:02d}" / f"{today.day:02d}"
+    )
     day_dir.mkdir(parents=True, exist_ok=True)
 
     filename = f"rollout-{now_fname}-{new_session_id}.jsonl"
