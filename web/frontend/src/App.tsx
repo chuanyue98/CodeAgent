@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket } from 'lucide-react';
+import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket, Terminal } from 'lucide-react';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ManifestDrawer from './components/ManifestDrawer';
 
@@ -12,6 +12,7 @@ const PluginGallery = lazy(() => import('./components/PluginGallery'));
 const PromptsGallery = lazy(() => import('./components/PromptsGallery'));
 const Analytics = lazy(() => import('./components/Analytics'));
 const LaunchPad = lazy(() => import('./components/LaunchPad'));
+const LogViewer = lazy(() => import('./components/LogViewer'));
 
 const navItems = [
   { path: '/launch', label: 'Launch', icon: Rocket },
@@ -21,6 +22,7 @@ const navItems = [
   { path: '/plugins', label: 'Plugins', icon: Zap },
   { path: '/config', label: 'Configuration', icon: Settings },
   { path: '/dashboard', label: 'Dashboard', icon: Activity },
+  { path: '/logs', label: 'Logs', icon: Terminal },
   { path: '/analytics', label: 'Analytics', icon: TrendingUp },
 ] as const;
 
@@ -32,6 +34,7 @@ const PAGE_LABELS: Record<string, string> = {
   '/plugins': 'Plugins',
   '/config': 'Configuration',
   '/dashboard': 'Dashboard',
+  '/logs': 'Logs',
   '/analytics': 'Analytics',
 };
 
@@ -103,6 +106,7 @@ function App() {
               <Route path="/plugins" element={<PluginGallery />} />
               <Route path="/config" element={<ConfigHub />} />
               <Route path="/dashboard" element={<TaskDashboard />} />
+              <Route path="/logs" element={<LogViewer />} />
               <Route path="/analytics" element={<Analytics />} />
             </Routes>
           </Suspense>
