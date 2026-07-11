@@ -78,6 +78,7 @@ def parse_opencode_session(session_id: str, db_path: Path) -> Optional[UnifiedSe
     if not db_path.exists():
         return None
 
+    con = None
     try:
         con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         con.row_factory = sqlite3.Row
@@ -90,7 +91,6 @@ def parse_opencode_session(session_id: str, db_path: Path) -> Optional[UnifiedSe
         ).fetchone()
 
         if not sess_row:
-            con.close()
             return None
 
         project_path = sess_row["directory"] or ""
@@ -209,10 +209,11 @@ def parse_opencode_session(session_id: str, db_path: Path) -> Optional[UnifiedSe
                     )
                 )
 
-        con.close()
-
     except sqlite3.Error:
         return None
+    finally:
+        if con is not None:
+            con.close()
 
     if not messages:
         return None
@@ -252,6 +253,7 @@ def find_opencode_sessions(
     normalized_target = project_path.replace("\\", "/").lower().rstrip("/")
     sessions: list[UnifiedSession] = []
 
+    con = None
     try:
         con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         con.row_factory = sqlite3.Row
@@ -260,10 +262,12 @@ def find_opencode_sessions(
         rows = con.execute(
             "SELECT id, directory, time_created FROM session ORDER BY time_created DESC"
         ).fetchall()
-        con.close()
 
     except sqlite3.Error:
         return []
+    finally:
+        if con is not None:
+            con.close()
 
     for row in rows:
         directory = (row["directory"] or "").replace("\\", "/").lower().rstrip("/")

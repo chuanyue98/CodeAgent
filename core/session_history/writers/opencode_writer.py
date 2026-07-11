@@ -8,6 +8,7 @@ following OpenCode's native schema.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import uuid
@@ -62,8 +63,8 @@ def write_opencode_session(session: UnifiedSession) -> str:
     new_session_id = f"ses_{uuid.uuid4().hex[:24]}"
     now_ms = _now_ms()
 
-    # Generate a project ID (deterministic from path)
-    project_id = f"pro_{hash(session.project_path) & 0xFFFFFFFFFFFFFFFF:016x}"
+    # Generate a project ID (deterministic from path, stable across processes)
+    project_id = f"pro_{hashlib.sha256(session.project_path.encode()).hexdigest()[:16]}"
 
     # Model JSON
     model_json = json.dumps(

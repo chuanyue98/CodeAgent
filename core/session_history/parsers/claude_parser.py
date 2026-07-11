@@ -123,7 +123,8 @@ def _claude_dir_matches(dir_name: str, target_path: str) -> bool:
             # Couldn't match this segment
             return False
 
-    return ti == len(target_segments)
+    # Both target segments and dir parts must be fully consumed
+    return ti == len(target_segments) and di == len(dir_parts)
 
 
 def parse_claude_session(file_path: Path) -> Optional[UnifiedSession]:

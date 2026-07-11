@@ -107,12 +107,16 @@ def write_claude_session(session: UnifiedSession) -> str:
             if msg.content:
                 content_blocks.append({"type": "text", "text": msg.content})
             for tc in msg.tool_calls:
+                try:
+                    input_obj = json.loads(tc.args_preview) if tc.args_preview else {}
+                except (json.JSONDecodeError, TypeError):
+                    input_obj = {}
                 content_blocks.append(
                     {
                         "type": "tool_use",
                         "id": f"toolu_{uuid.uuid4().hex[:24]}",
                         "name": tc.name,
-                        "input": json.loads(tc.args_preview) if tc.args_preview else {},
+                        "input": input_obj,
                     }
                 )
 

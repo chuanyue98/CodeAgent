@@ -82,11 +82,15 @@ def write_gemini_session(session: UnifiedSession) -> str:
         elif msg.role == "assistant":
             tool_calls = []
             for tc in msg.tool_calls:
+                try:
+                    args_obj = json.loads(tc.args_preview) if tc.args_preview else {}
+                except (json.JSONDecodeError, TypeError):
+                    args_obj = {}
                 tool_calls.append(
                     {
                         "id": f"call_{uuid.uuid4().hex[:24]}",
                         "name": tc.name,
-                        "args": json.loads(tc.args_preview) if tc.args_preview else {},
+                        "args": args_obj,
                         "result": [
                             {
                                 "functionResponse": {
