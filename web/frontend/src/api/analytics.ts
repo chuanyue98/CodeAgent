@@ -42,6 +42,7 @@ export interface SessionUsage {
   cost: number;
   lastActivity: string;
   modelsUsed: string[];
+  modelBreakdowns: ModelBreakdown[];
 }
 
 export interface EngineSummary {

@@ -448,28 +448,23 @@ def _render(sections: List[Section]) -> int:
 # ── Public entry point ────────────────────────────────────────────────────────
 
 
-def run_doctor(fix: bool = False) -> int:
-    """Run all health checks. Returns exit code (0 = OK, 1 = failures)."""
+def get_doctor_sections(fix: bool = False) -> list[Section]:
+    """Run all health checks and return structured Section results.
+
+    Does NOT print anything. The caller is responsible for rendering or
+    serializing the sections.
+    """
     root = Path(__file__).resolve().parent.parent
 
-    print()
-    print("  CodeAgent Health Check")
-    print("  " + "=" * 22)
-    if fix:
-        print("  --fix mode: auto-repairable issues will be resolved")
-
-    # ── Section 1: Runtime ────────────────────────────────────────────────────
     s1 = Section("Runtime")
     check_python(s1)
     check_engines(s1)
 
-    # ── Section 2: Configuration ──────────────────────────────────────────────
     s2 = Section("Configuration")
     cfg = check_config(s2, root)
     if cfg is not None:
         check_directories(s2, root)
 
-    # ── Section 3: Context resolution ────────────────────────────────────────
     s3 = Section("Context Resolution")
     if cfg is not None:
         check_skills_resolution(s3, root, cfg)
@@ -478,27 +473,32 @@ def run_doctor(fix: bool = False) -> int:
     else:
         s3.add(INFO, "Skipped", "config.json could not be loaded")
 
-    # ── Section 4: Environment ────────────────────────────────────────────────
     s4 = Section("Environment")
     check_temp_file(s4, root)
     if cfg is not None:
         check_proxy(s4, cfg)
     check_symlink_capability(s4, root)
 
-    # ── Section 5: Session integrity ──────────────────────────────────────────
     s5 = Section("Session Integrity")
     stale = check_stale_injections(s5)
-
-    # ── Render ────────────────────────────────────────────────────────────────
-    failures = _render([s1, s2, s3, s4, s5])
-
-    # ── Auto-fix ──────────────────────────────────────────────────────────────
     if fix and stale:
         print("  Applying fixes...")
         fix_stale_injections(stale)
         print("  Done. Re-run 'ca doctor' to verify.")
         print()
 
+    return [s1, s2, s3, s4, s5]
+
+
+def run_doctor(fix: bool = False) -> int:
+    """Run all health checks. Returns exit code (0 = OK, 1 = failures)."""
+    print()
+    print("  CodeAgent Health Check")
+    print("  " + "=" * 22)
+    if fix:
+        print("  --fix mode: auto-repairable issues will be resolved")
+    sections = get_doctor_sections(fix=fix)
+    failures = _render(sections)
     return 1 if failures else 0
 
 

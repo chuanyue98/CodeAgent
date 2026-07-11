@@ -1,8 +1,10 @@
 import { lazy, Suspense, useState } from 'react';
 import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket } from 'lucide-react';
+import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket, Terminal, FileText, Cpu } from 'lucide-react';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ManifestDrawer from './components/ManifestDrawer';
+import SystemPanel from './components/SystemPanel';
+const SystemPage = lazy(() => import('./pages/SystemPage'));
 
 const SkillGallery = lazy(() => import('./components/SkillGallery'));
 const ConfigHub = lazy(() => import('./components/ConfigHub'));
@@ -12,6 +14,8 @@ const PluginGallery = lazy(() => import('./components/PluginGallery'));
 const PromptsGallery = lazy(() => import('./components/PromptsGallery'));
 const Analytics = lazy(() => import('./components/Analytics'));
 const LaunchPad = lazy(() => import('./components/LaunchPad'));
+const LogViewer = lazy(() => import('./components/LogViewer'));
+const SessionsPage = lazy(() => import('./components/SessionsPage'));
 
 const navItems = [
   { path: '/launch', label: 'Launch', icon: Rocket },
@@ -21,7 +25,10 @@ const navItems = [
   { path: '/plugins', label: 'Plugins', icon: Zap },
   { path: '/config', label: 'Configuration', icon: Settings },
   { path: '/dashboard', label: 'Dashboard', icon: Activity },
+  { path: '/logs', label: 'Logs', icon: Terminal },
   { path: '/analytics', label: 'Analytics', icon: TrendingUp },
+  { path: '/sessions', label: 'Sessions', icon: FileText },
+  { path: '/system', label: 'System', icon: Cpu },
 ] as const;
 
 const PAGE_LABELS: Record<string, string> = {
@@ -32,7 +39,10 @@ const PAGE_LABELS: Record<string, string> = {
   '/plugins': 'Plugins',
   '/config': 'Configuration',
   '/dashboard': 'Dashboard',
+  '/logs': 'Logs',
   '/analytics': 'Analytics',
+  '/sessions': 'Sessions',
+  '/system': 'System',
 };
 
 function App() {
@@ -87,7 +97,7 @@ function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-hidden relative flex flex-col gap-4">
+      <main className="flex-1 overflow-hidden relative flex flex-col gap-4 pb-8">
         <header className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-800">{pageLabel}</h2>
           <ProjectSwitcher />
@@ -103,13 +113,17 @@ function App() {
               <Route path="/plugins" element={<PluginGallery />} />
               <Route path="/config" element={<ConfigHub />} />
               <Route path="/dashboard" element={<TaskDashboard />} />
+              <Route path="/logs" element={<LogViewer />} />
               <Route path="/analytics" element={<Analytics />} />
+              <Route path="/sessions" element={<SessionsPage />} />
+              <Route path="/system" element={<SystemPage />} />
             </Routes>
           </Suspense>
         </div>
       </main>
 
       <ManifestDrawer />
+      <SystemPanel />
     </div>
   );
 }

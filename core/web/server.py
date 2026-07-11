@@ -13,9 +13,11 @@ from core.web.routers import (
     history,
     hooks,
     launch,
+    logs,
     plugins,
     prompts,
     skills,
+    system,
     tasks,
 )
 from core.web.resource_paths import ROOT_DIR, resolve_resource_path
@@ -117,9 +119,11 @@ app.include_router(config.router)
 app.include_router(history.router)
 app.include_router(hooks.router)
 app.include_router(launch.router)
+app.include_router(logs.router)
 app.include_router(plugins.router)
 app.include_router(prompts.router)
 app.include_router(skills.router)
+app.include_router(system.router)
 app.include_router(tasks.router)
 
 
