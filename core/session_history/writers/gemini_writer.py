@@ -62,6 +62,7 @@ def write_gemini_session(session: UnifiedSession) -> str:
 
     # Write messages
     for msg in session.messages:
+        msg_row: dict[str, Any]
         if msg.role == "user":
             msg_row = {
                 "$set": {
@@ -101,7 +102,7 @@ def write_gemini_session(session: UnifiedSession) -> str:
                     }
                 )
 
-            msg_row: dict[str, Any] = {
+            msg_row = {
                 "id": str(uuid.uuid4()),
                 "timestamp": msg.timestamp or now,
                 "type": "gemini",
