@@ -181,6 +181,24 @@ async def test_projects_api_crud(mock_env):
 
 
 @pytest.mark.asyncio
+async def test_projects_api_validation_errors(mock_env):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        # Missing path
+        resp = await ac.post("/api/projects", json={"group": "g1"})
+        assert resp.status_code == 422
+
+        # Missing group
+        resp = await ac.post("/api/projects", json={"path": "/p1"})
+        assert resp.status_code == 422
+
+        # Empty path
+        resp = await ac.post("/api/projects", json={"path": "", "group": "g1"})
+        assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_groups_api_crud(mock_env):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
