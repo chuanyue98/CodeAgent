@@ -13,6 +13,7 @@ const PromptsGallery = lazy(() => import('./components/PromptsGallery'));
 const Analytics = lazy(() => import('./components/Analytics'));
 const LaunchPad = lazy(() => import('./components/LaunchPad'));
 const LogViewer = lazy(() => import('./components/LogViewer'));
+const SessionsPage = lazy(() => import('./components/SessionsPage'));
 
 const navItems = [
   { path: '/launch', label: 'Launch', icon: Rocket },
@@ -24,6 +25,7 @@ const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: Activity },
   { path: '/logs', label: 'Logs', icon: Terminal },
   { path: '/analytics', label: 'Analytics', icon: TrendingUp },
+  { path: '/sessions', label: 'Sessions', icon: Terminal },
 ] as const;
 
 const PAGE_LABELS: Record<string, string> = {
@@ -36,6 +38,7 @@ const PAGE_LABELS: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/logs': 'Logs',
   '/analytics': 'Analytics',
+  '/sessions': 'Sessions',
 };
 
 function App() {
@@ -108,6 +111,7 @@ function App() {
               <Route path="/dashboard" element={<TaskDashboard />} />
               <Route path="/logs" element={<LogViewer />} />
               <Route path="/analytics" element={<Analytics />} />
+              <Route path="/sessions" element={<SessionsPage />} />
             </Routes>
           </Suspense>
         </div>
