@@ -112,19 +112,19 @@ const PromptsGallery: React.FC = () => {
     return (
       <div className="flex h-full overflow-hidden p-6 gap-6">
         <div className="flex-1 glass-card flex flex-col overflow-hidden">
-          <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-slate-50/30 backdrop-blur-sm">
+          <div className="p-6 border-b border-slate-200 flex items-center gap-4 bg-white">
             <button
               onClick={() => setSelectedPrompt(null)}
-              className="p-2 hover:bg-slate-100 rounded-xl transition-all border border-slate-100"
+              className="p-2 hover:bg-slate-100 rounded-xl transition-all border border-slate-200"
             >
               <ChevronRight className="w-5 h-5 rotate-180" />
             </button>
             <div className="flex-1">
               <span className="text-[10px] uppercase tracking-widest text-primary font-bold">Prompt Group</span>
-              <h1 className="text-2xl font-semibold tracking-tight capitalize">{selectedPrompt.name}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight capitalize text-slate-900">{selectedPrompt.name}</h1>
             </div>
-            <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100">
-              <span className="text-xs font-semibold text-slate-500">Active in {currentGroup}</span>
+            <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-xl border border-slate-200">
+              <span className="text-xs font-semibold text-slate-600">Active in {currentGroup}</span>
               <button
                 onClick={(e) => togglePromptStatus(selectedPrompt.id, e)}
                 className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
@@ -141,8 +141,8 @@ const PromptsGallery: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] flex-1 min-h-0">
-            <div className="border-r border-slate-100 bg-slate-50/30 p-6 overflow-y-auto">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400 mb-4">
+            <div className="border-r border-slate-200 bg-slate-50 p-6 overflow-y-auto">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">
                 <Files className="w-4 h-4 text-primary" />
                 Files in Group
               </div>
@@ -150,10 +150,10 @@ const PromptsGallery: React.FC = () => {
                 {selectedPrompt.files.map((file) => (
                   <div
                     key={file.path}
-                    className="rounded-xl border border-slate-100 bg-white px-4 py-3"
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-3"
                   >
                     <div className="text-sm font-semibold text-slate-800">{file.name}</div>
-                    <div className="mt-1 text-[11px] font-mono text-slate-400 break-all">
+                    <div className="mt-1 text-[11px] font-mono text-slate-500 break-all">
                       {file.path}
                     </div>
                   </div>
@@ -161,13 +161,18 @@ const PromptsGallery: React.FC = () => {
               </div>
             </div>
 
-            <div className="overflow-y-auto p-8 prose prose-slate prose-cyan max-w-none font-sans">
+            <div className="overflow-y-auto p-8 bg-white prose prose-slate max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-li:text-slate-700 prose-strong:text-slate-900">
               <ReactMarkdown
                 components={{
                   code({ className, children, ...props }) {
-                    return (
+                    const isCodeBlock = className && className.startsWith('language-');
+                    return isCodeBlock ? (
+                      <code className={`${className} font-mono`} {...props}>
+                        {children}
+                      </code>
+                    ) : (
                       <code
-                        className={`${className ?? ''} font-mono bg-slate-50 px-1.5 py-0.5 rounded text-primary`}
+                        className="font-mono bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-cyan-700 text-[0.875em]"
                         {...props}
                       >
                         {children}
@@ -177,7 +182,7 @@ const PromptsGallery: React.FC = () => {
                   pre({ children, ...props }) {
                     return (
                       <pre
-                        className="!bg-slate-900 !text-slate-100 p-4 rounded-xl shadow-inner border border-slate-800"
+                        className="!bg-slate-900 !text-slate-100 p-5 rounded-xl shadow-inner border border-slate-700 overflow-x-auto"
                         {...props}
                       >
                         {children}

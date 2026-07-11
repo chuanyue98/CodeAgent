@@ -10,6 +10,7 @@ from core.plugin_scanner import PluginScanner
 from core.web.routers import (
     analytics,
     config,
+    history,
     hooks,
     launch,
     plugins,
@@ -113,6 +114,7 @@ app = FastAPI(title="CodeAgent Web UI", lifespan=lifespan)
 # Mount modular routers
 app.include_router(analytics.router)
 app.include_router(config.router)
+app.include_router(history.router)
 app.include_router(hooks.router)
 app.include_router(launch.router)
 app.include_router(plugins.router)
