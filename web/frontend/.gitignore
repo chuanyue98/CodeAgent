@@ -18,6 +18,9 @@ dist-ssr
 /blob-report/
 /playwright/.cache/
 
+# npm lockfile (project uses bun)
+package-lock.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
