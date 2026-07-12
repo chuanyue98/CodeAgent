@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+"""Fake stand-in for the `claude`/`codex`/`gemini`/`opencode` CLIs, used only
+by the Playwright E2E suite (web/frontend/e2e/). See README.md in this
+directory for why these exist and what argv shapes they handle.
+
+This one file's content is identical across all four filenames in this
+directory — the engine is auto-detected from argv[0]'s basename, and
+per-engine differences (flag names, native config file format, session-id
+field name) are handled via the ENGINE branches below. Keep any edits to
+this docstring/logic in sync across claude/codex/gemini/opencode.
+"""
+
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+ENGINE = Path(sys.argv[0]).name
+args = sys.argv[1:]
+
+
+def _read_json(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _write_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _toml_str(s: str) -> str:
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _append_codex_server(path: Path, name: str, command: list, url, env: dict) -> None:
+    """Hand-rolled TOML append — deliberately avoids importing tomlkit, since
+    this script runs under the system python3 (via PATH), not the repo's uv
+    venv where tomlkit is actually installed. Only needs to produce output
+    the real tomlkit (used by mcp_service.py's read path) can parse back."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"\n[mcp_servers.{name}]\n"]
+    if command:
+        lines.append(f"command = {_toml_str(command[0])}\n")
+        args_str = ", ".join(_toml_str(a) for a in command[1:])
+        lines.append(f"args = [{args_str}]\n")
+    else:
+        lines.append(f"url = {_toml_str(url)}\n")
+    if env:
+        lines.append(f"\n[mcp_servers.{name}.env]\n")
+        for k, v in env.items():
+            lines.append(f"{k} = {_toml_str(v)}\n")
+    with open(path, "a", encoding="utf-8") as f:
+        f.writelines(lines)
+
+
+def _remove_codex_server(path: Path, name: str) -> None:
+    if not path.exists():
+        return
+    header_exact = f"[mcp_servers.{name}]"
+    header_prefix = f"[mcp_servers.{name}."
+    out, skip = [], False
+    for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped == header_exact or stripped.startswith(header_prefix):
+            skip = True
+            continue
+        if skip and stripped.startswith("["):
+            skip = False
+        if not skip:
+            out.append(line)
+    path.write_text("".join(out), encoding="utf-8")
+
+
+def _parse_env_pairs(pairs: list) -> dict:
+    env = {}
+    for pair in pairs:
+        if "=" in pair:
+            k, v = pair.split("=", 1)
+            env[k] = v
+    return env
+
+
+def _parse_add_args_name_first(rest: list) -> tuple:
+    """codex/opencode shape: mcp add <name> [--env K=V ...] (--url <url> | -- <command...>)"""
+    if not rest:
+        raise ValueError("mcp add requires a server name")
+    name = rest[0]
+    env_pairs, url, command = [], None, []
+    i = 1
+    while i < len(rest):
+        if rest[i] == "--env":
+            env_pairs.append(rest[i + 1])
+            i += 2
+        elif rest[i] == "--url":
+            url = rest[i + 1]
+            i += 2
+        elif rest[i] == "--":
+            command = rest[i + 1 :]
+            break
+        else:
+            i += 1
+    return name, command, url, _parse_env_pairs(env_pairs)
+
+
+def _parse_add_args_scope_first(rest: list, has_separator: bool) -> tuple:
+    """claude/gemini shape: mcp add --scope project [--transport T] <name>
+    [-e K=V ...] (<url> | -- <command...> | <command...>)"""
+    i = 0
+    while i < len(rest) and rest[i] in ("--scope", "--transport"):
+        i += 2
+    if i >= len(rest):
+        raise ValueError("mcp add requires a server name")
+    name = rest[i]
+    i += 1
+    env_pairs = []
+    while i < len(rest) and rest[i] == "-e":
+        env_pairs.append(rest[i + 1])
+        i += 2
+    remaining = rest[i:]
+    url, command = None, []
+    if remaining and remaining[0] == "--":
+        command = remaining[1:]
+    elif len(remaining) == 1 and remaining[0].startswith(("http://", "https://")):
+        url = remaining[0]
+    else:
+        command = remaining
+    return name, command, url, _parse_env_pairs(env_pairs)
+
+
+def handle_mcp_add() -> None:
+    rest = args[2:]  # drop "mcp", "add"
+    if ENGINE in ("claude", "gemini"):
+        name, command, url, env = _parse_add_args_scope_first(rest, ENGINE == "claude")
+    else:
+        name, command, url, env = _parse_add_args_name_first(rest)
+
+    if ENGINE == "claude":
+        path = Path.cwd() / ".mcp.json"
+        data = _read_json(path)
+        data.setdefault("mcpServers", {})
+        entry = {"env": env}
+        if command:
+            entry.update({"type": "stdio", "command": command[0], "args": command[1:]})
+        else:
+            entry.update({"type": "http", "url": url})
+        data["mcpServers"][name] = entry
+        _write_json(path, data)
+    elif ENGINE == "gemini":
+        path = Path.cwd() / ".gemini" / "settings.json"
+        data = _read_json(path)
+        data.setdefault("mcpServers", {})
+        entry: dict = {}
+        if command:
+            entry["command"] = command[0]
+            entry["args"] = command[1:]
+        else:
+            entry["url"] = url
+        if env:
+            entry["env"] = env
+        data["mcpServers"][name] = entry
+        _write_json(path, data)
+    elif ENGINE == "codex":
+        _append_codex_server(Path.home() / ".codex" / "config.toml", name, command, url, env)
+    else:  # opencode
+        path = Path.home() / ".config" / "opencode" / "opencode.json"
+        data = _read_json(path)
+        data.setdefault("mcp", {})
+        entry = {}
+        if command:
+            entry["type"] = "local"
+            entry["command"] = command
+        else:
+            entry["type"] = "remote"
+            entry["url"] = url
+        if env:
+            entry["environment"] = env
+        data["mcp"][name] = entry
+        _write_json(path, data)
+
+    print(f'Added MCP server "{name}"')
+    sys.exit(0)
+
+
+def handle_mcp_remove() -> None:
+    if len(args) < 3:
+        print("mcp remove requires a server name", file=sys.stderr)
+        sys.exit(1)
+    name = args[2]
+    if ENGINE == "claude":
+        path = Path.cwd() / ".mcp.json"
+        data = _read_json(path)
+        data.get("mcpServers", {}).pop(name, None)
+        _write_json(path, data)
+    elif ENGINE == "codex":
+        _remove_codex_server(Path.home() / ".codex" / "config.toml", name)
+    # gemini/opencode: mcp_service.py never shells out to remove for these
+    # two (it edits their native config file directly) — nothing to do here.
+    print(f'Removed MCP server "{name}"')
+    sys.exit(0)
+
+
+if args and args[0] == "mcp" and len(args) > 1:
+    if args[1] == "add":
+        handle_mcp_add()
+    elif args[1] == "remove":
+        handle_mcp_remove()
+    else:
+        print("[]")
+        sys.exit(0)
+
+if "--version" in args or "-v" in args:
+    print(f"fake-{ENGINE} 0.0.0-e2e")
+    sys.exit(0)
+
+# --- Chat-turn (structured-output) invocation, built by build_chat_command() ---
+STRUCTURED_FLAGS = {"--output-format", "--json", "-o", "--format"}
+if any(flag in args for flag in STRUCTURED_FLAGS):
+    # Message position differs per engine's build_chat_command(): last
+    # positional for claude/codex, but immediately after a marker flag for
+    # gemini (-p) and opencode (run) since those two have flags trailing
+    # the message rather than only preceding it.
+    if ENGINE == "gemini" and "-p" in args:
+        message = args[args.index("-p") + 1]
+    elif ENGINE == "opencode" and "run" in args:
+        message = args[args.index("run") + 1]
+    else:
+        message = args[-1] if args else ""
+    reply = f"(fake {ENGINE} reply) You said: {message}"
+    session_id = f"fake-session-{int(time.time() * 1000)}"
+
+    if ENGINE == "claude":
+        if "-r" in args:
+            session_id = args[args.index("-r") + 1]
+        print(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": [{"type": "text", "text": reply}]},
+                }
+            )
+        )
+        print(json.dumps({"type": "result", "session_id": session_id, "result": reply}))
+    elif ENGINE == "codex":
+        if "resume" in args:
+            session_id = args[args.index("resume") + 1]
+        print(json.dumps({"type": "thread.started", "thread_id": session_id}))
+        print(
+            json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {"type": "agent_message", "text": reply},
+                }
+            )
+        )
+    elif ENGINE == "gemini":
+        print(json.dumps({"response": reply, "session_id": session_id}))
+    else:  # opencode
+        if "-s" in args:
+            session_id = args[args.index("-s") + 1]
+        print(json.dumps({"type": "text", "part": {"text": reply}, "sessionID": session_id}))
+    sys.exit(0)
+
+# --- Headless task / launch invocation (ca_launcher.py -> engine build_command()) ---
+# Sleep a few seconds so the E2E Dashboard/Launch specs can observe the
+# running state before the process exits. A task/launch run reaches the
+# binary as `<engine> --dangerously-skip-permissions <prompt-file>` (no
+# `-p`), whereas a Chat turn arrives with `-p` (handled above) and the
+# mcp/hooks subcommands carry their own verb — so "no -p / mcp / hooks" is
+# the reliable signal for a task/launch run.
+if "-p" not in args and "mcp" not in args and "hooks" not in args:
+    time.sleep(4)
+print(f"(fake {ENGINE}) ok: {' '.join(args)}")
+sys.exit(0)

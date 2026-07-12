@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -146,6 +147,13 @@ app.include_router(schedules.router)
 app.include_router(skills.router)
 app.include_router(system.router)
 app.include_router(tasks.router)
+
+# E2E-only reset endpoint — mounted exclusively when CA_E2E=1 so the
+# production app never exposes it. See core/web/routers/e2e.py.
+if os.environ.get("CA_E2E") == "1":
+    from core.web.routers import e2e
+
+    app.include_router(e2e.router)
 
 
 @app.get("/api/health")

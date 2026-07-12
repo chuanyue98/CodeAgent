@@ -1,0 +1,5 @@
+{
+  "name": "E2E Pre Hook",
+  "event": "pre_run",
+  "description": "Fixture hook firing before a run, used by Hooks-gallery specs to exercise event filtering."
+}

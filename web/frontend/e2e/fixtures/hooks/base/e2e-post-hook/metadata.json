@@ -1,0 +1,5 @@
+{
+  "name": "E2E Post Hook",
+  "event": "post_run",
+  "description": "Fixture hook firing after a run, used by Hooks-gallery specs to exercise event filtering and toggling."
+}
