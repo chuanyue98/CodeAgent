@@ -221,6 +221,11 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
                 )
                 subprocess.Popen(args + cmd)
                 break
+        else:
+            # No GUI terminal emulator on PATH (headless/server/WSL-without-X
+            # environments) — fall back to spawning the process directly so
+            # "launched" stays true, just without a visible terminal window.
+            subprocess.Popen(cmd)
 
     return {
         "status": "launched",

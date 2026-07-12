@@ -184,6 +184,7 @@ const ConfigHub: React.FC = () => {
           <div className="space-y-2">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Operation Mode</label>
             <select
+              aria-label="Operation Mode"
               value={localConfig.default_mode || 'local'}
               onChange={(e) => setLocalConfig({ ...localConfig, default_mode: e.target.value })}
               className="w-full p-3 border border-slate-100 rounded-xl bg-slate-50/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
@@ -196,6 +197,7 @@ const ConfigHub: React.FC = () => {
           <div className="space-y-2">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Language</label>
             <select
+              aria-label="Language"
               value={localConfig.language || 'hybrid'}
               onChange={(e) => setLocalConfig({ ...localConfig, language: e.target.value })}
               className="w-full p-3 border border-slate-100 rounded-xl bg-slate-50/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
@@ -223,8 +225,8 @@ const ConfigHub: React.FC = () => {
               className="flex-1 p-3 border border-slate-100 rounded-xl bg-slate-50/50 text-sm font-mono focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
             />
           </div>
-          <p className="text-[10px] text-slate-400">
-            Unified directory for prompts, skills, tasks, etc. Use <code className="bg-slate-100 px-1 rounded">$CODEAGENT</code> for project root.
+          <p className="text-[10px] text-slate-500">
+            Unified directory for prompts, skills, tasks, etc. Use <code className="bg-slate-100 px-1 rounded text-slate-600">$CODEAGENT</code> for project root.
           </p>
         </div>
       </section>
@@ -257,6 +259,7 @@ const ConfigHub: React.FC = () => {
                 className="flex-1 p-2 bg-transparent border-b border-slate-200 focus:border-primary outline-none text-sm font-mono"
               />
               <select
+                aria-label="Resource group"
                 value={p.group}
                 onChange={(e) => updateProject(i, 'group', e.target.value)}
                 className="w-40 p-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/20"
@@ -268,7 +271,7 @@ const ConfigHub: React.FC = () => {
               </button>
             </div>
           ))}
-          {localProjects.length === 0 && <p className="text-center py-8 text-slate-400 text-sm italic">No projects registered. Add one to get started.</p>}
+          {localProjects.length === 0 && <p className="text-center py-8 text-slate-500 text-sm italic">No projects registered. Add one to get started.</p>}
         </div>
       </section>
 
@@ -321,7 +324,7 @@ const ConfigHub: React.FC = () => {
                 <span className="text-xs text-slate-400">{def.skills?.length ?? 0} skills · {def.prompts?.length ?? 0} prompts · {def.hooks?.length ?? 0} hooks · {def.plugins?.length ?? 0} plugins</span>
               </div>
               {name !== 'codeagent' && name !== 'common' && (
-                <button onClick={() => removeGroup(name)} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
+                <button onClick={() => removeGroup(name)} className="p-1.5 text-slate-500 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
                   <Trash2 size={15} />
                 </button>
               )}

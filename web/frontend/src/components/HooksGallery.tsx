@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Anchor, Terminal, Info, ExternalLink } from 'lucide-react';
+import { Search, Anchor, Terminal, Info } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 
 interface Hook {
@@ -133,8 +133,8 @@ const HooksGallery: React.FC = () => {
                     </div>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wider ${
                       active
-                        ? 'border-emerald-100 bg-emerald-50 text-emerald-600'
-                        : 'border-slate-100 bg-slate-50 text-slate-400'
+                        ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-100 bg-slate-50 text-slate-600'
                     }`}>
                       {hook.event}
                     </span>
@@ -143,6 +143,7 @@ const HooksGallery: React.FC = () => {
                   {/* Toggle Switch */}
                   <button
                     onClick={() => toggleHookStatus(hook.id)}
+                    aria-label={`Toggle ${hook.name} active status`}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
                       active ? 'bg-primary' : 'bg-slate-200'
                     }`}
@@ -169,14 +170,9 @@ const HooksGallery: React.FC = () => {
                     <span className="truncate">{hook.path}</span>
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                      <Info className="w-3 h-3" />
-                      <span>Status: {active ? 'Active' : 'Inactive'}</span>
-                    </div>
-                    <button className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-primary">
-                      <ExternalLink className="w-4 h-4" />
-                    </button>
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                    <Info className="w-3 h-3" />
+                    <span>Status: {active ? 'Active' : 'Inactive'}</span>
                   </div>
                 </div>
 
@@ -189,7 +185,7 @@ const HooksGallery: React.FC = () => {
         </div>
 
         {filteredHooks.length === 0 && (
-          <div className="text-center py-20 text-slate-400 glass-card">
+          <div className="text-center py-20 text-slate-500 glass-card">
             No hooks found matching your search.
           </div>
         )}

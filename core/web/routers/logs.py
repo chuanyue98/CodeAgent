@@ -5,7 +5,7 @@ import json
 from collections import deque
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
@@ -61,7 +61,7 @@ async def list_log_files():
 async def get_log_file(task_id: str):
     path = _resolve_log_path(task_id)
     if path is None:
-        return {"detail": "Log file not found"}, 404
+        raise HTTPException(status_code=404, detail="Log file not found")
     content = _read_log(path)
     return {"task_id": task_id, "content": content}
 
@@ -70,7 +70,7 @@ async def get_log_file(task_id: str):
 async def stream_log_file(task_id: str):
     path = _resolve_log_path(task_id)
     if path is None:
-        return {"detail": "Log file not found"}, 404
+        raise HTTPException(status_code=404, detail="Log file not found")
 
     async def event_generator():
         last_size = 0

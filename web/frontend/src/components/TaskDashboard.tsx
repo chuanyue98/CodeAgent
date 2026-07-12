@@ -135,7 +135,7 @@ function TaskList({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-3 min-w-0">
-                    <h3 className="font-semibold text-slate-900 truncate">{task.title}</h3>
+                    <h2 className="font-semibold text-slate-900 truncate">{task.title}</h2>
                     {activeRun && (
                       <span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider border border-emerald-100 animate-pulse">
                         <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
