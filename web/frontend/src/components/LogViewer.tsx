@@ -52,7 +52,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
   }, [streamLines, autoScroll, initialContent]);
 
   const allLines = [
-    ...initialContent.split('\n'),
+    ...(initialContent ?? '').split('\n'),
     ...(selectedTaskId ? streamLines : []),
   ].filter((l: string) => l.trim());
 
