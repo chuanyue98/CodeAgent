@@ -13,12 +13,11 @@ export async function waitForH2(page: Page, label: string): Promise<void> {
   await expect(page.getByRole('heading', { level: 2, name: label, exact: true })).toBeVisible();
 }
 
-/** Opens the ProjectSwitcher dropdown (CSS group-hover) and picks a group.
+/** Opens the ProjectSwitcher dropdown (click toggle) and picks a group.
  *  Drives every page whose data is re-scoped by `currentGroup`. */
 export async function switchGroup(page: Page, group: string): Promise<void> {
   // The trigger is the first <button> inside <header> (the ProjectSwitcher).
-  // The dropdown's group buttons also live in <header> but come later in DOM.
-  await page.locator('header button').first().hover();
+  await page.locator('header button').first().click();
   await page.getByRole('button', { name: group, exact: true }).click();
 }
 
