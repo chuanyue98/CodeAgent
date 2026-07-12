@@ -88,6 +88,8 @@ def _parse_env_pairs(pairs: list) -> dict:
 
 def _parse_add_args_name_first(rest: list) -> tuple:
     """codex/opencode shape: mcp add <name> [--env K=V ...] (--url <url> | -- <command...>)"""
+    if not rest:
+        raise ValueError("mcp add requires a server name")
     name = rest[0]
     env_pairs, url, command = [], None, []
     i = 1
@@ -112,6 +114,8 @@ def _parse_add_args_scope_first(rest: list, has_separator: bool) -> tuple:
     i = 0
     while i < len(rest) and rest[i] in ("--scope", "--transport"):
         i += 2
+    if i >= len(rest):
+        raise ValueError("mcp add requires a server name")
     name = rest[i]
     i += 1
     env_pairs = []
@@ -184,6 +188,9 @@ def handle_mcp_add() -> None:
 
 
 def handle_mcp_remove() -> None:
+    if len(args) < 3:
+        print("mcp remove requires a server name", file=sys.stderr)
+        sys.exit(1)
     name = args[2]
     if ENGINE == "claude":
         path = Path.cwd() / ".mcp.json"

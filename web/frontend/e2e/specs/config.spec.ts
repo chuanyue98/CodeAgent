@@ -91,7 +91,7 @@ test('Deleting a (non-default) group confirms via dialog', async ({ page }) => {
   await expect(page.locator('main')).toContainText('e2e-team');
 
   const groupsSection = page.locator('section', { hasText: 'Resource Groups' });
-  page.on('dialog', (d) => d.accept());
+  page.once('dialog', (d) => d.accept());
   await groupsSection.locator('button').last().click();
   await expect(page.locator('main')).not.toContainText('e2e-team');
 });

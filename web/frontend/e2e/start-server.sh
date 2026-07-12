@@ -22,6 +22,15 @@ fi
 
 SCRATCH="$(mktemp -d -t codeagent-e2e-XXXXXX)"
 
+cleanup() {
+  local ec=$?
+  kill "${SERVER_PID:-}" 2>/dev/null || true
+  wait "${SERVER_PID:-}" 2>/dev/null || true
+  rm -rf "$SCRATCH"
+  exit "$ec"
+}
+trap cleanup EXIT INT TERM
+
 export HOME="$SCRATCH/home"
 mkdir -p "$HOME"
 
@@ -64,14 +73,5 @@ echo "🚀 Starting CodeAgent backend on port $PORT (serving $FRONTEND_DIR/dist)
 cd "$REPO_ROOT"
 uv run uvicorn core.web.server:app --host 127.0.0.1 --port "$PORT" &
 SERVER_PID=$!
-
-cleanup() {
-  local ec=$?
-  kill "$SERVER_PID" 2>/dev/null || true
-  wait "$SERVER_PID" 2>/dev/null || true
-  rm -rf "$SCRATCH"
-  exit "$ec"
-}
-trap cleanup EXIT INT TERM
 
 wait "$SERVER_PID"

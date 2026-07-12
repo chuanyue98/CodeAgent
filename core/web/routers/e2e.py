@@ -68,8 +68,28 @@ def _reseed_root(root: Path, fixture_subdir: str) -> None:
             shutil.copy2(item, dst)
 
 
+def _reseed_task_logs() -> None:
+    tasks_root = resolve_resource_path("tasks", "CA_TASKS_ROOT")
+    if tasks_root.exists():
+        for child in tasks_root.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+    else:
+        tasks_root.mkdir(parents=True, exist_ok=True)
+
+    dummy = tasks_root / "e2e-task.log"
+    dummy.write_text(
+        "[2026-07-12 10:00:00] E2E dummy log entry\n"
+        "[2026-07-12 10:00:01] Task started: e2e-demo\n"
+        "[2026-07-12 10:00:05] Task completed: e2e-demo\n",
+        encoding="utf-8",
+    )
+
+
 @router.post("/__e2e_reset")
-async def e2e_reset() -> dict:
+def e2e_reset() -> dict:
     if os.environ.get("CA_E2E") != "1":
         raise HTTPException(status_code=404, detail="Not Found")
 
@@ -92,6 +112,10 @@ async def e2e_reset() -> dict:
     _reseed_root(resolve_resource_path("prompt", "CA_PROMPTS_ROOT"), "prompts")
     reset.append("prompts")
 
+    # Clean up and re-seed task logs so the Logs page has deterministic
+    # content. All files under CA_TASKS_ROOT are removed, then a single
+    # dummy log entry is written.
+    _reseed_task_logs()
     # Seed a small analytics history so the Sessions / Audit / Analytics
     # pages have deterministic data to render and interact with (the
     # isolated backend otherwise starts with zero usage history).
