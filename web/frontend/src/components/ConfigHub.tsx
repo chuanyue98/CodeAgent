@@ -151,8 +151,7 @@ const ConfigHub: React.FC = () => {
     <div className="p-8 max-w-5xl mx-auto space-y-8 min-h-full pb-20">
       <div className="flex justify-between items-end pb-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Unified Configuration</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage projects, groups, and system settings in one place</p>
+          <p className="text-sm text-slate-500">Manage projects, groups, and system settings in one place</p>
         </div>
         <button
           onClick={handleSave}

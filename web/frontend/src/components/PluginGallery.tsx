@@ -142,7 +142,7 @@ const PluginGallery: React.FC = () => {
               {getCategoryIcon(category)}
               <span className="capitalize">{category}</span>
               <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full border ${
-                selectedCategory === category ? 'border-primary/20 bg-primary/10' : 'border-slate-100 bg-slate-50'
+                selectedCategory === category ? 'border-primary/20 bg-primary/10 text-cyan-800' : 'border-slate-100 bg-slate-50'
               }`}>
                 {pluginsData[category].length}
               </span>

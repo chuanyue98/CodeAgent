@@ -15,7 +15,7 @@ export default function ManifestDrawer() {
   return (
     <div className="w-48 glass-card flex flex-col h-full overflow-hidden">
       <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Manifest</p>
+        <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-1">Manifest</p>
         <p className="text-sm font-black text-primary capitalize truncate">{currentGroup}</p>
       </div>
       <div className="flex-1 p-4 space-y-3">

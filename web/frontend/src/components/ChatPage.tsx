@@ -345,10 +345,10 @@ export default function ChatPage() {
                 void send();
               }
             }}
-            placeholder="Message the engine..."
-            rows={2}
+            placeholder="Message the engine... (Enter to send, Shift+Enter for newline)"
+            rows={4}
             disabled={sending}
-            className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary resize-none disabled:opacity-50"
+            className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary resize-y disabled:opacity-50"
           />
           <button
             onClick={() => void send()}

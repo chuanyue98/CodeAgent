@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
 import { NavLink, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Box, Settings, Activity, Menu, X, Anchor, Zap, GitBranch, TrendingUp, Rocket, Terminal, FileText, Cpu, History, MessageSquare, Clock, Server } from 'lucide-react';
 import ProjectSwitcher from './components/ProjectSwitcher';
@@ -22,7 +22,7 @@ const CronPage = lazy(() => import('./components/CronPage'));
 const McpPage = lazy(() => import('./components/McpPage'));
 
 const navItems = [
-  { path: '/launch', label: 'Launch', icon: Rocket },
+  { path: '/dashboard', label: 'Dashboard', icon: Activity },
   { path: '/chat', label: 'Chat', icon: MessageSquare },
   { path: '/skills', label: 'Skills', icon: Box },
   { path: '/prompts', label: 'Prompts', icon: GitBranch },
@@ -30,13 +30,13 @@ const navItems = [
   { path: '/plugins', label: 'Plugins', icon: Zap },
   { path: '/mcp', label: 'MCP Servers', icon: Server },
   { path: '/config', label: 'Configuration', icon: Settings },
-  { path: '/dashboard', label: 'Dashboard', icon: Activity },
   { path: '/cron', label: 'Cron', icon: Clock },
   { path: '/logs', label: 'Logs', icon: Terminal },
   { path: '/analytics', label: 'Analytics', icon: TrendingUp },
   { path: '/sessions', label: 'Sessions', icon: FileText },
   { path: '/audit', label: 'Audit Trail', icon: History },
   { path: '/system', label: 'System', icon: Cpu },
+  { path: '/launch', label: 'Launch', icon: Rocket },
 ] as const;
 
 const PAGE_LABELS: Record<string, string> = {
@@ -61,6 +61,10 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { pathname } = useLocation();
   const pageLabel = PAGE_LABELS[pathname] ?? '';
+
+  useEffect(() => {
+    document.title = pageLabel ? `${pageLabel} - CodeAgent` : 'CodeAgent';
+  }, [pageLabel]);
 
   return (
     <div className="flex h-screen bg-transparent text-foreground overflow-hidden font-sans p-4 gap-4">
@@ -103,7 +107,7 @@ function App() {
           ))}
         </nav>
 
-        <div className="p-6 border-t border-slate-100 text-[10px] font-medium text-slate-400 text-center uppercase tracking-widest bg-slate-50/50">
+        <div className="p-6 border-t border-slate-100 text-xs font-medium text-slate-400 text-center uppercase tracking-widest bg-slate-50/50">
           {isSidebarOpen ? '© 2026 CodeAgent SYSTEM v1.0' : 'v1.0'}
         </div>
       </aside>

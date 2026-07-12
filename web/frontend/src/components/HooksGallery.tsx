@@ -109,7 +109,7 @@ const HooksGallery: React.FC = () => {
             className="w-full pl-10 pr-4 py-3 bg-white border border-slate-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary/30 transition-all text-sm placeholder:text-slate-400"
           />
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-xl text-sm font-semibold">
+        <div className="flex items-center gap-2 px-4 py-2 bg-primary/15 text-cyan-800 rounded-xl text-sm font-semibold">
           <Anchor className="w-4 h-4" />
           <span>{hooks.length} Total Hooks</span>
         </div>
