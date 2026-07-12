@@ -87,9 +87,9 @@ function StatCard({
     <div className="glass-card p-4 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
-          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest truncate">{label}</p>
+          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest truncate">{label}</p>
           <p className="text-xl font-bold text-slate-800 truncate">{value}</p>
-          {sub && <p className="text-[10px] text-slate-400 truncate">{sub}</p>}
+          {sub && <p className="text-[10px] text-slate-500 truncate">{sub}</p>}
         </div>
         <div className={`p-2 rounded-lg shrink-0 ${iconBg}`}>
           <Icon className={`w-4 h-4 ${iconColor}`} />
@@ -255,7 +255,7 @@ const Analytics: React.FC = () => {
               className={`px-4 py-1.5 text-sm font-semibold rounded-lg transition-all ${
                 tab === t.id
                   ? 'bg-white text-primary shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
+                  : 'text-slate-600 hover:text-slate-800'
               }`}
             >
               {t.label}
@@ -296,13 +296,13 @@ const Analytics: React.FC = () => {
             />
             <StatCard
               label="Input Cost"
-              value={fmtCost(engines.reduce((s, e) => s + e.inputTokens, 0) * 0.000003)}
+              value={fmtCost(modelStats.reduce((s, m) => s + m.inputCost, 0))}
               sub={fmtTokens(totalInput) + ' tokens'}
               Icon={ArrowDownRight} iconColor="text-purple-600" iconBg="bg-purple-100"
             />
             <StatCard
               label="Output Cost"
-              value={fmtCost(engines.reduce((s, e) => s + e.outputTokens, 0) * 0.000015)}
+              value={fmtCost(modelStats.reduce((s, m) => s + m.outputCost, 0))}
               sub={fmtTokens(totalOutput) + ' tokens'}
               Icon={ArrowUpRight} iconColor="text-orange-600" iconBg="bg-orange-100"
             />
@@ -397,17 +397,17 @@ const Analytics: React.FC = () => {
 
               {/* Session mini-stats */}
               <div className="glass-card p-4 flex-1">
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
                   <Terminal className="w-3 h-3" /> Recent Sessions
                 </p>
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-center">
                     <p className="text-lg font-bold text-blue-600">{totalSessions}</p>
-                    <p className="text-[9px] text-slate-400 uppercase tracking-wide">Total</p>
+                    <p className="text-[9px] text-slate-600 uppercase tracking-wide">Total</p>
                   </div>
                   <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-center">
-                    <p className="text-lg font-bold text-green-600">{fmtCost(avgCostPerSession)}</p>
-                    <p className="text-[9px] text-slate-400 uppercase tracking-wide">Avg / session</p>
+                    <p className="text-lg font-bold text-green-700">{fmtCost(avgCostPerSession)}</p>
+                    <p className="text-[9px] text-slate-600 uppercase tracking-wide">Avg / session</p>
                   </div>
                 </div>
                 <div className="space-y-1.5">

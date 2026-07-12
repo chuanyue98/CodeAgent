@@ -123,12 +123,14 @@ export default function SessionsPage() {
           <div className="flex gap-2">
             <input
               type="date"
+              aria-label="Date range start"
               value={dateStart}
               onChange={e => setDateStart(e.target.value)}
               className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
             />
             <input
               type="date"
+              aria-label="Date range end"
               value={dateEnd}
               onChange={e => setDateEnd(e.target.value)}
               className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"

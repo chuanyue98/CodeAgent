@@ -159,6 +159,7 @@ const SkillGallery: React.FC = () => {
             <div className="p-6 border-b border-slate-200 flex items-center gap-4 bg-white">
               <button
                 onClick={() => setSelectedSkill(null)}
+                aria-label="Back to skill list"
                 className="p-2 hover:bg-slate-100 rounded-xl transition-all border border-slate-200"
               >
                 <ChevronRight className="w-5 h-5 rotate-180" />
@@ -171,6 +172,7 @@ const SkillGallery: React.FC = () => {
                 <span className="text-xs font-semibold text-slate-600">Active in {currentGroup}</span>
                 <button
                   onClick={(e) => toggleSkillStatus(selectedSkill.id, e)}
+                  aria-label={isSkillActive(selectedSkill.id) ? 'Deactivate skill' : 'Activate skill'}
                   className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
                     isSkillActive(selectedSkill.id) ? 'bg-primary' : 'bg-slate-200'
                   }`}
@@ -244,6 +246,7 @@ const SkillGallery: React.FC = () => {
                       {/* Toggle Switch */}
                       <button
                         onClick={(e) => toggleSkillStatus(skill.id, e)}
+                        aria-label={`Toggle ${skill.name} active status`}
                         className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
                           isSkillActive(skill.id) ? 'bg-primary' : 'bg-slate-200'
                         }`}

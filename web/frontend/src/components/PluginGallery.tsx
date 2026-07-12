@@ -162,6 +162,7 @@ const PluginGallery: React.FC = () => {
             <div className="p-6 border-b border-slate-200 flex items-center gap-4 bg-white">
               <button
                 onClick={() => setSelectedPlugin(null)}
+                aria-label="Back to plugin list"
                 className="p-2 hover:bg-slate-100 rounded-xl transition-all border border-slate-200"
               >
                 <ChevronRight className="w-5 h-5 rotate-180" />
@@ -174,6 +175,7 @@ const PluginGallery: React.FC = () => {
                 <span className="text-xs font-semibold text-slate-600">Active in {currentGroup}</span>
                 <button
                   onClick={(e) => togglePluginStatus(selectedPlugin.id, e)}
+                  aria-label={isPluginActive(selectedPlugin.id) ? 'Deactivate plugin' : 'Activate plugin'}
                   className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
                     isPluginActive(selectedPlugin.id) ? 'bg-primary' : 'bg-slate-200'
                   }`}
@@ -247,6 +249,7 @@ const PluginGallery: React.FC = () => {
                       {/* Toggle Switch */}
                       <button
                         onClick={(e) => togglePluginStatus(plugin.id, e)}
+                        aria-label={`Toggle ${plugin.name} active status`}
                         className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
                           isPluginActive(plugin.id) ? 'bg-primary' : 'bg-slate-200'
                         }`}

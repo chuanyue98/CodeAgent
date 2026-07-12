@@ -125,6 +125,7 @@ export default function CronPage() {
         <div>
           <label className="text-xs text-slate-400 font-medium block mb-1">Task</label>
           <select
+            aria-label="Task"
             value={taskName}
             onChange={e => setTaskName(e.target.value)}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
@@ -140,6 +141,7 @@ export default function CronPage() {
         <div>
           <label className="text-xs text-slate-400 font-medium block mb-1">Engine</label>
           <select
+            aria-label="Engine"
             value={engine}
             onChange={e => setEngine(e.target.value)}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
@@ -190,7 +192,7 @@ export default function CronPage() {
 
         <div className="flex-1 overflow-y-auto space-y-2">
           {schedules.length === 0 && (
-            <p className="text-sm text-slate-400 text-center py-8">
+            <p className="text-sm text-slate-500 text-center py-8">
               No schedules yet. Create one to run a task automatically.
             </p>
           )}
@@ -225,7 +227,7 @@ export default function CronPage() {
                     {schedule.cron_expr}
                   </span>
                 </div>
-                <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-3">
+                <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-3">
                   <span>Next: {formatTimestamp(schedule.next_run_at)}</span>
                   {schedule.last_run_status && (
                     <span>
