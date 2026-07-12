@@ -7,8 +7,6 @@ import { type Page, type Locator, expect } from '@playwright/test';
  * layout change touches one place, not fifteen specs.
  */
 
-const PAGE_HEADER = 'h2';
-
 /** Waits for a page to have mounted — every route renders its label as the
  *  <h2> in App.tsx's header, so this is the universal "did we render" signal. */
 export async function waitForH2(page: Page, label: string): Promise<void> {

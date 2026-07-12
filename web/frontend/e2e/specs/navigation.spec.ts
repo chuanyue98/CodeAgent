@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { resetBackend } from '../lib/reset';
 import { waitForH2, switchGroup } from '../lib/ui';
 

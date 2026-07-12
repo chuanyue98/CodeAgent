@@ -4,7 +4,6 @@ import {
   waitForH2,
   typeSearch,
   cardByText,
-  toggleInCard,
   openCard,
   backFromDetail,
 } from '../lib/ui';

@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { resetBackend } from '../lib/reset';
-import { waitForH2, typeSearch } from '../lib/ui';
+import { waitForH2 } from '../lib/ui';
 
 test.beforeEach(async ({ baseURL }) => {
   await resetBackend(baseURL!);
