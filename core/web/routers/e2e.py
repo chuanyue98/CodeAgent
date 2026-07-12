@@ -75,13 +75,9 @@ async def e2e_reset() -> dict:
 
     reset: list[str] = []
 
-    config_path = Path(
-        os.environ.get("CA_CONFIG_PATH", str(ROOT_DIR / "config.json"))
-    )
+    config_path = Path(os.environ.get("CA_CONFIG_PATH", str(ROOT_DIR / "config.json")))
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(
-        json.dumps(_baseline_config(), indent=2), encoding="utf-8"
-    )
+    config_path.write_text(json.dumps(_baseline_config(), indent=2), encoding="utf-8")
     reset.append("config")
 
     _reseed_root(resolve_resource_path("skills", "CA_SKILLS_ROOT"), "skills")
