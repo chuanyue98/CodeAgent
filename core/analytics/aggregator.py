@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from core.analytics.models import (
@@ -11,6 +12,23 @@ from core.analytics.models import (
     SessionUsage,
 )
 from core.analytics.pricing import calculate_cost
+
+
+def _parse_ts(ts: str) -> datetime:
+    """Parse an ISO 8601 timestamp string to a UTC-aware datetime for comparison.
+
+    Handles ``Z`` suffix and mixed timezone offsets (e.g. ``+08:00``)
+    that heterogeneous engine parsers may produce.
+    Returns ``datetime.min`` (UTC) on parse failure or empty input.
+    """
+    try:
+        normalized = ts.replace("Z", "+00:00") if ts else ""
+        dt = datetime.fromisoformat(normalized) if normalized else datetime.min
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except (ValueError, TypeError):
+        return datetime.min.replace(tzinfo=timezone.utc)
 
 
 def _date(ts: str) -> str:
@@ -134,7 +152,7 @@ def aggregate(entries: List[RawUsageEntry]) -> Dict[str, Any]:
             )
         su = sessions[s_key]
         update_usage(su, e, cost)
-        if e.timestamp > su.last_activity:
+        if _parse_ts(e.timestamp) > _parse_ts(su.last_activity):
             su.last_activity = e.timestamp
         _merge_breakdown(session_bds[s_key], e, cost)
 

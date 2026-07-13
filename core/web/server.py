@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os
 from contextlib import asynccontextmanager
 
@@ -54,65 +53,73 @@ DEFAULT_GROUP_CATEGORIES: dict[str, list[str]] = {
 
 
 def initialize_default_groups() -> None:
-    """Seed config.json['groups'] with scanned defaults for any group not yet configured."""
-    if not CONFIG_PATH.exists():
-        return
+    """Seed config.json['groups'] with scanned defaults for any group not yet configured.
+
+    Uses ``ConfigService.modify_config`` for an atomic read-modify-write so
+    that concurrent scheduler / web-request writes don't clobber each other.
+    """
+    config_service = ConfigService(CONFIG_PATH)
+
+    def _modifier(config_data: dict) -> dict:
+        skills_root, prompts_root, hooks_root = _get_roots()
+        groups: dict = config_data.get("groups", {})
+        skill_scanner = SkillScanner(skills_root)
+        scanned_skills, _ = skill_scanner.scan()
+        prompt_scanner = PromptScanner(prompts_root)
+        scanned_prompts, _ = prompt_scanner.scan()
+
+        plugin_scanner = PluginScanner(
+            resolve_resource_path("plugins", "CA_PLUGINS_ROOT")
+        )
+        scanned_plugins, _ = plugin_scanner.scan()
+
+        changed = False
+        for group_name, categories in DEFAULT_GROUP_CATEGORIES.items():
+            prompt_defaults = [
+                prompt_group
+                for prompt_group in DEFAULT_GROUP_PROMPTS.get(group_name, [])
+                if prompt_group in scanned_prompts
+            ]
+            if group_name not in groups:
+                skills_list = [
+                    f"{cat}/{skill}"
+                    for cat in categories
+                    for skill in scanned_skills.get(cat, [])
+                ]
+                plugins_list = [
+                    f"{cat}/{plugin}"
+                    for cat in categories
+                    for plugin in scanned_plugins.get(cat, [])
+                ]
+                groups[group_name] = {
+                    "skills": skills_list,
+                    "prompts": prompt_defaults,
+                    "hooks": [],
+                    "plugins": plugins_list,
+                }
+                changed = True
+                print(
+                    f"✅ Initialized group '{group_name}' with {len(skills_list)} skills"
+                )
+
+            else:
+                if "prompts" not in groups[group_name]:
+                    groups[group_name]["prompts"] = prompt_defaults
+                    changed = True
+
+                if "plugins" not in groups[group_name]:
+                    groups[group_name]["plugins"] = []
+                    changed = True
+
+        if changed:
+            config_data["groups"] = groups
+
+        return config_data
+
     try:
-        with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
-            config_data = json.load(f)
+        config_service.modify_config(_modifier)
     except Exception:
-        return
-
-    skills_root, prompts_root, hooks_root = _get_roots()
-    groups: dict = config_data.get("groups", {})
-    skill_scanner = SkillScanner(skills_root)
-    scanned_skills, _ = skill_scanner.scan()
-    prompt_scanner = PromptScanner(prompts_root)
-    scanned_prompts, _ = prompt_scanner.scan()
-
-    plugin_scanner = PluginScanner(resolve_resource_path("plugins", "CA_PLUGINS_ROOT"))
-    scanned_plugins, _ = plugin_scanner.scan()
-
-    changed = False
-    for group_name, categories in DEFAULT_GROUP_CATEGORIES.items():
-        prompt_defaults = [
-            prompt_group
-            for prompt_group in DEFAULT_GROUP_PROMPTS.get(group_name, [])
-            if prompt_group in scanned_prompts
-        ]
-        if group_name not in groups:
-            skills_list = [
-                f"{cat}/{skill}"
-                for cat in categories
-                for skill in scanned_skills.get(cat, [])
-            ]
-            plugins_list = [
-                f"{cat}/{plugin}"
-                for cat in categories
-                for plugin in scanned_plugins.get(cat, [])
-            ]
-            groups[group_name] = {
-                "skills": skills_list,
-                "prompts": prompt_defaults,
-                "hooks": [],
-                "plugins": plugins_list,
-            }
-            changed = True
-            print(f"✅ Initialized group '{group_name}' with {len(skills_list)} skills")
-
-        else:
-            if "prompts" not in groups[group_name]:
-                groups[group_name]["prompts"] = prompt_defaults
-                changed = True
-
-            if "plugins" not in groups[group_name]:
-                groups[group_name]["plugins"] = []
-                changed = True
-
-    if changed:
-        config_data["groups"] = groups
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(config_data, f, indent=2, ensure_ascii=False)
+        pass  # config file may not exist yet — silently skip
 
 
 @asynccontextmanager

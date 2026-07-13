@@ -3,6 +3,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -14,6 +15,22 @@ from core.prompt_kit import prompt_general, prompt_review
 from core.prompt_scanner import PromptScanner, get_prompts_to_inject
 from core.services.config_service import ConfigService
 from core.skill_scanner import SkillScanner, get_skills_to_mount
+
+
+def register_signal_handler() -> None:
+    """Install a SIGTERM handler that triggers a clean exit.
+
+    The handler raises ``SystemExit`` via ``sys.exit()``, which ensures
+    ``finally`` blocks execute — so per-engine cleanup (restore settings,
+    remove symlinks, …) runs before the process terminates.  SIGKILL
+    cannot be caught, but this covers the common case of OS/service-manager
+    shutdown and manual ``kill <pid>``.
+    """
+
+    def _sigterm_handler(signum: int, frame: object) -> None:
+        sys.exit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _sigterm_handler)
 
 
 class EnvironmentManager:
@@ -214,7 +231,7 @@ class BaseEngine:
             List[Path]: A list of absolute paths to skill search roots.
         """
         skill_path_cfg = self.full_config.get("paths", {}).get("skills", "skills")
-        default_root = (self.root_dir / skill_path_cfg).resolve()
+        default_root = (self._resolve_resource_root() / skill_path_cfg).resolve()
 
         cfg = self.full_config.get("skills", {})
         mappings = cfg.get("project_skill_root_mapping", [])
@@ -747,7 +764,7 @@ class BaseEngine:
         settings_path = (Path.cwd() / settings_rel_path).absolute()
         settings_path.parent.mkdir(parents=True, exist_ok=True)
 
-        backup_path = settings_path.with_suffix(".json.bak")
+        backup_path = settings_path.with_suffix(settings_path.suffix + ".bak")
         if settings_path.exists() and not backup_path.exists():
             shutil.copy2(settings_path, backup_path)
             print(f"💾 Created safety backup: {backup_path.name}")
