@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from core.console import configure_console_encoding
+from core.resource_locator import get_bundled_resource_root, get_default_config_path
 
 UI_API_PORT = 8000
 UI_DEV_SERVER_HOST = "127.0.0.1"
@@ -41,7 +42,7 @@ def _project_root():
 
 def load_config():
     root = _project_root()
-    config_path = root / "config.json"
+    config_path = get_default_config_path(root)
     default_config = {
         "default_mode": "local",
         "language": "hybrid",
@@ -79,7 +80,11 @@ def _is_ui_dev_server_running(host=UI_DEV_SERVER_HOST, port=UI_DEV_SERVER_PORT):
 
 
 def _frontend_root():
-    return _project_root() / "web" / "frontend"
+    root = _project_root()
+    source_frontend = root / "web" / "frontend"
+    if source_frontend.exists():
+        return source_frontend
+    return get_bundled_resource_root(root) / "web" / "frontend"
 
 
 def _frontend_dist_exists():

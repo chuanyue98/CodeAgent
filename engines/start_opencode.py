@@ -38,10 +38,29 @@ class OpenCodeEngine(BaseEngine):
         """为 OpenCode 优化插件挂载逻辑：支持扁平化链接并自动生成通用适配器"""
         plugins_to_mount = self.get_plugins_to_mount()
         if not plugins_to_mount:
+            self.cleanup_plugins_link()
             return
 
         link_dir = self._get_plugin_link_dir()
         link_dir.mkdir(parents=True, exist_ok=True)
+
+        desired_native_names: set[str] = set()
+        for plugin_meta in plugins_to_mount:
+            plugin_src_str = plugin_meta.get("_plugin_dir")
+            if not plugin_src_str:
+                continue
+            native_dir = Path(plugin_src_str).resolve() / ".opencode" / "plugins"
+            if native_dir.is_dir():
+                desired_native_names.update(item.name for item in native_dir.iterdir())
+        self._remove_stale_managed_links(link_dir, desired_native_names)
+
+        # Generated adapters are recreated from the current plugin selection.
+        for item in link_dir.glob("ca_adapter_*.js"):
+            try:
+                if "_ca_injected: true" in item.read_text(encoding="utf-8")[:500]:
+                    item.unlink()
+            except OSError:
+                pass
 
         mounted_count = 0
         for plugin_meta in plugins_to_mount:
@@ -58,14 +77,22 @@ class OpenCodeEngine(BaseEngine):
                 # 链接内部所有的内容（根据 Review 建议：链接所有文件和文件夹而不仅仅是 JS）
                 for item in opencode_inner_plugins.iterdir():
                     target_link = link_dir / item.name
-                    self._safe_remove_link(target_link)
-                    self._create_skill_link(item, target_link)
-                    mounted_count += 1
+                    if self._ensure_managed_link(item, target_link, link_dir):
+                        mounted_count += 1
                 continue
 
             # 2. 如果没有原生适配器，自动生成一个通用适配器
             adapter_content = self._generate_universal_adapter(plugin_name, plugin_src)
             adapter_file = link_dir / f"ca_adapter_{plugin_name.replace('/', '_')}.js"
+
+            if adapter_file.exists():
+                try:
+                    existing = adapter_file.read_text(encoding="utf-8")
+                except OSError:
+                    existing = ""
+                if "_ca_injected: true" not in existing[:500]:
+                    print(f"⚠️ Refusing to replace unmanaged path: {adapter_file}")
+                    continue
 
             # 写入生成的适配器代码 (带有 _ca_injected 标记以便清理)
             with open(adapter_file, "w", encoding="utf-8") as f:
@@ -174,12 +201,13 @@ export default async ({{ client }}) => {{
         if not link_dir.exists():
             return
 
+        self._cleanup_link_dir(link_dir)
+
+        if not link_dir.exists():
+            return
         for item in link_dir.iterdir():
-            # 1. 如果是符号链接，直接删除
-            if self._is_windows_link(item) or item.is_symlink():
-                self._safe_remove_link(item)
-            # 2. 如果是 CodeAgent 生成的临时适配器文件，也删除
-            elif item.is_file() and item.name.startswith("ca_adapter_"):
+            # 仅删除带有明确 CodeAgent 标记的生成适配器。
+            if item.is_file() and item.name.startswith("ca_adapter_"):
                 try:
                     with open(item, "r", encoding="utf-8") as f:
                         if "_ca_injected: true" in f.read(500):
@@ -251,36 +279,41 @@ def main():
         if task_prompt:
             full_prompt = f"{full_prompt}\n\n{task_prompt}"
 
-    # 使用临时文件引导模式，解决命令行超长问题
-    concise_msg = engine.write_temp_prompt(full_prompt)
-
-    # 统一技能链接 (挂载到 .opencode/skills)
-    engine.ensure_skills_link(".opencode/skills")
-    # 统一插件链接
-    engine.ensure_plugins_link()
-
-    # 注入动态钩子
-    resolved_hooks = engine.get_hooks_to_inject()
-    engine.inject_hooks_to_settings(".opencode/settings.json", resolved_hooks)
-
-    env = engine.env_manager.get_env()
-
-    register_signal_handler()
-
+    resource_lock = engine.acquire_resource_lock(
+        Path.cwd() / ".opencode" / ".codeagent-session.lock"
+    )
     try:
+        # 使用临时文件引导模式，解决命令行超长问题
+        concise_msg = engine.write_temp_prompt(full_prompt)
+
+        # 统一技能链接 (挂载到 .opencode/skills)
+        engine.ensure_skills_link(".opencode/skills")
+        # 统一插件链接
+        engine.ensure_plugins_link()
+
+        # 注入动态钩子
+        resolved_hooks = engine.get_hooks_to_inject()
+        engine.inject_hooks_to_settings(".opencode/settings.json", resolved_hooks)
+
+        env = engine.env_manager.get_env()
+        register_signal_handler()
+
         final_command = engine.build_command(concise_msg, args.non_interactive)
         print(f"🚀 Launching {engine.name}...")
 
         engine.run_shell(final_command, env)
     finally:
-        # 1. 还原配置到注入前状态
-        engine.restore_settings(".opencode/settings.json")
-        # 2. 清理技能链接
-        engine.cleanup_skills_link(".opencode/skills")
-        # 3. 清理插件链接
-        engine.cleanup_plugins_link()
-        # 4. 使用基类统一清理临时提示词
-        engine.cleanup_temp_prompt()
+        try:
+            # 1. 还原配置到注入前状态
+            engine.restore_settings(".opencode/settings.json")
+            # 2. 清理技能链接
+            engine.cleanup_skills_link(".opencode/skills")
+            # 3. 清理插件链接
+            engine.cleanup_plugins_link()
+            # 4. 使用基类统一清理临时提示词
+            engine.cleanup_temp_prompt()
+        finally:
+            engine.release_resource_lock(resource_lock)
 
 
 if __name__ == "__main__":

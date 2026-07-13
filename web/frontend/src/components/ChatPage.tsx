@@ -78,6 +78,7 @@ export default function ChatPage() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeProjectPath, setActiveProjectPath] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [turnId, setTurnId] = useState<string | null>(null);
@@ -134,12 +135,14 @@ export default function ChatPage() {
 
   const startNewSession = () => {
     setActiveSessionId(null);
+    setActiveProjectPath(null);
     setMessages([]);
     setError(null);
   };
 
   const continueSession = async (session: SessionSummary) => {
     setActiveSessionId(session.session_id);
+    setActiveProjectPath(session.project_path);
     setError(null);
     try {
       const res = await fetch(
@@ -155,10 +158,14 @@ export default function ChatPage() {
         );
       } else {
         setError('Failed to load session history');
+        setActiveSessionId(null);
+        setActiveProjectPath(null);
         setMessages([]);
       }
     } catch {
       setError('Failed to load session history');
+      setActiveSessionId(null);
+      setActiveProjectPath(null);
       setMessages([]);
     }
   };
@@ -210,6 +217,7 @@ export default function ChatPage() {
         message: text,
         session_id: activeSessionId,
         group: currentGroup || 'common',
+        project_path: activeProjectPath,
       });
       setTurnId(status.task_id);
     } catch (e) {

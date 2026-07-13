@@ -170,23 +170,26 @@ def main():
         if task_prompt:
             full_prompt = f"{full_prompt}\n\n{task_prompt}"
 
-    # 临时文件处理
-    concise_msg = engine.write_temp_prompt(full_prompt)
-
-    # 统一技能链接
-    engine.ensure_skills_link(".gemini/skills")
-    # 挂载插件 (创建全局临时映射以满足 Gemini CLI 加载要求)
-    engine.ensure_plugins_link()
-
-    # 注入动态钩子
-    resolved_hooks = engine.get_hooks_to_inject()
-    engine.inject_hooks_to_settings(".gemini/settings.json", resolved_hooks)
-    # 注册已挂载插件
-    engine.inject_plugins_to_settings(".gemini/settings.json")
-
-    register_signal_handler()
-
+    resource_lock = engine.acquire_resource_lock(
+        Path.home() / ".gemini" / ".codeagent-session.lock"
+    )
     try:
+        # 临时文件处理
+        concise_msg = engine.write_temp_prompt(full_prompt)
+
+        # 统一技能链接
+        engine.ensure_skills_link(".gemini/skills")
+        # 挂载插件 (创建全局临时映射以满足 Gemini CLI 加载要求)
+        engine.ensure_plugins_link()
+
+        # 注入动态钩子
+        resolved_hooks = engine.get_hooks_to_inject()
+        engine.inject_hooks_to_settings(".gemini/settings.json", resolved_hooks)
+        # 注册已挂载插件
+        engine.inject_plugins_to_settings(".gemini/settings.json")
+
+        register_signal_handler()
+
         final_cmd = engine.build_command(
             concise_msg,
             selected_model,
@@ -198,14 +201,17 @@ def main():
         )
         engine.run_engine(final_cmd, env)
     finally:
-        # 1. 还原配置到注入前状态
-        engine.restore_settings(".gemini/settings.json")
-        # 2. 清理技能链接，保持项目纯净
-        engine.cleanup_skills_link(".gemini/skills")
-        # 3. 清理插件链接，避免 ~/.gemini/extensions/ 下符号链接泄漏
-        engine.cleanup_plugins_link()
-        # 4. 使用基类统一清理临时提示词
-        engine.cleanup_temp_prompt()
+        try:
+            # 1. 还原配置到注入前状态
+            engine.restore_settings(".gemini/settings.json")
+            # 2. 清理技能链接，保持项目纯净
+            engine.cleanup_skills_link(".gemini/skills")
+            # 3. 清理插件链接，避免 ~/.gemini/extensions/ 下符号链接泄漏
+            engine.cleanup_plugins_link()
+            # 4. 使用基类统一清理临时提示词
+            engine.cleanup_temp_prompt()
+        finally:
+            engine.release_resource_lock(resource_lock)
 
 
 if __name__ == "__main__":

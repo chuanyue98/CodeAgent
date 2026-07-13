@@ -7,6 +7,8 @@ import argparse
 from pathlib import Path
 from typing import Callable, List
 
+from core.resource_locator import get_bundled_resource_root
+
 VERSION = "0.2"
 
 EXCLUDED_PROMPT_FILES = {"IMPLEMENTATION_PLAN.md", "README.md"}
@@ -62,9 +64,8 @@ def prompt_general(
     Returns:
         The fully synthesized prompt string.
     """
-    root_dir = Path(__file__).resolve().parent.parent
     if prompt_root is None:
-        prompt_root = root_dir / "prompt"
+        prompt_root = get_bundled_resource_root() / "prompt"
 
     # Default groups to load
     if groups is None:

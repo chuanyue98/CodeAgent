@@ -108,6 +108,11 @@ def _parse_claude_file(
                 if input_t == 0 and output_t == 0:
                     continue
 
+                # Session rows normally contain the exact cwd.  The parent
+                # directory encoding cannot distinguish path separators from
+                # dashes in directory names, so use cwd when present.
+                exact_project_path = row.get("cwd") or project_path
+
                 entries.append(
                     RawUsageEntry(
                         timestamp=row.get("timestamp", ""),
@@ -117,7 +122,7 @@ def _parse_claude_file(
                         output_tokens=output_t,
                         cache_creation_tokens=cache_create,
                         cache_read_tokens=cache_read,
-                        project_path=project_path,
+                        project_path=exact_project_path,
                         target="claude",
                     )
                 )

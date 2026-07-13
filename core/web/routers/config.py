@@ -1,21 +1,14 @@
-import os
-from pathlib import Path
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.services.config_service import ConfigService
+from core.resource_locator import get_default_config_path
 
 router = APIRouter(prefix="/api")
 
 
 def get_config_path():
-    # Use environment variable if set (for tests), otherwise default to ROOT_DIR
-    env_path = os.environ.get("CA_CONFIG_PATH")
-    if env_path:
-        return Path(env_path)
-    root_dir = Path(__file__).resolve().parent.parent.parent.parent
-    return root_dir / "config.json"
+    return get_default_config_path()
 
 
 def _load_config(service: ConfigService) -> dict:

@@ -6,13 +6,15 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple, cast
 
 from core.hook_scanner import HookScanner, get_hooks_to_inject
 from core.plugin_scanner import PluginScanner, get_plugins_to_mount
 from core.prompt_kit import prompt_general, prompt_review
 from core.prompt_scanner import PromptScanner, get_prompts_to_inject
+from core.resource_locator import get_bundled_resource_root, get_default_config_path
 from core.services.config_service import ConfigService
 from core.skill_scanner import SkillScanner, get_skills_to_mount
 
@@ -96,6 +98,7 @@ class BaseEngine:
         self.full_config = self._load_full_config()
         self.env_manager = EnvironmentManager(self.root_dir)
         self.temp_prompt_name = ".ca_prompt.tmp"
+        self._temp_prompt_paths: set[Path] = set()
         resource_root = self._resolve_resource_root()
         self.skill_scanner = SkillScanner(resource_root / "skills")
         self.prompt_scanner = PromptScanner(resource_root / "prompt")
@@ -117,7 +120,7 @@ class BaseEngine:
             ).resolve()
             if resolved.is_dir():
                 return resolved
-        return self.root_dir
+        return get_bundled_resource_root(self.root_dir)
 
     def _load_full_config(self) -> dict:
         """Loads the complete configuration using ConfigService.
@@ -125,7 +128,7 @@ class BaseEngine:
         Returns:
             dict: The loaded configuration dictionary, or an empty dict if not found or invalid.
         """
-        config_service = ConfigService(self.root_dir / "config.json")
+        config_service = ConfigService(get_default_config_path(self.root_dir))
         config, _ = config_service.get_config()
         return config
 
@@ -433,8 +436,21 @@ class BaseEngine:
         Returns:
             str: A guidance message for the agent on how to load the prompt.
         """
-        temp_file_path = self.root_dir / self.temp_prompt_name
-        temp_file_path.write_text(prompt, encoding="utf-8")
+        prompt_dir = Path(tempfile.gettempdir()) / "codeagent-prompts"
+        prompt_dir.mkdir(parents=True, exist_ok=True)
+        fd, temp_name = tempfile.mkstemp(
+            dir=prompt_dir, prefix="ca_prompt.", suffix=".tmp", text=True
+        )
+        temp_file_path = Path(temp_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(prompt)
+        except Exception:
+            temp_file_path.unlink(missing_ok=True)
+            raise
+        if not hasattr(self, "_temp_prompt_paths"):
+            self._temp_prompt_paths = set()
+        self._temp_prompt_paths.add(temp_file_path)
 
         abs_path = str(temp_file_path.absolute()).replace("\\", "/")
         read_cmd = "Get-Content" if os.name == "nt" else "cat"
@@ -447,10 +463,57 @@ class BaseEngine:
         )
 
     def cleanup_temp_prompt(self):
-        """Removes the temporary prompt file from the project root."""
-        temp_file_path = self.root_dir / self.temp_prompt_name
-        if temp_file_path.exists():
-            temp_file_path.unlink()
+        """Removes temporary prompt files created by this engine instance."""
+        paths: set[Path] = getattr(self, "_temp_prompt_paths", set())
+        for temp_file_path in list(paths):
+            temp_file_path.unlink(missing_ok=True)
+            paths.discard(temp_file_path)
+
+    def acquire_resource_lock(self, lock_path: Path) -> BinaryIO:
+        """Acquire an inter-process lock for mutable engine resources."""
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = open(lock_path, "a+b")
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write(b"\0")
+            handle.flush()
+        handle.seek(0)
+        if os.name == "nt":
+            import msvcrt
+
+            lock_fn = getattr(msvcrt, "locking")
+            lock_mode = getattr(msvcrt, "LK_LOCK")
+            lock_fn(
+                handle.fileno(),
+                lock_mode,
+                1,
+            )
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        return handle
+
+    def release_resource_lock(self, handle: BinaryIO) -> None:
+        """Release a handle returned by :meth:`acquire_resource_lock`."""
+        try:
+            handle.seek(0)
+            if os.name == "nt":
+                import msvcrt
+
+                unlock_fn = getattr(msvcrt, "locking")
+                unlock_mode = getattr(msvcrt, "LK_UNLCK")
+                unlock_fn(
+                    handle.fileno(),
+                    unlock_mode,
+                    1,
+                )
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
 
     def run_shell(self, cmd: List[str], env: dict):
         """Executes a command in a subprocess with the given environment.
@@ -487,10 +550,10 @@ class BaseEngine:
             target_link_path (str): The relative path to the directory where skills should be linked.
         """
         link_path = (Path.cwd() / target_link_path).absolute()
-        self._cleanup_link_dir(link_path)
 
         skills_to_mount = self.get_skills_to_mount()
         if not skills_to_mount:
+            self._cleanup_link_dir(link_path)
             return
 
         skill_roots = self._get_skill_search_roots()
@@ -536,6 +599,7 @@ class BaseEngine:
                 "Matched skill groups exist, but none of the candidate directories contain a valid SKILL.md. "
                 f"Search roots: {searched_roots}"
             )
+            self._cleanup_link_dir(link_path)
             return
 
         print(
@@ -544,13 +608,13 @@ class BaseEngine:
         )
         link_path.mkdir(parents=True, exist_ok=True)
 
+        desired_names = {target_name for target_name, _ in resolved_skills}
+        self._remove_stale_managed_links(link_path, desired_names)
+
         for target_name, skill_src in resolved_skills:
             target_skill_path = link_path / target_name
-            if target_skill_path.exists():
-                self._safe_remove_link(target_skill_path)
-
             try:
-                self._create_skill_link(skill_src, target_skill_path)
+                self._ensure_managed_link(skill_src, target_skill_path, link_path)
             except Exception as e:
                 print(f"⚠️ Failed to link skill '{target_name}': {e}")
 
@@ -577,13 +641,19 @@ class BaseEngine:
         No-op if ``_get_plugin_link_dir()`` returns None.
         """
         plugins_to_mount = self.get_plugins_to_mount()
-        if not plugins_to_mount:
-            return
-
         link_dir = self._get_plugin_link_dir()
         if link_dir is None:
             return
+        if not plugins_to_mount:
+            self._cleanup_link_dir(link_dir)
+            return
         link_dir.mkdir(parents=True, exist_ok=True)
+        desired_names = {
+            str(plugin_meta.get("name"))
+            for plugin_meta in plugins_to_mount
+            if plugin_meta.get("name")
+        }
+        self._remove_stale_managed_links(link_dir, desired_names)
 
         mounted_count = 0
         for plugin_meta in plugins_to_mount:
@@ -596,24 +666,9 @@ class BaseEngine:
             plugin_src = Path(plugin_src_str).resolve()
             target_link = link_dir / plugin_name
 
-            if target_link.exists():
-                try:
-                    if self._is_windows_link(target_link) or target_link.is_symlink():
-                        if target_link.resolve() == plugin_src:
-                            continue
-                        else:
-                            self._safe_remove_link(target_link)
-                    else:
-                        print(
-                            f"⚠️ Warning: '{plugin_name}' exists as a real directory in global exts. Skipping."
-                        )
-                        continue
-                except Exception:
-                    self._safe_remove_link(target_link)
-
             try:
-                self._create_skill_link(plugin_src, target_link)
-                mounted_count += 1
+                if self._ensure_managed_link(plugin_src, target_link, link_dir):
+                    mounted_count += 1
             except Exception as e:
                 print(f"⚠️ Failed to link plugin '{plugin_name}': {e}")
 
@@ -626,19 +681,10 @@ class BaseEngine:
         Only removes items verified to be links (symlinks or Windows junctions).
         No-op if ``_get_plugin_link_dir()`` returns None.
         """
-        plugins_to_mount = self.get_plugins_to_mount()
-        if not plugins_to_mount:
-            return
-
         link_dir = self._get_plugin_link_dir()
         if link_dir is None:
             return
-        for plugin_meta in plugins_to_mount:
-            plugin_name = plugin_meta["name"]
-            target_link = link_dir / plugin_name
-
-            if self._is_windows_link(target_link) or target_link.is_symlink():
-                self._safe_remove_link(target_link)
+        self._cleanup_link_dir(link_dir)
 
     def _create_skill_link(self, source: Path, target: Path):
         """Creates a symbolic link or Windows junction from source to target.
@@ -675,6 +721,10 @@ class BaseEngine:
         if not path.exists() and not path.is_symlink():
             return
 
+        if not (self._is_windows_link(path) or path.is_symlink()):
+            print(f"⚠️ Refusing to remove unmanaged path: {path}")
+            return
+
         try:
             if os.name == "nt":
                 if path.is_dir():
@@ -690,8 +740,94 @@ class BaseEngine:
         except Exception as e:
             print(f"⚠️ Security: Failed to remove link {path}: {e}")
 
+    _LINK_MANIFEST = ".codeagent-links.json"
+
+    def _load_link_manifest(self, link_path: Path) -> dict[str, str]:
+        manifest_path = link_path / self._LINK_MANIFEST
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                result: dict[str, str] = {}
+                for name, target in data.items():
+                    if not isinstance(name, str) or not isinstance(target, str):
+                        continue
+                    relative = Path(name)
+                    if relative.is_absolute() or ".." in relative.parts:
+                        continue
+                    result[name] = target
+                return result
+        except (OSError, json.JSONDecodeError):
+            pass
+        return {}
+
+    def _save_link_manifest(self, link_path: Path, manifest: dict[str, str]) -> None:
+        manifest_path = link_path / self._LINK_MANIFEST
+        if not manifest:
+            manifest_path.unlink(missing_ok=True)
+            return
+        link_path.mkdir(parents=True, exist_ok=True)
+        fd, temp_name = tempfile.mkstemp(
+            dir=link_path, prefix=".codeagent-links.", suffix=".tmp", text=True
+        )
+        temp_path = Path(temp_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, manifest_path)
+        except Exception:
+            temp_path.unlink(missing_ok=True)
+            raise
+
+    def _managed_link_matches(self, path: Path, source: Path) -> bool:
+        try:
+            return (
+                self._is_windows_link(path) or path.is_symlink()
+            ) and path.resolve() == source.resolve()
+        except OSError:
+            return False
+
+    def _ensure_managed_link(self, source: Path, target: Path, link_path: Path) -> bool:
+        """Create a link without replacing user-owned files or links."""
+        manifest = self._load_link_manifest(link_path)
+        relative_name = target.relative_to(link_path).as_posix()
+        previous_source = manifest.get(relative_name)
+
+        if target.exists() or target.is_symlink():
+            if self._managed_link_matches(target, source):
+                if previous_source is not None:
+                    manifest[relative_name] = str(source.resolve())
+                    self._save_link_manifest(link_path, manifest)
+                return False
+            if previous_source and self._managed_link_matches(
+                target, Path(previous_source)
+            ):
+                self._safe_remove_link(target)
+            else:
+                print(f"⚠️ Refusing to replace unmanaged path: {target}")
+                return False
+
+        self._create_skill_link(source, target)
+        manifest[relative_name] = str(source.resolve())
+        self._save_link_manifest(link_path, manifest)
+        return True
+
+    def _remove_stale_managed_links(
+        self, link_path: Path, desired_names: set[str]
+    ) -> None:
+        manifest = self._load_link_manifest(link_path)
+        for relative_name, source in list(manifest.items()):
+            if relative_name in desired_names:
+                continue
+            target = link_path / relative_name
+            if self._managed_link_matches(target, Path(source)):
+                self._safe_remove_link(target)
+            manifest.pop(relative_name, None)
+        self._save_link_manifest(link_path, manifest)
+
     def _cleanup_link_dir(self, link_path: Path):
-        """Cleans up stale links within a directory while preserving other files.
+        """Remove only links recorded in CodeAgent's ownership manifest.
 
         Args:
             link_path (Path): The directory to clean up.
@@ -700,9 +836,13 @@ class BaseEngine:
             return
 
         try:
-            for item in list(link_path.iterdir()):
-                if self._is_windows_link(item) or item.is_symlink():
+            manifest = self._load_link_manifest(link_path)
+            for relative_name, source in manifest.items():
+                item = link_path / relative_name
+                if self._managed_link_matches(item, Path(source)):
                     self._safe_remove_link(item)
+
+            self._save_link_manifest(link_path, {})
 
             if not any(link_path.iterdir()):
                 link_path.rmdir()

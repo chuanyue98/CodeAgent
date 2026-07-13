@@ -677,20 +677,22 @@ def main() -> None:
     env = engine.env_manager.get_env()
     pre_launch_commands = list(general_commands) + list(task_commands)
 
-    engine.ensure_skills_link(".codex/skills")
-    # 挂载插件 (创建全局临时映射以满足 Codex 加载要求)
-    engine.ensure_plugins_link()
-
-    # 注入动态钩子
-    resolved_hooks = engine.get_hooks_to_inject()
-    engine.inject_hooks_to_settings(".codex/settings.json", resolved_hooks)
-
-    # Codex 读取用户级插件配置与安装缓存，而不是项目内 .codex/config.toml
-    engine.ensure_plugins_available()
-
-    register_signal_handler()
-
+    resource_lock = engine.acquire_resource_lock(
+        Path.home() / ".codex" / ".codeagent-session.lock"
+    )
     try:
+        engine.ensure_skills_link(".codex/skills")
+        # 挂载插件 (创建全局临时映射以满足 Codex 加载要求)
+        engine.ensure_plugins_link()
+
+        # 注入动态钩子
+        resolved_hooks = engine.get_hooks_to_inject()
+        engine.inject_hooks_to_settings(".codex/settings.json", resolved_hooks)
+
+        # Codex 读取用户级插件配置与安装缓存，而不是项目内 .codex/config.toml
+        engine.ensure_plugins_available()
+
+        register_signal_handler()
         run_prelaunch_commands(pre_launch_commands, env)
 
         if code_plan_prompts:
@@ -735,16 +737,19 @@ def main() -> None:
             finally:
                 engine.cleanup_temp_prompt()
     finally:
-        # 1. 还原配置到注入前状态
-        engine.restore_settings(".codex/settings.json")
-        # 2. 还原全局 config.toml 并清理缓存
-        engine.cleanup_plugins_available()
-        # 3. 清理插件链接，避免 ~/.codex/plugins/ 下符号链接泄漏
-        engine.cleanup_plugins_link()
-        # 4. 清理所有技能链接
-        engine.cleanup_skills_link(".codex/skills")
-        # 5. 兜底清理所有临时文件
-        engine.cleanup_temp_prompt()
+        try:
+            # 1. 还原配置到注入前状态
+            engine.restore_settings(".codex/settings.json")
+            # 2. 还原全局 config.toml 并清理缓存
+            engine.cleanup_plugins_available()
+            # 3. 清理插件链接，避免 ~/.codex/plugins/ 下符号链接泄漏
+            engine.cleanup_plugins_link()
+            # 4. 清理所有技能链接
+            engine.cleanup_skills_link(".codex/skills")
+            # 5. 兜底清理所有临时文件
+            engine.cleanup_temp_prompt()
+        finally:
+            engine.release_resource_lock(resource_lock)
 
 
 if __name__ == "__main__":

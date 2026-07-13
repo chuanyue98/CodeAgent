@@ -29,16 +29,21 @@ jobs:
         run: uv sync --frozen --all-groups
 
       - name: Lint (ruff)
-        run: uv run ruff check ca_launcher.py core engines tests
+        run: uv run ruff check ca_launcher.py core engines tests setup.py
 
       - name: Format check (ruff)
-        run: uv run ruff format --check ca_launcher.py core engines tests
+        run: uv run ruff format --check ca_launcher.py core engines tests setup.py
 
       - name: Type check (mypy)
         run: uv run mypy core engines ca_launcher.py
 
       - name: Test
         run: uv run pytest --tb=short -q --cov --cov-report=term-missing
+
+      - name: Build wheel and verify runtime assets
+        run: |
+          uv build --wheel --out-dir /tmp/codeagent-dist
+          uv run python -c "import zipfile; from pathlib import Path; wheel=next(Path('/tmp/codeagent-dist').glob('*.whl')); names=set(zipfile.ZipFile(wheel).namelist()); required=('prompt/base/general.basic.md','skills/base/skill-creator/SKILL.md','web/frontend/dist/index.html'); assert all(any(name.endswith(item) for name in names) for item in required)"
 
   # ── React / Vite frontend ─────────────────────────────────────────────────
   frontend:

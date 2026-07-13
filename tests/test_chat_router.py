@@ -18,13 +18,21 @@ class _FakeRunner:
         self.started: list[dict] = []
         self._status = None
 
-    def run_chat_turn(self, engine, message, session_id=None, group="common"):
+    def run_chat_turn(
+        self,
+        engine,
+        message,
+        session_id=None,
+        group="common",
+        project_path=None,
+    ):
         self.started.append(
             {
                 "engine": engine,
                 "message": message,
                 "session_id": session_id,
                 "group": group,
+                "project_path": project_path,
             }
         )
         if engine == "shell":
@@ -67,7 +75,13 @@ async def test_start_chat_turn_returns_running_status(fake_runner):
     assert data["engine"] == "claude"
     assert data["status"] == "running"
     assert fake_runner.started == [
-        {"engine": "claude", "message": "hello", "session_id": None, "group": "common"}
+        {
+            "engine": "claude",
+            "message": "hello",
+            "session_id": None,
+            "group": "common",
+            "project_path": None,
+        }
     ]
 
 
@@ -83,6 +97,7 @@ async def test_start_chat_turn_passes_session_id_and_group(fake_runner):
                 "message": "continue",
                 "session_id": "abc-123",
                 "group": "work",
+                "project_path": "/tmp/other-project",
             },
         )
 
@@ -93,6 +108,7 @@ async def test_start_chat_turn_passes_session_id_and_group(fake_runner):
             "message": "continue",
             "session_id": "abc-123",
             "group": "work",
+            "project_path": "/tmp/other-project",
         }
     ]
 

@@ -43,6 +43,7 @@ class StartChatTurnRequest(BaseModel):
     message: str
     session_id: str | None = None
     group: str = "common"
+    project_path: str | None = None
 
 
 @router.post("/turns")
@@ -61,6 +62,7 @@ async def start_chat_turn(req: StartChatTurnRequest) -> dict:
             req.message,
             session_id=req.session_id,
             group=req.group,
+            project_path=req.project_path,
         ).__dict__
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

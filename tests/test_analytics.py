@@ -6,6 +6,7 @@ from core.analytics.models import RawUsageEntry
 from core.analytics.aggregator import aggregate
 from core.analytics.history import append_history, load_history, get_last_timestamps
 from core.analytics.service import _collect_all, get_analytics_data
+from core.analytics.collectors.claude_collector import scan_claude_usage
 
 
 @pytest.fixture
@@ -171,3 +172,19 @@ def test_codex_session_snapshot_is_replaced(
     assert len(codex_entries) == 1
     assert codex_entries[0].input_tokens == 164
     assert len(load_history()) == 1
+
+
+def test_claude_usage_prefers_exact_cwd_for_hyphenated_project(tmp_path):
+    project_dir = tmp_path / ".claude" / "projects" / "-home-user-my-project"
+    project_dir.mkdir(parents=True)
+    (project_dir / "session.jsonl").write_text(
+        '{"timestamp":"2026-07-10T10:00:00Z","cwd":"/home/user/my-project",'
+        '"message":{"model":"claude-test","usage":{"input_tokens":10,'
+        '"output_tokens":5}}}\n',
+        encoding="utf-8",
+    )
+
+    entries = scan_claude_usage(home=tmp_path)
+
+    assert len(entries) == 1
+    assert entries[0].project_path == "/home/user/my-project"

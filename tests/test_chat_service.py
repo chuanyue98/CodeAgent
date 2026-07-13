@@ -39,11 +39,11 @@ def _write_fake_cli(tmp_path: Path) -> Path:
     """
     script = tmp_path / "fake_cli.py"
     script.write_text(
-        "import json, sys\n"
+        "import json, os, sys\n"
         "field, message = sys.argv[1], sys.argv[2]\n"
         "resumed = sys.argv[3] if len(sys.argv) > 3 else None\n"
         "session_id = resumed or 'new-session-123'\n"
-        "print(json.dumps({field: session_id, 'echo': message}))\n",
+        "print(json.dumps({field: session_id, 'echo': message, 'cwd': os.getcwd()}))\n",
         encoding="utf-8",
     )
     return script
@@ -105,6 +105,35 @@ def test_run_chat_turn_rejects_empty_message(tmp_path):
     runner = TaskRunner(tmp_path)
     with pytest.raises(ValueError, match="message must not be empty"):
         runner.run_chat_turn("claude", "   ")
+
+
+def test_run_chat_turn_uses_resumed_session_project(tmp_path, monkeypatch):
+    script = _write_fake_cli(tmp_path)
+    fake_engine = _FakeChatEngine(script, "session_id")
+    runner = TaskRunner(tmp_path)
+    monkeypatch.setattr(runner, "_build_engine", lambda engine: fake_engine)
+
+    project = tmp_path / "other-project"
+    project.mkdir()
+    run = runner.run_chat_turn("claude", "hello", project_path=str(project))
+    status = _wait_for_completion(runner, run.task_id)
+
+    assert status is not None
+    assert status.status == "completed"
+    payload = json.loads(Path(status.log_path).read_text(encoding="utf-8"))
+    assert payload["cwd"] == str(project)
+
+
+def test_run_chat_turn_rejects_missing_project(tmp_path, monkeypatch):
+    script = _write_fake_cli(tmp_path)
+    fake_engine = _FakeChatEngine(script, "session_id")
+    runner = TaskRunner(tmp_path)
+    monkeypatch.setattr(runner, "_build_engine", lambda engine: fake_engine)
+
+    with pytest.raises(ValueError, match="Invalid project path"):
+        runner.run_chat_turn(
+            "claude", "hello", project_path=str(tmp_path / "missing-project")
+        )
 
 
 def test_extract_chat_session_id_uses_engine_specific_field(tmp_path):

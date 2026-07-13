@@ -2,11 +2,13 @@ import json
 import os
 from pathlib import Path
 
+from core.resource_locator import get_bundled_resource_root, get_default_config_path
+
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 def _config_resource_root() -> Path:
-    config_path = ROOT_DIR / "config.json"
+    config_path = get_default_config_path(ROOT_DIR)
     try:
         with open(config_path, "r", encoding="utf-8-sig") as f:
             resource_root = json.load(f).get("paths", {}).get("resource_root")
@@ -22,7 +24,7 @@ def _config_resource_root() -> Path:
                 return resolved
     except Exception:
         pass
-    return ROOT_DIR
+    return get_bundled_resource_root(ROOT_DIR)
 
 
 def resolve_resource_path(subdir: str, env_var: str) -> Path:

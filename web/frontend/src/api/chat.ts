@@ -46,6 +46,7 @@ export async function startChatTurn(params: {
   message: string;
   session_id?: string | null;
   group?: string;
+  project_path?: string | null;
 }): Promise<ChatTurnStatus> {
   const res = await fetch('/api/chat/turns', {
     method: 'POST',
