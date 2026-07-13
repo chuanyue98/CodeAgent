@@ -101,32 +101,37 @@ def main():
         if task_prompt:
             full_prompt = f"{full_prompt}\n\n{task_prompt}"
 
-    # 使用临时文件引导模式 (关键：解决命令行超长问题)
-    concise_msg = engine.write_temp_prompt(full_prompt)
-
-    # 统一技能链接
-    engine.ensure_skills_link(".claude/skills")
-
-    # 注入动态钩子
-    resolved_hooks = engine.get_hooks_to_inject()
-    engine.inject_hooks_to_settings(".claude/settings.json", resolved_hooks)
-
-    env = engine.env_manager.get_env()
-
-    register_signal_handler()
-
+    resource_lock = engine.acquire_resource_lock(
+        Path.cwd() / ".claude" / ".codeagent-session.lock"
+    )
     try:
+        # 使用临时文件引导模式 (关键：解决命令行超长问题)
+        concise_msg = engine.write_temp_prompt(full_prompt)
+
+        # 统一技能链接
+        engine.ensure_skills_link(".claude/skills")
+
+        # 注入动态钩子
+        resolved_hooks = engine.get_hooks_to_inject()
+        engine.inject_hooks_to_settings(".claude/settings.json", resolved_hooks)
+
+        env = engine.env_manager.get_env()
+        register_signal_handler()
+
         final_command = engine.build_command(concise_msg, args.non_interactive)
         print(f"🚀 Launching {engine.name} ({engine.default_model})...")
 
         engine.run_shell(final_command, env)
     finally:
-        # 1. 还原配置到注入前状态
-        engine.restore_settings(".claude/settings.json")
-        # 2. 清理技能链接，保持项目纯净
-        engine.cleanup_skills_link(".claude/skills")
-        # 3. 使用基类统一清理临时提示词
-        engine.cleanup_temp_prompt()
+        try:
+            # 1. 还原配置到注入前状态
+            engine.restore_settings(".claude/settings.json")
+            # 2. 清理技能链接，保持项目纯净
+            engine.cleanup_skills_link(".claude/skills")
+            # 3. 使用基类统一清理临时提示词
+            engine.cleanup_temp_prompt()
+        finally:
+            engine.release_resource_lock(resource_lock)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ class DummyEngine(BaseEngine):
             self.full_config = self._load_full_config()
             self.env_manager = EnvironmentManager(self.root_dir)
             self.temp_prompt_name = ".ca_prompt.tmp"
+            self._temp_prompt_paths = set()
         else:
             super().__init__("Dummy", "dummy-model")
 
@@ -92,13 +93,35 @@ def test_engine_temp_prompt_lifecycle(mock_engine):
     prompt_content = "Hello CodeAgent"
     instruction = mock_engine.write_temp_prompt(prompt_content)
 
-    temp_file = mock_engine.root_dir / ".ca_prompt.tmp"
+    [temp_file] = mock_engine._temp_prompt_paths
     assert temp_file.exists()
+    assert temp_file.parent.name == "codeagent-prompts"
     assert temp_file.read_text(encoding="utf-8") == prompt_content
     assert str(temp_file.absolute()).replace("\\", "/") in instruction
 
     mock_engine.cleanup_temp_prompt()
     assert not temp_file.exists()
+
+
+def test_engine_temp_prompts_are_unique_per_instance(tmp_path):
+    root = tmp_path / "ca"
+    root.mkdir()
+    first = DummyEngine(root_dir=root)
+    second = DummyEngine(root_dir=root)
+
+    first.write_temp_prompt("first")
+    second.write_temp_prompt("second")
+
+    [first_path] = first._temp_prompt_paths
+    [second_path] = second._temp_prompt_paths
+    assert first_path != second_path
+    assert first_path.read_text(encoding="utf-8") == "first"
+    assert second_path.read_text(encoding="utf-8") == "second"
+
+    first.cleanup_temp_prompt()
+    assert not first_path.exists()
+    assert second_path.exists()
+    second.cleanup_temp_prompt()
 
 
 def test_engine_inject_hooks_to_settings(mock_engine, tmp_path, monkeypatch):
@@ -160,7 +183,7 @@ def test_ensure_skills_link_deduplicates_same_skill_name(monkeypatch, tmp_path, 
     assert "Skip duplicate skill 'ui-ux-pro-max'" in output
 
 
-def test_ensure_skills_link_cleans_stale_links_but_keeps_regular_dirs(
+def test_ensure_skills_link_preserves_unmanaged_links_and_regular_dirs(
     monkeypatch, tmp_path
 ):
     # (Original test 2)
@@ -192,11 +215,38 @@ def test_ensure_skills_link_cleans_stale_links_but_keeps_regular_dirs(
 
     engine.ensure_skills_link(".gemini/skills")
 
-    assert not (mounted_root / "old-skill").exists()
+    assert (mounted_root / "old-skill").is_symlink()
     assert (mounted_root / "new-skill" / "SKILL.md").read_text(
         encoding="utf-8"
     ) == "new"
     assert (regular_dir / "keep.txt").read_text(encoding="utf-8") == "keep"
+
+    engine.cleanup_skills_link(".gemini/skills")
+    assert (mounted_root / "old-skill").is_symlink()
+    assert not (mounted_root / "new-skill").exists()
+
+
+def test_ensure_skills_link_does_not_replace_regular_file(monkeypatch, tmp_path):
+    engine = DummyEngine(root_dir=tmp_path / "ca")
+    engine.root_dir.mkdir()
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    monkeypatch.chdir(project_root)
+
+    source = tmp_path / "source" / "skill"
+    source.mkdir(parents=True)
+    (source / "SKILL.md").write_text("skill", encoding="utf-8")
+    mounted_root = project_root / ".gemini" / "skills"
+    mounted_root.mkdir(parents=True)
+    collision = mounted_root / "skill"
+    collision.write_text("user-owned", encoding="utf-8")
+
+    monkeypatch.setattr(engine, "get_skills_to_mount", lambda: ["skill"])
+    monkeypatch.setattr(engine, "_get_skill_search_roots", lambda: [source.parent])
+
+    engine.ensure_skills_link(".gemini/skills")
+
+    assert collision.read_text(encoding="utf-8") == "user-owned"
 
 
 def test_create_skill_link_unix(mock_engine, tmp_path):
@@ -231,11 +281,12 @@ def test_safe_remove_link_windows_dir(mock_engine, tmp_path):
     target.mkdir()
 
     with patch("os.name", "nt"):
-        with patch("subprocess.run") as mock_run:
-            mock_engine._safe_remove_link(target)
-            # On Windows, directories should be removed via rmdir if they are links/junctions
-            mock_run.assert_called_once()
-            assert "rmdir" in mock_run.call_args[0][0]
+        with patch.object(mock_engine, "_is_windows_link", return_value=True):
+            with patch("subprocess.run") as mock_run:
+                mock_engine._safe_remove_link(target)
+                # On Windows, directories should be removed via rmdir if they are links/junctions
+                mock_run.assert_called_once()
+                assert "rmdir" in mock_run.call_args[0][0]
 
 
 def test_is_windows_link_detection(mock_engine, tmp_path):

@@ -153,6 +153,29 @@ def test_parse_claude_empty_file(tmp_path):
     assert parse_claude_session(tmp_path / "nonexistent.jsonl") is None
 
 
+def test_parse_claude_session_prefers_exact_cwd_for_hyphenated_path(tmp_path):
+    session_dir = tmp_path / ".claude" / "projects" / "-home-user-my-project"
+    session_dir.mkdir(parents=True)
+    session_file = session_dir / "hyphenated.jsonl"
+    session_file.write_text(
+        json.dumps(
+            {
+                "type": "user",
+                "message": {"role": "user", "content": "hello"},
+                "timestamp": "2026-07-10T10:00:00.000Z",
+                "cwd": "/home/user/my-project",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    session = parse_claude_session(session_file)
+
+    assert session is not None
+    assert session.project_path == "/home/user/my-project"
+
+
 # ─── Codex parser tests ───────────────────────────────────────────────
 
 

@@ -29,10 +29,10 @@ from core.web.routers import (
 )
 from core.web.routers.config import get_config_path
 from core.web.routers.tasks import _runner as _task_runner, get_tasks_root
-from core.web.resource_paths import ROOT_DIR, resolve_resource_path
+from core.web.resource_paths import resolve_resource_path
 
-CONFIG_PATH = ROOT_DIR / "config.json"
-FRONTEND_DIST = ROOT_DIR / "web" / "frontend" / "dist"
+CONFIG_PATH = get_config_path()
+FRONTEND_DIST = resolve_resource_path("web/frontend/dist", "CA_FRONTEND_DIST")
 
 
 def _get_roots():

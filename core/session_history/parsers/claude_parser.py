@@ -219,14 +219,15 @@ def parse_claude_session(file_path: Path) -> Optional[UnifiedSession]:
     if not messages:
         return None
 
-    # Decode project path from parent directory name
+    # Claude's directory encoding is ambiguous for names containing dashes.
+    # Prefer the exact cwd recorded in the JSONL whenever it is available.
     project_dir = file_path.parent.name
-    project_path = _decode_claude_project_path(project_dir)
+    project_path = cwd or _decode_claude_project_path(project_dir)
 
     return UnifiedSession(
         session_id=session_id,
         engine=EngineType.CLAUDE,
-        project_path=project_path or cwd,
+        project_path=project_path,
         started_at=started_at,
         ended_at=ended_at,
         messages=messages,

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 from core.console import configure_console_encoding
+from core.resource_locator import get_bundled_resource_root, get_default_config_path
 
 configure_console_encoding()
 
@@ -50,7 +51,7 @@ def get_tasks_dir(directory: Union[str, Path] = TASKS_DIR) -> Path:
             return Path(env_root).expanduser().resolve()
 
         codeagent_root = Path(__file__).resolve().parent.parent
-        config_path = codeagent_root / "config.json"
+        config_path = get_default_config_path(codeagent_root)
         try:
             config = json.loads(config_path.read_text(encoding="utf-8-sig"))
             resource_root = config.get("paths", {}).get("resource_root")
@@ -65,7 +66,7 @@ def get_tasks_dir(directory: Union[str, Path] = TASKS_DIR) -> Path:
         except (OSError, json.JSONDecodeError, TypeError):
             pass
 
-        return codeagent_root / TASKS_DIR
+        return get_bundled_resource_root(codeagent_root) / TASKS_DIR
 
     return (Path.cwd() / dir_path).resolve()
 

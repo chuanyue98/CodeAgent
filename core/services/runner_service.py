@@ -120,6 +120,7 @@ class TaskRunner:
         message: str,
         session_id: Optional[str] = None,
         group: str = "common",
+        project_path: Optional[str] = None,
     ) -> TaskRunStatus:
         """Starts one headless, non-interactive ChatPage turn in the background.
 
@@ -135,6 +136,12 @@ class TaskRunner:
             raise ValueError(f"Invalid engine: {engine!r}")
         if not message or not message.strip():
             raise ValueError("message must not be empty")
+
+        working_dir = Path.cwd()
+        if project_path:
+            working_dir = Path(project_path).expanduser().resolve()
+            if not working_dir.is_dir():
+                raise ValueError(f"Invalid project path: {project_path!r}")
 
         engine_obj = self._build_engine(engine)
         cmd = engine_obj.build_chat_command(message, session_id=session_id)
@@ -156,7 +163,7 @@ class TaskRunner:
             with open(log_file, "w", encoding="utf-8") as f:
                 process = subprocess.Popen(
                     resolved_cmd,
-                    cwd=str(Path.cwd()),
+                    cwd=str(working_dir),
                     stdout=f,
                     stderr=subprocess.STDOUT,
                     stdin=subprocess.DEVNULL,
