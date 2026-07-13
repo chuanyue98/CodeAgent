@@ -22,8 +22,9 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from core.session_history.audit import build_audit_events
@@ -33,6 +34,18 @@ from core.session_history.session_finder import (
 )
 
 router = APIRouter(prefix="/api")
+
+
+def _parse_ts(ts: str) -> datetime:
+    """Parse ISO 8601 timestamp string to a UTC-aware datetime for comparison."""
+    try:
+        normalized = ts.replace("Z", "+00:00") if ts else ""
+        dt = datetime.fromisoformat(normalized) if normalized else datetime.min
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except (ValueError, TypeError):
+        return datetime.min.replace(tzinfo=timezone.utc)
 
 
 class ConvertRequest(BaseModel):
@@ -108,9 +121,11 @@ async def get_audit_events(
     events = build_audit_events(sessions)
 
     if since:
-        events = [e for e in events if e["timestamp"] >= since]
+        since_dt = _parse_ts(since)
+        events = [e for e in events if _parse_ts(e["timestamp"]) >= since_dt]
     if until:
-        events = [e for e in events if e["timestamp"] <= until]
+        until_dt = _parse_ts(until)
+        events = [e for e in events if _parse_ts(e["timestamp"]) <= until_dt]
 
     events = events[:limit]
 
@@ -135,11 +150,14 @@ async def get_session_detail(
     """
     session = find_session_by_id(session_id, engine, project)
     if not session:
-        return {
-            "error": "Session not found",
-            "session_id": session_id,
-            "engine": engine,
-        }
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Session not found",
+                "session_id": session_id,
+                "engine": engine,
+            },
+        )
     return session.to_full_dict()
 
 
@@ -161,7 +179,13 @@ async def convert_session(req: ConvertRequest) -> dict:
 
     session = find_session_by_id(req.session_id, req.source_engine, req.project_path)
     if not session:
-        return {"error": "Source session not found", "session_id": req.session_id}
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Source session not found",
+                "session_id": req.session_id,
+            },
+        )
 
     try:
         new_id = write_session(session, req.target_engine)
@@ -172,7 +196,7 @@ async def convert_session(req: ConvertRequest) -> dict:
             "message": f"Session converted to {req.target_engine}. Use '{req.target_engine} continue' or equivalent to resume.",
         }
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail={"error": str(e)})
 
 
 @router.post("/history/convert-and-launch")
@@ -189,12 +213,16 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
 
     session = find_session_by_id(req.session_id, req.source_engine, req.project_path)
     if not session:
-        return {"error": "Source session not found"}
+        raise HTTPException(
+            status_code=404, detail={"error": "Source session not found"}
+        )
 
     try:
         new_id = write_session(session, req.target_engine)
     except Exception as e:
-        return {"error": f"Conversion failed: {e}"}
+        raise HTTPException(
+            status_code=500, detail={"error": f"Conversion failed: {e}"}
+        )
 
     # Launch the engine in a terminal (same mechanism as /api/launch)
     import shlex

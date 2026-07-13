@@ -13,7 +13,8 @@ from typing import List, Optional
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
-from core.engine_base import BaseEngine
+from core.engine_base import BaseEngine, register_signal_handler
+
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -112,13 +113,11 @@ def main():
 
     env = engine.env_manager.get_env()
 
+    register_signal_handler()
+
     try:
         final_command = engine.build_command(concise_msg, args.non_interactive)
         print(f"🚀 Launching {engine.name} ({engine.default_model})...")
-
-        # 强制检查：确保 message 真的只是 concise_msg
-        if len(str(final_command)) > 1000:
-            print("⚠️ Warning: Command list still seems too long. Checking structure...")
 
         engine.run_shell(final_command, env)
     finally:

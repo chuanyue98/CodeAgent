@@ -14,7 +14,8 @@ from typing import List, Optional
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
-from core.engine_base import BaseEngine
+from core.engine_base import BaseEngine, register_signal_handler
+
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -151,10 +152,13 @@ def main():
     approval_mode = "yolo"
 
     selected_model = engine.select_model_interactive(args.non_interactive)
-    env = engine.env_manager.get_env()
 
     if args.pr_url:
         os.environ["PR_URL"] = args.pr_url
+
+    env = engine.env_manager.get_env()
+    if args.pr_url:
+        env["PR_URL"] = args.pr_url
 
     # 使用基类统一合成提示词 (支持 review 模式)
     full_prompt = engine.assemble_prompt(
@@ -180,6 +184,8 @@ def main():
     # 注册已挂载插件
     engine.inject_plugins_to_settings(".gemini/settings.json")
 
+    register_signal_handler()
+
     try:
         final_cmd = engine.build_command(
             concise_msg,
@@ -196,7 +202,9 @@ def main():
         engine.restore_settings(".gemini/settings.json")
         # 2. 清理技能链接，保持项目纯净
         engine.cleanup_skills_link(".gemini/skills")
-        # 3. 使用基类统一清理临时提示词
+        # 3. 清理插件链接，避免 ~/.gemini/extensions/ 下符号链接泄漏
+        engine.cleanup_plugins_link()
+        # 4. 使用基类统一清理临时提示词
         engine.cleanup_temp_prompt()
 
 

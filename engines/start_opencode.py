@@ -14,7 +14,8 @@ from typing import List, Optional
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
-from core.engine_base import BaseEngine
+from core.engine_base import BaseEngine, register_signal_handler
+
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -262,6 +263,8 @@ def main():
     engine.inject_hooks_to_settings(".opencode/settings.json", resolved_hooks)
 
     env = engine.env_manager.get_env()
+
+    register_signal_handler()
 
     try:
         final_command = engine.build_command(concise_msg, args.non_interactive)

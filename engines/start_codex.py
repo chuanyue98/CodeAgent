@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
-from core.engine_base import BaseEngine
+from core.engine_base import BaseEngine, register_signal_handler
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     get_tasks_dir,
@@ -688,6 +688,8 @@ def main() -> None:
     # Codex 读取用户级插件配置与安装缓存，而不是项目内 .codex/config.toml
     engine.ensure_plugins_available()
 
+    register_signal_handler()
+
     try:
         run_prelaunch_commands(pre_launch_commands, env)
 
@@ -737,9 +739,11 @@ def main() -> None:
         engine.restore_settings(".codex/settings.json")
         # 2. 还原全局 config.toml 并清理缓存
         engine.cleanup_plugins_available()
-        # 3. 清理所有技能链接
+        # 3. 清理插件链接，避免 ~/.codex/plugins/ 下符号链接泄漏
+        engine.cleanup_plugins_link()
+        # 4. 清理所有技能链接
         engine.cleanup_skills_link(".codex/skills")
-        # 4. 兜底清理所有临时文件
+        # 5. 兜底清理所有临时文件
         engine.cleanup_temp_prompt()
 
 
