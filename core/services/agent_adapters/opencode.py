@@ -62,7 +62,9 @@ class OpenCodeAdapter:
             return
         executable = shutil.which(self.executable)
         if not executable:
-            self._unavailable_reason = "OpenCode CLI was not found on the CodeAgent server"
+            self._unavailable_reason = (
+                "OpenCode CLI was not found on the CodeAgent server"
+            )
             raise RuntimeError(self._unavailable_reason)
         self._stopping = False
         self._loop = asyncio.get_running_loop()
@@ -97,7 +99,9 @@ class OpenCodeAdapter:
                 if self._process.returncode is not None:
                     raise OpenCodeProtocolError("OpenCode server exited during startup")
                 try:
-                    health = await self._request_json("GET", "/global/health", timeout=2)
+                    health = await self._request_json(
+                        "GET", "/global/health", timeout=2
+                    )
                     if health.get("healthy") is True:
                         break
                 except Exception:
@@ -137,7 +141,11 @@ class OpenCodeAdapter:
             if task:
                 task.cancel()
         await asyncio.gather(
-            *(task for task in (self._sse_task, self._stdout_task, self._stderr_task) if task),
+            *(
+                task
+                for task in (self._sse_task, self._stdout_task, self._stderr_task)
+                if task
+            ),
             return_exceptions=True,
         )
         self._sse_task = self._stdout_task = self._stderr_task = None
@@ -248,9 +256,7 @@ class OpenCodeAdapter:
             {"reply": reply},
         )
         if decision == ApprovalDecision.CANCEL:
-            await self.cancel_turn(
-                session_id, self._active_turns.get(session_id, "")
-            )
+            await self.cancel_turn(session_id, self._active_turns.get(session_id, ""))
 
     async def events(self) -> AsyncIterator[AdapterEvent]:
         while True:
@@ -297,7 +303,9 @@ class OpenCodeAdapter:
         body: dict[str, Any] | None = None,
         timeout: float = 30,
     ) -> dict[str, Any]:
-        return await asyncio.to_thread(self._request_json_sync, method, path, body, timeout)
+        return await asyncio.to_thread(
+            self._request_json_sync, method, path, body, timeout
+        )
 
     def _request_json_sync(
         self,
@@ -398,7 +406,11 @@ class OpenCodeAdapter:
             AdapterEvent(
                 type="error",
                 provider_session_id="",
-                data={"code": "provider_crashed", "message": message, "retryable": True},
+                data={
+                    "code": "provider_crashed",
+                    "message": message,
+                    "retryable": True,
+                },
             )
         )
 

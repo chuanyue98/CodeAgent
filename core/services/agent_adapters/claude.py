@@ -46,7 +46,9 @@ class ClaudeAdapter:
         self,
         executable: str = "claude",
         queue_size: int = 1024,
-        client_factory: Callable[[ClaudeAgentOptions], ClaudeSDKClient] = ClaudeSDKClient,
+        client_factory: Callable[
+            [ClaudeAgentOptions], ClaudeSDKClient
+        ] = ClaudeSDKClient,
     ):
         self.executable = executable
         self._client_factory = client_factory
@@ -72,7 +74,9 @@ class ClaudeAdapter:
         if self._started:
             return
         if not shutil.which(self.executable):
-            self._unavailable_reason = "Claude Code CLI was not found on the CodeAgent server"
+            self._unavailable_reason = (
+                "Claude Code CLI was not found on the CodeAgent server"
+            )
             raise RuntimeError(self._unavailable_reason)
         self._started = True
         self._unavailable_reason = None
@@ -134,7 +138,9 @@ class ClaudeAdapter:
         info = await client.get_server_info() or {}
         return ProviderSession(
             id=session_id,
-            model=info.get("model") if isinstance(info.get("model"), str) else options.model,
+            model=info.get("model")
+            if isinstance(info.get("model"), str)
+            else options.model,
         )
 
     async def resume_session(
@@ -160,7 +166,9 @@ class ClaudeAdapter:
         info = await client.get_server_info() or {}
         return ProviderSession(
             id=provider_session_id,
-            model=info.get("model") if isinstance(info.get("model"), str) else options.model,
+            model=info.get("model")
+            if isinstance(info.get("model"), str)
+            else options.model,
         )
 
     async def start_turn(self, provider_session_id: str, turn: TurnInput) -> str:
@@ -218,7 +226,9 @@ class ClaudeAdapter:
         if future.done():
             raise ClaudeProtocolError("Approval request is already resolved")
         if decision == ApprovalDecision.ACCEPT:
-            result: PermissionResultAllow | PermissionResultDeny = PermissionResultAllow()
+            result: PermissionResultAllow | PermissionResultDeny = (
+                PermissionResultAllow()
+            )
         elif decision == ApprovalDecision.ACCEPT_FOR_SESSION:
             result = PermissionResultAllow(
                 updated_permissions=context.suggestions or None
@@ -245,7 +255,9 @@ class ClaudeAdapter:
         self._require_started()
         client = self._clients.get(provider_session_id)
         if client is None:
-            raise ClaudeProtocolError("Claude session is not connected; resume it first")
+            raise ClaudeProtocolError(
+                "Claude session is not connected; resume it first"
+            )
         return client
 
     async def _connect_client(
@@ -263,9 +275,9 @@ class ClaudeAdapter:
             context: ToolPermissionContext,
         ) -> PermissionResultAllow | PermissionResultDeny:
             approval_id = context.tool_use_id or f"claude-approval-{uuid4().hex}"
-            future: asyncio.Future[
-                PermissionResultAllow | PermissionResultDeny
-            ] = asyncio.get_running_loop().create_future()
+            future: asyncio.Future[PermissionResultAllow | PermissionResultDeny] = (
+                asyncio.get_running_loop().create_future()
+            )
             self._pending_approvals[approval_id] = (session_id, future, context)
             self._put_event(
                 AdapterEvent(
@@ -450,7 +462,9 @@ class ClaudeAdapter:
                             {
                                 "tool": {
                                     "id": block.tool_use_id,
-                                    "status": "failed" if block.is_error else "completed",
+                                    "status": "failed"
+                                    if block.is_error
+                                    else "completed",
                                     "result": block.content,
                                 }
                             },
