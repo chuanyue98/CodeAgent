@@ -80,7 +80,7 @@ export async function startChatTurn(params: {
   message: string;
   session_id?: string | null;
   group?: string;
-  project_path?: string | null;
+  project_path: string;
 }): Promise<ChatTurnStatus> {
   const res = await fetch('/api/chat/turns', {
     method: 'POST',
@@ -90,6 +90,17 @@ export async function startChatTurn(params: {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.detail || 'Failed to start chat turn');
+  }
+  return res.json();
+}
+
+export async function cancelChatTurn(turnId: string): Promise<ChatTurnStatus> {
+  const res = await fetch(`/api/chat/turns/${encodeURIComponent(turnId)}/cancel`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || 'Failed to cancel chat turn');
   }
   return res.json();
 }

@@ -82,7 +82,7 @@ class GeminiEngine(BaseEngine):
             "-o",
             "json",
             "--approval-mode",
-            "yolo",
+            "plan",
             "--skip-trust",
         ]
 

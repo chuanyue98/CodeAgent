@@ -13,6 +13,9 @@ Endpoints:
       SSE stream of the turn's raw JSON(L) engine events, one per line,
       terminated by a ``done`` event once the process exits and the log
       file stops growing.
+
+  POST /api/chat/turns/{turn_id}/cancel
+      Stops a running legacy turn and its child process group.
 """
 
 from __future__ import annotations
@@ -23,7 +26,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi import Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi.responses import StreamingResponse
 
 from core.services.runner_service import TaskRunner
@@ -46,10 +49,43 @@ class StartChatTurnRequest(BaseModel):
     message: str
     session_id: str | None = None
     group: str = "common"
-    project_path: str | None = None
+    project_path: str = Field(min_length=1)
 
 
 _RESOURCE_NAMES = ("skills", "hooks", "plugins")
+
+
+def _registered_project(project_path: str) -> tuple[str, str]:
+    """Returns the normalized path and configured group for a workspace."""
+    requested = Path(project_path).expanduser().resolve()
+    if not requested.is_dir():
+        raise HTTPException(status_code=400, detail="Selected workspace is unavailable")
+
+    service = ConfigService(get_config_path())
+    config, warnings = service.get_config()
+    if config is None:
+        raise HTTPException(
+            status_code=500,
+            detail=warnings[0] if warnings else "Failed to load configuration",
+        )
+
+    registry = config.get("project_registry")
+    if not isinstance(registry, list):
+        registry = []
+    for project in registry:
+        if not isinstance(project, dict):
+            continue
+        configured_path = project.get("path")
+        configured_group = project.get("group")
+        if not isinstance(configured_path, str) or not isinstance(configured_group, str):
+            continue
+        if Path(configured_path).expanduser().resolve() == requested:
+            return str(requested), configured_group
+
+    raise HTTPException(
+        status_code=400,
+        detail="Select a workspace registered in Settings before starting a chat",
+    )
 
 
 @router.get("/capabilities")
@@ -122,13 +158,14 @@ async def start_chat_turn(req: StartChatTurnRequest) -> dict:
     Returns:
         dict: The initial TaskRunStatus (running, with the log path to poll/stream).
     """
+    project_path, group = _registered_project(req.project_path)
     try:
         return _runner.run_chat_turn(
             req.engine,
             req.message,
             session_id=req.session_id,
-            group=req.group,
-            project_path=req.project_path,
+            group=group,
+            project_path=project_path,
         ).__dict__
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -148,6 +185,20 @@ async def get_chat_turn(turn_id: str) -> dict:
     if not status:
         raise HTTPException(status_code=404, detail="Turn not found")
     return status.__dict__
+
+
+@router.post("/turns/{turn_id}/cancel")
+async def cancel_chat_turn(turn_id: str) -> dict:
+    """Stops a running legacy Chat turn."""
+    status = _runner.get_status(turn_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Turn not found")
+    if status.status != "running":
+        raise HTTPException(status_code=409, detail="Turn is no longer running")
+    if not _runner.stop_task(turn_id):
+        raise HTTPException(status_code=500, detail="Failed to stop turn")
+    stopped = _runner.get_status(turn_id)
+    return (stopped or status).__dict__
 
 
 @router.get("/turns/{turn_id}/stream")

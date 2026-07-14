@@ -23,7 +23,16 @@ async function request<T = unknown>(url: string, config: RequestConfig = {}): Pr
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      throw new Error(`Request failed with status ${response.status}`);
+      let detail = `Request failed with status ${response.status}`;
+      try {
+        const body = await response.json() as { detail?: string | { error?: string; message?: string } };
+        if (typeof body.detail === 'string') detail = body.detail;
+        else if (body.detail?.error) detail = body.detail.error;
+        else if (body.detail?.message) detail = body.detail.message;
+      } catch {
+        // Keep the status-based fallback when the response is not JSON.
+      }
+      throw new Error(detail);
     }
 
     const text = await response.text();

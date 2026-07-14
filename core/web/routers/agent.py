@@ -1,0 +1,194 @@
+"""REST discovery and WebSocket transport for the interactive Agent Gateway."""
+
+from __future__ import annotations
+
+import asyncio
+
+from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from pydantic import ValidationError
+
+from core.services.agent_gateway import AgentGateway, AgentGatewayError
+from core.services.agent_protocol import (
+    AgentCommand,
+    AgentError,
+    CreateAgentSessionRequest,
+    wire,
+)
+
+
+router = APIRouter(prefix="/api/agent", tags=["agent"])
+
+
+def _gateway(source: Request | WebSocket) -> AgentGateway:
+    gateway = getattr(source.app.state, "agent_gateway", None)
+    if gateway is None:
+        raise AgentGatewayError(
+            "gateway_unavailable",
+            "Agent Gateway is not running",
+            status_code=503,
+        )
+    return gateway
+
+
+def _http_error(exc: AgentGatewayError) -> HTTPException:
+    return HTTPException(
+        status_code=exc.status_code,
+        detail={"code": exc.code, "message": exc.message},
+    )
+
+
+@router.get("/providers")
+async def list_agent_providers(request: Request) -> list[dict]:
+    try:
+        return [wire(value) for value in await _gateway(request).providers()]
+    except AgentGatewayError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.get("/sessions")
+async def list_agent_sessions(
+    request: Request, limit: int = Query(100, ge=1, le=500)
+) -> list[dict]:
+    try:
+        return [wire(value) for value in _gateway(request).list_sessions(limit)]
+    except AgentGatewayError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/sessions", status_code=201)
+async def create_agent_session(
+    payload: CreateAgentSessionRequest, request: Request
+) -> dict:
+    try:
+        session = await _gateway(request).create_session(
+            provider=payload.provider,
+            project_id=payload.project_id,
+            model=payload.model,
+            permission_mode=payload.permission_mode,
+            title=payload.title,
+        )
+        return wire(session)
+    except AgentGatewayError as exc:
+        raise _http_error(exc) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get("/sessions/{session_id}")
+async def get_agent_session(session_id: str, request: Request) -> dict:
+    try:
+        return wire(_gateway(request).get_session(session_id))
+    except AgentGatewayError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/sessions/{session_id}/resume")
+async def resume_agent_session(session_id: str, request: Request) -> dict:
+    try:
+        return wire(await _gateway(request).resume_session(session_id))
+    except AgentGatewayError as exc:
+        raise _http_error(exc) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_agent_session(session_id: str, request: Request) -> dict:
+    try:
+        _gateway(request).delete_session(session_id)
+        return {"status": "deleted", "sessionId": session_id}
+    except AgentGatewayError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.websocket("/sessions/{session_id}/events")
+async def agent_session_events(
+    websocket: WebSocket,
+    session_id: str,
+    after_sequence: int = Query(0, alias="afterSequence", ge=0),
+) -> None:
+    await websocket.accept()
+    try:
+        gateway = _gateway(websocket)
+        queue = gateway.subscribe(session_id, after_sequence)
+    except AgentGatewayError as exc:
+        await websocket.send_json(
+            wire(
+                AgentError(
+                    session_id=session_id,
+                    code=exc.code,
+                    message=exc.message,
+                )
+            )
+        )
+        await websocket.close(code=4404 if exc.status_code == 404 else 1013)
+        return
+
+    send_lock = asyncio.Lock()
+
+    async def send(payload: dict) -> None:
+        async with send_lock:
+            await websocket.send_json(payload)
+
+    async def event_sender() -> None:
+        while True:
+            event = await queue.get()
+            if event is None:
+                await websocket.close(code=1013, reason="Subscriber fell behind; reconnect to replay")
+                return
+            await send(wire(event))
+
+    sender = asyncio.create_task(event_sender(), name=f"agent-ws-{session_id}")
+    try:
+        while True:
+            raw = await websocket.receive_json()
+            try:
+                command = AgentCommand.model_validate(raw)
+                if command.session_id != session_id:
+                    raise AgentGatewayError(
+                        "session_mismatch",
+                        "Command sessionId does not match WebSocket session",
+                    )
+                ack = await gateway.execute_command(command)
+                await send(wire(ack))
+            except ValidationError as exc:
+                request_id = raw.get("requestId") if isinstance(raw, dict) else None
+                await send(
+                    wire(
+                        AgentError(
+                            request_id=request_id,
+                            session_id=session_id,
+                            code="invalid_command",
+                            message=str(exc),
+                        )
+                    )
+                )
+            except AgentGatewayError as exc:
+                await send(
+                    wire(
+                        AgentError(
+                            request_id=(raw.get("requestId") if isinstance(raw, dict) else None),
+                            session_id=session_id,
+                            code=exc.code,
+                            message=exc.message,
+                        )
+                    )
+                )
+            except Exception as exc:
+                await send(
+                    wire(
+                        AgentError(
+                            request_id=(raw.get("requestId") if isinstance(raw, dict) else None),
+                            session_id=session_id,
+                            code="provider_error",
+                            message=str(exc),
+                            retryable=True,
+                        )
+                    )
+                )
+    except WebSocketDisconnect:
+        pass
+    finally:
+        sender.cancel()
+        await asyncio.gather(sender, return_exceptions=True)
+        gateway.unsubscribe(session_id, queue)

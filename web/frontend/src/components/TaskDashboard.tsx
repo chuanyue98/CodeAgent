@@ -109,10 +109,10 @@ function TaskList({
     <div className="p-8 max-w-3xl mx-auto space-y-8 pb-20">
       <div className="flex justify-between items-end pb-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight flex items-center gap-3">
+          <h2 className="text-3xl font-semibold tracking-tight flex items-center gap-3">
             <Activity className="w-8 h-8 text-primary" />
             Tasks
-          </h1>
+          </h2>
           <p className="text-sm text-slate-500 mt-1">{tasks.length} tasks available</p>
         </div>
       </div>
@@ -220,14 +220,14 @@ function TaskDetail({
 
       <div className="flex justify-between items-start">
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 flex items-center gap-3">
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-900 flex items-center gap-3">
             {task.title}
             {activeRun && (
               <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-bold uppercase tracking-wider border border-emerald-100 animate-pulse">
                 Running
               </span>
             )}
-          </h1>
+          </h2>
           {task.description && <p className="text-sm text-slate-500 mt-1">{task.description}</p>}
         </div>
       </div>

@@ -26,11 +26,11 @@ describe('App Layout and Navigation', () => {
 
   test('shows correct page heading for /config route', async () => {
     renderWithRouter('/config');
-    expect(await screen.findByRole('heading', { name: /Configuration/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Workspace/i })).toBeInTheDocument();
   });
 
   test('shows correct page heading for /dashboard route', async () => {
     renderWithRouter('/dashboard');
-    expect(await screen.findByRole('heading', { name: /Dashboard/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Tasks/i })).toBeInTheDocument();
   });
 });

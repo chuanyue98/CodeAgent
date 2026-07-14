@@ -78,14 +78,16 @@ class CodexEngine(BaseEngine):
                 "resume",
                 session_id,
                 "--json",
-                CODEX_SKIP_PERMISSIONS_FLAG,
+                "--sandbox",
+                "workspace-write",
                 message,
             ]
         return [
             CODEX_COMMAND,
             CODEX_EXEC_SUBCOMMAND,
             "--json",
-            CODEX_SKIP_PERMISSIONS_FLAG,
+            "--sandbox",
+            "workspace-write",
             message,
         ]
 

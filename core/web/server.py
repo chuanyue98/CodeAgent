@@ -1,6 +1,7 @@
 import asyncio
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -12,6 +13,7 @@ from core.services.config_service import ConfigService
 from core.services.schedule_service import ScheduleService
 from core.services.scheduler_loop import scheduler_tick_loop
 from core.web.routers import (
+    agent,
     analytics,
     chat,
     config,
@@ -125,6 +127,26 @@ def initialize_default_groups() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize_default_groups()
+    from core.services.agent_adapters.codex import CodexAdapter
+    from core.services.agent_adapters.fake import FakeAgentAdapter
+    from core.services.agent_gateway import AgentGateway
+    from core.services.agent_store import AgentStore
+
+    agent_db = os.environ.get(
+        "CA_AGENT_DB", str(Path.home() / ".codeagent" / "agent-gateway.sqlite3")
+    )
+    adapters = (
+        [FakeAgentAdapter()]
+        if os.environ.get("CA_AGENT_GATEWAY_FAKE") == "1"
+        else [CodexAdapter()]
+    )
+    agent_gateway = AgentGateway(
+        AgentStore(agent_db),
+        get_config_path(),
+        adapters,
+    )
+    app.state.agent_gateway = agent_gateway
+    await agent_gateway.start()
     schedule_service = ScheduleService(ConfigService(get_config_path()))
     scheduler_task = asyncio.create_task(
         scheduler_tick_loop(schedule_service, _task_runner, get_tasks_root)
@@ -136,10 +158,26 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
+    await agent_gateway.stop()
+    app.state.agent_gateway = None
+
+    # Clean up background subprocesses
+    from core.web.routers.chat import _runner as chat_runner
+    from core.web.routers.tasks import _runner as tasks_runner
+    try:
+        chat_runner.kill_all()
+    except Exception:
+        pass
+    try:
+        tasks_runner.kill_all()
+    except Exception:
+        pass
+
 
 app = FastAPI(title="CodeAgent Web UI", lifespan=lifespan)
 
 # Mount modular routers
+app.include_router(agent.router)
 app.include_router(analytics.router)
 app.include_router(chat.router)
 app.include_router(config.router)

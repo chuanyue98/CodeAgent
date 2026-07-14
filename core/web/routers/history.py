@@ -224,39 +224,89 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
             status_code=500, detail={"error": f"Conversion failed: {e}"}
         )
 
-    # Launch the engine in a terminal (same mechanism as /api/launch)
-    import shlex
-    import shutil
-    import subprocess
+    # Launch the engine in a visible terminal (same mechanism as /api/launch).
     import sys
     from pathlib import Path
+    from core.web.routers.launch import launch_in_terminal
 
     _CA_LAUNCHER = Path(__file__).resolve().parents[3] / "ca_launcher.py"
     cmd = [sys.executable, str(_CA_LAUNCHER), req.target_engine]
 
-    if sys.platform == "win32":
-        subprocess.Popen(["cmd", "/c", "start", "cmd", "/k"] + cmd)
-    elif sys.platform == "darwin":
-        script = f'tell app "Terminal" to do script "cd {shlex.quote(Path.cwd().as_posix())} && {shlex.join(cmd)}"'
-        subprocess.Popen(["osascript", "-e", script])
-    else:
-        for terminal in ["gnome-terminal", "konsole", "xterm"]:
-            if shutil.which(terminal):
-                args = (
-                    [terminal, "--"]
-                    if terminal == "gnome-terminal"
-                    else [terminal, "-e"]
-                )
-                subprocess.Popen(args + cmd)
-                break
-        else:
-            # No GUI terminal emulator on PATH (headless/server/WSL-without-X
-            # environments) — fall back to spawning the process directly so
-            # "launched" stays true, just without a visible terminal window.
-            subprocess.Popen(cmd)
+    try:
+        terminal = launch_in_terminal(cmd, cwd=Path(req.project_path))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to open terminal: {exc}") from exc
 
     return {
         "status": "launched",
         "new_session_id": new_id,
         "target_engine": req.target_engine,
+        "terminal": terminal,
     }
+
+
+@router.delete("/history/{engine}/{session_id}")
+async def delete_session(
+    engine: str,
+    session_id: str,
+    project: str = Query(..., description="Project directory path"),
+) -> dict:
+    """Deletes a specific session from local history storage."""
+    import sqlite3
+    from pathlib import Path
+
+    session = find_session_by_id(session_id, engine, project)
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Session not found",
+                "session_id": session_id,
+                "engine": engine,
+            },
+        )
+    
+    if engine == "opencode":
+        if not session.source_file:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Session source file path is empty", "session_id": session_id},
+            )
+        db_path = Path(session.source_file)
+        if not db_path.exists() or not db_path.is_file():
+            raise HTTPException(
+                status_code=400,
+                detail={"error": f"Session source file path is invalid: {session.source_file}", "session_id": session_id},
+            )
+        con = None
+        try:
+            con = sqlite3.connect(str(db_path))
+            with con:
+                con.execute("DELETE FROM part WHERE session_id = ?", (session_id,))
+                con.execute("DELETE FROM message WHERE session_id = ?", (session_id,))
+                con.execute("DELETE FROM session WHERE id = ?", (session_id,))
+        except sqlite3.Error as e:
+            raise HTTPException(status_code=500, detail={"error": f"Failed to delete session row: {e}"})
+        finally:
+            if con is not None:
+                con.close()
+    else:
+        if not session.source_file:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Session source file path is empty", "session_id": session_id},
+            )
+        file_path = Path(session.source_file)
+        if not file_path.exists() or not file_path.is_file():
+            raise HTTPException(
+                status_code=400,
+                detail={"error": f"Session source file path is invalid: {session.source_file}", "session_id": session_id},
+            )
+        try:
+            file_path.unlink()
+        except OSError as e:
+            raise HTTPException(status_code=500, detail={"error": f"Failed to delete session file: {e}"})
+
+    return {"status": "deleted", "session_id": session_id}

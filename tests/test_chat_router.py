@@ -53,6 +53,14 @@ class _FakeRunner:
             return None
         return self._status
 
+    def stop_task(self, task_id):
+        if self._status is None or task_id != self._status.task_id:
+            return False
+        if self._status.status != "running":
+            return False
+        self._status.status = "stopped"
+        return True
+
 
 @pytest.fixture
 def fake_runner(monkeypatch):
@@ -61,14 +69,36 @@ def fake_runner(monkeypatch):
     return fake
 
 
+@pytest.fixture
+def registered_project(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "project_registry": [{"path": str(project), "group": "work"}],
+                "groups": {"work": {"skills": [], "hooks": [], "plugins": []}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(chat_router, "get_config_path", lambda: config_path)
+    return project
+
+
 @pytest.mark.asyncio
-async def test_start_chat_turn_returns_running_status(fake_runner):
+async def test_start_chat_turn_returns_running_status(fake_runner, registered_project):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         response = await ac.post(
             "/api/chat/turns",
-            json={"engine": "claude", "message": "hello"},
+            json={
+                "engine": "claude",
+                "message": "hello",
+                "project_path": str(registered_project),
+            },
         )
 
     assert response.status_code == 200
@@ -80,14 +110,16 @@ async def test_start_chat_turn_returns_running_status(fake_runner):
             "engine": "claude",
             "message": "hello",
             "session_id": None,
-            "group": "common",
-            "project_path": None,
+            "group": "work",
+            "project_path": str(registered_project.resolve()),
         }
     ]
 
 
 @pytest.mark.asyncio
-async def test_start_chat_turn_passes_session_id_and_group(fake_runner):
+async def test_start_chat_turn_uses_registered_project_group(
+    fake_runner, registered_project
+):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
@@ -97,8 +129,8 @@ async def test_start_chat_turn_passes_session_id_and_group(fake_runner):
                 "engine": "codex",
                 "message": "continue",
                 "session_id": "abc-123",
-                "group": "work",
-                "project_path": "/tmp/other-project",
+                "group": "untrusted-client-value",
+                "project_path": str(registered_project),
             },
         )
 
@@ -109,19 +141,25 @@ async def test_start_chat_turn_passes_session_id_and_group(fake_runner):
             "message": "continue",
             "session_id": "abc-123",
             "group": "work",
-            "project_path": "/tmp/other-project",
+            "project_path": str(registered_project.resolve()),
         }
     ]
 
 
 @pytest.mark.asyncio
-async def test_start_chat_turn_invalid_engine_returns_400(fake_runner):
+async def test_start_chat_turn_invalid_engine_returns_400(
+    fake_runner, registered_project
+):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         response = await ac.post(
             "/api/chat/turns",
-            json={"engine": "shell", "message": "hello"},
+            json={
+                "engine": "shell",
+                "message": "hello",
+                "project_path": str(registered_project),
+            },
         )
 
     assert response.status_code == 400
@@ -129,12 +167,17 @@ async def test_start_chat_turn_invalid_engine_returns_400(fake_runner):
 
 
 @pytest.mark.asyncio
-async def test_get_chat_turn_returns_status(fake_runner):
+async def test_get_chat_turn_returns_status(fake_runner, registered_project):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         start = await ac.post(
-            "/api/chat/turns", json={"engine": "claude", "message": "hi"}
+            "/api/chat/turns",
+            json={
+                "engine": "claude",
+                "message": "hi",
+                "project_path": str(registered_project),
+            },
         )
         turn_id = start.json()["task_id"]
 
@@ -160,6 +203,69 @@ async def test_stream_chat_turn_missing_returns_404(fake_runner):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         response = await ac.get("/api/chat/turns/does-not-exist/stream")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_start_chat_turn_requires_registered_project(fake_runner, tmp_path):
+    missing = tmp_path / "missing"
+    missing.mkdir()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.post(
+            "/api/chat/turns",
+            json={
+                "engine": "claude",
+                "message": "hello",
+                "project_path": str(missing),
+            },
+        )
+
+    assert response.status_code == 400
+    assert "registered" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_start_chat_turn_requires_project_path(fake_runner):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.post(
+            "/api/chat/turns", json={"engine": "claude", "message": "hello"}
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_cancel_chat_turn_stops_running_process(fake_runner, registered_project):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        start = await ac.post(
+            "/api/chat/turns",
+            json={
+                "engine": "claude",
+                "message": "hello",
+                "project_path": str(registered_project),
+            },
+        )
+        response = await ac.post(
+            f"/api/chat/turns/{start.json()['task_id']}/cancel"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_cancel_chat_turn_missing_returns_404(fake_runner):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.post("/api/chat/turns/does-not-exist/cancel")
 
     assert response.status_code == 404
 

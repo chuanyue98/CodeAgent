@@ -8,7 +8,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoMcp(page: Page): Promise<void> {
   await page.goto('/mcp');
-  await waitForH2(page, 'MCP Servers');
+  await waitForH2(page, 'MCP');
   await expect(page.getByText('No MCP servers configured.')).toBeVisible();
 }
 

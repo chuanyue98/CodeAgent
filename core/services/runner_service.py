@@ -137,11 +137,11 @@ class TaskRunner:
         if not message or not message.strip():
             raise ValueError("message must not be empty")
 
-        working_dir = Path.cwd()
-        if project_path:
-            working_dir = Path(project_path).expanduser().resolve()
-            if not working_dir.is_dir():
-                raise ValueError(f"Invalid project path: {project_path!r}")
+        if not project_path:
+            raise ValueError("project_path is required for chat turns")
+        working_dir = Path(project_path).expanduser().resolve()
+        if not working_dir.is_dir():
+            raise ValueError(f"Invalid project path: {project_path!r}")
 
         engine_obj = self._build_engine(engine)
         cmd = engine_obj.build_chat_command(message, session_id=session_id)
@@ -297,6 +297,21 @@ class TaskRunner:
             return True
         except Exception:
             return False
+
+    def kill_all(self):
+        """Terminates all active processes immediately."""
+        for task_id, process in list(self._processes.items()):
+            try:
+                process.terminate()
+                process.wait(timeout=1.0)
+            except Exception:
+                try:
+                    process.kill()
+                    process.wait()
+                except Exception:
+                    pass
+            if task_id in self.active_runs:
+                self.active_runs[task_id].status = "stopped"
 
     def _is_process_running(self, pid: int) -> bool:
         try:

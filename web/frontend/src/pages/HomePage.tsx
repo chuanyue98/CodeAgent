@@ -10,8 +10,8 @@ const QUICK_ACTIONS = [
   },
   {
     to: '/agent/terminal',
-    title: 'Native Terminal',
-    description: 'Launch the provider’s full interactive terminal experience.',
+    title: 'Local Terminal',
+    description: 'Open a provider CLI in a separate terminal on this machine.',
     icon: Terminal,
   },
   {

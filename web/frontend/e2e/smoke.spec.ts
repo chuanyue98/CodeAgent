@@ -10,25 +10,25 @@ import AxeBuilder from '@axe-core/playwright';
 // against the E2E fixtures (see start-server.sh) — asserting the hint text
 // is present catches the class of bug where a component renders nothing at
 // all for an empty array, rather than a real empty-state message.
-const PAGES: { path: string; label: string; emptyStateHint?: RegExp }[] = [
-  { path: '/launch', label: 'Launch' },
-  { path: '/chat', label: 'Chat' },
-  { path: '/skills', label: 'Skills' },
-  { path: '/prompts', label: 'Prompts' },
-  { path: '/hooks', label: 'Hooks' },
-  { path: '/plugins', label: 'Plugins' },
-  { path: '/mcp', label: 'MCP Servers' },
-  { path: '/config', label: 'Configuration' },
-  { path: '/dashboard', label: 'Dashboard' },
-  { path: '/cron', label: 'Cron' },
-  { path: '/logs', label: 'Logs' },
-  { path: '/analytics', label: 'Analytics' },
-  { path: '/sessions', label: 'Sessions' },
-  { path: '/audit', label: 'Audit Trail' },
-  { path: '/system', label: 'System' },
+const PAGES: { path: string; label: string; screenshotSlug: string; emptyStateHint?: RegExp }[] = [
+  { path: '/launch', label: 'Local Terminal', screenshotSlug: 'launch' },
+  { path: '/chat', label: 'Web Agent', screenshotSlug: 'chat' },
+  { path: '/skills', label: 'Skills', screenshotSlug: 'skills' },
+  { path: '/prompts', label: 'Prompts', screenshotSlug: 'prompts' },
+  { path: '/hooks', label: 'Hooks', screenshotSlug: 'hooks' },
+  { path: '/plugins', label: 'Plugins', screenshotSlug: 'plugins' },
+  { path: '/mcp', label: 'MCP', screenshotSlug: 'mcp-servers' },
+  { path: '/config', label: 'Workspace', screenshotSlug: 'configuration' },
+  { path: '/dashboard', label: 'Tasks', screenshotSlug: 'dashboard' },
+  { path: '/cron', label: 'Schedules', screenshotSlug: 'cron' },
+  { path: '/logs', label: 'Logs', screenshotSlug: 'logs' },
+  { path: '/analytics', label: 'Analytics', screenshotSlug: 'analytics' },
+  { path: '/sessions', label: 'History', screenshotSlug: 'sessions' },
+  { path: '/audit', label: 'Events', screenshotSlug: 'audit-trail' },
+  { path: '/system', label: 'System', screenshotSlug: 'system' },
 ];
 
-for (const { path, label, emptyStateHint } of PAGES) {
+for (const { path, label, screenshotSlug, emptyStateHint } of PAGES) {
   test(`smoke: ${label} (${path}) renders, is accessible, makes no failed requests`, async ({
     page,
   }) => {
@@ -85,13 +85,12 @@ for (const { path, label, emptyStateHint } of PAGES) {
 
     // The one real layout interaction in this shell: the sidebar's
     // expanded/collapsed states. Screenshot both.
-    const slug = label.toLowerCase().replace(/\s+/g, '-');
-    await page.screenshot({ path: `e2e/screenshots/${slug}-expanded.png` });
+    await page.screenshot({ path: `e2e/screenshots/${screenshotSlug}-expanded.png` });
 
     const navigation = page.locator('aside').first();
     const collapseButton = navigation.locator('button').first();
     await collapseButton.click();
     await expect(navigation).toHaveClass(/w-24/);
-    await page.screenshot({ path: `e2e/screenshots/${slug}-collapsed.png` });
+    await page.screenshot({ path: `e2e/screenshots/${screenshotSlug}-collapsed.png` });
   });
 }

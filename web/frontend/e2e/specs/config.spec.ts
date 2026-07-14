@@ -8,7 +8,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoConfig(page: Page): Promise<void> {
   await page.goto('/config');
-  await waitForH2(page, 'Configuration');
+  await waitForH2(page, 'Workspace');
   await expect(page.getByRole('button', { name: 'Save All Changes' })).toBeVisible();
 }
 
@@ -27,7 +27,7 @@ test('changing Operation Mode and saving persists across reload', async ({
   await modeSelect(page).selectOption('cloud');
   await save(page);
   await page.reload();
-  await waitForH2(page, 'Configuration');
+  await waitForH2(page, 'Workspace');
   await expect(modeSelect(page)).toHaveValue('cloud');
 });
 
@@ -36,7 +36,7 @@ test('changing Language and saving persists across reload', async ({ page }) => 
   await langSelect(page).selectOption('zh');
   await save(page);
   await page.reload();
-  await waitForH2(page, 'Configuration');
+  await waitForH2(page, 'Workspace');
   await expect(langSelect(page)).toHaveValue('zh');
 });
 
@@ -44,7 +44,7 @@ test('unsaved changes are lost on reload', async ({ page }) => {
   await gotoConfig(page);
   await modeSelect(page).selectOption('hybrid');
   await page.reload();
-  await waitForH2(page, 'Configuration');
+  await waitForH2(page, 'Workspace');
   await expect(modeSelect(page)).toHaveValue('local');
 });
 
@@ -55,7 +55,7 @@ test('adding a project then saving persists the row', async ({ page }) => {
   await registry.locator('input[placeholder="E:/your/project/path"]').last().fill('/tmp/e2e-project');
   await save(page);
   await page.reload();
-  await waitForH2(page, 'Configuration');
+  await waitForH2(page, 'Workspace');
   // The project path lives in an <input> value (not text content), so assert
   // the persisted value rather than visible text.
   await expect(

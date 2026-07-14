@@ -19,7 +19,7 @@ test('sidebar nav links navigate and mark the active route', async ({ page }) =>
   const primaryNav = page.getByRole('navigation', { name: 'Primary navigation' });
   const agentLink = primaryNav.getByRole('link', { name: 'Agent', exact: true });
   await agentLink.click();
-  await waitForH2(page, 'Chat');
+  await waitForH2(page, 'Web Agent');
   await expect(agentLink).toHaveClass(/bg-primary\/10/);
 });
 
@@ -31,16 +31,16 @@ test('legacy routes redirect into the new hierarchy', async ({ page }) => {
   await expect(page.getByRole('navigation', { name: 'Capabilities sections' })).toBeVisible();
 });
 
-test('Agent workspace combines Web Agent and Native Terminal modes', async ({ page }) => {
+test('Agent workspace combines Web Agent and Local Terminal modes', async ({ page }) => {
   await page.goto('/chat');
-  await waitForH2(page, 'Chat');
+  await waitForH2(page, 'Web Agent');
   const sections = page.getByRole('navigation', { name: 'Agent sections' });
   await expect(sections.getByRole('link', { name: 'Web Agent' })).toHaveAttribute('aria-current', 'page');
 
-  await sections.getByRole('link', { name: 'Native Terminal' }).click();
-  await waitForH2(page, 'Launch');
+  await sections.getByRole('link', { name: 'Local Terminal' }).click();
+  await waitForH2(page, 'Local Terminal');
   await expect(page).toHaveURL(/\/agent\/terminal$/);
-  await expect(page.getByText('选择引擎，点击启动即可在新终端窗口中运行对应的 ca 会话。')).toBeVisible();
+  await expect(page.getByText('This is a local launcher, not an in-browser terminal.')).toBeVisible();
 });
 
 test('command palette opens via Ctrl/Cmd+K, filters, and navigates', async ({ page }) => {
@@ -50,11 +50,11 @@ test('command palette opens via Ctrl/Cmd+K, filters, and navigates', async ({ pa
   await expect(palette).toBeVisible();
 
   await page.getByLabel('Command palette search').fill('mcp');
-  await expect(page.getByRole('option', { name: /MCP Servers/ })).toBeVisible();
-  await expect(page.getByRole('option', { name: /Chat/ })).toHaveCount(0);
+  await expect(page.getByRole('option', { name: /^MCP/ })).toBeVisible();
+  await expect(page.getByRole('option', { name: /Web Agent/ })).toHaveCount(0);
 
-  await page.getByRole('option', { name: /MCP Servers/ }).click();
-  await waitForH2(page, 'MCP Servers');
+  await page.getByRole('option', { name: /^MCP/ }).click();
+  await waitForH2(page, 'MCP');
   await expect(palette).toHaveCount(0);
 });
 

@@ -16,10 +16,10 @@ export default function SectionLayout({ label, description, tabs }: SectionLayou
   const { pathname } = useLocation();
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-        <p className="text-xs text-slate-500">{description}</p>
-        <nav aria-label={`${label} sections`} className="flex max-w-full gap-1 overflow-x-auto rounded-xl bg-slate-100/80 p-1 custom-scrollbar">
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <div className="border-b border-slate-200 px-1 pb-2">
+        <span className="sr-only">{description}</span>
+        <nav aria-label={`${label} sections`} className="custom-scrollbar flex max-w-full gap-1 overflow-x-auto">
           {tabs.map(tab => {
             const active = tab.matchPrefix
               ? pathname === tab.matchPrefix || pathname.startsWith(`${tab.matchPrefix}/`)
@@ -29,10 +29,10 @@ export default function SectionLayout({ label, description, tabs }: SectionLayou
                 key={tab.to}
                 to={tab.to}
                 aria-current={active ? 'page' : undefined}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                   active
-                    ? 'bg-white text-primary shadow-sm'
-                    : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
                 }`}
               >
                 {tab.label}

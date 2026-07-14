@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Terminal } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, ExternalLink, Loader2 } from 'lucide-react';
 import request from '../utils/request';
 
 interface Engine {
@@ -7,6 +7,19 @@ interface Engine {
   name: string;
   description: string;
   color: string;
+}
+
+interface LaunchCapability {
+  available: boolean;
+  terminal: string | null;
+  mode: 'local_gui';
+  reason?: string | null;
+}
+
+interface LaunchResult {
+  status: 'launched';
+  engine: string;
+  terminal: string;
 }
 
 const ENGINES: Engine[] = [
@@ -19,14 +32,25 @@ const ENGINES: Engine[] = [
 export default function LaunchPad() {
   const [launching, setLaunching] = useState<string | null>(null);
   const [lastLaunched, setLastLaunched] = useState<string | null>(null);
+  const [lastTerminal, setLastTerminal] = useState<string | null>(null);
+  const [capability, setCapability] = useState<LaunchCapability | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    request<LaunchCapability>('/api/launch/status')
+      .then(setCapability)
+      .catch(err => setError(err instanceof Error ? err.message : 'Failed to detect local terminal support'));
+  }, []);
 
   async function launch(engine: string) {
     setLaunching(engine);
+    setError(null);
     try {
-      await request(`/api/launch/${engine}`, { method: 'POST' });
+      const result = await request<LaunchResult>(`/api/launch/${engine}`, { method: 'POST' });
       setLastLaunched(engine);
+      setLastTerminal(result.terminal);
     } catch (error) {
-      console.error('Launch engine failed:', error);
+      setError(error instanceof Error ? error.message : 'Failed to open local terminal');
     } finally {
       setLaunching(null);
     }
@@ -34,7 +58,26 @@ export default function LaunchPad() {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-slate-500">选择引擎，点击启动即可在新终端窗口中运行对应的 ca 会话。</p>
+      <div className="space-y-2">
+        <p className="text-sm text-slate-600">
+          Opens the provider CLI in a separate terminal window on the machine running CodeAgent.
+        </p>
+        <p className="text-xs text-slate-400">This is a local launcher, not an in-browser terminal.</p>
+      </div>
+
+      {capability && !capability.available && (
+        <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">Local terminal unavailable</p>
+            <p className="mt-0.5 text-xs">{capability.reason}</p>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {ENGINES.map((engine) => (
@@ -46,21 +89,21 @@ export default function LaunchPad() {
               <div className="font-semibold text-slate-800">{engine.name}</div>
               <div className="text-xs text-slate-500">{engine.description}</div>
               {lastLaunched === engine.id && (
-                <div className="text-xs text-emerald-600 font-medium">已启动 ✓</div>
+                <div className="text-xs text-emerald-600 font-medium">Opened in {lastTerminal}</div>
               )}
             </div>
 
             <button
               onClick={() => launch(engine.id)}
-              disabled={launching === engine.id}
+              disabled={launching !== null || !capability?.available}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all
-                ${launching === engine.id
+                ${launching !== null || !capability?.available
                   ? 'opacity-50 cursor-not-allowed'
                   : 'hover:scale-105 active:scale-95 cursor-pointer'}
                 ${engine.color}`}
             >
-              <Terminal size={15} />
-              {launching === engine.id ? '启动中…' : '启动'}
+              {launching === engine.id ? <Loader2 size={15} className="animate-spin" /> : <ExternalLink size={15} />}
+              {launching === engine.id ? 'Opening…' : 'Open terminal'}
             </button>
           </div>
         ))}

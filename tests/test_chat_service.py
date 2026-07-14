@@ -66,7 +66,7 @@ def test_run_chat_turn_writes_jsonl_log_and_extracts_session_id(tmp_path, monkey
     runner = TaskRunner(tmp_path)
     monkeypatch.setattr(runner, "_build_engine", lambda engine: fake_engine)
 
-    run = runner.run_chat_turn("claude", "hello there")
+    run = runner.run_chat_turn("claude", "hello there", project_path=str(tmp_path))
     status = _wait_for_completion(runner, run.task_id)
 
     assert status is not None
@@ -85,7 +85,10 @@ def test_run_chat_turn_resume_passes_session_id_through(tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "_build_engine", lambda engine: fake_engine)
 
     run = runner.run_chat_turn(
-        "codex", "what did I say?", session_id="existing-thread-1"
+        "codex",
+        "what did I say?",
+        session_id="existing-thread-1",
+        project_path=str(tmp_path),
     )
     status = _wait_for_completion(runner, run.task_id)
 
@@ -98,13 +101,19 @@ def test_run_chat_turn_resume_passes_session_id_through(tmp_path, monkeypatch):
 def test_run_chat_turn_rejects_unknown_engine(tmp_path):
     runner = TaskRunner(tmp_path)
     with pytest.raises(ValueError, match="Invalid engine"):
-        runner.run_chat_turn("shell", "hello")
+        runner.run_chat_turn("shell", "hello", project_path=str(tmp_path))
 
 
 def test_run_chat_turn_rejects_empty_message(tmp_path):
     runner = TaskRunner(tmp_path)
     with pytest.raises(ValueError, match="message must not be empty"):
-        runner.run_chat_turn("claude", "   ")
+        runner.run_chat_turn("claude", "   ", project_path=str(tmp_path))
+
+
+def test_run_chat_turn_requires_project_path(tmp_path):
+    runner = TaskRunner(tmp_path)
+    with pytest.raises(ValueError, match="project_path is required"):
+        runner.run_chat_turn("claude", "hello")
 
 
 def test_run_chat_turn_uses_resumed_session_project(tmp_path, monkeypatch):
@@ -183,3 +192,22 @@ def test_gemini_build_chat_command_rejects_resume():
     cmd = engine.build_chat_command("hello")
     assert cmd[0] == "gemini"
     assert "hello" in cmd
+    assert cmd[cmd.index("--approval-mode") + 1] == "plan"
+    assert "yolo" not in cmd
+
+
+def test_legacy_chat_commands_use_restricted_defaults():
+    from engines.start_claude_code import ClaudeEngine
+    from engines.start_codex import CodexEngine
+    from engines.start_opencode import OpenCodeEngine
+
+    claude = ClaudeEngine().build_chat_command("hello")
+    assert "--dangerously-skip-permissions" not in claude
+    assert claude[claude.index("--permission-mode") + 1] == "dontAsk"
+
+    codex = CodexEngine().build_chat_command("hello")
+    assert "--dangerously-bypass-approvals-and-sandbox" not in codex
+    assert codex[codex.index("--sandbox") + 1] == "workspace-write"
+
+    opencode = OpenCodeEngine().build_chat_command("hello")
+    assert "--auto" not in opencode
