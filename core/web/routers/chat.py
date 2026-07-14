@@ -49,7 +49,7 @@ class StartChatTurnRequest(BaseModel):
     project_path: str | None = None
 
 
-_EMPTY_RESOURCES = {"skills": [], "hooks": [], "plugins": []}
+_RESOURCE_NAMES = ("skills", "hooks", "plugins")
 
 
 @router.get("/capabilities")
@@ -71,21 +71,31 @@ async def get_chat_capabilities(
 
     service = ConfigService(get_config_path())
     config, warnings = service.get_config()
-    if warnings:
-        raise HTTPException(status_code=500, detail=warnings[0])
+    if config is None:
+        raise HTTPException(
+            status_code=500,
+            detail=warnings[0] if warnings else "Failed to load configuration",
+        )
 
-    group_definition = config.get("groups", {}).get(group, {})
-    configured = {
-        resource: list(group_definition.get(resource, []))
-        for resource in _EMPTY_RESOURCES
-    }
+    groups = config.get("groups")
+    if not isinstance(groups, dict):
+        groups = {}
+    group_definition = groups.get(group)
+    if not isinstance(group_definition, dict):
+        group_definition = {}
+
+    configured = {}
+    for resource in _RESOURCE_NAMES:
+        value = group_definition.get(resource)
+        configured[resource] = list(value) if isinstance(value, list) else []
     return {
         "mode": "legacy_one_shot",
         "engine": engine,
         "group": group,
         "project_path": project_path,
+        "configuration_warnings": warnings,
         "codeagent_resources_injected": False,
-        "active": {resource: [] for resource in _EMPTY_RESOURCES},
+        "active": {resource: [] for resource in _RESOURCE_NAMES},
         "configured_but_inactive": configured,
         "provider_native": {
             "status": "unknown",

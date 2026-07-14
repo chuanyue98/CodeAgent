@@ -119,7 +119,8 @@ function App() {
 
           <nav aria-label="Primary navigation" className="custom-scrollbar mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto p-2 xl:mt-4 xl:p-4">
             {primaryNav.map(item => {
-              const active = pathname.startsWith(item.matchPrefix);
+              const active = pathname === item.matchPrefix
+                || pathname.startsWith(`${item.matchPrefix}/`);
               return (
                 <NavLink
                   key={item.to}

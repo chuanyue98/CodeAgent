@@ -7,6 +7,17 @@ interface ProxyConfig {
   port: number;
 }
 
+interface EditableProxyConfig extends ProxyConfig {
+  uiId: string;
+}
+
+interface EditableProject extends Project {
+  uiId: string;
+}
+
+let nextEditableRowId = 0;
+const createEditableRowId = (kind: 'project' | 'proxy') => `${kind}-${nextEditableRowId++}`;
+
 const deepClone = <T,>(value: T): T => structuredClone(value);
 
 const ConfigHub: React.FC = () => {
@@ -19,7 +30,8 @@ const ConfigHub: React.FC = () => {
   } = useProject();
 
   const [localConfig, setLocalConfig] = useState<Config | null>(null);
-  const [localProjects, setLocalProjects] = useState<Project[]>([]);
+  const [localProjects, setLocalProjects] = useState<EditableProject[]>([]);
+  const [localProxies, setLocalProxies] = useState<EditableProxyConfig[]>([]);
   const [localGroups, setLocalGroups] = useState<Record<string, GroupDefinition>>({});
 
   const [loading, setLoading] = useState(true);
@@ -38,7 +50,18 @@ const ConfigHub: React.FC = () => {
 
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocalConfig(cloned);
-      setLocalProjects(deepClone(projects));
+      setLocalProjects(
+        deepClone(projects).map(project => ({
+          ...project,
+          uiId: createEditableRowId('project'),
+        })),
+      );
+      setLocalProxies(
+        (cloned.proxy || []).map(proxy => ({
+          ...proxy,
+          uiId: createEditableRowId('proxy'),
+        })),
+      );
       setLocalGroups(deepClone(groups));
       setLoading(false);
     }
@@ -50,7 +73,8 @@ const ConfigHub: React.FC = () => {
 
       const fullConfig = {
         ...localConfig,
-        project_registry: localProjects,
+        proxy: localProxies.map(({ host, port }) => ({ host, port })),
+        project_registry: localProjects.map(({ path, group }) => ({ path, group })),
         groups: localGroups
       };
 
@@ -71,40 +95,39 @@ const ConfigHub: React.FC = () => {
     }
   };
 
-  const updateProxy = (index: number, field: keyof ProxyConfig, value: string | number) => {
-    if (!localConfig || !localConfig.proxy) return;
-    const newProxy = [...localConfig.proxy];
-    newProxy[index] = { ...newProxy[index], [field]: value };
-    setLocalConfig({ ...localConfig, proxy: newProxy });
+  const updateProxy = (uiId: string, field: keyof ProxyConfig, value: string | number) => {
+    setLocalProxies(current => current.map(proxy => (
+      proxy.uiId === uiId ? { ...proxy, [field]: value } : proxy
+    )));
   };
 
   const addProxy = () => {
-    if (!localConfig) return;
-    setLocalConfig({
-      ...localConfig,
-      proxy: [...(localConfig.proxy || []), { host: '127.0.0.1', port: 7890 }]
-    });
+    setLocalProxies(current => [
+      ...current,
+      { uiId: createEditableRowId('proxy'), host: '127.0.0.1', port: 7890 },
+    ]);
   };
 
-  const removeProxy = (index: number) => {
-    if (!localConfig || !localConfig.proxy) return;
-    const newProxy = localConfig.proxy.filter((_: ProxyConfig, i: number) => i !== index);
-    setLocalConfig({ ...localConfig, proxy: newProxy });
+  const removeProxy = (uiId: string) => {
+    setLocalProxies(current => current.filter(proxy => proxy.uiId !== uiId));
   };
 
   // Project Registry Handlers
   const addProject = () => {
-    setLocalProjects([...localProjects, { path: '', group: 'common' }]);
+    setLocalProjects(current => [
+      ...current,
+      { uiId: createEditableRowId('project'), path: '', group: 'common' },
+    ]);
   };
 
-  const updateProject = (index: number, field: keyof Project, value: string) => {
-    const newProjects = [...localProjects];
-    newProjects[index] = { ...newProjects[index], [field]: value };
-    setLocalProjects(newProjects);
+  const updateProject = (uiId: string, field: keyof Project, value: string) => {
+    setLocalProjects(current => current.map(project => (
+      project.uiId === uiId ? { ...project, [field]: value } : project
+    )));
   };
 
-  const removeProject = (index: number) => {
-    setLocalProjects(localProjects.filter((_, i) => i !== index));
+  const removeProject = (uiId: string) => {
+    setLocalProjects(current => current.filter(project => project.uiId !== uiId));
   };
 
   // Group Handlers
@@ -251,24 +274,24 @@ const ConfigHub: React.FC = () => {
 
         <div className="space-y-3">
           {localProjects.map((p, i) => (
-            <div key={i} className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center bg-slate-50/30 p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
+            <div key={p.uiId} className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center bg-slate-50/30 p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
               <input
                 type="text"
                 aria-label={`Project path ${i + 1}`}
                 value={p.path}
-                onChange={(e) => updateProject(i, 'path', e.target.value)}
+                onChange={(e) => updateProject(p.uiId, 'path', e.target.value)}
                 placeholder="E:/your/project/path"
                 className="flex-1 p-2 bg-transparent border-b border-slate-200 focus:border-primary outline-none text-sm font-mono"
               />
               <select
                 aria-label="Resource group"
                 value={p.group}
-                onChange={(e) => updateProject(i, 'group', e.target.value)}
+                onChange={(e) => updateProject(p.uiId, 'group', e.target.value)}
                 className="w-full sm:w-40 p-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/20"
               >
                 {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
-              <button aria-label={`Remove project ${p.path || i + 1}`} onClick={() => removeProject(i)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
+              <button aria-label={`Remove project ${p.path || i + 1}`} onClick={() => removeProject(p.uiId)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
                 <Trash2 size={18} />
               </button>
             </div>
@@ -353,23 +376,23 @@ const ConfigHub: React.FC = () => {
           </button>
         </div>
         <div className="space-y-3">
-          {(localConfig.proxy || []).map((p: ProxyConfig, i: number) => (
-            <div key={i} className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center bg-slate-50/30 p-2 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
+          {localProxies.map((p, i) => (
+            <div key={p.uiId} className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center bg-slate-50/30 p-2 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
               <input
                 type="text"
                 aria-label={`Proxy host ${i + 1}`}
                 value={p.host}
-                onChange={(e) => updateProxy(i, 'host', e.target.value)}
+                onChange={(e) => updateProxy(p.uiId, 'host', e.target.value)}
                 className="flex-1 p-2.5 bg-transparent border-b border-slate-100 focus:border-primary outline-none text-sm font-mono"
               />
               <input
                 type="number"
                 aria-label={`Proxy port ${i + 1}`}
                 value={p.port}
-                onChange={(e) => updateProxy(i, 'port', parseInt(e.target.value) || 0)}
+                onChange={(e) => updateProxy(p.uiId, 'port', parseInt(e.target.value) || 0)}
                 className="w-full sm:w-24 p-2.5 bg-transparent border-b border-slate-100 focus:border-primary outline-none text-sm font-mono"
               />
-              <button aria-label={`Remove proxy ${p.host}:${p.port}`} onClick={() => removeProxy(i)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
+              <button aria-label={`Remove proxy ${p.host}:${p.port}`} onClick={() => removeProxy(p.uiId)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
                 <Trash2 size={20} />
               </button>
             </div>

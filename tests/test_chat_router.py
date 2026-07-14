@@ -223,8 +223,68 @@ async def test_chat_capabilities_reject_invalid_engine():
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
-        response = await ac.get(
-            "/api/chat/capabilities", params={"engine": "shell"}
-        )
+        response = await ac.get("/api/chat/capabilities", params={"engine": "shell"})
 
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_chat_capabilities_tolerate_warnings_and_null_resources(
+    tmp_path, monkeypatch
+):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "groups": {
+                    "web": {
+                        "skills": None,
+                        "hooks": ["base/audit"],
+                        "plugins": None,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(chat_router, "get_config_path", lambda: config_path)
+    monkeypatch.setattr(
+        chat_router.ConfigService,
+        "get_config",
+        lambda self: (
+            json.loads(config_path.read_text(encoding="utf-8")),
+            ["deprecated field"],
+        ),
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get(
+            "/api/chat/capabilities", params={"engine": "codex", "group": "web"}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["configured_but_inactive"] == {
+        "skills": [],
+        "hooks": ["base/audit"],
+        "plugins": [],
+    }
+    assert response.json()["configuration_warnings"] == ["deprecated field"]
+
+
+@pytest.mark.asyncio
+async def test_chat_capabilities_reject_missing_config(monkeypatch):
+    monkeypatch.setattr(
+        chat_router.ConfigService,
+        "get_config",
+        lambda self: (None, ["fatal config error"]),
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get("/api/chat/capabilities", params={"engine": "codex"})
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "fatal config error"

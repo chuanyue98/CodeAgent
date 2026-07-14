@@ -22,7 +22,7 @@ export default function SectionLayout({ label, description, tabs }: SectionLayou
         <nav aria-label={`${label} sections`} className="flex max-w-full gap-1 overflow-x-auto rounded-xl bg-slate-100/80 p-1 custom-scrollbar">
           {tabs.map(tab => {
             const active = tab.matchPrefix
-              ? pathname.startsWith(tab.matchPrefix)
+              ? pathname === tab.matchPrefix || pathname.startsWith(`${tab.matchPrefix}/`)
               : pathname === tab.to;
             return (
               <NavLink

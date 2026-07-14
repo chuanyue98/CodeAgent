@@ -39,6 +39,7 @@ export interface ChatCapabilities {
   engine: string;
   group: string;
   project_path: string | null;
+  configuration_warnings: string[];
   codeagent_resources_injected: boolean;
   active: ChatResourceSet;
   configured_but_inactive: ChatResourceSet;
