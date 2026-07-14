@@ -230,7 +230,7 @@ const PromptsGallery: React.FC = () => {
                 key={promptGroup.id}
                 onClick={() => setSelectedPrompt(promptGroup)}
                 className={`group glass-card p-6 hover:border-primary/20 hover:bg-slate-50/50 transition-all cursor-pointer relative overflow-hidden ${
-                  !active ? 'opacity-70' : ''
+                  !active ? 'bg-slate-50/60 border-slate-200' : ''
                 }`}
               >
                 <div className="flex justify-between items-start mb-4">
@@ -253,9 +253,9 @@ const PromptsGallery: React.FC = () => {
                   </button>
                 </div>
 
-                <h3 className="text-lg font-semibold tracking-tight group-hover:text-primary transition-colors mb-2 capitalize">
+                <h2 className="break-words text-lg font-semibold tracking-tight group-hover:text-primary transition-colors mb-2 capitalize">
                   {promptGroup.name}
-                </h3>
+                </h2>
                 <p className="text-sm text-slate-500 line-clamp-3 font-medium leading-relaxed">
                   {promptGroup.description}
                 </p>

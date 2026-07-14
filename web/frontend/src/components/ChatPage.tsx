@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Send, MessageSquare, Plus, AlertCircle, Loader2, RotateCcw } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import SessionCapabilities from './SessionCapabilities';
 import {
   fetchChatEngines,
   fetchResumableSessions,
@@ -227,8 +228,8 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex gap-4 h-full">
-      <div className="w-64 shrink-0 glass-card p-4 space-y-4 flex flex-col">
+    <div className="flex flex-col lg:flex-row gap-4 min-h-full lg:h-full">
+      <aside className="w-full lg:w-64 shrink-0 glass-card p-4 space-y-4 flex flex-col">
         <div>
           <label className="text-xs text-slate-400 font-medium block mb-1">Engine</label>
           <div className="space-y-1">
@@ -292,7 +293,7 @@ export default function ChatPage() {
             </div>
           )}
         </div>
-      </div>
+      </aside>
 
       <div className="flex-1 min-w-0 glass-card p-5 flex flex-col">
         <div className="flex items-center justify-between mb-3">
@@ -311,6 +312,12 @@ export default function ChatPage() {
             <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}
           </div>
         )}
+
+        <SessionCapabilities
+          engine={selectedEngine}
+          group={currentGroup || 'common'}
+          projectPath={activeProjectPath}
+        />
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 pr-1">
           {messages.length === 0 && !sending && (

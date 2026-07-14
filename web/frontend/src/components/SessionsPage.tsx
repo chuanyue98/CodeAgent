@@ -98,8 +98,8 @@ export default function SessionsPage() {
   }
 
   return (
-    <div className="flex gap-4 h-full">
-      <div className="w-56 shrink-0 glass-card p-4 space-y-4">
+    <div className="flex flex-col xl:flex-row gap-4 min-h-full xl:h-full">
+      <aside data-testid="session-filters" className="w-full xl:w-56 shrink-0 glass-card p-4 space-y-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
           <Filter className="w-4 h-4" /> Filters
         </div>
@@ -120,7 +120,7 @@ export default function SessionsPage() {
 
         <div>
           <label className="text-xs text-slate-400 font-medium block mb-1">Date Range</label>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-1 gap-2">
             <input
               type="date"
               aria-label="Date range start"
@@ -156,14 +156,14 @@ export default function SessionsPage() {
             ))}
           </div>
         </div>
-      </div>
+      </aside>
 
-      <div className="flex-1 min-w-0 glass-card p-5">
-        <div className="flex items-center justify-between mb-4">
+      <div data-testid="session-list" className="flex-1 min-w-0 glass-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <p className="text-xs text-slate-400 font-medium">
             {filtered.length} session{filtered.length !== 1 ? 's' : ''}
           </p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {(['lastActivity', 'cost', 'tokens'] as SortKey[]).map(key => (
               <button
                 key={key}
@@ -191,15 +191,24 @@ export default function SessionsPage() {
                 className="border border-slate-100 rounded-xl p-4 hover:bg-slate-50/60 transition-colors"
               >
                 <div
-                  className="flex items-center justify-between cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isExpanded}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer"
                   onClick={() => setExpandedId(isExpanded ? null : session.sessionId)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setExpandedId(isExpanded ? null : session.sessionId);
+                    }
+                  }}
                 >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1">
                     <div className="flex flex-col min-w-0">
                       <span className="text-sm font-medium text-slate-700 truncate">
                         {session.projectPath.split(/[\\/]/).pop() || session.projectPath || '—'}
                       </span>
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-slate-400 truncate" title={session.projectPath}>
                         {session.projectPath}
                       </span>
                     </div>
@@ -207,7 +216,7 @@ export default function SessionsPage() {
                       {session.target}
                     </span>
                   </div>
-                  <div className="flex items-center gap-4 shrink-0">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 shrink-0">
                     <span className="text-xs text-slate-500 flex items-center gap-1">
                       <FileText className="w-3 h-3" />{fmtTokens(totalTokens)}
                     </span>
@@ -228,9 +237,9 @@ export default function SessionsPage() {
                     {session.modelBreakdowns?.length > 0 ? (
                       <div className="space-y-1.5">
                         {session.modelBreakdowns.map((mb, i) => (
-                          <div key={i} className="flex items-center justify-between text-xs">
-                            <span className="text-slate-600 font-mono">{mb.modelName}</span>
-                            <div className="flex gap-3 text-slate-500">
+                          <div key={i} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                            <span className="min-w-0 break-all text-slate-600 font-mono">{mb.modelName}</span>
+                            <div className="flex flex-wrap gap-3 text-slate-500">
                               <span>in: {fmtTokens(mb.inputTokens)}</span>
                               <span>out: {fmtTokens(mb.outputTokens)}</span>
                               <span className="font-semibold text-slate-700">{fmtCost(mb.cost)}</span>
@@ -241,7 +250,7 @@ export default function SessionsPage() {
                     ) : (
                       <p className="text-xs text-slate-400">No model breakdown available</p>
                     )}
-                    <div className="mt-2 pt-2 border-t border-slate-50 flex gap-4 text-xs text-slate-500">
+                    <div className="mt-2 pt-2 border-t border-slate-50 flex flex-wrap gap-4 text-xs text-slate-500">
                       <span>Cache write: {fmtTokens(session.cacheCreationTokens)}</span>
                       <span>Cache read: {fmtTokens(session.cacheReadTokens)}</span>
                       <span className="font-mono text-slate-400 truncate">{session.sessionId}</span>

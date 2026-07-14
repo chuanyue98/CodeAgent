@@ -123,7 +123,7 @@ const HooksGallery: React.FC = () => {
               <div
                 key={hook.id}
                 className={`group glass-card p-6 transition-all relative overflow-hidden flex flex-col ${
-                  !active ? 'opacity-70 grayscale-[0.5]' : ''
+                  !active ? 'bg-slate-50/60 border-slate-200' : ''
                 }`}
               >
                 <div className="flex justify-between items-start mb-4">
@@ -156,9 +156,9 @@ const HooksGallery: React.FC = () => {
                   </button>
                 </div>
 
-                <h3 className="text-lg font-semibold tracking-tight mb-2 group-hover:text-primary transition-colors">
+                <h2 className="text-lg font-semibold tracking-tight mb-2 group-hover:text-primary transition-colors">
                   {hook.name}
-                </h3>
+                </h2>
 
                 <p className="text-sm text-slate-500 line-clamp-2 font-medium leading-relaxed mb-4 flex-1">
                   {hook.description}

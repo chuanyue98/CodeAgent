@@ -11,7 +11,7 @@ from pathlib import Path
 from core.console import configure_console_encoding
 from core.resource_locator import get_bundled_resource_root, get_default_config_path
 
-UI_API_PORT = 8000
+UI_API_PORT = 8524
 UI_DEV_SERVER_HOST = "127.0.0.1"
 UI_DEV_SERVER_PORT = 5173
 UI_DEV_SERVER_START_TIMEOUT = 15
@@ -65,7 +65,7 @@ def is_tcp_port_open(host, port, timeout=0.3):
         return False
 
 
-def find_available_port(start_port=8000):
+def find_available_port(start_port=8524):
     port = start_port
     while port < 9000:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

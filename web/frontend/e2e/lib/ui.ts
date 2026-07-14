@@ -8,9 +8,9 @@ import { type Page, type Locator, expect } from '@playwright/test';
  */
 
 /** Waits for a page to have mounted — every route renders its label as the
- *  <h2> in App.tsx's header, so this is the universal "did we render" signal. */
+ *  primary heading in App.tsx's header, so this is the universal render signal. */
 export async function waitForH2(page: Page, label: string): Promise<void> {
-  await expect(page.getByRole('heading', { level: 2, name: label, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: label, exact: true })).toBeVisible();
 }
 
 /** Opens the ProjectSwitcher dropdown (click toggle) and picks a group.
@@ -18,7 +18,7 @@ export async function waitForH2(page: Page, label: string): Promise<void> {
 export async function switchGroup(page: Page, group: string): Promise<void> {
   // The trigger is the first <button> inside <header> (the ProjectSwitcher).
   await page.locator('header button').first().click();
-  await page.getByRole('button', { name: group, exact: true }).click();
+  await page.getByRole('option', { name: group, exact: true }).click();
 }
 
 /** Types into the first search box on the page (galleries, sessions, audit).

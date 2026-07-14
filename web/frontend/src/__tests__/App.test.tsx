@@ -15,22 +15,22 @@ function renderWithRouter(initialPath = '/skills') {
 }
 
 describe('App Layout and Navigation', () => {
-  test('renders navigation links', () => {
+  test('renders the five workflow navigation links', () => {
     renderWithRouter();
-    // Nav links appear as <a> elements in the sidebar
-    expect(screen.getByRole('link', { name: /Skills/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Prompts/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Configuration/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Agent' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Automations' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Activity' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
   });
 
-  test('shows correct page heading for /config route', () => {
+  test('shows correct page heading for /config route', async () => {
     renderWithRouter('/config');
-    expect(screen.getByRole('heading', { name: /Configuration/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Configuration/i })).toBeInTheDocument();
   });
 
-  test('shows correct page heading for /dashboard route', () => {
+  test('shows correct page heading for /dashboard route', async () => {
     renderWithRouter('/dashboard');
-    expect(screen.getByRole('heading', { name: /Dashboard/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Dashboard/i })).toBeInTheDocument();
   });
 });

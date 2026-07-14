@@ -113,8 +113,8 @@ export default function McpPage() {
   };
 
   return (
-    <div className="flex gap-4 h-full">
-      <div className="w-56 shrink-0 glass-card p-4 space-y-1">
+    <div className="flex flex-col xl:flex-row gap-4 min-h-full xl:h-full">
+      <aside className="w-full xl:w-56 shrink-0 glass-card p-4 space-y-1">
         <label className="text-xs text-slate-400 font-medium block mb-2">Engine</label>
         {engines.map(engine => (
           <button
@@ -129,10 +129,10 @@ export default function McpPage() {
             {engine.name}
           </button>
         ))}
-      </div>
+      </aside>
 
       <div className="flex-1 min-w-0 flex flex-col gap-4">
-        <div className="glass-card p-4 flex items-center gap-3">
+        <div className="glass-card p-4 flex flex-wrap items-center gap-3">
           <Server className="w-4 h-4 text-slate-400 shrink-0" />
           <label className="text-xs text-slate-400 font-medium shrink-0">Project</label>
           {groupProjects.length > 0 ? (
@@ -148,7 +148,7 @@ export default function McpPage() {
               ))}
             </select>
           ) : (
-            <span className="text-xs text-slate-400 italic">
+            <span className="min-w-0 text-xs text-slate-400 italic">
               No projects registered for group "{currentGroup}" — add one in Configuration.
             </span>
           )}
@@ -169,7 +169,7 @@ export default function McpPage() {
           </div>
         )}
 
-        <div className="flex gap-4 flex-1 min-h-0">
+        <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
           <div className="flex-1 glass-card p-4 overflow-y-auto space-y-2">
             <div className="text-sm font-semibold text-slate-700 mb-2">Configured Servers</div>
             {servers.length === 0 && (
@@ -207,7 +207,7 @@ export default function McpPage() {
             ))}
           </div>
 
-          <div className="w-80 shrink-0 glass-card p-4 space-y-3">
+          <div className="w-full lg:w-80 shrink-0 glass-card p-4 space-y-3">
             <div className="text-sm font-semibold text-slate-700">Add Server</div>
 
             <div>

@@ -58,8 +58,8 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
 
   return (
     <div className="glass-card flex flex-col h-full">
-      <div className="flex items-center justify-between p-3 border-b border-slate-100">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-b border-slate-100">
+        <div className="flex flex-wrap items-center gap-2">
           <Terminal className="w-4 h-4 text-slate-500" />
           <span className="text-sm font-semibold text-slate-700">Logs</span>
           {selectedTaskId && (
@@ -77,8 +77,8 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
         </button>
       </div>
 
-      <div className="flex flex-1 min-h-0">
-        <div className="w-48 border-r border-slate-100 overflow-y-auto p-2 space-y-1">
+      <div className="flex flex-col sm:flex-row flex-1 min-h-0">
+        <div className="w-full sm:w-48 shrink-0 max-h-40 sm:max-h-none border-b sm:border-b-0 sm:border-r border-slate-100 overflow-y-auto p-2 space-y-1">
           {filesError && (
             <p className="text-xs text-red-600 px-2">{filesError}</p>
           )}

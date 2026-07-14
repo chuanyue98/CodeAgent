@@ -116,8 +116,8 @@ export default function CronPage() {
   };
 
   return (
-    <div className="flex gap-4 h-full">
-      <div className="w-80 shrink-0 glass-card p-5 space-y-4">
+    <div className="flex flex-col lg:flex-row gap-4 min-h-full lg:h-full">
+      <section className="w-full lg:w-80 shrink-0 glass-card p-5 space-y-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
           <Clock className="w-4 h-4" /> New Schedule
         </div>
@@ -177,7 +177,7 @@ export default function CronPage() {
         >
           <Plus className="w-4 h-4" /> Create Schedule
         </button>
-      </div>
+      </section>
 
       <div className="flex-1 min-w-0 glass-card p-5 flex flex-col">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-3">
@@ -199,7 +199,7 @@ export default function CronPage() {
           {schedules.map(schedule => (
             <div
               key={schedule.id}
-              className={`glass-card p-4 border-slate-100 flex items-center gap-3 ${
+              className={`glass-card p-4 border-slate-100 flex flex-wrap items-center gap-3 ${
                 !schedule.enabled ? 'opacity-50' : ''
               }`}
             >
@@ -216,7 +216,7 @@ export default function CronPage() {
               </button>
 
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-sm text-slate-800 truncate">
                     {schedule.task_name}
                   </span>
@@ -227,7 +227,7 @@ export default function CronPage() {
                     {schedule.cron_expr}
                   </span>
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-3">
+                <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-3">
                   <span>Next: {formatTimestamp(schedule.next_run_at)}</span>
                   {schedule.last_run_status && (
                     <span>

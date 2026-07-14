@@ -28,6 +28,28 @@ export interface SessionSummary {
   model: string | null;
 }
 
+export interface ChatResourceSet {
+  skills: string[];
+  hooks: string[];
+  plugins: string[];
+}
+
+export interface ChatCapabilities {
+  mode: 'legacy_one_shot';
+  engine: string;
+  group: string;
+  project_path: string | null;
+  configuration_warnings: string[];
+  codeagent_resources_injected: boolean;
+  active: ChatResourceSet;
+  configured_but_inactive: ChatResourceSet;
+  provider_native: {
+    status: 'unknown';
+    reason: string;
+  };
+  notice: string;
+}
+
 export async function fetchChatEngines(): Promise<ChatEngine[]> {
   const res = await fetch('/api/engines');
   if (!res.ok) throw new Error('Failed to fetch engines');
@@ -39,6 +61,18 @@ export async function fetchResumableSessions(engine: string, limit = 50): Promis
   if (!res.ok) throw new Error('Failed to fetch sessions');
   const data = await res.json();
   return data.sessions;
+}
+
+export async function fetchChatCapabilities(params: {
+  engine: string;
+  group: string;
+  project_path?: string | null;
+}): Promise<ChatCapabilities> {
+  const query = new URLSearchParams({ engine: params.engine, group: params.group });
+  if (params.project_path) query.set('project_path', params.project_path);
+  const res = await fetch(`/api/chat/capabilities?${query.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch session capabilities');
+  return res.json();
 }
 
 export async function startChatTurn(params: {
