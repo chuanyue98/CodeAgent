@@ -6,6 +6,7 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
+import request from '../utils/request';
 
 interface ProxyConfig {
   host: string;
@@ -43,6 +44,7 @@ interface ProjectContextType {
   refreshConfig: () => Promise<void>;
   updateConfig: (newConfig: Config) => Promise<void>;
   availableGroups: string[];
+  error: string | null;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -53,71 +55,57 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [projects, setProjects] = useState<Project[]>([]);
   const [groups, setGroups] = useState<Record<string, GroupDefinition>>({});
   const [availableGroups, setAvailableGroups] = useState<string[]>(['codeagent', 'common', 'work', 'web']);
+  const [error, setError] = useState<string | null>(null);
 
   const refreshConfig = useCallback(async () => {
     try {
-      const configRes = await fetch('/api/config');
-      if (configRes.ok) {
-        const configData = await configRes.json();
-        setConfig(configData as Config);
-      } else {
-        setConfig({});
-      }
+      setError(null);
+      const [configData, projectsData, groupsData] = await Promise.all([
+        request<Config>('/api/config'),
+        request<Project[]>('/api/projects'),
+        request<Record<string, GroupDefinition>>('/api/groups'),
+      ]);
 
-      const projectsRes = await fetch('/api/projects');
-      let projectsData: Project[] = [];
-      if (projectsRes.ok) {
-        projectsData = await projectsRes.json();
-        if (Array.isArray(projectsData)) {
-          setProjects(projectsData);
-        } else {
-          projectsData = [];
-        }
-      }
+      setConfig(configData || {});
 
-      const groupsRes = await fetch('/api/groups');
-      let groupsData: Record<string, GroupDefinition> = {};
-      if (groupsRes.ok) {
-        groupsData = await groupsRes.json();
-        if (groupsData && typeof groupsData === 'object') {
-          setGroups(groupsData);
-        } else {
-          groupsData = {};
-        }
-      }
+      const projectsArr = Array.isArray(projectsData) ? projectsData : [];
+      setProjects(projectsArr);
+
+      const groupsObj = groupsData && typeof groupsData === 'object' ? groupsData : {};
+      setGroups(groupsObj);
 
       const groupSet = new Set<string>(['codeagent', 'common', 'work', 'web']);
-      if (Array.isArray(projectsData)) {
-        projectsData.forEach((p: Project) => {
-          if (p && p.group) groupSet.add(p.group);
-        });
-      }
-      if (groupsData) {
-        Object.keys(groupsData).forEach(g => groupSet.add(g));
-      }
+      projectsArr.forEach((p: Project) => {
+        if (p && p.group) groupSet.add(p.group);
+      });
+      Object.keys(groupsObj).forEach(g => groupSet.add(g));
 
       setAvailableGroups(Array.from(groupSet));
 
       if (!groupSet.has(currentGroup)) {
         setCurrentGroup('codeagent');
       }
-    } catch (error) {
-      console.error('Failed to refresh project context:', error);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load configuration';
+      setError(msg);
+      console.error('Failed to refresh project context:', err);
       setConfig({});
     }
   }, [currentGroup]);
 
   const updateConfig = useCallback(async (newConfig: Config) => {
     try {
-      await fetch('/api/config', {
+      setError(null);
+      await request('/api/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newConfig),
       });
       setConfig(newConfig);
       await refreshConfig();
-    } catch (error) {
-      console.error('Failed to update config:', error);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update config';
+      setError(msg);
+      console.error('Failed to update config:', err);
     }
   }, [refreshConfig]);
 
@@ -135,7 +123,8 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       groups,
       refreshConfig,
       updateConfig,
-      availableGroups
+      availableGroups,
+      error,
     }}>
       {children}
     </ProjectContext.Provider>

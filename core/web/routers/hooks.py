@@ -1,8 +1,12 @@
+"""Hooks listing endpoint."""
+
 import os
-from fastapi import APIRouter
 from pathlib import Path
+
+from fastapi import APIRouter, HTTPException
+
 from core.services.hook_service import HookService
-from core.web.resource_paths import resolve_resource_path, ROOT_DIR
+from core.web.resource_paths import ROOT_DIR, resolve_resource_path
 
 router = APIRouter(prefix="/api")
 
@@ -19,6 +23,10 @@ def get_config_path():
 
 
 @router.get("/hooks")
-async def list_hooks():
-    service = HookService(get_hooks_root(), get_config_path())
-    return service.get_detailed_hooks()
+async def list_hooks() -> list:
+    """List all registered hooks with metadata."""
+    try:
+        service = HookService(get_hooks_root(), get_config_path())
+        return service.get_detailed_hooks()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e

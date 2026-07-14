@@ -33,9 +33,7 @@ class AgentAdapter(Protocol):
         self, provider_session_id: str, options: ResumeOptions
     ) -> ProviderSession: ...
 
-    async def start_turn(
-        self, provider_session_id: str, turn: TurnInput
-    ) -> str: ...
+    async def start_turn(self, provider_session_id: str, turn: TurnInput) -> str: ...
 
     async def steer_turn(
         self, provider_session_id: str, provider_turn_id: str, turn: TurnInput

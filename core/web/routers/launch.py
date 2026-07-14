@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
-router = APIRouter()
+router = APIRouter(prefix="/api/launch", tags=["launch"])
 
 ENGINES = {"claude", "gemini", "opencode", "codex"}
 _CA_LAUNCHER = Path(__file__).resolve().parents[3] / "ca_launcher.py"
@@ -24,7 +24,9 @@ def terminal_capability() -> dict:
             "available": bool(shutil.which("osascript")),
             "terminal": "Terminal" if shutil.which("osascript") else None,
             "mode": "local_gui",
-            "reason": None if shutil.which("osascript") else "macOS Terminal automation is unavailable",
+            "reason": None
+            if shutil.which("osascript")
+            else "macOS Terminal automation is unavailable",
         }
 
     if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
@@ -95,12 +97,12 @@ def launch_in_terminal(cmd: list[str], cwd: Path | None = None) -> str:
     return terminal
 
 
-@router.get("/api/launch/status")
+@router.get("/status")
 async def get_launch_status() -> dict:
     return terminal_capability()
 
 
-@router.post("/api/launch/{engine}")
+@router.post("/{engine}")
 async def launch_engine(engine: str) -> dict:
     if engine not in ENGINES:
         raise HTTPException(status_code=400, detail=f"Unknown engine: {engine}")
@@ -112,6 +114,8 @@ async def launch_engine(engine: str) -> dict:
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to open terminal: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Failed to open terminal: {exc}"
+        ) from exc
 
     return {"status": "launched", "engine": engine, "terminal": terminal}

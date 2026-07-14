@@ -127,6 +127,7 @@ def initialize_default_groups() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize_default_groups()
+    from core.services.agent_adapters.base import AgentAdapter
     from core.services.agent_adapters.codex import CodexAdapter
     from core.services.agent_adapters.fake import FakeAgentAdapter
     from core.services.agent_gateway import AgentGateway
@@ -135,7 +136,7 @@ async def lifespan(app: FastAPI):
     agent_db = os.environ.get(
         "CA_AGENT_DB", str(Path.home() / ".codeagent" / "agent-gateway.sqlite3")
     )
-    adapters = (
+    adapters: list[AgentAdapter] = (
         [FakeAgentAdapter()]
         if os.environ.get("CA_AGENT_GATEWAY_FAKE") == "1"
         else [CodexAdapter()]
@@ -164,6 +165,7 @@ async def lifespan(app: FastAPI):
     # Clean up background subprocesses
     from core.web.routers.chat import _runner as chat_runner
     from core.web.routers.tasks import _runner as tasks_runner
+
     try:
         chat_runner.kill_all()
     except Exception:

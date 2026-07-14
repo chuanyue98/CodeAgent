@@ -85,7 +85,8 @@ def test_main_help(capsys, monkeypatch):
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", "--help"])
     ca_launcher.main()
     captured = capsys.readouterr()
-    assert "Usage: python ca_launcher.py" in captured.out
+    assert "Usage:" in captured.out
+    assert "CodeAgent: Professional AI Engineering Shell" in captured.out
 
 
 def test_main_ui_command(monkeypatch):

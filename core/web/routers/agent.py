@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from pydantic import ValidationError
 
 from core.services.agent_gateway import AgentGateway, AgentGatewayError
@@ -134,7 +141,9 @@ async def agent_session_events(
         while True:
             event = await queue.get()
             if event is None:
-                await websocket.close(code=1013, reason="Subscriber fell behind; reconnect to replay")
+                await websocket.close(
+                    code=1013, reason="Subscriber fell behind; reconnect to replay"
+                )
                 return
             await send(wire(event))
 
@@ -167,7 +176,9 @@ async def agent_session_events(
                 await send(
                     wire(
                         AgentError(
-                            request_id=(raw.get("requestId") if isinstance(raw, dict) else None),
+                            request_id=(
+                                raw.get("requestId") if isinstance(raw, dict) else None
+                            ),
                             session_id=session_id,
                             code=exc.code,
                             message=exc.message,
@@ -178,7 +189,9 @@ async def agent_session_events(
                 await send(
                     wire(
                         AgentError(
-                            request_id=(raw.get("requestId") if isinstance(raw, dict) else None),
+                            request_id=(
+                                raw.get("requestId") if isinstance(raw, dict) else None
+                            ),
                             session_id=session_id,
                             code="provider_error",
                             message=str(exc),

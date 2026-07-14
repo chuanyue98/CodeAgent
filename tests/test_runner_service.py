@@ -71,24 +71,28 @@ def test_task_runner_kill_all(tmp_path):
     from core.services.runner_service import TaskRunner
     import time
     from unittest.mock import MagicMock
+
     runner = TaskRunner(tmp_path)
     # Start a dummy long-running command (like sleep 10)
     import subprocess
+
     dummy_proc = subprocess.Popen(["sleep", "10"])
     runner.active_runs["dummy"] = MagicMock(pid=dummy_proc.pid, status="running")
     runner._processes["dummy"] = dummy_proc
 
     runner.kill_all()
     time.sleep(0.1)
-    assert dummy_proc.poll() is not None # Process terminated
+    assert dummy_proc.poll() is not None  # Process terminated
 
 
 def test_task_runner_kill_all_missing_from_active_runs(tmp_path):
     from core.services.runner_service import TaskRunner
     import time
+
     runner = TaskRunner(tmp_path)
     # Start a dummy long-running command
     import subprocess
+
     dummy_proc = subprocess.Popen(["sleep", "10"])
     # Do NOT put it in active_runs
     runner._processes["dummy"] = dummy_proc
@@ -97,4 +101,3 @@ def test_task_runner_kill_all_missing_from_active_runs(tmp_path):
     runner.kill_all()
     time.sleep(0.1)
     assert dummy_proc.poll() is not None
-

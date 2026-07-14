@@ -252,9 +252,7 @@ async def test_cancel_chat_turn_stops_running_process(fake_runner, registered_pr
                 "project_path": str(registered_project),
             },
         )
-        response = await ac.post(
-            f"/api/chat/turns/{start.json()['task_id']}/cancel"
-        )
+        response = await ac.post(f"/api/chat/turns/{start.json()['task_id']}/cancel")
 
     assert response.status_code == 200
     assert response.json()["status"] == "stopped"

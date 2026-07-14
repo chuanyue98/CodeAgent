@@ -1,7 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { BookMarked, ChevronRight, Files, GitBranch, Search } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import Toggle from './shared/Toggle';
+import ErrorState from './shared/ErrorState';
+import LoadingState from './shared/LoadingState';
+import useResourceData from '../hooks/useResourceData';
+import useResourceToggle from '../hooks/useResourceToggle';
 
 interface PromptFile {
   name: string;
@@ -16,66 +21,20 @@ interface PromptGroup {
   files: PromptFile[];
 }
 
-const EMPTY_GROUP = { skills: [], prompts: [], hooks: [], plugins: [] };
-
 const PromptsGallery: React.FC = () => {
-  const { currentGroup, groups, refreshConfig } = useProject();
-  const [promptGroups, setPromptGroups] = useState<PromptGroup[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { currentGroup, groups } = useProject();
+  const { data: rawData, loading, error, refetch } = useResourceData<PromptGroup[] | { prompts: PromptGroup[] }>('/api/prompts');
+  const { toggleResource, toggleError } = useResourceToggle();
   const [selectedPrompt, setSelectedPrompt] = useState<PromptGroup | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    const fetchPrompts = async () => {
-      try {
-        const response = await fetch('/api/prompts');
-        if (!response.ok) {
-          throw new Error('Failed to fetch prompts');
-        }
-        const data = await response.json();
-        const promptArray = Array.isArray(data) ? data : [];
-        setPromptGroups(promptArray);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchPrompts();
-  }, []);
+  const promptGroups = React.useMemo(() => {
+    if (!rawData) return [];
+    return Array.isArray(rawData) ? rawData : (rawData.prompts || []);
+  }, [rawData]);
 
   const isPromptActive = (promptId: string) => {
     return groups[currentGroup]?.prompts?.includes(promptId) ?? false;
-  };
-
-  const togglePromptStatus = async (promptId: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (!currentGroup) return;
-
-    try {
-      const currentGroupDef = groups[currentGroup] || EMPTY_GROUP;
-      const newPrompts = [...currentGroupDef.prompts];
-      const index = newPrompts.indexOf(promptId);
-
-      if (index > -1) {
-        newPrompts.splice(index, 1);
-      } else {
-        newPrompts.push(promptId);
-      }
-
-      await fetch(`/api/groups/${currentGroup}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...currentGroupDef, prompts: newPrompts }),
-      });
-
-      await refreshConfig();
-    } catch (err) {
-      console.error('Failed to toggle prompt:', err);
-      setError(err instanceof Error ? err.message : 'Failed to toggle prompt');
-    }
   };
 
   const filteredPrompts = promptGroups.filter((promptGroup) =>
@@ -87,25 +46,11 @@ const PromptsGallery: React.FC = () => {
   );
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <LoadingState />;
   }
 
   if (error) {
-    return (
-      <div className="p-8 text-center text-red-500">
-        <p>Error: {error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-4 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    );
+    return <ErrorState message={error} onRetry={refetch} />;
   }
 
   if (selectedPrompt) {
@@ -126,19 +71,11 @@ const PromptsGallery: React.FC = () => {
             </div>
             <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-xl border border-slate-200">
               <span className="text-xs font-semibold text-slate-600">Active in {currentGroup}</span>
-              <button
-                onClick={(e) => togglePromptStatus(selectedPrompt.id, e)}
+              <Toggle
+                checked={isPromptActive(selectedPrompt.id)}
+                onChange={(e) => toggleResource('prompts', selectedPrompt.id, e)}
                 aria-label={isPromptActive(selectedPrompt.id) ? 'Deactivate prompt group' : 'Activate prompt group'}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
-                  isPromptActive(selectedPrompt.id) ? 'bg-primary' : 'bg-slate-200'
-                }`}
-              >
-                <span
-                  className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                    isPromptActive(selectedPrompt.id) ? 'translate-x-5' : 'translate-x-1'
-                  }`}
-                />
-              </button>
+              />
             </div>
           </div>
 
@@ -206,8 +143,10 @@ const PromptsGallery: React.FC = () => {
     <div className="flex flex-col h-full overflow-hidden p-6 gap-6">
       <div className="flex items-center justify-between glass-card p-6 bg-slate-50/30 backdrop-blur-sm">
         <div className="relative max-w-md w-full">
+          <label htmlFor="prompt-search" className="sr-only">Search prompt groups</label>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
+            id="prompt-search"
             type="text"
             placeholder="Search prompt groups..."
             value={searchTerm}
@@ -238,19 +177,11 @@ const PromptsGallery: React.FC = () => {
                     <BookMarked className="w-5 h-5" />
                   </div>
 
-                  <button
-                    onClick={(e) => togglePromptStatus(promptGroup.id, e)}
+                  <Toggle
+                    checked={active}
+                    onChange={(e) => toggleResource('prompts', promptGroup.id, e)}
                     aria-label={`Toggle ${promptGroup.name} active status`}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
-                      active ? 'bg-primary' : 'bg-slate-200'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                        active ? 'translate-x-5' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
+                  />
                 </div>
 
                 <h2 className="break-words text-lg font-semibold tracking-tight group-hover:text-primary transition-colors mb-2 capitalize">
@@ -297,6 +228,11 @@ const PromptsGallery: React.FC = () => {
           </div>
         )}
       </div>
+      {toggleError && (
+        <div className="fixed bottom-4 right-4 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium shadow-lg">
+          {toggleError}
+        </div>
+      )}
     </div>
   );
 };

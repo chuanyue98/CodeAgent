@@ -8,6 +8,8 @@ import socket
 import time
 from pathlib import Path
 
+import click
+
 from core.console import configure_console_encoding
 from core.resource_locator import get_bundled_resource_root, get_default_config_path
 
@@ -281,11 +283,104 @@ def run_ui_command():
     return 0
 
 
-def main():
+# ============================================================================
+# Click CLI
+# ============================================================================
+
+EPILOG = """\
+Engines: gemini, claude, opencode, codex (default: gemini)
+YOLO mode is enabled by default.
+
+Examples:
+  ca                       Start the default engine (gemini)
+  ca claude do something   Start claude with extra args
+  ca --proxy gemini        Start gemini with proxy enabled
+  ca doctor --fix          Run health check and auto-repair
+  ca ui                    Start the Web UI
+  ca new my-task           Create a new task draft
+  ca history list          List sessions (use --engine <name> to filter)
+  ca history show <engine> <session_id>
+  ca history convert <source_engine> <session_id> <target_engine>
+"""
+
+
+class CodeAgentGroup(click.Group):
+    """Click group that routes non-subcommand arguments to engine launch.
+
+    Registered subcommands (``doctor``, ``ui``, ``history``, ``new``) dispatch
+    normally. Any other leading token -- an engine name such as ``gemini`` or
+    free-form task text -- falls through to the hidden ``_launch`` command so it
+    can be forwarded to the matching engine script.
+    """
+
+    def resolve_command(self, ctx, args):
+        if args:
+            cmd_name = args[0]
+            cmd = self.get_command(ctx, cmd_name)
+            if cmd is not None:
+                return cmd_name, cmd, args[1:]
+        # Unknown leading token: forward *all* original args to engine launch.
+        launch = self.get_command(ctx, "_launch")
+        return "_launch", launch, args
+
+
+def _ensure_project_on_path(root):
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+
+
+def _launch_engine(ctx, args):
+    """Build and run the engine subprocess.
+
+    ``args`` is the list of tokens that follow the (optional) engine name and
+    have already had ``--proxy`` / ``-y`` / ``--help`` stripped by click.
+    """
+    obj = ctx.ensure_object(dict)
+    child_env = obj.get("child_env")
+    engine_script_map = obj["engine_script_map"]
+
+    engine_name = "gemini"
+    extra_params = []
+
+    if args:
+        first_arg = args[0].lower()
+        if first_arg in engine_script_map:
+            engine_name = first_arg
+            # 后面的全是 extra_params
+            extra_params = list(args[1:])
+        else:
+            # 全部视为 extra_params
+            extra_params = list(args)
+
+    # 显式向底层引擎脚本透传 -y
+    if "-y" not in extra_params:
+        extra_params.append("-y")
+
+    target_script = engine_script_map[engine_name]
+    cmd = [sys.executable, target_script] + extra_params
+    subprocess.run(cmd, env=child_env)
+
+
+@click.group(
+    cls=CodeAgentGroup,
+    invoke_without_command=True,
+    context_settings=dict(
+        ignore_unknown_options=True,
+        allow_extra_args=True,
+        allow_interspersed_args=True,
+    ),
+    epilog=EPILOG,
+)
+@click.option("--proxy", is_flag=True, help="Enable proxy from config.json")
+@click.option("-y", "--yolo", is_flag=True, default=True, help="Enable YOLO mode")
+@click.pass_context
+def cli(ctx, proxy, yolo):
+    """CodeAgent: Professional AI Engineering Shell."""
+    ctx.ensure_object(dict)
+
     config = load_config()
     root = _project_root()
 
-    # 2. 正常引擎启动逻辑
     engine_script_map = {
         "gemini": str(root / "engines" / "start_gemini.py"),
         "claude": str(root / "engines" / "start_claude_code.py"),
@@ -293,230 +388,217 @@ def main():
         "codex": str(root / "engines" / "start_codex.py"),
     }
 
-    raw_args = sys.argv[1:]
-    use_proxy = "--proxy" in raw_args
-
-    if use_proxy:
+    child_env = None
+    if proxy:
         child_env, proxy_host, proxy_port, proxy_scheme = build_proxy_env(config)
         print(f"🌐 代理已启用: {proxy_scheme}://{proxy_host}:{proxy_port}")
-    else:
-        child_env = None
 
-    # 过滤掉帮助、YOLO、代理相关参数；`-p` 保留给底层 CLI 自己处理。
-    filtered_args = [
-        arg
-        for arg in raw_args
-        if arg not in ["-y", "--yolo", "-h", "--help", "--proxy"]
+    ctx.obj.update(
+        config=config,
+        root=root,
+        engine_script_map=engine_script_map,
+        child_env=child_env,
+        proxy=proxy,
+        yolo=yolo,
+    )
+
+    # No subcommand (and no leading token) -> launch the default engine.
+    if ctx.invoked_subcommand is None:
+        _launch_engine(ctx, [])
+
+
+@cli.command(
+    name="_launch",
+    hidden=True,
+    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
+)
+@click.argument("args", nargs=-1)
+@click.pass_context
+def _launch(ctx, args):
+    """Forward arbitrary arguments to an engine launch."""
+    _launch_engine(ctx, list(args))
+
+
+@cli.command()
+@click.option("--fix", is_flag=True, help="Auto-repair issues")
+@click.pass_context
+def doctor(ctx, fix):
+    """Run health self-check."""
+    _ensure_project_on_path(ctx.obj["root"])
+    from core.doctor import run_doctor
+
+    return run_doctor(fix=fix)
+
+
+@cli.command()
+@click.pass_context
+def ui(ctx):
+    """Start the Web UI."""
+    return run_ui_command()
+
+
+@cli.command()
+@click.argument("name", required=False)
+@click.pass_context
+def new(ctx, name):
+    """Create a new task draft in tasks/[name].md."""
+    config = ctx.obj["config"]
+    root = ctx.obj["root"]
+    child_env = ctx.obj["child_env"]
+
+    # 'new' 语义：使用 opencode 启动一个带 interview 任务的会话
+    task_name = name or "unnamed_task"
+
+    # Resolve tasks path
+    paths_cfg = config.get("paths", {})
+    res_root = paths_cfg.get("resource_root")
+    if res_root:
+        tasks_dir = Path(res_root.replace("$CODEAGENT", str(root.as_posix()))) / "tasks"
+    else:
+        tasks_dir = Path(paths_cfg.get("tasks", "tasks"))
+
+    if not tasks_dir.is_absolute():
+        tasks_dir = root / tasks_dir
+
+    rel_tasks_path = os.path.relpath(tasks_dir, Path.cwd())
+    target_file = os.path.join(rel_tasks_path, f"{task_name}.md").replace("\\", "/")
+
+    # 确定启动命令：使用默认引擎 (opencode) 运行 interview 任务
+    engine_script = str(root / "engines" / "start_opencode.py")
+
+    print(f"✍️ 启动任务编排专家为您编写新任务: {task_name}...")
+    print(f"📂 目标位置: {target_file}")
+
+    # 构建命令：直接注入任务创建的专项意图
+    cmd = [
+        sys.executable,
+        engine_script,
+        f"请启动‘任务编排专家 (Task Authoring)’模式，目标是为 CodeAgent 编写一个新的自动化任务剧本，文件名为：{target_file}",
     ]
 
-    if "-h" in sys.argv or "--help" in sys.argv:
-        print("CodeAgent: Professional AI Engineering Shell\n")
-        print("Usage: python ca_launcher.py [engine|command] [extra_args] [--proxy]\n")
-        print("Engines: gemini, claude, opencode, codex (default: gemini)")
-        print("Options: (YOLO mode is enabled by default)")
-        print("  -h, --help    Show this help message")
-        print("  --proxy       Enable proxy from config.json")
-        print("Commands:")
-        print("  ui            Start the Web UI")
-        print("  doctor        Run health self-check")
-        print("  doctor --fix  Run health self-check and auto-repair issues")
-        print("  new [name]    Create a new task draft in tasks/[name].md")
-        print("  history       List all sessions for this project (all engines)")
-        print("  history list  List sessions (use --engine <name> to filter)")
-        print("  history show <engine> <id>  Show full session content")
-        print("  history convert <src> <id> <target>  Convert session between engines")
+    subprocess.run(cmd, env=child_env)
+
+
+def _history_list(ctx, engine):
+    _ensure_project_on_path(ctx.obj["root"])
+    from core.session_history.session_finder import find_all_sessions
+
+    project_path = str(Path.cwd())
+    sessions = find_all_sessions(project_path, engine=engine)
+    if not sessions:
+        print("📝 No sessions found for this project.")
         return
 
-    # 0a. Handle 'doctor' command
-    if filtered_args and filtered_args[0] == "doctor":
-        fix_mode = "--fix" in filtered_args
-        sys.path.insert(0, str(root))
-        from core.doctor import run_doctor
-
-        return run_doctor(fix=fix_mode)
-
-    # 0b. Handle 'ui' command
-    if filtered_args and filtered_args[0] == "ui":
-        return run_ui_command()
-
-    # 0c. Handle 'history' command
-    if filtered_args and filtered_args[0] == "history":
-        sys.path.insert(0, str(root))
-        from core.session_history.session_finder import (
-            find_all_sessions,
-            find_session_by_id,
+    print(f"📋 Found {len(sessions)} session(s) for {project_path}:\n")
+    for i, s in enumerate(sessions):
+        title = s.title or s.first_user_message[:60] or "(no title)"
+        print(
+            f"  [{i + 1}] {s.engine.value:8s} | {s.started_at[:19]:19s} | {s.message_count:3d} msgs | {title}"
         )
+        print(f"       ID: {s.session_id}")
+    print("\nUse: ca history show <engine> <session_id>")
 
-        sub = filtered_args[1] if len(filtered_args) > 1 else "list"
-        project_path = str(Path.cwd())
 
-        if sub == "list":
-            engine_filter = None
-            if "--engine" in filtered_args:
-                idx = filtered_args.index("--engine")
-                if idx + 1 < len(filtered_args):
-                    engine_filter = filtered_args[idx + 1]
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def history(ctx):
+    """Session history management."""
+    if ctx.invoked_subcommand is None:
+        # Default to listing all sessions.
+        _history_list(ctx, engine=None)
 
-            sessions = find_all_sessions(project_path, engine=engine_filter)
-            if not sessions:
-                print("📝 No sessions found for this project.")
-                return
 
-            print(f"📋 Found {len(sessions)} session(s) for {project_path}:\n")
-            for i, s in enumerate(sessions):
-                title = s.title or s.first_user_message[:60] or "(no title)"
-                print(
-                    f"  [{i + 1}] {s.engine.value:8s} | {s.started_at[:19]:19s} | {s.message_count:3d} msgs | {title}"
-                )
-                print(f"       ID: {s.session_id}")
-            print("\nUse: ca history show <engine> <session_id>")
+@history.command(name="list")
+@click.option("--engine", default=None, help="Filter by engine")
+@click.pass_context
+def history_list(ctx, engine):
+    """List all sessions for this project."""
+    _history_list(ctx, engine=engine)
 
-        elif sub == "show":
-            if len(filtered_args) < 4:
-                print("Usage: ca history show <engine> <session_id>")
-                return
-            engine = filtered_args[2]
-            session_id = filtered_args[3]
-            session = find_session_by_id(session_id, engine, project_path)
-            if not session:
-                print(f"❌ Session not found: {engine}/{session_id}")
-                return
 
-            print(f"{'=' * 60}")
-            print(f"Engine:    {session.engine.value}")
-            print(f"Session:   {session.session_id}")
-            print(f"Started:   {session.started_at}")
-            print(f"Messages:  {session.message_count}")
-            print(f"Model:     {session.model or '(unknown)'}")
-            print(f"{'=' * 60}\n")
+@history.command()
+@click.argument("engine_name")
+@click.argument("session_id")
+@click.pass_context
+def show(ctx, engine_name, session_id):
+    """Show full session content."""
+    _ensure_project_on_path(ctx.obj["root"])
+    from core.session_history.session_finder import find_session_by_id
 
-            for msg in session.messages:
-                role_label = "👤 USER" if msg.role == "user" else "🤖 ASSISTANT"
-                print(f"[{msg.timestamp[:19] if msg.timestamp else ''}] {role_label}")
-                if msg.content:
-                    # Truncate very long messages for terminal display
-                    text = (
-                        msg.content
-                        if len(msg.content) <= 500
-                        else msg.content[:500] + "..."
-                    )
-                    print(text)
-                for tc in msg.tool_calls:
-                    print(
-                        f"  🔧 {tc.name}({tc.args_preview[:80]})"
-                        if tc.args_preview
-                        else f"  🔧 {tc.name}"
-                    )
-                print()
+    project_path = str(Path.cwd())
+    session = find_session_by_id(session_id, engine_name, project_path)
+    if not session:
+        print(f"❌ Session not found: {engine_name}/{session_id}")
+        return
 
-        elif sub == "convert":
-            if len(filtered_args) < 5:
-                print(
-                    "Usage: ca history convert <source_engine> <session_id> <target_engine>"
-                )
-                return
-            src_engine = filtered_args[2]
-            session_id = filtered_args[3]
-            target_engine = filtered_args[4]
+    print(f"{'=' * 60}")
+    print(f"Engine:    {session.engine.value}")
+    print(f"Session:   {session.session_id}")
+    print(f"Started:   {session.started_at}")
+    print(f"Messages:  {session.message_count}")
+    print(f"Model:     {session.model or '(unknown)'}")
+    print(f"{'=' * 60}\n")
 
-            session = find_session_by_id(session_id, src_engine, project_path)
-            if not session:
-                print(f"❌ Session not found: {src_engine}/{session_id}")
-                return
-
-            from core.session_history.writers import write_session
-
-            try:
-                new_id = write_session(session, target_engine)
-                print(f"✅ Converted {src_engine} → {target_engine}")
-                print(f"   New session ID: {new_id}")
-                if target_engine == "claude":
-                    print(f"   Resume with: claude -r {new_id}")
-                elif target_engine == "codex":
-                    print("   Resume with: codex continue")
-                elif target_engine == "gemini":
-                    print("   Resume with: gemini (select from history)")
-                elif target_engine == "opencode":
-                    print("   Resume with: opencode (select from history)")
-            except Exception as e:
-                print(f"❌ Conversion failed: {e}")
-
-        else:
-            print("Usage: ca history [list|show|convert]")
-            print("  list                          List all sessions for this project")
-            print("  list --engine <name>          Filter by engine")
-            print("  show <engine> <session_id>    Show full session content")
+    for msg in session.messages:
+        role_label = "👤 USER" if msg.role == "user" else "🤖 ASSISTANT"
+        print(f"[{msg.timestamp[:19] if msg.timestamp else ''}] {role_label}")
+        if msg.content:
+            # Truncate very long messages for terminal display
+            text = msg.content if len(msg.content) <= 500 else msg.content[:500] + "..."
+            print(text)
+        for tc in msg.tool_calls:
             print(
-                "  convert <src> <id> <target>   Convert session to another engine format"
+                f"  🔧 {tc.name}({tc.args_preview[:80]})"
+                if tc.args_preview
+                else f"  🔧 {tc.name}"
             )
+        print()
+
+
+@history.command()
+@click.argument("source_engine")
+@click.argument("session_id")
+@click.argument("target_engine")
+@click.pass_context
+def convert(ctx, source_engine, session_id, target_engine):
+    """Convert session to another engine format."""
+    _ensure_project_on_path(ctx.obj["root"])
+    from core.session_history.session_finder import find_session_by_id
+    from core.session_history.writers import write_session
+
+    project_path = str(Path.cwd())
+    session = find_session_by_id(session_id, source_engine, project_path)
+    if not session:
+        print(f"❌ Session not found: {source_engine}/{session_id}")
         return
 
-    # 1. 处理 'new' 语义：它本质上是使用 opencode 启动一个带 interview 任务的会话
-    if filtered_args and filtered_args[0] == "new":
-        task_name = filtered_args[1] if len(filtered_args) > 1 else "unnamed_task"
-
-        # Resolve tasks path
-        paths_cfg = config.get("paths", {})
-        res_root = paths_cfg.get("resource_root")
-        if res_root:
-            tasks_dir = (
-                Path(res_root.replace("$CODEAGENT", str(root.as_posix()))) / "tasks"
-            )
-        else:
-            tasks_dir = Path(paths_cfg.get("tasks", "tasks"))
-
-        if not tasks_dir.is_absolute():
-            tasks_dir = root / tasks_dir
-
-        rel_tasks_path = os.path.relpath(tasks_dir, Path.cwd())
-        target_file = os.path.join(rel_tasks_path, f"{task_name}.md").replace("\\", "/")
-
-        # 确定启动命令：使用默认引擎 (opencode) 运行 interview 任务
-        engine_script = str(root / "engines" / "start_opencode.py")
-
-        print(f"✍️ 启动任务编排专家为您编写新任务: {task_name}...")
-        print(f"📂 目标位置: {target_file}")
-
-        # 构建命令：直接注入任务创建的专项意图
-        cmd = [
-            sys.executable,
-            engine_script,
-            f"请启动‘任务编排专家 (Task Authoring)’模式，目标是为 CodeAgent 编写一个新的自动化任务剧本，文件名为：{target_file}",
-        ]
-
-        try:
-            subprocess.run(cmd, env=child_env)
-        except KeyboardInterrupt:
-            pass
-        return
-
-    engine_name = "gemini"
-    extra_params = []
-
-    if filtered_args:
-        first_arg = filtered_args[0].lower()
-        if first_arg in engine_script_map:
-            engine_name = first_arg
-            # 后面的全是 extra_params
-            extra_params = filtered_args[1:]
-        else:
-            # 全部视为 extra_params
-            extra_params = filtered_args
-    else:
-        # 没有参数，使用默认引擎
-        pass
-
-    # 显式向底层引擎脚本透传 -y
-    if "-y" not in extra_params:
-        extra_params.append("-y")
-
-    target_script = engine_script_map[engine_name]
-
-    cmd = [sys.executable, target_script] + extra_params
     try:
-        subprocess.run(cmd, env=child_env)
+        new_id = write_session(session, target_engine)
+        print(f"✅ Converted {source_engine} → {target_engine}")
+        print(f"   New session ID: {new_id}")
+        if target_engine == "claude":
+            print(f"   Resume with: claude -r {new_id}")
+        elif target_engine == "codex":
+            print("   Resume with: codex continue")
+        elif target_engine == "gemini":
+            print("   Resume with: gemini (select from history)")
+        elif target_engine == "opencode":
+            print("   Resume with: opencode (select from history)")
+    except Exception as e:
+        print(f"❌ Conversion failed: {e}")
+
+
+def main():
+    try:
+        return cli(standalone_mode=False)
+    except click.ClickException as e:
+        e.show()
+        sys.exit(e.exit_code)
+    except click.exceptions.Abort:
+        sys.exit(1)
     except KeyboardInterrupt:
-        pass
+        print("\n\n👋 Cancelled")
+        sys.exit(0)
 
 
 if __name__ == "__main__":

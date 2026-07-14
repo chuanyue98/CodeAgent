@@ -44,9 +44,12 @@ def test_store_migrates_persists_and_replays_events(tmp_path):
     store.close()
 
     reopened = AgentStore(path)
-    assert reopened._connection.execute(
-        "SELECT version FROM schema_version"
-    ).fetchone()["version"] == SCHEMA_VERSION
+    assert (
+        reopened._connection.execute("SELECT version FROM schema_version").fetchone()[
+            "version"
+        ]
+        == SCHEMA_VERSION
+    )
     replay = reopened.list_events("agent_test", after_sequence=1)
     assert len(replay) == 1
     assert replay[0].data == {"delta": "hello"}

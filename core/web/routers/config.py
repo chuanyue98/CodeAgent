@@ -11,11 +11,9 @@ def get_config_path():
     return get_default_config_path()
 
 
-def _load_config(service: ConfigService) -> dict:
-    config, warnings = service.get_config()
-    if warnings:
-        raise HTTPException(status_code=500, detail=warnings[0])
-    return config
+def _load_config(service: ConfigService) -> tuple[dict, list[str]]:
+    """Load config, returning (config, warnings) without raising on warnings."""
+    return service.get_config()
 
 
 # ── Pydantic request models ──────────────────────────────────────────────────
@@ -45,7 +43,6 @@ class ConfigPayload(BaseModel):
 
     default_mode: str | None = None
     language: str | None = None
-    proxy: ProxyPayload | None = None
     groups: dict[str, GroupDefinitionPayload] | None = None
     project_registry: list[dict] | None = None
 
@@ -56,7 +53,7 @@ class ConfigPayload(BaseModel):
 @router.get("/projects")
 async def list_projects():
     service = ConfigService(get_config_path())
-    config = _load_config(service)
+    config, _ = _load_config(service)
     return config.get("project_registry", [])
 
 
@@ -87,7 +84,7 @@ async def delete_project(path: str):
 @router.get("/groups")
 async def list_groups():
     service = ConfigService(get_config_path())
-    config = _load_config(service)
+    config, _ = _load_config(service)
     return config.get("groups", {})
 
 
@@ -95,7 +92,7 @@ async def list_groups():
 async def update_group(group_name: str, definition: GroupDefinitionPayload):
     try:
         service = ConfigService(get_config_path())
-        config = _load_config(service)
+        config, _ = _load_config(service)
         if "groups" not in config:
             config["groups"] = {}
         group_data = definition.model_dump()
@@ -116,7 +113,7 @@ async def update_group(group_name: str, definition: GroupDefinitionPayload):
 async def delete_group(group_name: str):
     try:
         service = ConfigService(get_config_path())
-        config = _load_config(service)
+        config, _ = _load_config(service)
         if "groups" in config and group_name in config["groups"]:
             del config["groups"][group_name]
         else:
@@ -135,14 +132,18 @@ async def get_config():
     if not path.exists():
         raise HTTPException(status_code=404, detail="config.json not found")
     service = ConfigService(path)
-    return _load_config(service)
+    config, warnings = _load_config(service)
+    if warnings:
+        return {**config, "warnings": warnings}
+    return config
 
 
 @router.post("/config")
-async def update_config(config: dict):
+async def update_config(config: ConfigPayload):
     try:
+        config_dict = config.model_dump(exclude_none=True)
         service = ConfigService(get_config_path())
-        service.update_config(config)
+        service.update_config(config_dict)
         return {"status": "success", "message": "Configuration updated"}
     except HTTPException:
         raise

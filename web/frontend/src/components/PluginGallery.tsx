@@ -2,6 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Search, BookOpen, Layers, Terminal, Globe, Cpu, ChevronRight, Zap } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useProject } from '../context/ProjectContext';
+import Toggle from './shared/Toggle';
+import ErrorState from './shared/ErrorState';
+import LoadingState from './shared/LoadingState';
+import useResourceData from '../hooks/useResourceData';
+import useResourceToggle from '../hooks/useResourceToggle';
 
 interface Plugin {
   name: string;
@@ -15,63 +20,22 @@ interface PluginsData {
 }
 
 const PluginGallery: React.FC = () => {
-  const { currentGroup, groups, refreshConfig } = useProject();
-  const [pluginsData, setPluginsData] = useState<PluginsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { currentGroup, groups } = useProject();
+  const { data: pluginsData, loading, error, refetch } = useResourceData<PluginsData>('/api/plugins');
+  const { toggleResource, toggleError } = useResourceToggle();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedPlugin, setSelectedPlugin] = useState<Plugin | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const fetchPlugins = async () => {
-      try {
-        const response = await fetch('/api/plugins');
-        if (!response.ok) {
-          throw new Error('Failed to fetch plugins');
-        }
-        const data: PluginsData = await response.json();
-        setPluginsData(data);
-        const categories = Object.keys(data);
-        if (categories.length > 0) {
-          setSelectedCategory(categories[0]);
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      } finally {
-        setLoading(false);
+    if (pluginsData) {
+      const categories = Object.keys(pluginsData);
+      if (categories.length > 0 && !selectedCategory) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSelectedCategory(categories[0]);
       }
-    };
-
-    fetchPlugins();
-  }, []);
-
-  const togglePluginStatus = async (pluginId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!currentGroup) return;
-
-    try {
-      const currentGroupDef = groups[currentGroup] || { skills: [], prompts: [], hooks: [], plugins: [] };
-      const newPlugins = [...(currentGroupDef.plugins || [])];
-      const index = newPlugins.indexOf(pluginId);
-
-      if (index > -1) {
-        newPlugins.splice(index, 1);
-      } else {
-        newPlugins.push(pluginId);
-      }
-
-      await fetch(`/api/groups/${currentGroup}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...currentGroupDef, plugins: newPlugins }),
-      });
-
-      await refreshConfig();
-    } catch (err) {
-      console.error('Failed to toggle plugin:', err);
     }
-  };
+  }, [pluginsData, selectedCategory]);
 
   const isPluginActive = (pluginId: string) => {
     return groups[currentGroup]?.plugins?.includes(pluginId) ?? false;
@@ -94,25 +58,11 @@ const PluginGallery: React.FC = () => {
     : [];
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <LoadingState />;
   }
 
   if (error) {
-    return (
-      <div className="p-8 text-center text-red-500">
-        <p>Error: {error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-4 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    );
+    return <ErrorState message={error} onRetry={refetch} />;
   }
 
   return (
@@ -173,19 +123,11 @@ const PluginGallery: React.FC = () => {
               </div>
               <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-xl border border-slate-200">
                 <span className="text-xs font-semibold text-slate-600">Active in {currentGroup}</span>
-                <button
-                  onClick={(e) => togglePluginStatus(selectedPlugin.id, e)}
+                <Toggle
+                  checked={isPluginActive(selectedPlugin.id)}
+                  onChange={(e) => toggleResource('plugins', selectedPlugin.id, e)}
                   aria-label={isPluginActive(selectedPlugin.id) ? 'Deactivate plugin' : 'Activate plugin'}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
-                    isPluginActive(selectedPlugin.id) ? 'bg-primary' : 'bg-slate-200'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                      isPluginActive(selectedPlugin.id) ? 'translate-x-5' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
+                />
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-8 bg-white prose prose-slate max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-li:text-slate-700 prose-strong:text-slate-900">
@@ -221,8 +163,10 @@ const PluginGallery: React.FC = () => {
           <div className="flex-1 flex flex-col overflow-hidden gap-6">
             <div className="p-6 glass-card bg-slate-50/30 backdrop-blur-sm">
               <div className="relative max-w-md">
+                <label htmlFor="plugin-search" className="sr-only">Search plugins</label>
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
+                  id="plugin-search"
                   type="text"
                   placeholder="Search plugins..."
                   value={searchTerm}
@@ -246,20 +190,11 @@ const PluginGallery: React.FC = () => {
                         <Zap className="w-5 h-5" />
                       </div>
 
-                      {/* Toggle Switch */}
-                      <button
-                        onClick={(e) => togglePluginStatus(plugin.id, e)}
+                      <Toggle
+                        checked={isPluginActive(plugin.id)}
+                        onChange={(e) => toggleResource('plugins', plugin.id, e)}
                         aria-label={`Toggle ${plugin.name} active status`}
-                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
-                          isPluginActive(plugin.id) ? 'bg-primary' : 'bg-slate-200'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                            isPluginActive(plugin.id) ? 'translate-x-5' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
+                      />
                     </div>
 
                     <h2 className="break-words text-lg font-semibold tracking-tight group-hover:text-primary transition-colors mb-2">
@@ -287,6 +222,11 @@ const PluginGallery: React.FC = () => {
           </div>
         )}
       </div>
+      {toggleError && (
+        <div className="fixed bottom-4 right-4 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium shadow-lg">
+          {toggleError}
+        </div>
+      )}
     </div>
   );
 };

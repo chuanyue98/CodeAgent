@@ -1,8 +1,12 @@
+"""Prompts listing endpoint."""
+
 import os
-from fastapi import APIRouter
 from pathlib import Path
+
+from fastapi import APIRouter, HTTPException
+
 from core.services.prompt_service import PromptService
-from core.web.resource_paths import resolve_resource_path, ROOT_DIR
+from core.web.resource_paths import ROOT_DIR, resolve_resource_path
 
 router = APIRouter(prefix="/api")
 
@@ -19,6 +23,10 @@ def get_root_dir():
 
 
 @router.get("/prompts")
-async def list_prompts():
-    service = PromptService(get_prompts_root(), get_root_dir())
-    return service.get_prompt_groups()
+async def list_prompts() -> list:
+    """List all prompt groups with metadata."""
+    try:
+        service = PromptService(get_prompts_root(), get_root_dir())
+        return service.get_prompt_groups()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e

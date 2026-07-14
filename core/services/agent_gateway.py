@@ -52,9 +52,9 @@ class AgentGateway:
         self.subscriber_queue_size = subscriber_queue_size
         self.event_retention = event_retention
         self._adapter_tasks: list[asyncio.Task] = []
-        self._subscribers: dict[
-            str, set[asyncio.Queue[AgentEvent | None]]
-        ] = defaultdict(set)
+        self._subscribers: dict[str, set[asyncio.Queue[AgentEvent | None]]] = (
+            defaultdict(set)
+        )
         self._acks: dict[str, OrderedDict[str, AgentAck]] = defaultdict(OrderedDict)
         self._started = False
 
@@ -127,7 +127,9 @@ class AgentGateway:
                 "workspace_unavailable", "Selected workspace is unavailable"
             )
         for project in config.get("project_registry", []):
-            if not isinstance(project, dict) or not isinstance(project.get("path"), str):
+            if not isinstance(project, dict) or not isinstance(
+                project.get("path"), str
+            ):
                 continue
             if Path(project["path"]).expanduser().resolve() == requested:
                 return str(requested)
@@ -139,7 +141,9 @@ class AgentGateway:
     def get_session(self, session_id: str) -> AgentSession:
         session = self.store.get_session(session_id)
         if session is None:
-            raise AgentGatewayError("session_not_found", "Session not found", status_code=404)
+            raise AgentGatewayError(
+                "session_not_found", "Session not found", status_code=404
+            )
         return session
 
     def list_sessions(self, limit: int = 100) -> list[AgentSession]:
@@ -156,7 +160,9 @@ class AgentGateway:
     ) -> AgentSession:
         adapter = self.adapters.get(provider)
         if adapter is None:
-            raise AgentGatewayError("provider_not_found", "Provider not found", status_code=404)
+            raise AgentGatewayError(
+                "provider_not_found", "Provider not found", status_code=404
+            )
         capabilities = await adapter.capabilities()
         if not capabilities.available:
             raise AgentGatewayError(
@@ -187,7 +193,11 @@ class AgentGateway:
         )
         self.store.upsert_session(session)
         await self.publish(
-            AgentEvent(type="session.ready", session_id=session.id, data={"session": wire(session)})
+            AgentEvent(
+                type="session.ready",
+                session_id=session.id,
+                data={"session": wire(session)},
+            )
         )
         return self.get_session(session.id)
 
@@ -197,7 +207,8 @@ class AgentGateway:
         self._registered_workspace(session.project_id)
         if not session.capability_snapshot.supports_resume:
             raise AgentGatewayError(
-                "unsupported_capability", "This provider does not support session resume"
+                "unsupported_capability",
+                "This provider does not support session resume",
             )
         resumed = await adapter.resume_session(
             session.provider_session_id,
@@ -213,7 +224,11 @@ class AgentGateway:
         session.updated_at = utc_now()
         self.store.upsert_session(session)
         await self.publish(
-            AgentEvent(type="session.ready", session_id=session.id, data={"session": wire(session)})
+            AgentEvent(
+                type="session.ready",
+                session_id=session.id,
+                data={"session": wire(session)},
+            )
         )
         return self.get_session(session.id)
 
@@ -225,7 +240,9 @@ class AgentGateway:
         adapter = self.adapters.get(session.provider)
         if adapter is None:
             raise AgentGatewayError(
-                "provider_unavailable", "Session provider is unavailable", status_code=503
+                "provider_unavailable",
+                "Session provider is unavailable",
+                status_code=503,
             )
         return adapter
 
@@ -265,7 +282,8 @@ class AgentGateway:
         session = self.get_session(session_id)
         if not session.capability_snapshot.supports_cancel:
             raise AgentGatewayError(
-                "unsupported_capability", "This provider does not support turn cancellation"
+                "unsupported_capability",
+                "This provider does not support turn cancellation",
             )
         await self._adapter_for(session).cancel_turn(
             session.provider_session_id, turn_id
@@ -315,7 +333,9 @@ class AgentGateway:
             )
         elif command.type == "turn.cancel":
             if not command.turn_id:
-                raise AgentGatewayError("invalid_command", "turn.cancel requires turnId")
+                raise AgentGatewayError(
+                    "invalid_command", "turn.cancel requires turnId"
+                )
             await self.cancel_turn(command.session_id, command.turn_id)
         elif command.type == "approval.respond":
             if not command.approval_id or command.decision is None:
@@ -326,7 +346,9 @@ class AgentGateway:
             await self.respond_to_approval(
                 command.session_id, command.approval_id, command.decision
             )
-        ack = AgentAck(request_id=command.request_id, command=command.type, result=result)
+        ack = AgentAck(
+            request_id=command.request_id, command=command.type, result=result
+        )
         cache = self._acks[command.session_id]
         cache[command.request_id] = ack
         cache.move_to_end(command.request_id)
