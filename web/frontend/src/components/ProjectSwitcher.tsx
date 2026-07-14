@@ -30,11 +30,14 @@ export default function ProjectSwitcher() {
     }
   }, [open, currentGroup, availableGroups]);
 
-  // Scroll focused option into view
+  // Scroll focused option into view and move browser focus
   useEffect(() => {
     if (open && focusedIndex >= 0 && listboxRef.current) {
-      const option = listboxRef.current.querySelectorAll('[role="option"]')[focusedIndex];
-      option?.scrollIntoView({ block: 'nearest' });
+      const option = listboxRef.current.querySelectorAll('[role="option"]')[focusedIndex] as HTMLElement;
+      if (option) {
+        option.scrollIntoView({ block: 'nearest' });
+        option.focus();
+      }
     }
   }, [focusedIndex, open]);
 

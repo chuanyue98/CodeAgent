@@ -61,9 +61,9 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     try {
       setError(null);
       const [configData, projectsData, groupsData] = await Promise.all([
-        request<Config>('/api/config').catch(() => ({} as Config)),
-        request<Project[]>('/api/projects').catch(() => [] as Project[]),
-        request<Record<string, GroupDefinition>>('/api/groups').catch(() => ({} as Record<string, GroupDefinition>)),
+        request<Config>('/api/config'),
+        request<Project[]>('/api/projects'),
+        request<Record<string, GroupDefinition>>('/api/groups'),
       ]);
 
       setConfig(configData || {});
