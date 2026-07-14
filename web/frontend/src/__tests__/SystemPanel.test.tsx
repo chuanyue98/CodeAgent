@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import SystemPanel from '../components/SystemPanel';
 import { fetchSystemMetrics, type SystemMetrics } from '../api/system';
@@ -26,6 +26,17 @@ describe('SystemPanel', () => {
     vi.mocked(fetchSystemMetrics).mockReset();
   });
 
+  test('metrics stay tucked away in the status popover until the button is clicked', async () => {
+    vi.mocked(fetchSystemMetrics).mockResolvedValue(metrics);
+
+    render(<SystemPanel />);
+    await act(async () => {});
+
+    expect(screen.queryByText('12%')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'System status' }));
+    expect(screen.getByText('12%')).toBeInTheDocument();
+  });
+
   test('clears a transient error when the next metrics poll succeeds', async () => {
     vi.useFakeTimers();
     vi.mocked(fetchSystemMetrics)
@@ -34,6 +45,8 @@ describe('SystemPanel', () => {
 
     render(<SystemPanel />);
     await act(async () => {});
+
+    fireEvent.click(screen.getByRole('button', { name: 'System status' }));
     expect(screen.getByText('Failed to fetch system metrics')).toBeInTheDocument();
 
     await act(async () => {

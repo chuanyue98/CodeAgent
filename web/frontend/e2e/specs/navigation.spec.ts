@@ -43,6 +43,30 @@ test('Agent workspace combines Web Agent and Native Terminal modes', async ({ pa
   await expect(page.getByText('选择引擎，点击启动即可在新终端窗口中运行对应的 ca 会话。')).toBeVisible();
 });
 
+test('command palette opens via Ctrl/Cmd+K, filters, and navigates', async ({ page }) => {
+  await page.goto('/home');
+  await page.keyboard.press('ControlOrMeta+k');
+  const palette = page.getByTestId('command-palette');
+  await expect(palette).toBeVisible();
+
+  await page.getByLabel('Command palette search').fill('mcp');
+  await expect(page.getByRole('option', { name: /MCP Servers/ })).toBeVisible();
+  await expect(page.getByRole('option', { name: /Chat/ })).toHaveCount(0);
+
+  await page.getByRole('option', { name: /MCP Servers/ }).click();
+  await waitForH2(page, 'MCP Servers');
+  await expect(palette).toHaveCount(0);
+});
+
+test('command palette closes on Escape without navigating', async ({ page }) => {
+  await page.goto('/home');
+  await page.getByTestId('command-palette-trigger').click();
+  await expect(page.getByTestId('command-palette')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('command-palette')).toHaveCount(0);
+  await waitForH2(page, 'Home');
+});
+
 test('sidebar collapses to icons and expands back', async ({ page }) => {
   await page.goto('/skills');
   const aside = page.locator('aside').first();

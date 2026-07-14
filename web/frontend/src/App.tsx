@@ -1,10 +1,20 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
-import { Bot, Clock3, Home, History, Menu, Settings, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
+import CommandPalette from './components/CommandPalette';
 import ManifestDrawer from './components/ManifestDrawer';
 import ProjectSwitcher from './components/ProjectSwitcher';
-import SectionLayout, { type SectionTab } from './components/SectionLayout';
+import SectionLayout from './components/SectionLayout';
 import SystemPanel from './components/SystemPanel';
+import {
+  ACTIVITY_TABS,
+  AGENT_TABS,
+  AUTOMATION_TABS,
+  CAPABILITY_TABS,
+  PAGE_LABELS,
+  primaryNav,
+  SETTINGS_TABS,
+} from './navigation';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
 const SystemPage = lazy(() => import('./pages/SystemPage'));
@@ -22,68 +32,6 @@ const AuditTrail = lazy(() => import('./components/AuditTrail'));
 const ChatPage = lazy(() => import('./components/ChatPage'));
 const CronPage = lazy(() => import('./components/CronPage'));
 const McpPage = lazy(() => import('./components/McpPage'));
-
-const primaryNav = [
-  { to: '/home', matchPrefix: '/home', label: 'Home', icon: Home },
-  { to: '/agent/web', matchPrefix: '/agent', label: 'Agent', icon: Bot },
-  { to: '/automations/tasks', matchPrefix: '/automations', label: 'Automations', icon: Clock3 },
-  { to: '/activity/history', matchPrefix: '/activity', label: 'Activity', icon: History },
-  { to: '/settings/workspace', matchPrefix: '/settings', label: 'Settings', icon: Settings },
-] as const;
-
-const AGENT_TABS: SectionTab[] = [
-  { to: '/agent/web', label: 'Web Agent' },
-  { to: '/agent/terminal', label: 'Native Terminal' },
-];
-
-const AUTOMATION_TABS: SectionTab[] = [
-  { to: '/automations/tasks', label: 'Tasks' },
-  { to: '/automations/schedules', label: 'Schedules' },
-];
-
-const ACTIVITY_TABS: SectionTab[] = [
-  { to: '/activity/history', label: 'History' },
-  { to: '/activity/events', label: 'Events' },
-  { to: '/activity/analytics', label: 'Analytics' },
-  { to: '/activity/logs', label: 'Logs' },
-];
-
-const SETTINGS_TABS: SectionTab[] = [
-  { to: '/settings/workspace', label: 'Workspace' },
-  {
-    to: '/settings/capabilities/skills',
-    label: 'Capabilities',
-    matchPrefix: '/settings/capabilities',
-  },
-  { to: '/settings/system', label: 'System' },
-];
-
-const CAPABILITY_TABS: SectionTab[] = [
-  { to: '/settings/capabilities/skills', label: 'Skills' },
-  { to: '/settings/capabilities/prompts', label: 'Prompts' },
-  { to: '/settings/capabilities/hooks', label: 'Hooks' },
-  { to: '/settings/capabilities/plugins', label: 'Plugins' },
-  { to: '/settings/capabilities/mcp', label: 'MCP' },
-];
-
-const PAGE_LABELS: Record<string, string> = {
-  '/home': 'Home',
-  '/agent/web': 'Chat',
-  '/agent/terminal': 'Launch',
-  '/automations/tasks': 'Dashboard',
-  '/automations/schedules': 'Cron',
-  '/activity/history': 'Sessions',
-  '/activity/events': 'Audit Trail',
-  '/activity/analytics': 'Analytics',
-  '/activity/logs': 'Logs',
-  '/settings/workspace': 'Configuration',
-  '/settings/capabilities/skills': 'Skills',
-  '/settings/capabilities/prompts': 'Prompts',
-  '/settings/capabilities/hooks': 'Hooks',
-  '/settings/capabilities/plugins': 'Plugins',
-  '/settings/capabilities/mcp': 'MCP Servers',
-  '/settings/system': 'System',
-};
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -152,7 +100,11 @@ function App() {
         <main className="relative flex min-w-0 flex-1 flex-col gap-3 overflow-hidden md:gap-4">
           <header className="flex min-w-0 items-center justify-between gap-3">
             <h1 className="min-w-0 truncate text-lg font-bold text-slate-800 md:text-xl">{pageLabel}</h1>
-            <ProjectSwitcher />
+            <div className="flex shrink-0 items-center gap-2">
+              <CommandPalette />
+              <SystemPanel />
+              <ProjectSwitcher />
+            </div>
           </header>
           <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1 md:pr-2">
             <Suspense fallback={<div className="p-8 text-sm text-slate-400">Loading…</div>}>
@@ -232,7 +184,6 @@ function App() {
 
         <ManifestDrawer />
       </div>
-      <SystemPanel />
     </div>
   );
 }
