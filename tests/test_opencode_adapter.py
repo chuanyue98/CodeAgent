@@ -168,6 +168,23 @@ async def test_opencode_respond_to_approval_unknown_id_raises():
 
 
 @pytest.mark.asyncio
+async def test_opencode_cancel_turn_clears_pending_approvals_for_session(monkeypatch):
+    adapter = OpenCodeAdapter()
+    adapter._pending_approvals["perm-1"] = "session-1"
+    adapter._pending_approvals["perm-2"] = "session-2"
+
+    async def fake_request_json(method, path, body=None, timeout=30):
+        return {}
+
+    monkeypatch.setattr(adapter, "_request_json", fake_request_json)
+
+    await adapter.cancel_turn("session-1", "turn-1")
+
+    assert "perm-1" not in adapter._pending_approvals
+    assert adapter._pending_approvals["perm-2"] == "session-2"
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(
     os.environ.get("CA_LIVE_OPENCODE") != "1",
     reason="set CA_LIVE_OPENCODE=1 to run against the authenticated OpenCode CLI",

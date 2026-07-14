@@ -50,6 +50,7 @@ class OpenCodeAdapter:
         self._unavailable_reason: str | None = None
         self._active_turns: dict[str, str] = {}
         self._pending_approvals: dict[str, str] = {}
+        self._stderr_lines: list[str] = []
 
     @staticmethod
     def _reserve_port() -> int:
@@ -88,11 +89,13 @@ class OpenCodeAdapter:
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
             )
+            self._stderr_lines = []
             self._stdout_task = asyncio.create_task(
                 self._drain(self._process.stdout), name="opencode-server-stdout"
             )
             self._stderr_task = asyncio.create_task(
-                self._drain(self._process.stderr), name="opencode-server-stderr"
+                self._drain(self._process.stderr, self._stderr_lines),
+                name="opencode-server-stderr",
             )
             deadline = self._loop.time() + 20
             while True:
@@ -114,7 +117,9 @@ class OpenCodeAdapter:
                 asyncio.to_thread(self._sse_worker), name="opencode-global-events"
             )
         except Exception as exc:
-            self._unavailable_reason = f"OpenCode server failed to start: {exc}"
+            stderr_tail = "\n".join(self._stderr_lines[-20:])
+            detail = f"\nstderr:\n{stderr_tail}" if stderr_tail else ""
+            self._unavailable_reason = f"OpenCode server failed to start: {exc}{detail}"
             await self.stop()
             raise RuntimeError(self._unavailable_reason) from exc
 
@@ -232,6 +237,9 @@ class OpenCodeAdapter:
     async def cancel_turn(
         self, provider_session_id: str, provider_turn_id: str
     ) -> None:
+        for approval_id, session_id in list(self._pending_approvals.items()):
+            if session_id == provider_session_id:
+                self._pending_approvals.pop(approval_id, None)
         await self._request_json(
             "POST",
             f"/api/session/{urllib.parse.quote(provider_session_id, safe='')}/interrupt",
@@ -337,13 +345,21 @@ class OpenCodeAdapter:
             raise OpenCodeProtocolError(
                 f"OpenCode HTTP {exc.code}: {detail or exc.reason}"
             ) from exc
+        except urllib.error.URLError as exc:
+            raise OpenCodeProtocolError(
+                f"OpenCode request failed: {exc.reason}"
+            ) from exc
 
-    async def _drain(self, stream: asyncio.StreamReader | None) -> None:
+    async def _drain(
+        self, stream: asyncio.StreamReader | None, buffer: list[str] | None = None
+    ) -> None:
         if stream is None:
             return
         try:
-            while await stream.readline():
-                pass
+            while line := await stream.readline():
+                if buffer is not None:
+                    buffer.append(line.decode(errors="replace").rstrip())
+                    del buffer[:-20]
         except asyncio.CancelledError:
             raise
 
@@ -356,6 +372,10 @@ class OpenCodeAdapter:
         try:
             response = urllib.request.urlopen(request, timeout=None)
             self._sse_response = response
+            if self._stopping:
+                response.close()
+                self._sse_response = None
+                return
             data_lines: list[str] = []
             for raw_line in response:
                 line = raw_line.decode(errors="replace").rstrip("\r\n")
