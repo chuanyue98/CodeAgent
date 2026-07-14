@@ -151,7 +151,10 @@ async def test_codex_live_approval_decline_and_cancel():
         await adapter.respond_to_approval(approval_id, "decline")
         while True:
             event = await asyncio.wait_for(anext(adapter.events()), timeout=90)
-            if event.provider_turn_id == approval_turn and event.type == "turn.completed":
+            if (
+                event.provider_turn_id == approval_turn
+                and event.type == "turn.completed"
+            ):
                 break
 
         cancel_turn = await adapter.start_turn(
@@ -179,7 +182,11 @@ async def test_codex_live_approval_decline_and_cancel():
         while True:
             event = await asyncio.wait_for(anext(adapter.events()), timeout=30)
             if event.provider_turn_id == cancel_turn and event.type == "turn.completed":
-                assert event.data.get("status") in {"interrupted", "cancelled", "failed"}
+                assert event.data.get("status") in {
+                    "interrupted",
+                    "cancelled",
+                    "failed",
+                }
                 break
     finally:
         await adapter.stop()

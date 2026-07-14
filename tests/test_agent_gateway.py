@@ -16,13 +16,7 @@ def _config(tmp_path):
     workspace.mkdir()
     config = tmp_path / "config.json"
     config.write_text(
-        json.dumps(
-            {
-                "project_registry": [
-                    {"path": str(workspace), "group": "common"}
-                ]
-            }
-        ),
+        json.dumps({"project_registry": [{"path": str(workspace), "group": "common"}]}),
         encoding="utf-8",
     )
     return config, workspace
@@ -32,13 +26,9 @@ def _config(tmp_path):
 async def test_gateway_fake_adapter_turn_and_request_idempotency(tmp_path):
     config, workspace = _config(tmp_path)
     adapter = FakeAgentAdapter()
-    gateway = AgentGateway(
-        AgentStore(tmp_path / "agent.sqlite3"), config, [adapter]
-    )
+    gateway = AgentGateway(AgentStore(tmp_path / "agent.sqlite3"), config, [adapter])
     await gateway.start()
-    session = await gateway.create_session(
-        provider="fake", project_id=str(workspace)
-    )
+    session = await gateway.create_session(provider="fake", project_id=str(workspace))
     queue = gateway.subscribe(session.id, after_sequence=0)
     ready = await asyncio.wait_for(queue.get(), timeout=1)
     assert ready.type == "session.ready"
@@ -90,12 +80,8 @@ async def test_gateway_replays_only_events_after_sequence(tmp_path):
         AgentStore(tmp_path / "agent.sqlite3"), config, [FakeAgentAdapter()]
     )
     await gateway.start()
-    session = await gateway.create_session(
-        provider="fake", project_id=str(workspace)
-    )
-    await gateway.start_turn(
-        session.id, TurnInput(input=[AgentInput(text="replay")])
-    )
+    session = await gateway.create_session(provider="fake", project_id=str(workspace))
+    await gateway.start_turn(session.id, TurnInput(input=[AgentInput(text="replay")]))
     for _ in range(20):
         if gateway.get_session(session.id).last_sequence == 6:
             break
@@ -115,9 +101,7 @@ async def test_gateway_disconnects_subscriber_that_falls_behind(tmp_path):
         subscriber_queue_size=2,
     )
     await gateway.start()
-    session = await gateway.create_session(
-        provider="fake", project_id=str(workspace)
-    )
+    session = await gateway.create_session(provider="fake", project_id=str(workspace))
     queue = gateway.subscribe(session.id, after_sequence=1)
     await gateway.publish(AgentEvent(type="test.one", session_id=session.id))
     await gateway.publish(AgentEvent(type="test.two", session_id=session.id))

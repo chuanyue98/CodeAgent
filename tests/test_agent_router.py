@@ -17,13 +17,7 @@ def _app(tmp_path):
     workspace.mkdir()
     config_path = tmp_path / "config.json"
     config_path.write_text(
-        json.dumps(
-            {
-                "project_registry": [
-                    {"path": str(workspace), "group": "common"}
-                ]
-            }
-        ),
+        json.dumps({"project_registry": [{"path": str(workspace), "group": "common"}]}),
         encoding="utf-8",
     )
 

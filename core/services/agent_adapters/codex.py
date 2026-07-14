@@ -113,9 +113,9 @@ class CodexAdapter:
             provider_id=self.provider_id,
             display_name="Codex",
             available=running,
-            unavailable_reason=None if running else (
-                self._unavailable_reason or "Codex app-server is not running"
-            ),
+            unavailable_reason=None
+            if running
+            else (self._unavailable_reason or "Codex app-server is not running"),
             supports_resume=True,
             supports_steer=True,
             supports_cancel=True,
@@ -126,9 +126,7 @@ class CodexAdapter:
             supports_model_switch=True,
         )
 
-    async def create_session(
-        self, options: CreateSessionOptions
-    ) -> ProviderSession:
+    async def create_session(self, options: CreateSessionOptions) -> ProviderSession:
         result = await self._request(
             "thread/start",
             {

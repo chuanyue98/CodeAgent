@@ -51,9 +51,7 @@ class FakeAgentAdapter:
         if not self._started:
             raise RuntimeError("Fake adapter is not running")
 
-    async def create_session(
-        self, options: CreateSessionOptions
-    ) -> ProviderSession:
+    async def create_session(self, options: CreateSessionOptions) -> ProviderSession:
         self._require_started()
         return ProviderSession(id=f"fake-thread-{uuid4().hex}", model=options.model)
 

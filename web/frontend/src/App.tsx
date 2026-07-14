@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, AlertCircle } from 'lucide-react';
 import CommandPalette from './components/CommandPalette';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import SectionLayout from './components/SectionLayout';
 import SystemPanel from './components/SystemPanel';
+import { useProject } from './context/ProjectContext';
 import {
   ACTIVITY_TABS,
   AGENT_TABS,
@@ -35,6 +36,7 @@ const McpPage = lazy(() => import('./components/McpPage'));
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { pathname } = useLocation();
+  const { error: ctxError } = useProject();
   const pageLabel = PAGE_LABELS[pathname] ?? 'CodeAgent';
 
   useEffect(() => {
@@ -105,8 +107,14 @@ function App() {
               <ProjectSwitcher />
             </div>
           </header>
+          {ctxError && (
+            <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600" role="alert">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>Configuration error: {ctxError}</span>
+            </div>
+          )}
           <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1 md:pr-2">
-            <Suspense fallback={<div className="p-8 text-sm text-slate-400">Loading…</div>}>
+            <Suspense fallback={<div className="flex h-96 items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}>
               <Routes>
                 <Route path="/" element={<Navigate to="/home" replace />} />
                 <Route path="/home" element={<HomePage />} />

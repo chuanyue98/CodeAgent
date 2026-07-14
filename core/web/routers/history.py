@@ -237,7 +237,9 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to open terminal: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Failed to open terminal: {exc}"
+        ) from exc
 
     return {
         "status": "launched",
@@ -267,18 +269,24 @@ async def delete_session(
                 "engine": engine,
             },
         )
-    
+
     if engine == "opencode":
         if not session.source_file:
             raise HTTPException(
                 status_code=400,
-                detail={"error": "Session source file path is empty", "session_id": session_id},
+                detail={
+                    "error": "Session source file path is empty",
+                    "session_id": session_id,
+                },
             )
         db_path = Path(session.source_file)
         if not db_path.exists() or not db_path.is_file():
             raise HTTPException(
                 status_code=400,
-                detail={"error": f"Session source file path is invalid: {session.source_file}", "session_id": session_id},
+                detail={
+                    "error": f"Session source file path is invalid: {session.source_file}",
+                    "session_id": session_id,
+                },
             )
         con = None
         try:
@@ -288,7 +296,9 @@ async def delete_session(
                 con.execute("DELETE FROM message WHERE session_id = ?", (session_id,))
                 con.execute("DELETE FROM session WHERE id = ?", (session_id,))
         except sqlite3.Error as e:
-            raise HTTPException(status_code=500, detail={"error": f"Failed to delete session row: {e}"})
+            raise HTTPException(
+                status_code=500, detail={"error": f"Failed to delete session row: {e}"}
+            )
         finally:
             if con is not None:
                 con.close()
@@ -296,17 +306,25 @@ async def delete_session(
         if not session.source_file:
             raise HTTPException(
                 status_code=400,
-                detail={"error": "Session source file path is empty", "session_id": session_id},
+                detail={
+                    "error": "Session source file path is empty",
+                    "session_id": session_id,
+                },
             )
         file_path = Path(session.source_file)
         if not file_path.exists() or not file_path.is_file():
             raise HTTPException(
                 status_code=400,
-                detail={"error": f"Session source file path is invalid: {session.source_file}", "session_id": session_id},
+                detail={
+                    "error": f"Session source file path is invalid: {session.source_file}",
+                    "session_id": session_id,
+                },
             )
         try:
             file_path.unlink()
         except OSError as e:
-            raise HTTPException(status_code=500, detail={"error": f"Failed to delete session file: {e}"})
+            raise HTTPException(
+                status_code=500, detail={"error": f"Failed to delete session file: {e}"}
+            )
 
     return {"status": "deleted", "session_id": session_id}

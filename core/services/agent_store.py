@@ -27,8 +27,7 @@ class AgentStore:
     def _migrate(self) -> None:
         with self._lock, self._connection:
             self._connection.execute(
-                "CREATE TABLE IF NOT EXISTS schema_version "
-                "(version INTEGER NOT NULL)"
+                "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
             )
             row = self._connection.execute(
                 "SELECT version FROM schema_version LIMIT 1"
@@ -104,10 +103,18 @@ class AgentStore:
                     capability_snapshot=excluded.capability_snapshot
                 """,
                 (
-                    values["id"], values["provider"], values["providerSessionId"],
-                    values["projectId"], values["cwd"], values["title"],
-                    values["model"], values["permissionMode"], values["createdAt"],
-                    values["updatedAt"], values["status"], values["lastSequence"],
+                    values["id"],
+                    values["provider"],
+                    values["providerSessionId"],
+                    values["projectId"],
+                    values["cwd"],
+                    values["title"],
+                    values["model"],
+                    values["permissionMode"],
+                    values["createdAt"],
+                    values["updatedAt"],
+                    values["status"],
+                    values["lastSequence"],
                     json.dumps(values["capabilitySnapshot"], ensure_ascii=False),
                 ),
             )

@@ -2,6 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Search, BookOpen, Layers, Terminal, Globe, Cpu, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useProject } from '../context/ProjectContext';
+import Toggle from './shared/Toggle';
+import ErrorState from './shared/ErrorState';
+import LoadingState from './shared/LoadingState';
+import useResourceData from '../hooks/useResourceData';
+import useResourceToggle from '../hooks/useResourceToggle';
 
 interface Skill {
   name: string;
@@ -15,63 +20,22 @@ interface SkillsData {
 }
 
 const SkillGallery: React.FC = () => {
-  const { currentGroup, groups, refreshConfig } = useProject();
-  const [skillsData, setSkillsData] = useState<SkillsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { currentGroup, groups } = useProject();
+  const { data: skillsData, loading, error, refetch } = useResourceData<SkillsData>('/api/skills');
+  const { toggleResource, toggleError } = useResourceToggle();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const fetchSkills = async () => {
-      try {
-        const response = await fetch('/api/skills');
-        if (!response.ok) {
-          throw new Error('Failed to fetch skills');
-        }
-        const data: SkillsData = await response.json();
-        setSkillsData(data);
-        const categories = Object.keys(data);
-        if (categories.length > 0) {
-          setSelectedCategory(categories[0]);
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      } finally {
-        setLoading(false);
+    if (skillsData) {
+      const categories = Object.keys(skillsData);
+      if (categories.length > 0 && !selectedCategory) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSelectedCategory(categories[0]);
       }
-    };
-
-    fetchSkills();
-  }, []);
-
-  const toggleSkillStatus = async (skillId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!currentGroup) return;
-
-    try {
-      const currentGroupDef = groups[currentGroup] || { skills: [], prompts: [], hooks: [] };
-      const newSkills = [...currentGroupDef.skills];
-      const index = newSkills.indexOf(skillId);
-
-      if (index > -1) {
-        newSkills.splice(index, 1);
-      } else {
-        newSkills.push(skillId);
-      }
-
-      await fetch(`/api/groups/${currentGroup}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...currentGroupDef, skills: newSkills }),
-      });
-
-      await refreshConfig();
-    } catch (err) {
-      console.error('Failed to toggle skill:', err);
     }
-  };
+  }, [skillsData, selectedCategory]);
 
   const isSkillActive = (skillId: string) => {
     return groups[currentGroup]?.skills?.includes(skillId) ?? false;
@@ -94,25 +58,11 @@ const SkillGallery: React.FC = () => {
     : [];
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <LoadingState />;
   }
 
   if (error) {
-    return (
-      <div className="p-8 text-center text-red-500">
-        <p>Error: {error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-4 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    );
+    return <ErrorState message={error} onRetry={refetch} />;
   }
 
   return (
@@ -170,19 +120,11 @@ const SkillGallery: React.FC = () => {
               </div>
               <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-xl border border-slate-200">
                 <span className="text-xs font-semibold text-slate-600">Active in {currentGroup}</span>
-                <button
-                  onClick={(e) => toggleSkillStatus(selectedSkill.id, e)}
+                <Toggle
+                  checked={isSkillActive(selectedSkill.id)}
+                  onChange={(e) => toggleResource('skills', selectedSkill.id, e)}
                   aria-label={isSkillActive(selectedSkill.id) ? 'Deactivate skill' : 'Activate skill'}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
-                    isSkillActive(selectedSkill.id) ? 'bg-primary' : 'bg-slate-200'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                      isSkillActive(selectedSkill.id) ? 'translate-x-5' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
+                />
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-8 bg-white prose prose-slate max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-li:text-slate-700 prose-strong:text-slate-900">
@@ -218,8 +160,10 @@ const SkillGallery: React.FC = () => {
           <div className="flex-1 flex flex-col overflow-hidden gap-6">
             <div className="p-6 glass-card bg-slate-50/30 backdrop-blur-sm">
               <div className="relative max-w-md">
+                <label htmlFor="skill-search" className="sr-only">Search skills</label>
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
+                  id="skill-search"
                   type="text"
                   placeholder="Search skills..."
                   value={searchTerm}
@@ -243,20 +187,11 @@ const SkillGallery: React.FC = () => {
                         <Terminal className="w-5 h-5" />
                       </div>
 
-                      {/* Toggle Switch */}
-                      <button
-                        onClick={(e) => toggleSkillStatus(skill.id, e)}
+                      <Toggle
+                        checked={isSkillActive(skill.id)}
+                        onChange={(e) => toggleResource('skills', skill.id, e)}
                         aria-label={`Toggle ${skill.name} active status`}
-                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
-                          isSkillActive(skill.id) ? 'bg-primary' : 'bg-slate-200'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                            isSkillActive(skill.id) ? 'translate-x-5' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
+                      />
                     </div>
 
                     <h2 className="break-words text-lg font-semibold tracking-tight group-hover:text-primary transition-colors mb-2">
@@ -284,6 +219,11 @@ const SkillGallery: React.FC = () => {
           </div>
         )}
       </div>
+      {toggleError && (
+        <div className="fixed bottom-4 right-4 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium shadow-lg">
+          {toggleError}
+        </div>
+      )}
     </div>
   );
 };

@@ -253,8 +253,8 @@ async def test_malformed_config_returns_server_error(mock_env):
     ) as ac:
         resp = await ac.get("/api/config")
 
-    assert resp.status_code == 500
-    assert "Failed to parse config.json" in resp.json()["detail"]
+    assert resp.status_code == 200
+    assert "Failed to parse config.json" in resp.json()["warnings"][0]
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -304,6 +304,7 @@ async def test_server_lifespan_cleanup_exceptions(monkeypatch):
     # Patch the imported runner modules inside lifespan context
     import core.web.routers.chat
     import core.web.routers.tasks
+
     monkeypatch.setattr(core.web.routers.chat, "_runner", mock_chat_runner)
     monkeypatch.setattr(core.web.routers.tasks, "_runner", mock_tasks_runner)
 

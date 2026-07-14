@@ -1,4 +1,7 @@
-from fastapi import APIRouter
+"""Skills listing endpoint."""
+
+from fastapi import APIRouter, HTTPException
+
 from core.services.skill_service import SkillService
 from core.web.resource_paths import resolve_resource_path
 
@@ -10,6 +13,10 @@ def get_skills_root():
 
 
 @router.get("/skills")
-async def list_skills():
-    service = SkillService(get_skills_root())
-    return service.get_detailed_skills()
+async def list_skills() -> dict:
+    """List all registered skills with metadata."""
+    try:
+        service = SkillService(get_skills_root())
+        return service.get_detailed_skills()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e

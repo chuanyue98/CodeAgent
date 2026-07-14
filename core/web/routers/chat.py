@@ -77,7 +77,9 @@ def _registered_project(project_path: str) -> tuple[str, str]:
             continue
         configured_path = project.get("path")
         configured_group = project.get("group")
-        if not isinstance(configured_path, str) or not isinstance(configured_group, str):
+        if not isinstance(configured_path, str) or not isinstance(
+            configured_group, str
+        ):
             continue
         if Path(configured_path).expanduser().resolve() == requested:
             return str(requested), configured_group

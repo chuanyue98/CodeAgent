@@ -5,7 +5,9 @@ import { Layers, ChevronDown } from 'lucide-react';
 export default function ProjectSwitcher() {
   const { currentGroup, setCurrentGroup, availableGroups, groups } = useProject();
   const [open, setOpen] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
+  const listboxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -17,6 +19,70 @@ export default function ProjectSwitcher() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // When opening, focus the current group
+  useEffect(() => {
+    if (open) {
+      const idx = availableGroups.indexOf(currentGroup);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFocusedIndex(idx >= 0 ? idx : 0);
+    } else {
+      setFocusedIndex(-1);
+    }
+  }, [open, currentGroup, availableGroups]);
+
+  // Scroll focused option into view
+  useEffect(() => {
+    if (open && focusedIndex >= 0 && listboxRef.current) {
+      const option = listboxRef.current.querySelectorAll('[role="option"]')[focusedIndex];
+      option?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [focusedIndex, open]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        setOpen(true);
+      }
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setFocusedIndex((prev) =>
+          prev < availableGroups.length - 1 ? prev + 1 : 0
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setFocusedIndex((prev) =>
+          prev > 0 ? prev - 1 : availableGroups.length - 1
+        );
+        break;
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        if (focusedIndex >= 0 && focusedIndex < availableGroups.length) {
+          setCurrentGroup(availableGroups[focusedIndex]);
+          setOpen(false);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setOpen(false);
+        break;
+      case 'Home':
+        e.preventDefault();
+        setFocusedIndex(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        setFocusedIndex(availableGroups.length - 1);
+        break;
+    }
+  };
+
   const current = groups[currentGroup];
   const resourceCount = (current?.skills?.length ?? 0)
     + (current?.prompts?.length ?? 0)
@@ -27,10 +93,11 @@ export default function ProjectSwitcher() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
+        onKeyDown={handleKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Resource group: ${currentGroup}`}
-        className="flex max-w-52 items-center gap-2 px-3 md:px-4 py-2 bg-white/50 backdrop-blur-md border border-slate-100 rounded-xl hover:bg-white transition-colors shadow-sm"
+        className="flex max-w-52 items-center gap-2 px-3 md:px-4 py-2 bg-white/50 backdrop-blur-md border border-slate-100 rounded-xl hover:bg-white transition-colors shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       >
         <Layers size={16} className="text-primary" />
         <span className="truncate text-sm font-semibold"><span className="text-slate-400">Group · </span>{currentGroup}</span>
@@ -39,15 +106,20 @@ export default function ProjectSwitcher() {
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-56 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-slate-100 bg-white shadow-xl">
           <div className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Resource group</div>
-          <div role="listbox" className="p-2 pt-1">
-            {availableGroups.map(group => (
+          <div role="listbox" ref={listboxRef} className="p-2 pt-1 max-h-64 overflow-y-auto" onKeyDown={handleKeyDown}>
+            {availableGroups.map((group, index) => (
               <button
                 key={group}
                 role="option"
                 aria-selected={currentGroup === group}
+                tabIndex={focusedIndex === index ? 0 : -1}
                 onClick={() => { setCurrentGroup(group); setOpen(false); }}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                  currentGroup === group ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-slate-50 text-slate-600'
+                  currentGroup === group
+                    ? 'bg-primary/10 text-primary font-bold'
+                    : focusedIndex === index
+                    ? 'bg-slate-100 text-slate-900'
+                    : 'hover:bg-slate-50 text-slate-600'
                 }`}
               >
                 {group}

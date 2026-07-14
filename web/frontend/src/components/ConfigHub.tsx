@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Save, Loader2, Plus, Trash2, Folder, Layers, Globe, Zap, Check, X } from 'lucide-react';
 import { useProject, type Config, type GroupDefinition, type Project } from '../context/ProjectContext';
+import request from '../utils/request';
 
 interface ProxyConfig {
   host: string;
@@ -78,13 +79,10 @@ const ConfigHub: React.FC = () => {
         groups: localGroups
       };
 
-      const response = await fetch('/api/config', {
+      await request('/api/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(fullConfig),
       });
-
-      if (!response.ok) throw new Error('Failed to save config');
 
       await refreshConfig();
       setError(null);
@@ -205,9 +203,9 @@ const ConfigHub: React.FC = () => {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Operation Mode</label>
+            <label htmlFor="config-mode" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Operation Mode</label>
             <select
-              aria-label="Operation Mode"
+              id="config-mode"
               value={localConfig.default_mode || 'local'}
               onChange={(e) => setLocalConfig({ ...localConfig, default_mode: e.target.value })}
               className="w-full p-3 border border-slate-100 rounded-xl bg-slate-50/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
@@ -218,9 +216,9 @@ const ConfigHub: React.FC = () => {
             </select>
           </div>
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Language</label>
+            <label htmlFor="config-language" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Language</label>
             <select
-              aria-label="Language"
+              id="config-language"
               value={localConfig.language || 'hybrid'}
               onChange={(e) => setLocalConfig({ ...localConfig, language: e.target.value })}
               className="w-full p-3 border border-slate-100 rounded-xl bg-slate-50/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
@@ -233,13 +231,13 @@ const ConfigHub: React.FC = () => {
         </div>
 
         <div className="space-y-2 pt-4">
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+          <label htmlFor="config-resource-root" className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
             <Folder size={12} className="text-primary" /> Private Resource Root
           </label>
           <div className="flex gap-3">
             <input
+              id="config-resource-root"
               type="text"
-              aria-label="Private resource root"
               value={localConfig.paths?.resource_root || ''}
               onChange={(e) => {
                 const newPaths = { ...(localConfig.paths || {}), resource_root: e.target.value };
@@ -276,6 +274,7 @@ const ConfigHub: React.FC = () => {
           {localProjects.map((p, i) => (
             <div key={p.uiId} className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center bg-slate-50/30 p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
               <input
+                id={`project-path-${p.uiId}`}
                 type="text"
                 aria-label={`Project path ${i + 1}`}
                 value={p.path}
@@ -284,7 +283,8 @@ const ConfigHub: React.FC = () => {
                 className="flex-1 p-2 bg-transparent border-b border-slate-200 focus:border-primary outline-none text-sm font-mono"
               />
               <select
-                aria-label="Resource group"
+                id={`project-group-${p.uiId}`}
+                aria-label={`Resource group for project ${i + 1}`}
                 value={p.group}
                 onChange={(e) => updateProject(p.uiId, 'group', e.target.value)}
                 className="w-full sm:w-40 p-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/20"
@@ -316,6 +316,7 @@ const ConfigHub: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <input
                 ref={newGroupInputRef}
+                id="config-new-group"
                 type="text"
                 aria-label="New group name"
                 value={newGroupName}
@@ -379,6 +380,7 @@ const ConfigHub: React.FC = () => {
           {localProxies.map((p, i) => (
             <div key={p.uiId} className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center bg-slate-50/30 p-2 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
               <input
+                id={`proxy-host-${p.uiId}`}
                 type="text"
                 aria-label={`Proxy host ${i + 1}`}
                 value={p.host}
@@ -386,6 +388,7 @@ const ConfigHub: React.FC = () => {
                 className="flex-1 p-2.5 bg-transparent border-b border-slate-100 focus:border-primary outline-none text-sm font-mono"
               />
               <input
+                id={`proxy-port-${p.uiId}`}
                 type="number"
                 aria-label={`Proxy port ${i + 1}`}
                 value={p.port}

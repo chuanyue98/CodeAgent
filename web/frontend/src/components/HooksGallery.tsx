@@ -1,6 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Search, Anchor, Terminal, Info } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import Toggle from './shared/Toggle';
+import ErrorState from './shared/ErrorState';
+import LoadingState from './shared/LoadingState';
+import useResourceData from '../hooks/useResourceData';
+import useResourceToggle from '../hooks/useResourceToggle';
 
 interface Hook {
   id: string;
@@ -11,61 +16,18 @@ interface Hook {
 }
 
 const HooksGallery: React.FC = () => {
-  const { currentGroup, groups, refreshConfig } = useProject();
-  const [hooks, setHooks] = useState<Hook[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { currentGroup, groups } = useProject();
+  const { data: rawData, loading, error, refetch } = useResourceData<Hook[] | { hooks: Hook[] }>('/api/hooks');
+  const { toggleResource, toggleError } = useResourceToggle();
   const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    const fetchHooks = async () => {
-      try {
-        const response = await fetch('/api/hooks');
-        if (!response.ok) {
-          throw new Error('Failed to fetch hooks');
-        }
-        const data = await response.json();
-        const hooksArray = Array.isArray(data) ? data : (data.hooks || []);
-        setHooks(hooksArray);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchHooks();
-  }, []);
+  const hooks = useMemo(() => {
+    if (!rawData) return [];
+    return Array.isArray(rawData) ? rawData : (rawData.hooks || []);
+  }, [rawData]);
 
   const isHookActive = (hookId: string) => {
     return groups[currentGroup]?.hooks?.includes(hookId) || false;
-  };
-
-  const toggleHookStatus = async (hookId: string) => {
-    if (!currentGroup) return;
-
-    try {
-      const currentGroupDef = groups[currentGroup] || { skills: [], prompts: [], hooks: [] };
-      const newHooks = [...currentGroupDef.hooks];
-      const index = newHooks.indexOf(hookId);
-
-      if (index > -1) {
-        newHooks.splice(index, 1);
-      } else {
-        newHooks.push(hookId);
-      }
-
-      await fetch(`/api/groups/${currentGroup}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...currentGroupDef, hooks: newHooks }),
-      });
-
-      await refreshConfig();
-    } catch (err) {
-      console.error('Failed to toggle hook:', err);
-      setError(err instanceof Error ? err.message : 'Failed to toggle hook');
-    }
   };
 
   const filteredHooks = hooks.filter(hook =>
@@ -75,33 +37,21 @@ const HooksGallery: React.FC = () => {
   );
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <LoadingState />;
   }
 
   if (error) {
-    return (
-      <div className="p-8 text-center text-red-500">
-        <p>Error: {error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-4 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    );
+    return <ErrorState message={error} onRetry={refetch} />;
   }
 
   return (
     <div className="flex flex-col h-full overflow-hidden p-6 gap-6">
       <div className="flex items-center justify-between glass-card p-6 bg-slate-50/30 backdrop-blur-sm">
         <div className="relative max-w-md w-full">
+          <label htmlFor="hook-search" className="sr-only">Search hooks</label>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
+            id="hook-search"
             type="text"
             placeholder="Search hooks..."
             value={searchTerm}
@@ -140,20 +90,12 @@ const HooksGallery: React.FC = () => {
                     </span>
                   </div>
 
-                  {/* Toggle Switch */}
-                  <button
-                    onClick={() => toggleHookStatus(hook.id)}
+                  <Toggle
+                    checked={active}
+                    onChange={() => toggleResource('hooks', hook.id)}
                     aria-label={`Toggle ${hook.name} active status`}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                      active ? 'bg-primary' : 'bg-slate-200'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        active ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
+                    size="md"
+                  />
                 </div>
 
                 <h2 className="text-lg font-semibold tracking-tight mb-2 group-hover:text-primary transition-colors">
@@ -190,6 +132,11 @@ const HooksGallery: React.FC = () => {
           </div>
         )}
       </div>
+      {toggleError && (
+        <div className="fixed bottom-4 right-4 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium shadow-lg">
+          {toggleError}
+        </div>
+      )}
     </div>
   );
 };
