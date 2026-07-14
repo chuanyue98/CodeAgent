@@ -128,8 +128,10 @@ def initialize_default_groups() -> None:
 async def lifespan(app: FastAPI):
     initialize_default_groups()
     from core.services.agent_adapters.base import AgentAdapter
+    from core.services.agent_adapters.claude import ClaudeAdapter
     from core.services.agent_adapters.codex import CodexAdapter
     from core.services.agent_adapters.fake import FakeAgentAdapter
+    from core.services.agent_adapters.opencode import OpenCodeAdapter
     from core.services.agent_gateway import AgentGateway
     from core.services.agent_store import AgentStore
 
@@ -139,7 +141,7 @@ async def lifespan(app: FastAPI):
     adapters: list[AgentAdapter] = (
         [FakeAgentAdapter()]
         if os.environ.get("CA_AGENT_GATEWAY_FAKE") == "1"
-        else [CodexAdapter()]
+        else [CodexAdapter(), ClaudeAdapter(), OpenCodeAdapter()]
     )
     agent_gateway = AgentGateway(
         AgentStore(agent_db),
