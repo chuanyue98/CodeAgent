@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { Cpu, HardDrive, Clock, FileText } from 'lucide-react';
 import { fetchSystemMetrics, type SystemMetrics } from '../api/system';
 
@@ -13,37 +13,40 @@ export default function SystemPanel() {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
-  useEffect(() => {
-    fetchSystemMetrics().then(setMetrics).catch((err) => { setError(err instanceof Error ? err.message : 'Failed to load metrics'); });
-    const interval = setInterval(() => {
-      fetchSystemMetrics().then(setMetrics).catch((err) => { setError(err instanceof Error ? err.message : 'Failed to load metrics'); });
-    }, 5000);
-    return () => clearInterval(interval);
+  const loadMetrics = useCallback(async () => {
+    try {
+      const nextMetrics = await fetchSystemMetrics();
+      setMetrics(nextMetrics);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load metrics');
+    }
   }, []);
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadMetrics();
+    const interval = setInterval(() => { void loadMetrics(); }, 5000);
+    return () => clearInterval(interval);
+  }, [loadMetrics]);
+
   const handleRetry = () => {
-    setError(null);
-    fetchSystemMetrics().then(setMetrics).catch((err) => {
-      setError(err instanceof Error ? err.message : 'Failed to load metrics');
-    });
+    void loadMetrics();
   };
 
   if (error) return (
-    <div className="fixed bottom-0 left-0 right-0 z-50">
-      <div className="glass-card border-t border-red-100 px-4 py-2 flex items-center justify-between">
+    <div role="alert" className="shrink-0 border-t border-red-100 bg-red-50/90 px-4 py-2 flex items-center justify-between">
         <span className="text-xs text-red-600">{error}</span>
         <button onClick={handleRetry} className="text-xs text-red-600 hover:underline">Retry</button>
-      </div>
     </div>
   );
 
   if (!metrics) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50">
-      <div className="glass-card border-t border-slate-200 px-4 py-1.5">
+    <footer data-testid="system-metrics" aria-label="System metrics" className="shrink-0 border-t border-slate-200 bg-white/95 px-3 md:px-4 py-1.5 shadow-[0_-4px_12px_rgba(15,23,42,0.04)]">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 text-xs">
+          <div className="flex min-w-0 items-center gap-1.5 sm:gap-4 text-xs">
             <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${colorFor(metrics.cpu_percent, [70, 90])}`}>
               <Cpu className="w-3 h-3" />{metrics.cpu_percent.toFixed(0)}%
             </span>
@@ -59,7 +62,8 @@ export default function SystemPanel() {
           </div>
           <button
             onClick={() => setExpanded(!expanded)}
-            className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1"
+            aria-expanded={expanded}
+            className="shrink-0 text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1"
           >
             {expanded ? 'Hide' : 'Details'}
           </button>
@@ -85,7 +89,6 @@ export default function SystemPanel() {
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </footer>
   );
 }

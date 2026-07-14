@@ -31,12 +31,12 @@ test('toggling a hook on and off updates active state', async ({ page }) => {
   const card = cardByText(page, HOOKS.pre.name);
   const toggle = card.locator('button').first();
 
-  await expect(card).toHaveClass(/opacity-70/);
+  await expect(card).toHaveClass(/bg-slate-50\/60/);
   await expect(toggle).toHaveClass(/bg-slate-200/);
 
   await toggleInCard(card);
   await expect(toggle).toHaveClass(/bg-primary/);
-  await expect(card).not.toHaveClass(/opacity-70/);
+  await expect(card).not.toHaveClass(/bg-slate-50\/60/);
 
   await toggleInCard(card);
   await expect(toggle).toHaveClass(/bg-slate-200/);

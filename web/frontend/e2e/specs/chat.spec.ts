@@ -1,6 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
 import { resetBackend } from '../lib/reset';
 import { waitForH2 } from '../lib/ui';
+import { cardByText, toggleInCard } from '../lib/ui';
+import { SKILLS } from '../lib/fixtures';
 
 test.beforeEach(async ({ baseURL }) => {
   await resetBackend(baseURL!);
@@ -71,4 +73,18 @@ test('switching engine resets the conversation', async ({ page }) => {
   });
   await page.getByRole('button', { name: 'OpenAI Codex' }).click();
   await expect(page.getByText(/Start a conversation/i)).toBeVisible();
+});
+
+test('shows configured resources as inactive instead of claiming they are enabled', async ({ page }) => {
+  await page.goto('/skills');
+  const skillCard = cardByText(page, SKILLS.web[0]);
+  await toggleInCard(skillCard);
+
+  await gotoChat(page);
+  const capabilities = page.getByRole('region', { name: 'Current session capabilities' });
+  await expect(capabilities).toContainText('0 CodeAgent-managed resources active');
+  await capabilities.getByRole('button', { name: /Legacy Web Chat/i }).click();
+  await expect(capabilities).toContainText('Configured but inactive: 1');
+  await expect(capabilities).toContainText(SKILLS.web[0]);
+  await expect(capabilities).toContainText('Provider-native capabilities: unknown');
 });

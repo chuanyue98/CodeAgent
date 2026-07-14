@@ -27,10 +27,11 @@ test('search filters the session list', async ({ page }) => {
 
 test('engine toggle narrows the list to that engine', async ({ page }) => {
   await gotoSessions(page);
-  await page.getByRole('button', { name: 'gemini' }).click();
+  const geminiFilter = page.getByTestId('session-filters').getByRole('button', { name: 'gemini' });
+  await geminiFilter.click();
   await expect(page.locator('main')).toContainText('1 session');
   // Toggle it off again — selection is additive, so this returns to all.
-  await page.getByRole('button', { name: 'gemini' }).click();
+  await geminiFilter.click();
   await expect(page.locator('main')).toContainText('2 sessions');
 });
 

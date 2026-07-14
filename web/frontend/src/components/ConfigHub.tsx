@@ -148,8 +148,8 @@ const ConfigHub: React.FC = () => {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8 min-h-full pb-20">
-      <div className="flex justify-between items-end pb-4">
+    <div className="p-3 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 lg:space-y-8 min-h-full pb-20">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 pb-4">
         <div>
           <p className="text-sm text-slate-500">Manage projects, groups, and system settings in one place</p>
         </div>
@@ -170,7 +170,7 @@ const ConfigHub: React.FC = () => {
       )}
 
       {/* General Settings */}
-      <section className="glass-card p-8 space-y-6">
+      <section className="glass-card p-4 sm:p-8 space-y-6">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-emerald-50 text-emerald-500 rounded-lg">
             <Zap size={20} />
@@ -216,6 +216,7 @@ const ConfigHub: React.FC = () => {
           <div className="flex gap-3">
             <input
               type="text"
+              aria-label="Private resource root"
               value={localConfig.paths?.resource_root || ''}
               onChange={(e) => {
                 const newPaths = { ...(localConfig.paths || {}), resource_root: e.target.value };
@@ -232,8 +233,8 @@ const ConfigHub: React.FC = () => {
       </section>
 
       {/* Project Registry */}
-      <section className="glass-card p-8 space-y-6">
-        <div className="flex justify-between items-center">
+      <section className="glass-card p-4 sm:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-50 text-blue-500 rounded-lg">
               <Folder size={20} />
@@ -250,9 +251,10 @@ const ConfigHub: React.FC = () => {
 
         <div className="space-y-3">
           {localProjects.map((p, i) => (
-            <div key={i} className="flex gap-4 items-center bg-slate-50/30 p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition-all">
+            <div key={i} className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center bg-slate-50/30 p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
               <input
                 type="text"
+                aria-label={`Project path ${i + 1}`}
                 value={p.path}
                 onChange={(e) => updateProject(i, 'path', e.target.value)}
                 placeholder="E:/your/project/path"
@@ -262,11 +264,11 @@ const ConfigHub: React.FC = () => {
                 aria-label="Resource group"
                 value={p.group}
                 onChange={(e) => updateProject(i, 'group', e.target.value)}
-                className="w-40 p-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/20"
+                className="w-full sm:w-40 p-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/20"
               >
                 {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
-              <button onClick={() => removeProject(i)} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+              <button aria-label={`Remove project ${p.path || i + 1}`} onClick={() => removeProject(i)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
                 <Trash2 size={18} />
               </button>
             </div>
@@ -276,8 +278,8 @@ const ConfigHub: React.FC = () => {
       </section>
 
       {/* Resource Groups */}
-      <section className="glass-card p-8 space-y-6">
-        <div className="flex justify-between items-center">
+      <section className="glass-card p-4 sm:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-purple-50 text-purple-500 rounded-lg">
               <Layers size={20} />
@@ -288,10 +290,11 @@ const ConfigHub: React.FC = () => {
             </div>
           </div>
           {addingGroup ? (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 ref={newGroupInputRef}
                 type="text"
+                aria-label="New group name"
                 value={newGroupName}
                 onChange={(e) => setNewGroupName(e.target.value)}
                 onKeyDown={(e) => {
@@ -301,10 +304,10 @@ const ConfigHub: React.FC = () => {
                 placeholder="group-name"
                 className="text-sm px-3 py-1.5 border border-primary/30 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 w-36 font-mono"
               />
-              <button onClick={confirmAddGroup} className="p-1.5 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-all">
+              <button aria-label="Confirm new group" onClick={confirmAddGroup} className="p-1.5 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors">
                 <Check className="w-4 h-4" />
               </button>
-              <button onClick={cancelAddGroup} className="p-1.5 bg-slate-100 text-slate-400 rounded-lg hover:bg-slate-200 transition-all">
+              <button aria-label="Cancel new group" onClick={cancelAddGroup} className="p-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-slate-200 transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -317,14 +320,14 @@ const ConfigHub: React.FC = () => {
 
         <div className="space-y-2">
           {Object.entries(localGroups).map(([name, def]) => (
-            <div key={name} className="flex items-center justify-between px-4 py-3 border border-slate-100 rounded-xl bg-slate-50/20 hover:border-slate-200 transition-all">
-              <div className="flex items-center gap-3">
+            <div key={name} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border border-slate-100 rounded-xl bg-slate-50/20 hover:border-slate-200 transition-colors">
+              <div className="flex flex-wrap items-center gap-3 min-w-0">
                 <span className="w-2 h-2 rounded-full bg-primary" />
                 <span className="font-semibold text-sm text-slate-800 uppercase tracking-tight">{name}</span>
                 <span className="text-xs text-slate-400">{def.skills?.length ?? 0} skills · {def.prompts?.length ?? 0} prompts · {def.hooks?.length ?? 0} hooks · {def.plugins?.length ?? 0} plugins</span>
               </div>
               {name !== 'codeagent' && name !== 'common' && (
-                <button onClick={() => removeGroup(name)} className="p-1.5 text-slate-500 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
+                <button aria-label={`Remove group ${name}`} onClick={() => removeGroup(name)} className="p-1.5 text-slate-500 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
                   <Trash2 size={15} />
                 </button>
               )}
@@ -334,8 +337,8 @@ const ConfigHub: React.FC = () => {
       </section>
 
       {/* Proxy Settings */}
-      <section className="glass-card p-8 space-y-6">
-        <div className="flex justify-between items-center">
+      <section className="glass-card p-4 sm:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-orange-50 text-orange-500 rounded-lg">
               <Globe size={20} />
@@ -351,20 +354,22 @@ const ConfigHub: React.FC = () => {
         </div>
         <div className="space-y-3">
           {(localConfig.proxy || []).map((p: ProxyConfig, i: number) => (
-            <div key={i} className="flex gap-4 items-center bg-slate-50/30 p-2 rounded-xl border border-slate-100 hover:border-slate-200 transition-all">
+            <div key={i} className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center bg-slate-50/30 p-2 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
               <input
                 type="text"
+                aria-label={`Proxy host ${i + 1}`}
                 value={p.host}
                 onChange={(e) => updateProxy(i, 'host', e.target.value)}
                 className="flex-1 p-2.5 bg-transparent border-b border-slate-100 focus:border-primary outline-none text-sm font-mono"
               />
               <input
                 type="number"
+                aria-label={`Proxy port ${i + 1}`}
                 value={p.port}
                 onChange={(e) => updateProxy(i, 'port', parseInt(e.target.value) || 0)}
-                className="w-24 p-2.5 bg-transparent border-b border-slate-100 focus:border-primary outline-none text-sm font-mono"
+                className="w-full sm:w-24 p-2.5 bg-transparent border-b border-slate-100 focus:border-primary outline-none text-sm font-mono"
               />
-              <button onClick={() => removeProxy(i)} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+              <button aria-label={`Remove proxy ${p.host}:${p.port}`} onClick={() => removeProxy(i)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
                 <Trash2 size={20} />
               </button>
             </div>

@@ -46,7 +46,7 @@ for (const { path, label, emptyStateHint } of PAGES) {
     });
 
     await page.goto(path);
-    await expect(page.getByRole('heading', { level: 2, name: label, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: label, exact: true })).toBeVisible();
     // Let the page's mount-time fetches resolve. Not networkidle: LogViewer
     // may open a long-lived SSE stream that never goes idle.
     await page.waitForTimeout(800);
@@ -88,9 +88,10 @@ for (const { path, label, emptyStateHint } of PAGES) {
     const slug = label.toLowerCase().replace(/\s+/g, '-');
     await page.screenshot({ path: `e2e/screenshots/${slug}-expanded.png` });
 
-    const collapseButton = page.locator('aside button').first();
+    const navigation = page.locator('aside').first();
+    const collapseButton = navigation.locator('button').first();
     await collapseButton.click();
-    await expect(page.locator('aside')).toHaveClass(/w-24/);
+    await expect(navigation).toHaveClass(/w-24/);
     await page.screenshot({ path: `e2e/screenshots/${slug}-collapsed.png` });
   });
 }

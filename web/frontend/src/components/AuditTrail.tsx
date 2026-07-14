@@ -129,8 +129,8 @@ export default function AuditTrail() {
   }
 
   return (
-    <div className="flex gap-4 h-full">
-      <div className="w-56 shrink-0 glass-card p-4 space-y-4">
+    <div className="flex flex-col xl:flex-row gap-4 min-h-full xl:h-full">
+      <aside className="w-full xl:w-56 shrink-0 glass-card p-4 space-y-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
           <Filter className="w-4 h-4" /> Filters
         </div>
@@ -151,7 +151,7 @@ export default function AuditTrail() {
 
         <div>
           <label className="text-xs text-slate-400 font-medium block mb-1">Date Range</label>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-1 gap-2">
             <input
               type="date"
               aria-label="Date range start"
@@ -206,7 +206,7 @@ export default function AuditTrail() {
             ))}
           </div>
         </div>
-      </div>
+      </aside>
 
       <div className="flex-1 min-w-0 glass-card p-5 flex flex-col">
         <div className="flex items-center justify-between mb-2">
@@ -233,10 +233,19 @@ export default function AuditTrail() {
                 className="border border-slate-100 rounded-xl p-4 hover:bg-slate-50/60 transition-colors"
               >
                 <div
-                  className="flex items-center justify-between cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isExpanded}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer"
                   onClick={() => setExpandedId(isExpanded ? null : event.event_id)}
+                  onKeyDown={keyboardEvent => {
+                    if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                      keyboardEvent.preventDefault();
+                      setExpandedId(isExpanded ? null : event.event_id);
+                    }
+                  }}
                 >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1">
                     {event.event_type === 'tool_call'
                       ? <Wrench className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                       : <MessageSquare className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
@@ -250,7 +259,7 @@ export default function AuditTrail() {
                       {event.engine}
                     </span>
                   </div>
-                  <div className="flex items-center gap-4 shrink-0">
+                  <div className="flex flex-wrap items-center gap-4 shrink-0">
                     <span className="text-xs text-slate-400 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       {event.timestamp ? new Date(event.timestamp).toLocaleString() : '—'}
@@ -287,7 +296,7 @@ export default function AuditTrail() {
       </div>
 
       {drawerSession && (
-        <div className="fixed inset-0 bg-black/20 flex justify-end z-50" onClick={() => setDrawerSession(null)}>
+        <div className="fixed inset-0 bg-black/20 flex justify-end z-50" role="presentation" onClick={() => setDrawerSession(null)}>
           <div
             className="w-[32rem] max-w-full h-full bg-white shadow-xl overflow-y-auto p-5"
             onClick={e => e.stopPropagation()}
@@ -296,7 +305,7 @@ export default function AuditTrail() {
               <h3 className="text-sm font-semibold text-slate-700 truncate">
                 {sessionDetail?.title || drawerSession.sessionId}
               </h3>
-              <button onClick={() => setDrawerSession(null)} className="text-slate-400 hover:text-slate-600">
+              <button aria-label="Close session details" onClick={() => setDrawerSession(null)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-4 h-4" />
               </button>
             </div>

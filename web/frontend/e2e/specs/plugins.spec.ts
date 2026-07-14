@@ -40,9 +40,9 @@ test('search filters the current category', async ({ page }) => {
 test('card and detail toggles flip active state', async ({ page }) => {
   await gotoPlugins(page);
   const card = cardByText(page, PLUGINS.base);
-  await expect(card).toHaveClass(/opacity-70/);
+  await expect(card).toHaveClass(/bg-slate-50\/60/);
   await toggleInCard(card);
-  await expect(card).not.toHaveClass(/opacity-70/);
+  await expect(card).not.toHaveClass(/bg-slate-50\/60/);
 
   await openCard(page, PLUGINS.base);
   await expect(page.locator('main')).toContainText('Plugin Detail');

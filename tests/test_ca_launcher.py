@@ -51,9 +51,9 @@ def test_is_tcp_port_open():
 def test_find_available_port():
     with patch("socket.socket") as mock_sock:
         mock_s = mock_sock.return_value.__enter__.return_value
-        # First port taken (8000), second free (8001)
+        # First port taken (8524), second free (8525)
         mock_s.connect_ex.side_effect = [0, 1]
-        assert ca_launcher.find_available_port(8000) == 8001
+        assert ca_launcher.find_available_port(8524) == 8525
 
 
 def test_build_proxy_env():
@@ -112,7 +112,7 @@ def test_run_ui_command_uses_existing_vite_server(capsys):
 
     mock_open_browser.assert_called_once_with("http://127.0.0.1:5173")
     mock_uvicorn.run.assert_called_once_with(
-        mock_server.app, host="127.0.0.1", port=8000, log_level="info"
+        mock_server.app, host="127.0.0.1", port=8524, log_level="info"
     )
     captured = capsys.readouterr()
     assert "Detected Vite dev server" in captured.out
@@ -139,7 +139,7 @@ def test_run_ui_command_starts_vite_server_when_available(capsys):
 
     mock_open_browser.assert_called_once_with("http://127.0.0.1:5173")
     mock_uvicorn.run.assert_called_once_with(
-        mock_server.app, host="127.0.0.1", port=8000, log_level="info"
+        mock_server.app, host="127.0.0.1", port=8524, log_level="info"
     )
     captured = capsys.readouterr()
     assert "Starting Vite dev server" in captured.out

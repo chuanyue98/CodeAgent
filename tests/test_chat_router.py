@@ -4,6 +4,7 @@ no real engine CLI is spawned in CI."""
 from __future__ import annotations
 
 import time
+import json
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -173,3 +174,57 @@ async def test_list_engines_reports_supports_resume():
     assert response.status_code == 200
     engines = {e["id"]: e["supportsResume"] for e in response.json()}
     assert engines == {"gemini": False, "claude": True, "opencode": True, "codex": True}
+
+
+@pytest.mark.asyncio
+async def test_chat_capabilities_distinguish_configured_from_active(
+    tmp_path, monkeypatch
+):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "groups": {
+                    "web": {
+                        "skills": ["base/review"],
+                        "hooks": ["base/audit"],
+                        "plugins": ["base/browser"],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(chat_router, "get_config_path", lambda: config_path)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get(
+            "/api/chat/capabilities",
+            params={"engine": "codex", "group": "web", "project_path": "/tmp/app"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["mode"] == "legacy_one_shot"
+    assert data["codeagent_resources_injected"] is False
+    assert data["active"] == {"skills": [], "hooks": [], "plugins": []}
+    assert data["configured_but_inactive"] == {
+        "skills": ["base/review"],
+        "hooks": ["base/audit"],
+        "plugins": ["base/browser"],
+    }
+    assert data["provider_native"]["status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_chat_capabilities_reject_invalid_engine():
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get(
+            "/api/chat/capabilities", params={"engine": "shell"}
+        )
+
+    assert response.status_code == 400

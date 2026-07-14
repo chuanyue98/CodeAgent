@@ -71,16 +71,16 @@ test('toggling a skill on/off updates the switch and card state', async ({
   const card = cardByText(page, SKILLS.base[0]);
   const toggle = card.locator('button').first();
 
-  // Initially inactive: card is dimmed, switch is grey.
-  await expect(card).toHaveClass(/opacity-70/);
+  // Initially inactive: card has a subtle surface treatment and the switch is grey.
+  await expect(card).toHaveClass(/bg-slate-50\/60/);
   await expect(toggle).toHaveClass(/bg-slate-200/);
 
   await toggleInCard(card);
   await expect(toggle).toHaveClass(/bg-primary/);
-  await expect(card).not.toHaveClass(/opacity-70/);
+  await expect(card).not.toHaveClass(/bg-slate-50\/60/);
 
   // Toggle off again.
   await toggleInCard(card);
   await expect(toggle).toHaveClass(/bg-slate-200/);
-  await expect(card).toHaveClass(/opacity-70/);
+  await expect(card).toHaveClass(/bg-slate-50\/60/);
 });

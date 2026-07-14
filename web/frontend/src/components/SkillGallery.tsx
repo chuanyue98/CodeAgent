@@ -118,7 +118,7 @@ const SkillGallery: React.FC = () => {
   return (
     <div className="flex h-full overflow-hidden p-6 gap-6">
       {/* Sidebar Categories */}
-      <div className="w-64 glass-card flex flex-col overflow-hidden">
+      <div className="w-64 shrink-0 glass-card flex flex-col overflow-hidden">
         <div className="p-6 border-b border-slate-100">
           <h2 className="text-sm font-semibold flex items-center gap-2 uppercase tracking-widest text-slate-400">
             <BookOpen className="w-4 h-4 text-primary" />
@@ -235,7 +235,7 @@ const SkillGallery: React.FC = () => {
                     key={skill.id}
                     onClick={() => setSelectedSkill(skill)}
                     className={`group glass-card p-6 hover:border-primary/20 hover:bg-slate-50/50 transition-all cursor-pointer relative overflow-hidden ${
-                      !isSkillActive(skill.id) ? 'opacity-70' : ''
+                      !isSkillActive(skill.id) ? 'bg-slate-50/60 border-slate-200' : ''
                     }`}
                   >
                     <div className="flex justify-between items-start mb-4">
@@ -259,9 +259,9 @@ const SkillGallery: React.FC = () => {
                       </button>
                     </div>
 
-                    <h3 className="text-lg font-semibold tracking-tight group-hover:text-primary transition-colors mb-2">
+                    <h2 className="break-words text-lg font-semibold tracking-tight group-hover:text-primary transition-colors mb-2">
                       {skill.name}
-                    </h3>
+                    </h2>
                     <p className="text-sm text-slate-500 line-clamp-3 font-medium leading-relaxed">
                       {skill.description}
                     </p>

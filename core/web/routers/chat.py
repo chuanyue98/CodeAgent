@@ -22,11 +22,14 @@ import json
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from fastapi import Query
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
 from core.services.runner_service import TaskRunner
+from core.services.config_service import ConfigService
 from core.web.resource_paths import ROOT_DIR
+from core.web.routers.config import get_config_path
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -44,6 +47,59 @@ class StartChatTurnRequest(BaseModel):
     session_id: str | None = None
     group: str = "common"
     project_path: str | None = None
+
+
+_EMPTY_RESOURCES = {"skills": [], "hooks": [], "plugins": []}
+
+
+@router.get("/capabilities")
+async def get_chat_capabilities(
+    engine: str = Query(...),
+    group: str = Query("common"),
+    project_path: str | None = Query(None),
+) -> dict:
+    """Reports the capabilities that are actually active in legacy Web Chat.
+
+    Legacy Chat invokes each provider's headless command directly and bypasses
+    CodeAgent's launcher-based skill, hook, and plugin injection. Group
+    resources are therefore returned separately as configured-but-inactive;
+    provider-native capabilities remain unknown because their discovery is
+    internal to each CLI and is not exposed by the one-shot protocol.
+    """
+    if engine not in {"claude", "gemini", "opencode", "codex"}:
+        raise HTTPException(status_code=400, detail=f"Invalid engine: {engine!r}")
+
+    service = ConfigService(get_config_path())
+    config, warnings = service.get_config()
+    if warnings:
+        raise HTTPException(status_code=500, detail=warnings[0])
+
+    group_definition = config.get("groups", {}).get(group, {})
+    configured = {
+        resource: list(group_definition.get(resource, []))
+        for resource in _EMPTY_RESOURCES
+    }
+    return {
+        "mode": "legacy_one_shot",
+        "engine": engine,
+        "group": group,
+        "project_path": project_path,
+        "codeagent_resources_injected": False,
+        "active": {resource: [] for resource in _EMPTY_RESOURCES},
+        "configured_but_inactive": configured,
+        "provider_native": {
+            "status": "unknown",
+            "reason": (
+                "The provider CLI does not expose its discovered native skills, "
+                "hooks, or plugins through the legacy one-shot Chat protocol."
+            ),
+        },
+        "notice": (
+            "Legacy Web Chat bypasses CodeAgent's launcher-based capability "
+            "injection. Resources configured for this group are not active in "
+            "the current Web Chat session."
+        ),
+    }
 
 
 @router.post("/turns")
