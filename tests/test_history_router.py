@@ -186,3 +186,143 @@ async def test_delete_session(two_project_history):
         list_res2 = await ac.get("/api/history", params={"project": "E:/demo/project-a"})
         assert len(list_res2.json()["sessions"]) == 0
 
+
+@pytest.mark.asyncio
+async def test_delete_opencode_session(tmp_path, monkeypatch):
+    import sqlite3
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    
+    db_dir = tmp_path / ".opencode"
+    db_dir.mkdir(parents=True)
+    db_path = db_dir / "opencode.db"
+    
+    # Initialize DB
+    con = sqlite3.connect(str(db_path))
+    with con:
+        con.execute("""
+            CREATE TABLE session (
+                id TEXT PRIMARY KEY,
+                directory TEXT,
+                title TEXT,
+                model TEXT,
+                time_created INTEGER,
+                time_updated INTEGER
+            )
+        """)
+        con.execute("""
+            CREATE TABLE message (
+                id TEXT PRIMARY KEY,
+                session_id TEXT,
+                time_created INTEGER,
+                data TEXT
+            )
+        """)
+        con.execute("""
+            CREATE TABLE part (
+                id TEXT PRIMARY KEY,
+                message_id TEXT,
+                session_id TEXT,
+                time_created INTEGER,
+                data TEXT
+            )
+        """)
+        
+        # Populate dummy data
+        con.execute(
+            "INSERT INTO session VALUES (?, ?, ?, ?, ?, ?)",
+            ("sess-opencode", "E:/demo/project-a", "OpenCode Session", '{"id": "opencode-model"}', 1700000000000, 1700000000000)
+        )
+        con.execute(
+            "INSERT INTO message VALUES (?, ?, ?, ?)",
+            ("msg-1", "sess-opencode", 1700000000000, '{"role": "user"}')
+        )
+        con.execute(
+            "INSERT INTO part VALUES (?, ?, ?, ?, ?)",
+            ("part-1", "msg-1", "sess-opencode", 1700000000000, '{"type": "text", "text": "hello"}')
+        )
+    con.close()
+    
+    # Verify they are in the DB
+    con = sqlite3.connect(str(db_path))
+    assert con.execute("SELECT count(*) FROM session").fetchone()[0] == 1
+    assert con.execute("SELECT count(*) FROM message").fetchone()[0] == 1
+    assert con.execute("SELECT count(*) FROM part").fetchone()[0] == 1
+    con.close()
+    
+    # Call the DELETE endpoint via AsyncClient
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        # First verify it exists in list view
+        list_res = await ac.get("/api/history", params={"project": "E:/demo/project-a", "engine": "opencode"})
+        assert list_res.status_code == 200
+        assert len(list_res.json()["sessions"]) == 1
+        assert list_res.json()["sessions"][0]["session_id"] == "sess-opencode"
+        
+        # Call delete
+        del_res = await ac.delete("/api/history/opencode/sess-opencode", params={"project": "E:/demo/project-a"})
+        assert del_res.status_code == 200
+        assert del_res.json()["status"] == "deleted"
+        
+        # Verify it no longer exists in list view
+        list_res2 = await ac.get("/api/history", params={"project": "E:/demo/project-a", "engine": "opencode"})
+        assert len(list_res2.json()["sessions"]) == 0
+        
+    # Assert database file itself is intact
+    assert db_path.exists()
+    assert db_path.is_file()
+    
+    # Assert database tables are empty
+    con = sqlite3.connect(str(db_path))
+    assert con.execute("SELECT count(*) FROM session WHERE id = 'sess-opencode'").fetchone()[0] == 0
+    assert con.execute("SELECT count(*) FROM message WHERE session_id = 'sess-opencode'").fetchone()[0] == 0
+    assert con.execute("SELECT count(*) FROM part WHERE session_id = 'sess-opencode'").fetchone()[0] == 0
+    con.close()
+
+
+@pytest.mark.asyncio
+async def test_delete_session_invalid_source_file(two_project_history, monkeypatch):
+    from core.session_history.models import UnifiedSession, EngineType
+    
+    # Mock find_session_by_id to return a session with an empty source_file
+    dummy_session_empty = UnifiedSession(
+        session_id="sess-empty",
+        engine=EngineType.CLAUDE,
+        project_path="E:/demo/project-a",
+        source_file=""
+    )
+    
+    # Mock find_session_by_id to return a session with an invalid source_file
+    dummy_session_invalid = UnifiedSession(
+        session_id="sess-invalid",
+        engine=EngineType.CLAUDE,
+        project_path="E:/demo/project-a",
+        source_file="/nonexistent/path/to/file.jsonl"
+    )
+    
+    import core.web.routers.history as history_router
+    
+    original_find = history_router.find_session_by_id
+    def mock_find(session_id, engine, project):
+        if session_id == "sess-empty":
+            return dummy_session_empty
+        if session_id == "sess-invalid":
+            return dummy_session_invalid
+        return original_find(session_id, engine, project)
+        
+    monkeypatch.setattr(history_router, "find_session_by_id", mock_find)
+    
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        # Delete empty source_file session
+        res_empty = await ac.delete("/api/history/claude/sess-empty", params={"project": "E:/demo/project-a"})
+        assert res_empty.status_code == 400
+        assert "empty" in res_empty.json()["detail"]["error"]
+        
+        # Delete invalid/non-existent source_file session
+        res_invalid = await ac.delete("/api/history/claude/sess-invalid", params={"project": "E:/demo/project-a"})
+        assert res_invalid.status_code == 400
+        assert "invalid" in res_invalid.json()["detail"]["error"]
+
+
