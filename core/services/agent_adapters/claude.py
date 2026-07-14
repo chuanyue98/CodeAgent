@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 from collections.abc import AsyncIterator, Callable
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from claude_agent_sdk import (
@@ -305,7 +305,9 @@ class ClaudeAdapter:
             finally:
                 self._pending_approvals.pop(approval_id, None)
 
-        sdk_mode = "plan" if permission_mode == PermissionMode.READ_ONLY else "default"
+        sdk_mode: Literal["plan", "default"] = (
+            "plan" if permission_mode == PermissionMode.READ_ONLY else "default"
+        )
         options = ClaudeAgentOptions(
             cwd=cwd,
             cli_path=shutil.which(self.executable),
