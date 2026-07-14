@@ -284,3 +284,33 @@ def test_initialize_default_groups_logic(tmp_path, monkeypatch):
         config = json.load(f)
         assert "groups" in config
         assert "common" in config["groups"]
+
+
+@pytest.mark.asyncio
+async def test_server_lifespan_cleanup_exceptions(monkeypatch):
+    from unittest.mock import MagicMock, AsyncMock
+    import core.web.server as server_mod
+
+    # Mock initialize_default_groups and scheduler_tick_loop to avoid real setup
+    monkeypatch.setattr(server_mod, "initialize_default_groups", MagicMock())
+    monkeypatch.setattr(server_mod, "scheduler_tick_loop", AsyncMock())
+
+    mock_chat_runner = MagicMock()
+    # Force one of them to raise an Exception to test independent try/except
+    mock_chat_runner.kill_all.side_effect = Exception("chat cleanup failed")
+
+    mock_tasks_runner = MagicMock()
+
+    # Patch the imported runner modules inside lifespan context
+    import core.web.routers.chat
+    import core.web.routers.tasks
+    monkeypatch.setattr(core.web.routers.chat, "_runner", mock_chat_runner)
+    monkeypatch.setattr(core.web.routers.tasks, "_runner", mock_tasks_runner)
+
+    dummy_app = MagicMock()
+    async with server_mod.lifespan(dummy_app):
+        pass
+
+    # Verify both kill_all were called despite the exception in chat_runner.kill_all()
+    mock_chat_runner.kill_all.assert_called_once()
+    mock_tasks_runner.kill_all.assert_called_once()

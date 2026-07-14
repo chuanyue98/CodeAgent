@@ -307,9 +307,11 @@ class TaskRunner:
             except Exception:
                 try:
                     process.kill()
+                    process.wait()
                 except Exception:
                     pass
-            self.active_runs[task_id].status = "stopped"
+            if task_id in self.active_runs:
+                self.active_runs[task_id].status = "stopped"
 
     def _is_process_running(self, pid: int) -> bool:
         try:
