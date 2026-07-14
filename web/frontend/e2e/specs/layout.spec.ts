@@ -18,13 +18,15 @@ test('laptop layout keeps session controls inside their panels and metrics out o
   expect(await filters.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect(await list.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
 
-  const metrics = page.getByTestId('system-metrics');
-  await expect(metrics).toBeVisible();
-  const shellBox = await page.getByTestId('app-shell').boundingBox();
-  const metricsBox = await metrics.boundingBox();
-  expect(shellBox).not.toBeNull();
+  const statusButton = page.getByTestId('system-status-button');
+  await expect(statusButton).toBeVisible();
+  await statusButton.click();
+  const metricsPanel = page.getByTestId('system-metrics');
+  await expect(metricsPanel).toBeVisible();
+  const metricsBox = await metricsPanel.boundingBox();
   expect(metricsBox).not.toBeNull();
-  expect(shellBox!.y + shellBox!.height).toBeLessThanOrEqual(metricsBox!.y + 1);
+  expect(metricsBox!.x + metricsBox!.width).toBeLessThanOrEqual(1366 + 1);
+  await statusButton.click();
 });
 
 test('compact layout stacks session filters above results', async ({ page }) => {
