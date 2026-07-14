@@ -136,6 +136,12 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
+    # Clean up background subprocesses
+    from core.web.routers.chat import _runner as chat_runner
+    from core.web.routers.tasks import _runner as tasks_runner
+    chat_runner.kill_all()
+    tasks_runner.kill_all()
+
 
 app = FastAPI(title="CodeAgent Web UI", lifespan=lifespan)
 

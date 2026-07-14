@@ -298,6 +298,19 @@ class TaskRunner:
         except Exception:
             return False
 
+    def kill_all(self):
+        """Terminates all active processes immediately."""
+        for task_id, process in list(self._processes.items()):
+            try:
+                process.terminate()
+                process.wait(timeout=1.0)
+            except Exception:
+                try:
+                    process.kill()
+                except Exception:
+                    pass
+            self.active_runs[task_id].status = "stopped"
+
     def _is_process_running(self, pid: int) -> bool:
         try:
             if sys.platform == "win32":
