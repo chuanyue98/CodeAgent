@@ -43,7 +43,6 @@ class ConfigPayload(BaseModel):
 
     default_mode: str | None = None
     language: str | None = None
-    proxy: ProxyPayload | None = None
     groups: dict[str, GroupDefinitionPayload] | None = None
     project_registry: list[dict] | None = None
 
