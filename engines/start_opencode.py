@@ -236,10 +236,10 @@ export default async ({{ client }}) => {{
         """Builds a headless JSON command for one ChatPage turn.
 
         Verified live (see docs/chatpage-cli-spike-results.md spike):
-        ``-s/--session <id>`` resumes with full prior context, and ``--auto``
-        is the skip-approval flag (undocumented in the original design table).
+        ``-s/--session <id>`` resumes with full prior context. Legacy Web Chat
+        intentionally keeps OpenCode's default permission policy.
         """
-        cmd = [self.OPENCODE_COMMAND, "run", message, "--format", "json", "--auto"]
+        cmd = [self.OPENCODE_COMMAND, "run", message, "--format", "json"]
         if session_id:
             cmd.extend(["-s", session_id])
         return cmd

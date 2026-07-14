@@ -60,7 +60,8 @@ class ClaudeEngine(BaseEngine):
             "stream-json",
             "--include-partial-messages",
             "--verbose",
-            self.CLAUDE_SKIP_PERMISSIONS_FLAG,
+            "--permission-mode",
+            "dontAsk",
         ]
         if session_id:
             cmd.extend(["-r", session_id])

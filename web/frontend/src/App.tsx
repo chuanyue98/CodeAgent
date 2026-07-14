@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import CommandPalette from './components/CommandPalette';
-import ManifestDrawer from './components/ManifestDrawer';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import SectionLayout from './components/SectionLayout';
 import SystemPanel from './components/SystemPanel';
@@ -29,7 +28,7 @@ const LaunchPad = lazy(() => import('./components/LaunchPad'));
 const LogViewer = lazy(() => import('./components/LogViewer'));
 const SessionsPage = lazy(() => import('./components/SessionsPage'));
 const AuditTrail = lazy(() => import('./components/AuditTrail'));
-const ChatPage = lazy(() => import('./components/ChatPage'));
+const AgentWorkspace = lazy(() => import('./pages/AgentWorkspace'));
 const CronPage = lazy(() => import('./components/CronPage'));
 const McpPage = lazy(() => import('./components/McpPage'));
 
@@ -114,10 +113,10 @@ function App() {
 
                 <Route
                   path="/agent"
-                  element={<SectionLayout label="Agent" description="Conversations and native provider terminals in one workspace." tabs={AGENT_TABS} />}
+                  element={<SectionLayout label="Agent" description="Conversations and local provider terminals in one workspace." tabs={AGENT_TABS} />}
                 >
                   <Route index element={<Navigate to="web" replace />} />
-                  <Route path="web" element={<ChatPage />} />
+                  <Route path="web" element={<AgentWorkspace />} />
                   <Route path="terminal" element={<LaunchPad />} />
                 </Route>
 
@@ -182,7 +181,6 @@ function App() {
           </div>
         </main>
 
-        <ManifestDrawer />
       </div>
     </div>
   );

@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+import json
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from core.services.agent_adapters.fake import FakeAgentAdapter
+from core.services.agent_gateway import AgentGateway
+from core.services.agent_store import AgentStore
+from core.web.routers import agent
+
+
+def _app(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "project_registry": [
+                    {"path": str(workspace), "group": "common"}
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        gateway = AgentGateway(
+            AgentStore(tmp_path / "agent.sqlite3"),
+            config_path,
+            [FakeAgentAdapter()],
+        )
+        app.state.agent_gateway = gateway
+        await gateway.start()
+        yield
+        await gateway.stop()
+
+    app = FastAPI(lifespan=lifespan)
+    app.include_router(agent.router)
+    return app, workspace
+
+
+def test_agent_rest_and_websocket_ack_event_and_replay(tmp_path):
+    app, workspace = _app(tmp_path)
+    with TestClient(app) as client:
+        providers = client.get("/api/agent/providers")
+        assert providers.status_code == 200
+        assert providers.json()[0]["available"] is True
+
+        created = client.post(
+            "/api/agent/sessions",
+            json={"provider": "fake", "projectId": str(workspace)},
+        )
+        assert created.status_code == 201
+        session_id = created.json()["id"]
+
+        with client.websocket_connect(
+            f"/api/agent/sessions/{session_id}/events?afterSequence=0"
+        ) as socket:
+            assert socket.receive_json()["type"] == "session.ready"
+            command = {
+                "type": "turn.start",
+                "requestId": "ws-1",
+                "sessionId": session_id,
+                "input": [{"type": "text", "text": "hello"}],
+            }
+            socket.send_json(command)
+            messages = [socket.receive_json() for _ in range(6)]
+            ack = next(message for message in messages if message["type"] == "ack")
+            assert ack["requestId"] == "ws-1"
+            assert {message["type"] for message in messages} >= {
+                "turn.started",
+                "message.user",
+                "message.delta",
+                "message.completed",
+                "turn.completed",
+            }
+
+        with client.websocket_connect(
+            f"/api/agent/sessions/{session_id}/events?afterSequence=4"
+        ) as socket:
+            replay = [socket.receive_json(), socket.receive_json()]
+            assert [event["sequence"] for event in replay] == [5, 6]
+
+
+def test_agent_rest_rejects_unregistered_workspace(tmp_path):
+    app, _workspace = _app(tmp_path)
+    other = tmp_path / "other"
+    other.mkdir()
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/agent/sessions",
+            json={"provider": "fake", "projectId": str(other)},
+        )
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "workspace_not_registered"

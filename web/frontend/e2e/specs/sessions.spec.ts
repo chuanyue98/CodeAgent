@@ -8,7 +8,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoSessions(page: Page): Promise<void> {
   await page.goto('/sessions');
-  await waitForH2(page, 'Sessions');
+  await waitForH2(page, 'History');
   await expect(page.getByText(/sessions?$/)).toBeVisible();
 }
 

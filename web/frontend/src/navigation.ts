@@ -18,7 +18,7 @@ export const primaryNav: PrimaryNavItem[] = [
 
 export const AGENT_TABS: SectionTab[] = [
   { to: '/agent/web', label: 'Web Agent' },
-  { to: '/agent/terminal', label: 'Native Terminal' },
+  { to: '/agent/terminal', label: 'Local Terminal' },
 ];
 
 export const AUTOMATION_TABS: SectionTab[] = [
@@ -55,19 +55,19 @@ export const CAPABILITY_TABS: SectionTab[] = [
 // destination list for the command palette, so keep it exhaustive.
 export const PAGE_LABELS: Record<string, string> = {
   '/home': 'Home',
-  '/agent/web': 'Chat',
-  '/agent/terminal': 'Launch',
-  '/automations/tasks': 'Dashboard',
-  '/automations/schedules': 'Cron',
-  '/activity/history': 'Sessions',
-  '/activity/events': 'Audit Trail',
+  '/agent/web': 'Web Agent',
+  '/agent/terminal': 'Local Terminal',
+  '/automations/tasks': 'Tasks',
+  '/automations/schedules': 'Schedules',
+  '/activity/history': 'History',
+  '/activity/events': 'Events',
   '/activity/analytics': 'Analytics',
   '/activity/logs': 'Logs',
-  '/settings/workspace': 'Configuration',
+  '/settings/workspace': 'Workspace',
   '/settings/capabilities/skills': 'Skills',
   '/settings/capabilities/prompts': 'Prompts',
   '/settings/capabilities/hooks': 'Hooks',
   '/settings/capabilities/plugins': 'Plugins',
-  '/settings/capabilities/mcp': 'MCP Servers',
+  '/settings/capabilities/mcp': 'MCP',
   '/settings/system': 'System',
 };

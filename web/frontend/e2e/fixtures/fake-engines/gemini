@@ -224,6 +224,8 @@ if any(flag in args for flag in STRUCTURED_FLAGS):
         message = args[args.index("run") + 1]
     else:
         message = args[-1] if args else ""
+    if message.startswith("slow "):
+        time.sleep(5)
     reply = f"(fake {ENGINE} reply) You said: {message}"
     session_id = f"fake-session-{int(time.time() * 1000)}"
 

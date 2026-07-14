@@ -137,11 +137,11 @@ class TaskRunner:
         if not message or not message.strip():
             raise ValueError("message must not be empty")
 
-        working_dir = Path.cwd()
-        if project_path:
-            working_dir = Path(project_path).expanduser().resolve()
-            if not working_dir.is_dir():
-                raise ValueError(f"Invalid project path: {project_path!r}")
+        if not project_path:
+            raise ValueError("project_path is required for chat turns")
+        working_dir = Path(project_path).expanduser().resolve()
+        if not working_dir.is_dir():
+            raise ValueError(f"Invalid project path: {project_path!r}")
 
         engine_obj = self._build_engine(engine)
         cmd = engine_obj.build_chat_command(message, session_id=session_id)

@@ -8,7 +8,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoCron(page: Page): Promise<void> {
   await page.goto('/cron');
-  await waitForH2(page, 'Cron');
+  await waitForH2(page, 'Schedules');
   await expect(page.getByText('No schedules yet.')).toBeVisible();
 }
 

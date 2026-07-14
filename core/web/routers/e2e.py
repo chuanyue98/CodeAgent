@@ -26,7 +26,7 @@ import os
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from core.analytics.disk_cache import invalidate_cache
 from core.web.resource_paths import ROOT_DIR, resolve_resource_path
@@ -73,7 +73,7 @@ def _reseed_tasks() -> None:
 
 
 @router.post("/__e2e_reset")
-def e2e_reset() -> dict:
+def e2e_reset(request: Request) -> dict:
     if os.environ.get("CA_E2E") != "1":
         raise HTTPException(status_code=404, detail="Not Found")
 
@@ -83,6 +83,12 @@ def e2e_reset() -> dict:
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(_baseline_config(), indent=2), encoding="utf-8")
     reset.append("config")
+
+    gateway = getattr(request.app.state, "agent_gateway", None)
+    if gateway is not None:
+        for session in gateway.list_sessions(limit=500):
+            gateway.delete_session(session.id)
+        reset.append("agent_sessions")
 
     _reseed_root(resolve_resource_path("skills", "CA_SKILLS_ROOT"), "skills")
     reset.append("skills")

@@ -224,41 +224,26 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
             status_code=500, detail={"error": f"Conversion failed: {e}"}
         )
 
-    # Launch the engine in a terminal (same mechanism as /api/launch)
-    import shlex
-    import shutil
-    import subprocess
+    # Launch the engine in a visible terminal (same mechanism as /api/launch).
     import sys
     from pathlib import Path
+    from core.web.routers.launch import launch_in_terminal
 
     _CA_LAUNCHER = Path(__file__).resolve().parents[3] / "ca_launcher.py"
     cmd = [sys.executable, str(_CA_LAUNCHER), req.target_engine]
 
-    if sys.platform == "win32":
-        subprocess.Popen(["cmd", "/c", "start", "cmd", "/k"] + cmd)
-    elif sys.platform == "darwin":
-        script = f'tell app "Terminal" to do script "cd {shlex.quote(Path.cwd().as_posix())} && {shlex.join(cmd)}"'
-        subprocess.Popen(["osascript", "-e", script])
-    else:
-        for terminal in ["gnome-terminal", "konsole", "xterm"]:
-            if shutil.which(terminal):
-                args = (
-                    [terminal, "--"]
-                    if terminal == "gnome-terminal"
-                    else [terminal, "-e"]
-                )
-                subprocess.Popen(args + cmd)
-                break
-        else:
-            # No GUI terminal emulator on PATH (headless/server/WSL-without-X
-            # environments) — fall back to spawning the process directly so
-            # "launched" stays true, just without a visible terminal window.
-            subprocess.Popen(cmd)
+    try:
+        terminal = launch_in_terminal(cmd, cwd=Path(req.project_path))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to open terminal: {exc}") from exc
 
     return {
         "status": "launched",
         "new_session_id": new_id,
         "target_engine": req.target_engine,
+        "terminal": terminal,
     }
 
 
@@ -325,4 +310,3 @@ async def delete_session(
             raise HTTPException(status_code=500, detail={"error": f"Failed to delete session file: {e}"})
 
     return {"status": "deleted", "session_id": session_id}
-

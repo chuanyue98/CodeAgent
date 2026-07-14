@@ -44,6 +44,8 @@ export CA_PLUGINS_ROOT="$SCRATCH/plugins"
 # Tells core/web/server.py to mount the /api/__e2e_reset route so per-test
 # Playwright cleanup can restore a clean baseline (see core/web/routers/e2e.py).
 export CA_E2E=1
+export CA_AGENT_GATEWAY_FAKE=1
+export CA_AGENT_DB="$SCRATCH/agent-gateway.sqlite3"
 
 mkdir -p "$CA_TASKS_ROOT" "$CA_SKILLS_ROOT" "$CA_PROMPTS_ROOT" "$CA_HOOKS_ROOT" "$CA_PLUGINS_ROOT"
 cp "$SCRIPT_DIR"/fixtures/tasks/*.md "$CA_TASKS_ROOT"/

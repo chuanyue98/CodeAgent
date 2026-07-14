@@ -37,7 +37,7 @@ export default function CommandPalette() {
     const groupItems: PaletteItem[] = availableGroups.map(group => ({
       id: `group:${group}`,
       label: `Switch to ${group}`,
-      hint: group === currentGroup ? 'current project group' : 'project group',
+      hint: group === currentGroup ? 'current resource group' : 'resource group',
       section: 'Project',
       run: () => setCurrentGroup(group),
     }));
@@ -139,7 +139,7 @@ export default function CommandPalette() {
                 value={query}
                 onChange={event => setQuery(event.target.value)}
                 onKeyDown={handleInputKeyDown}
-                placeholder="Go to a page, project group…"
+                placeholder="Go to a page, resource group…"
                 aria-label="Command palette search"
                 className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
               />

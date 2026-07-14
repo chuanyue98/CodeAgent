@@ -14,7 +14,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoAudit(page: Page): Promise<void> {
   await page.goto('/audit');
-  await waitForH2(page, 'Audit Trail');
+  await waitForH2(page, 'Events');
   await expect(page.getByText('Filters', { exact: true })).toBeVisible();
 }
 
