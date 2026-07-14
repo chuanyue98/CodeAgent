@@ -166,3 +166,23 @@ async def test_list_sessions_still_scopes_to_project_when_given(two_project_hist
     assert response.status_code == 200
     data = response.json()
     assert {s["session_id"] for s in data["sessions"]} == {"sess-a"}
+
+
+@pytest.mark.asyncio
+async def test_delete_session(two_project_history):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        # First verify it exists
+        list_res = await ac.get("/api/history", params={"project": "E:/demo/project-a"})
+        assert len(list_res.json()["sessions"]) == 1
+        
+        # Call delete
+        del_res = await ac.delete("/api/history/claude/sess-a", params={"project": "E:/demo/project-a"})
+        assert del_res.status_code == 200
+        assert del_res.json()["status"] == "deleted"
+
+        # Verify it no longer exists
+        list_res2 = await ac.get("/api/history", params={"project": "E:/demo/project-a"})
+        assert len(list_res2.json()["sessions"]) == 0
+

@@ -260,3 +260,49 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
         "new_session_id": new_id,
         "target_engine": req.target_engine,
     }
+
+
+@router.delete("/history/{engine}/{session_id}")
+async def delete_session(
+    engine: str,
+    session_id: str,
+    project: str = Query(..., description="Project directory path"),
+) -> dict:
+    """Deletes a specific session from local history storage."""
+    import sqlite3
+    from pathlib import Path
+
+    session = find_session_by_id(session_id, engine, project)
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Session not found",
+                "session_id": session_id,
+                "engine": engine,
+            },
+        )
+    
+    if engine == "opencode":
+        db_path = Path(session.source_file)
+        if db_path.exists():
+            try:
+                con = sqlite3.connect(str(db_path))
+                with con:
+                    con.execute("DELETE FROM part WHERE session_id = ?", (session_id,))
+                    con.execute("DELETE FROM message WHERE session_id = ?", (session_id,))
+                    con.execute("DELETE FROM session WHERE id = ?", (session_id,))
+            except sqlite3.Error as e:
+                raise HTTPException(status_code=500, detail={"error": f"Failed to delete session row: {e}"})
+            finally:
+                con.close()
+    else:
+        file_path = Path(session.source_file)
+        if file_path.exists():
+            try:
+                file_path.unlink()
+            except OSError as e:
+                raise HTTPException(status_code=500, detail={"error": f"Failed to delete session file: {e}"})
+
+    return {"status": "deleted", "session_id": session_id}
+
