@@ -4,6 +4,7 @@ import {
   createAgentSession,
   deleteAgentSession,
   fetchAgentProviders,
+  fetchAgentHistory,
   fetchAgentSessions,
   fetchNativeAgentSessions,
   importAgentSession,
@@ -52,6 +53,8 @@ export type UseAgentWorkspaceReturn = {
   input: string;
   permissionMode: PermissionMode;
   showScrollToBottom: boolean;
+  loadingOlderMessages: boolean;
+  hasOlderMessages: boolean;
   selectedCapabilities: ProviderCapabilities | undefined;
   availableProviders: ProviderCapabilities[];
   noGatewayProvider: boolean;
@@ -142,6 +145,12 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const intentionalClose = useRef(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const historyCursorRef = useRef<number | null>(null);
+  const hasOlderHistoryRef = useRef(false);
+  const loadingOlderHistoryRef = useRef(false);
+  const loadOlderHistoryRef = useRef<() => void>(() => {});
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
 
   const focusComposer = useCallback(() => {
     composerRef.current?.focus();
@@ -269,6 +278,9 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     const element = event.currentTarget;
     const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
     setShowScrollToBottom(distanceFromBottom > 120);
+    if (element.scrollTop < 120 && hasOlderHistoryRef.current && !loadingOlderHistoryRef.current) {
+      loadOlderHistoryRef.current();
+    }
   }, [setShowScrollToBottom]);
 
   useEffect(() => {
@@ -331,6 +343,50 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     });
   }, []);
 
+  const loadInitialHistory = useCallback(async (session: AgentSession, selectionId: number) => {
+    const page = await fetchAgentHistory(session.id);
+    if (selectionId !== selectionRequestRef.current) return null;
+    dispatch({ type: 'reset', session });
+    dispatch({ type: 'history.replace', events: page.events });
+    historyCursorRef.current = page.oldestSequence;
+    hasOlderHistoryRef.current = page.hasMore;
+    setHasOlderMessages(page.hasMore);
+    return page.latestSequence;
+  }, []);
+
+  const loadOlderHistory = useCallback(async () => {
+    const session = stateRef.current.session;
+    const beforeSequence = historyCursorRef.current;
+    if (!session || !beforeSequence || !hasOlderHistoryRef.current || loadingOlderHistoryRef.current) return;
+    loadingOlderHistoryRef.current = true;
+    setLoadingOlderMessages(true);
+    try {
+      const page = await fetchAgentHistory(session.id, beforeSequence);
+      if (stateRef.current.session?.id !== session.id) return;
+      const element = scrollRef.current;
+      const previousHeight = element?.scrollHeight ?? 0;
+      dispatch({ type: 'history.prepend', events: page.events });
+      historyCursorRef.current = page.oldestSequence;
+      hasOlderHistoryRef.current = page.hasMore;
+      setHasOlderMessages(page.hasMore);
+      // Prepending changes scrollHeight. Keep the oldest message that was
+      // already visible at the same viewport position instead of jumping the
+      // reader further up the conversation.
+      requestAnimationFrame(() => {
+        if (element) element.scrollTop += element.scrollHeight - previousHeight;
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to load earlier messages');
+    } finally {
+      loadingOlderHistoryRef.current = false;
+      setLoadingOlderMessages(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadOlderHistoryRef.current = () => { void loadOlderHistory(); };
+  }, [loadOlderHistory]);
+
   const selectSession = useCallback(async (session: AgentSession) => {
     if (state.activeTurnId) return;
     const selectionId = ++selectionRequestRef.current;
@@ -347,7 +403,9 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
       setPermissionMode(resumed.permissionMode);
       const project = validProjects.find(item => item.path === resumed.projectId);
       if (project) setCurrentGroup(project.group);
-      await connect(resumed, 0, true);
+      const latestSequence = await loadInitialHistory(resumed, selectionId);
+      if (latestSequence === null || selectionId !== selectionRequestRef.current) return;
+      await connect(resumed, latestSequence, false);
     } catch (caught) {
       if (selectionId === selectionRequestRef.current) {
         setWorkspace(previousSelection.workspace);
@@ -358,7 +416,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     } finally {
       if (selectionId === selectionRequestRef.current) setSelectingKey(null);
     }
-  }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, connect]);
+  }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, connect, loadInitialHistory]);
 
   const selectNativeSession = useCallback(async (native: NativeAgentSession) => {
     if (state.activeTurnId) return;
@@ -401,7 +459,9 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
       setPermissionMode(imported.permissionMode);
       const project = validProjects.find(item => item.path === imported.projectId);
       if (project) setCurrentGroup(project.group);
-      await connect(imported, 0, true);
+      const latestSequence = await loadInitialHistory(imported, selectionId);
+      if (latestSequence === null || selectionId !== selectionRequestRef.current) return;
+      await connect(imported, latestSequence, false);
     } catch (caught) {
       if (selectionId === selectionRequestRef.current) {
         setWorkspace(previousSelection.workspace);
@@ -416,7 +476,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     } finally {
       if (selectionId === selectionRequestRef.current) setSelectingKey(null);
     }
-  }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, connect]);
+  }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, connect, loadInitialHistory]);
 
   const newSession = useCallback(() => {
     selectionRequestRef.current += 1;
@@ -426,6 +486,9 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     setConnected(false);
     setError(null);
     dispatch({ type: 'reset' });
+    historyCursorRef.current = null;
+    hasOlderHistoryRef.current = false;
+    setHasOlderMessages(false);
     focusComposer();
   }, [focusComposer]);
 
@@ -682,6 +745,8 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     input,
     permissionMode,
     showScrollToBottom,
+    loadingOlderMessages,
+    hasOlderMessages,
     selectedCapabilities,
     availableProviders,
     noGatewayProvider,

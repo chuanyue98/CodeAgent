@@ -137,6 +137,12 @@ export default function AgentWorkspace() {
             onScroll={workspace.onScroll}
             className="custom-scrollbar h-full space-y-3 overflow-y-auto pr-1"
           >
+            {workspace.loadingOlderMessages && (
+              <div className="py-1 text-center text-xs text-slate-400">Loading earlier messages…</div>
+            )}
+            {!workspace.loadingOlderMessages && workspace.hasOlderMessages && (
+              <div className="py-1 text-center text-xs text-slate-400">Scroll up to load earlier messages</div>
+            )}
             {workspace.state.messages.length === 0 && !workspace.state.activeTurnId && (
               <div className="flex h-full min-h-48 flex-col items-center justify-center text-center text-slate-400">
                 <p className="text-sm font-medium text-slate-600">

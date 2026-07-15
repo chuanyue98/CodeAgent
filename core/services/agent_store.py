@@ -258,6 +258,32 @@ class AgentStore:
             ).fetchall()
         return [AgentEvent.model_validate_json(row["event_json"]) for row in rows]
 
+    def list_recent_events(
+        self, session_id: str, before_sequence: int | None = None, limit: int = 100
+    ) -> list[AgentEvent]:
+        """Return one chronological history page ending before ``before_sequence``.
+
+        Querying newest-first keeps switching a long conversation inexpensive;
+        callers reverse the page so message reducers can process it normally.
+        """
+        with self._lock:
+            if before_sequence is None:
+                rows = self._connection.execute(
+                    "SELECT event_json FROM agent_events WHERE session_id = ? "
+                    "ORDER BY sequence DESC LIMIT ?",
+                    (session_id, limit),
+                ).fetchall()
+            else:
+                rows = self._connection.execute(
+                    "SELECT event_json FROM agent_events "
+                    "WHERE session_id = ? AND sequence < ? "
+                    "ORDER BY sequence DESC LIMIT ?",
+                    (session_id, before_sequence, limit),
+                ).fetchall()
+        return [
+            AgentEvent.model_validate_json(row["event_json"]) for row in reversed(rows)
+        ]
+
     def trim_events(self, session_id: str, keep: int = 5000) -> None:
         if keep < 1:
             raise ValueError("keep must be positive")

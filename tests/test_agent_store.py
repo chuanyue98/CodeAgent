@@ -91,3 +91,24 @@ def test_store_never_reuses_an_event_sequence_after_stale_session_upsert(tmp_pat
     assert event.sequence == 3
     assert store.get_session("agent_test").last_sequence == 3
     store.close()
+
+
+def test_store_pages_recent_events_in_chronological_order(tmp_path):
+    store = AgentStore(tmp_path / "agent.sqlite3")
+    store.upsert_session(_session())
+    for index in range(1, 6):
+        store.append_event(
+            AgentEvent(
+                type="message.delta",
+                session_id="agent_test",
+                data={"delta": str(index)},
+            )
+        )
+
+    latest = store.list_recent_events("agent_test", limit=2)
+    earlier = store.list_recent_events(
+        "agent_test", before_sequence=latest[0].sequence, limit=2
+    )
+    assert [event.sequence for event in latest] == [4, 5]
+    assert [event.sequence for event in earlier] == [2, 3]
+    store.close()

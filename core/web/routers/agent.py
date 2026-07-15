@@ -166,6 +166,30 @@ async def get_agent_session(session_id: str, request: Request) -> dict:
         raise _http_error(exc) from exc
 
 
+@router.get("/sessions/{session_id}/history")
+async def get_agent_session_history(
+    session_id: str,
+    request: Request,
+    before_sequence: int | None = Query(None, alias="beforeSequence", ge=1),
+    limit: int = Query(100, ge=1, le=200),
+) -> dict:
+    """Fetch one newest-first conversation page without opening a WebSocket."""
+    try:
+        gateway = _gateway(request)
+        gateway.get_session(session_id)
+        events = gateway.store.list_recent_events(session_id, before_sequence, limit)
+        return {
+            "events": [wire(event) for event in events],
+            "oldestSequence": events[0].sequence if events else None,
+            "latestSequence": events[-1].sequence if events else 0,
+            "hasMore": bool(events)
+            and gateway.store.list_recent_events(session_id, events[0].sequence, 1)
+            != [],
+        }
+    except AgentGatewayError as exc:
+        raise _http_error(exc) from exc
+
+
 @router.post("/sessions/{session_id}/resume")
 async def resume_agent_session(session_id: str, request: Request) -> dict:
     try:

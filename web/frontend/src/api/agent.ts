@@ -1,6 +1,7 @@
 import request from '../utils/request';
 import type {
   AgentCommand,
+  AgentEvent,
   AgentSession,
   NativeAgentSession,
   PermissionMode,
@@ -55,6 +56,23 @@ export function resumeAgentSession(sessionId: string): Promise<AgentSession> {
   return request(`/api/agent/sessions/${encodeURIComponent(sessionId)}/resume`, {
     method: 'POST',
   });
+}
+
+export type AgentHistoryPage = {
+  events: AgentEvent[];
+  oldestSequence: number | null;
+  latestSequence: number;
+  hasMore: boolean;
+};
+
+export function fetchAgentHistory(
+  sessionId: string,
+  beforeSequence?: number,
+  limit = 100,
+): Promise<AgentHistoryPage> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (beforeSequence) query.set('beforeSequence', String(beforeSequence));
+  return request(`/api/agent/sessions/${encodeURIComponent(sessionId)}/history?${query}`);
 }
 
 export function deleteAgentSession(sessionId: string): Promise<void> {

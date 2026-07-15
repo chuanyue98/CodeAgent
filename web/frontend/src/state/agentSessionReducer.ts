@@ -30,6 +30,8 @@ export type AgentSessionAction =
   | { type: 'reset'; session?: AgentSession | null }
   | { type: 'user.message'; id: string; text: string }
   | { type: 'approval.resolved'; approvalId: string }
+  | { type: 'history.replace'; events: AgentEvent[] }
+  | { type: 'history.prepend'; events: AgentEvent[] }
   | { type: 'event'; event: AgentEvent };
 
 function dataString(data: Record<string, unknown>, key: string): string {
@@ -44,6 +46,14 @@ function eventMessageId(event: AgentEvent, role: 'user' | 'assistant'): string {
   const turnScope = event.turnId || `sequence-${event.sequence}`;
   const itemScope = event.itemId || role;
   return `${turnScope}:${itemScope}`;
+}
+
+function replayMessages(events: AgentEvent[]): AgentMessage[] {
+  let replay = initialAgentSessionState;
+  for (const event of events) {
+    replay = agentSessionReducer(replay, { type: 'event', event });
+  }
+  return replay.messages;
 }
 
 export function agentSessionReducer(
@@ -63,6 +73,22 @@ export function agentSessionReducer(
     return {
       ...state,
       approvals: state.approvals.filter(approval => approval.id !== action.approvalId),
+    };
+  }
+  if (action.type === 'history.replace') {
+    const messages = replayMessages(action.events);
+    return {
+      ...state,
+      messages,
+      lastSequence: action.events.at(-1)?.sequence ?? 0,
+    };
+  }
+  if (action.type === 'history.prepend') {
+    const page = replayMessages(action.events);
+    const existingIds = new Set(state.messages.map(message => message.id));
+    return {
+      ...state,
+      messages: [...page.filter(message => !existingIds.has(message.id)), ...state.messages],
     };
   }
 

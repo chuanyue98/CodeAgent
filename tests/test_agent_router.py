@@ -95,6 +95,36 @@ def test_agent_rest_rejects_unregistered_workspace(tmp_path):
     assert response.json()["detail"]["code"] == "workspace_not_registered"
 
 
+def test_agent_history_endpoint_returns_latest_page_then_older_page(tmp_path):
+    app, workspace = _app(tmp_path)
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/agent/sessions",
+            json={"provider": "fake", "projectId": str(workspace)},
+        )
+        session_id = created.json()["id"]
+        for index in range(4):
+            app.state.agent_gateway.store.append_event(
+                agent.AgentEvent(
+                    type="message.delta",
+                    session_id=session_id,
+                    data={"delta": str(index)},
+                )
+            )
+
+        latest = client.get(f"/api/agent/sessions/{session_id}/history?limit=2")
+        assert latest.status_code == 200
+        latest_body = latest.json()
+        assert [event["sequence"] for event in latest_body["events"]] == [4, 5]
+        assert latest_body["hasMore"] is True
+
+        earlier = client.get(
+            f"/api/agent/sessions/{session_id}/history?limit=2"
+            f"&beforeSequence={latest_body['oldestSequence']}"
+        )
+        assert [event["sequence"] for event in earlier.json()["events"]] == [2, 3]
+
+
 def test_agent_imports_native_history_into_replay_events(tmp_path, monkeypatch):
     app, workspace = _app(tmp_path)
     native = UnifiedSession(
