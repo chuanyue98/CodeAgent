@@ -50,9 +50,7 @@ def _ms_to_iso(timestamp: object) -> str:
         else:
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc).strftime(
-                "%Y-%m-%dT%H:%M:%S.000Z"
-            )
+            return parsed.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
         return ""
     seconds = float(timestamp)

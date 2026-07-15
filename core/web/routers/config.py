@@ -79,8 +79,7 @@ async def list_projects():
             {
                 "path": path,
                 "group": group,
-                "available": bool(path.strip())
-                and Path(path).expanduser().is_dir(),
+                "available": bool(path.strip()) and Path(path).expanduser().is_dir(),
             }
         )
     return result

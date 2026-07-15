@@ -40,9 +40,7 @@ class RunStore:
                 )
                 """
             )
-            con.execute(
-                "CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status)"
-            )
+            con.execute("CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status)")
 
     def upsert(self, run: TaskRunRecord):
         with sqlite3.connect(self.db_path) as con:
@@ -83,7 +81,9 @@ class RunStore:
             ).fetchall()
         return [TaskRunRecord(*r) for r in rows]
 
-    def update_status(self, task_id: str, status: str, session_id: Optional[str] = None):
+    def update_status(
+        self, task_id: str, status: str, session_id: Optional[str] = None
+    ):
         with sqlite3.connect(self.db_path) as con:
             con.execute(
                 "UPDATE runs SET status = ?, session_id = COALESCE(?, session_id) WHERE task_id = ?",

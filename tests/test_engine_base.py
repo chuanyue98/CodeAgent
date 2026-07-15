@@ -31,6 +31,7 @@ class DummyEngine(BaseEngine):
 class _DummyConfigManager:
     def __init__(self, root_dir):
         from core.config_manager import ConfigManager
+
         self._impl = ConfigManager(root_dir)
 
     @property

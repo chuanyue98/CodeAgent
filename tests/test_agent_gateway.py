@@ -88,9 +88,10 @@ async def test_gateway_imports_existing_provider_session(tmp_path):
     )
     assert session.provider_session_id == "fake-existing-session"
     assert session.title == "Existing conversation"
-    assert gateway.store.find_by_provider_session(
-        "fake", "fake-existing-session"
-    ).id == session.id
+    assert (
+        gateway.store.find_by_provider_session("fake", "fake-existing-session").id
+        == session.id
+    )
     await gateway.stop()
 
 
