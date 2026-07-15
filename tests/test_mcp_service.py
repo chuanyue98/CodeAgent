@@ -8,32 +8,7 @@ from pathlib import Path
 import pytest
 
 from core.services import mcp_service
-
-
-def _write_fake_cli(
-    bin_dir: Path, name: str, exit_code: int = 0, stderr: str = ""
-) -> None:
-    """Writes an executable fake CLI that records its argv to <name>_argv.json
-    (next to the script) and exits with the given code — mirrors
-    tests/test_chat_service.py's _write_fake_cli() fake-binary technique so
-    no real engine CLI is spawned in CI.
-    """
-    script = bin_dir / name
-    script.write_text(
-        "#!/usr/bin/env python3\n"
-        "import json, sys, os\n"
-        f"out = os.path.join(os.path.dirname(__file__), '{name}_argv.json')\n"
-        "with open(out, 'w') as f:\n"
-        "    json.dump(sys.argv[1:], f)\n"
-        f"sys.stderr.write({stderr!r})\n"
-        f"sys.exit({exit_code})\n",
-        encoding="utf-8",
-    )
-    script.chmod(script.stat().st_mode | stat.S_IEXEC)
-
-
-def _recorded_argv(bin_dir: Path, name: str) -> list[str]:
-    return json.loads((bin_dir / f"{name}_argv.json").read_text(encoding="utf-8"))
+from tests._helpers import recorded_argv, write_fake_cli
 
 
 @pytest.fixture
@@ -66,7 +41,7 @@ def test_add_server_rejects_unknown_engine(tmp_path):
 
 
 def test_add_server_rejects_invalid_name(tmp_path, fake_bin):
-    _write_fake_cli(fake_bin, "claude")
+    write_fake_cli(fake_bin, "claude")
     with pytest.raises(ValueError, match="Invalid MCP server name"):
         mcp_service.add_server("claude", str(tmp_path), "bad name!", command=["echo"])
 
@@ -192,13 +167,13 @@ def test_list_opencode_reads_global_config(tmp_path, home):
 
 
 def test_add_server_claude_builds_expected_argv(tmp_path, fake_bin):
-    _write_fake_cli(fake_bin, "claude")
+    write_fake_cli(fake_bin, "claude")
 
     mcp_service.add_server(
         "claude", str(tmp_path), "srv1", command=["echo", "hi"], env={"FOO": "bar"}
     )
 
-    argv = _recorded_argv(fake_bin, "claude")
+    argv = recorded_argv(fake_bin, "claude")
     # name must precede -e (variadic) or claude misparses it — see module docstring.
     assert argv == [
         "mcp",
@@ -215,24 +190,24 @@ def test_add_server_claude_builds_expected_argv(tmp_path, fake_bin):
 
 
 def test_add_server_codex_builds_expected_argv(tmp_path, fake_bin):
-    _write_fake_cli(fake_bin, "codex")
+    write_fake_cli(fake_bin, "codex")
 
     mcp_service.add_server(
         "codex", str(tmp_path), "srv1", command=["echo", "hi"], env={"FOO": "bar"}
     )
 
-    argv = _recorded_argv(fake_bin, "codex")
+    argv = recorded_argv(fake_bin, "codex")
     assert argv == ["mcp", "add", "srv1", "--env", "FOO=bar", "--", "echo", "hi"]
 
 
 def test_add_server_gemini_builds_expected_argv(tmp_path, fake_bin):
-    _write_fake_cli(fake_bin, "gemini")
+    write_fake_cli(fake_bin, "gemini")
 
     mcp_service.add_server(
         "gemini", str(tmp_path), "srv1", command=["echo", "hi"], env={"FOO": "bar"}
     )
 
-    argv = _recorded_argv(fake_bin, "gemini")
+    argv = recorded_argv(fake_bin, "gemini")
     assert argv == [
         "mcp",
         "add",
@@ -247,29 +222,29 @@ def test_add_server_gemini_builds_expected_argv(tmp_path, fake_bin):
 
 
 def test_add_server_opencode_builds_expected_argv(tmp_path, fake_bin):
-    _write_fake_cli(fake_bin, "opencode")
+    write_fake_cli(fake_bin, "opencode")
 
     mcp_service.add_server(
         "opencode", str(tmp_path), "srv1", command=["echo", "hi"], env={"FOO": "bar"}
     )
 
-    argv = _recorded_argv(fake_bin, "opencode")
+    argv = recorded_argv(fake_bin, "opencode")
     assert argv == ["mcp", "add", "srv1", "--env", "FOO=bar", "--", "echo", "hi"]
 
 
 def test_add_server_url_variant(tmp_path, fake_bin):
-    _write_fake_cli(fake_bin, "codex")
+    write_fake_cli(fake_bin, "codex")
 
     mcp_service.add_server(
         "codex", str(tmp_path), "srv1", url="https://example.com/mcp"
     )
 
-    argv = _recorded_argv(fake_bin, "codex")
+    argv = recorded_argv(fake_bin, "codex")
     assert argv == ["mcp", "add", "srv1", "--url", "https://example.com/mcp"]
 
 
 def test_add_server_raises_on_cli_failure(tmp_path, fake_bin):
-    _write_fake_cli(fake_bin, "claude", exit_code=1, stderr="boom")
+    write_fake_cli(fake_bin, "claude", exit_code=1, stderr="boom")
 
     with pytest.raises(RuntimeError, match="boom"):
         mcp_service.add_server("claude", str(tmp_path), "srv1", command=["echo"])
@@ -285,19 +260,19 @@ def test_add_server_raises_when_cli_missing(tmp_path, monkeypatch):
 
 
 def test_remove_server_claude_via_cli(tmp_path, fake_bin):
-    _write_fake_cli(fake_bin, "claude")
+    write_fake_cli(fake_bin, "claude")
 
     mcp_service.remove_server("claude", str(tmp_path), "srv1")
 
-    assert _recorded_argv(fake_bin, "claude") == ["mcp", "remove", "srv1"]
+    assert recorded_argv(fake_bin, "claude") == ["mcp", "remove", "srv1"]
 
 
 def test_remove_server_codex_via_cli(tmp_path, fake_bin):
-    _write_fake_cli(fake_bin, "codex")
+    write_fake_cli(fake_bin, "codex")
 
     mcp_service.remove_server("codex", str(tmp_path), "srv1")
 
-    assert _recorded_argv(fake_bin, "codex") == ["mcp", "remove", "srv1"]
+    assert recorded_argv(fake_bin, "codex") == ["mcp", "remove", "srv1"]
 
 
 def test_remove_server_gemini_via_file_edit_preserves_others(tmp_path):

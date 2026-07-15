@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from core.services.run_store import RunStore, TaskRunRecord
+
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
 
 # Field name each engine's JSON(L) output uses for its session identifier.
@@ -43,6 +45,8 @@ class TaskRunner:
         self._processes: Dict[str, subprocess.Popen] = {}
         self.log_dir = self.root_dir / ".ca_task_logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        self._run_store = RunStore(self.log_dir / "runs.db")
+        self._load_persisted_runs()
 
     def run_task(
         self,
@@ -101,6 +105,7 @@ class TaskRunner:
             )
             self.active_runs[task_id] = status
             self._processes[task_id] = process
+            self._persist(status)
             return status
         except Exception as e:
             status = TaskRunStatus(
@@ -112,6 +117,7 @@ class TaskRunner:
                 start_time=time.time(),
             )
             self.active_runs[task_id] = status
+            self._persist(status)
             return status
 
     def run_chat_turn(
@@ -184,6 +190,7 @@ class TaskRunner:
             )
             self.active_runs[turn_id] = status
             self._processes[turn_id] = process
+            self._persist(status)
             return status
         except Exception as e:
             status = TaskRunStatus(
@@ -195,7 +202,37 @@ class TaskRunner:
                 start_time=time.time(),
             )
             self.active_runs[turn_id] = status
+            self._persist(status)
             return status
+
+    def _load_persisted_runs(self):
+        """Reload runs from the SQLite store so they survive restarts."""
+        for record in self._run_store.list_running():
+            status = TaskRunStatus(
+                task_id=record.task_id,
+                engine=record.engine,
+                pid=record.pid,
+                status=record.status,
+                log_path=record.log_path,
+                start_time=record.start_time,
+                session_id=record.session_id,
+            )
+            self.active_runs[record.task_id] = status
+
+    def _persist(self, run: TaskRunStatus):
+        if not isinstance(run, TaskRunStatus):
+            return
+        self._run_store.upsert(
+            TaskRunRecord(
+                task_id=run.task_id,
+                engine=run.engine,
+                pid=run.pid,
+                status=run.status,
+                log_path=run.log_path,
+                start_time=run.start_time,
+                session_id=run.session_id,
+            )
+        )
 
     def _build_engine(self, engine: str):
         """Lazily imports and instantiates the given engine's controller class.
@@ -269,8 +306,10 @@ class TaskRunner:
                 run.session_id = self._extract_chat_session_id(
                     run.engine, Path(run.log_path)
                 )
+            self._persist(run)
         elif proc is None and not self._is_process_running(run.pid):
             run.status = "failed"
+            self._persist(run)
 
         return run
 
@@ -294,6 +333,7 @@ class TaskRunner:
                 except subprocess.TimeoutExpired:
                     pass
             run.status = "stopped"
+            self._persist(run)
             return True
         except Exception:
             return False
@@ -312,6 +352,7 @@ class TaskRunner:
                     pass
             if task_id in self.active_runs:
                 self.active_runs[task_id].status = "stopped"
+                self._persist(self.active_runs[task_id])
 
     def _is_process_running(self, pid: int) -> bool:
         try:

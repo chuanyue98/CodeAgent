@@ -37,6 +37,10 @@ def register_signal_handler() -> None:
     signal.signal(signal.SIGTERM, _sigterm_handler)
 
 
+class EngineExecutionError(Exception):
+    """Raised when an engine subprocess exits with a non-zero return code."""
+
+
 class EnvironmentManager:
     """Manages environment variables for the CodeAgent execution environment.
 
@@ -323,7 +327,7 @@ class BaseEngine:
 
         Raises:
             FileNotFoundError: If the command executable cannot be found.
-            SystemExit: If the command returns a non-zero exit code.
+            EngineExecutionError: If the command returns a non-zero exit code.
         """
         resolved_cmd = list(cmd)
         executable = shutil.which(resolved_cmd[0], path=env.get("PATH"))
@@ -337,7 +341,9 @@ class BaseEngine:
             raise
 
         if result.returncode:
-            raise SystemExit(result.returncode)
+            raise EngineExecutionError(
+                f"Engine command failed with exit code {result.returncode}: {cmd[0]}"
+            ) from None
 
     def ensure_skills_link(self, target_link_path: str):
         link_path = (Path.cwd() / target_link_path).absolute()

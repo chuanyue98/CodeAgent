@@ -36,7 +36,7 @@ async def get_health():
         sections = get_doctor_sections(fix=False)
         return {"status": "ok", "sections": _serialize_sections(sections)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/metrics")
@@ -73,4 +73,4 @@ async def get_metrics():
             "log_file_count": log_count,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

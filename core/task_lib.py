@@ -335,8 +335,7 @@ def read_task_prompt(task_file: Path) -> str:
     try:
         return task_file.read_text(encoding="utf-8").strip()
     except OSError as exc:
-        print(f"❌ Failed to read task file: {exc}", file=sys.stderr)
-        sys.exit(1)
+        raise FileNotFoundError(f"Failed to read task file: {exc}") from exc
 
 
 def create_task_template(task_name: str, directory: str = TASKS_DIR) -> Path:

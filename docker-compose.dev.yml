@@ -1,0 +1,19 @@
+services:
+  codeagent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8524:8524"
+    volumes:
+      # Mount source for live code reloading (Python)
+      - ./core:/app/core
+      - ./engines:/app/engines
+      - ./ca_launcher.py:/app/ca_launcher.py
+      - ./config.json:/app/config.json
+      # Persist analytics and task logs
+      - ./.ca_analytics_history.jsonl:/app/.ca_analytics_history.jsonl
+      - ./.ca_task_logs:/app/.ca_task_logs
+    environment:
+      - CA_DEBUG=1
+    restart: unless-stopped

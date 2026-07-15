@@ -18,6 +18,7 @@ class ConfigService:
             config_path: Path to the configuration file.
         """
         self.config_path = config_path
+        self._cache: tuple[float, dict, list[str]] | None = None
 
     def _read(self) -> tuple[dict, list[str]]:
         """Read the config file from disk (caller must hold ``_lock`` if needed)."""
@@ -53,9 +54,24 @@ class ConfigService:
             temp_path.unlink(missing_ok=True)
             raise
 
+    def _cached_read(self) -> tuple[dict, list[str]]:
+        """Return cached config if the file mtime hasn't changed."""
+        try:
+            mtime = self.config_path.stat().st_mtime
+        except OSError:
+            self._cache = None
+            return {}, []
+
+        if self._cache and self._cache[0] == mtime:
+            return self._cache[1], self._cache[2]
+
+        result = self._read()
+        self._cache = (mtime, result[0], result[1])
+        return result
+
     def get_config(self) -> tuple[dict, list[str]]:
         """Retrieves the current configuration (no lock — read-only access)."""
-        return self._read()
+        return self._cached_read()
 
     def update_config(self, config: dict):
         """Atomically replaces the entire config file.
@@ -74,6 +90,7 @@ class ConfigService:
 
         with self._lock:
             self._atomic_write(config)
+        self._cache = None
 
     def modify_config(self, modifier):
         """Atomically read, apply *modifier*, and write the config.
@@ -95,6 +112,7 @@ class ConfigService:
                 raise ValueError(warnings[0])
             config = modifier(config)
             self._atomic_write(config)
+        self._cache = None
 
     def add_project(self, path: str, group: str) -> list:
         """Adds or updates a project in the project registry (atomic RMW)."""

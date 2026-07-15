@@ -196,7 +196,7 @@ async def convert_session(req: ConvertRequest) -> dict:
             "message": f"Session converted to {req.target_engine}. Use '{req.target_engine} continue' or equivalent to resume.",
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail={"error": str(e)})
+        raise HTTPException(status_code=500, detail={"error": str(e)}) from e
 
 
 @router.post("/history/convert-and-launch")
@@ -222,7 +222,7 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
     except Exception as e:
         raise HTTPException(
             status_code=500, detail={"error": f"Conversion failed: {e}"}
-        )
+        ) from e
 
     # Launch the engine in a visible terminal (same mechanism as /api/launch).
     import sys
@@ -298,7 +298,7 @@ async def delete_session(
         except sqlite3.Error as e:
             raise HTTPException(
                 status_code=500, detail={"error": f"Failed to delete session row: {e}"}
-            )
+            ) from e
         finally:
             if con is not None:
                 con.close()
@@ -325,6 +325,6 @@ async def delete_session(
         except OSError as e:
             raise HTTPException(
                 status_code=500, detail={"error": f"Failed to delete session file: {e}"}
-            )
+            ) from e
 
     return {"status": "deleted", "session_id": session_id}
