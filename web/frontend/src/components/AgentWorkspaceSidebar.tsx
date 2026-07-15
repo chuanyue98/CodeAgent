@@ -7,7 +7,6 @@ import {
   Search,
   Trash2,
 } from 'lucide-react';
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type {
   AgentSession,
@@ -59,6 +58,7 @@ type Props = {
   onToggleExpandedWorkspace: (path: string) => void;
   onToggleCollapsedWorkspace: (path: string) => void;
   onShowUnavailableHistoryChange: (value: boolean) => void;
+  onSetLegacyMode: () => void;
 };
 
 export default function AgentWorkspaceSidebar({
@@ -92,9 +92,8 @@ export default function AgentWorkspaceSidebar({
   onToggleExpandedWorkspace,
   onToggleCollapsedWorkspace,
   onShowUnavailableHistoryChange,
+  onSetLegacyMode,
 }: Props) {
-  const [legacyMode, setLegacyMode] = useState(false);
-
   const selectedCapabilities = providers.find(provider => provider.providerId === selectedProvider);
   const nativeSessionsLoading = nativeLoadingProviders.has(selectedProvider);
   const nativeSessionsError = nativeSessionErrors[selectedProvider] || null;
@@ -175,25 +174,6 @@ export default function AgentWorkspaceSidebar({
   })();
   const unavailableHistoryExpanded =
     showUnavailableHistory || Boolean(normalizedSessionSearch);
-
-  if (legacyMode) {
-    return (
-      <div className="glass-card flex w-60 shrink-0 flex-col p-3">
-        <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
-          <span className="text-sm font-semibold text-slate-700">Legacy chat</span>
-        </div>
-        <p className="px-2 text-xs text-slate-500">
-          Legacy chat uses one-shot provider processes and has limited interaction.
-        </p>
-        <button
-          className="mt-3 font-semibold underline"
-          onClick={() => setLegacyMode(false)}
-        >
-          Try Agent Gateway
-        </button>
-      </div>
-    );
-  }
 
   return (
     <aside className="glass-card flex w-60 shrink-0 flex-col p-3">
@@ -438,7 +418,7 @@ export default function AgentWorkspaceSidebar({
         )}
       </div>
       <button
-        onClick={() => setLegacyMode(true)}
+        onClick={onSetLegacyMode}
         className="mt-3 border-t border-slate-100 pt-3 text-left text-[11px] text-slate-400 hover:text-slate-700"
       >
         Open legacy chat <ChevronRight className="inline h-3 w-3" />

@@ -55,6 +55,7 @@ export default function AgentWorkspace() {
         onToggleExpandedWorkspace={workspace.onToggleExpandedWorkspace}
         onToggleCollapsedWorkspace={workspace.onToggleCollapsedWorkspace}
         onShowUnavailableHistoryChange={workspace.onShowUnavailableHistoryChange}
+        onSetLegacyMode={workspace.onSetLegacyMode}
       />
 
       <section className="glass-card flex min-w-0 flex-1 flex-col p-4">
