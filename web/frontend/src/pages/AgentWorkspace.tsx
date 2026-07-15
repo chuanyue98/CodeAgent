@@ -42,6 +42,7 @@ export default function AgentWorkspace() {
         workspace={workspace.workspace}
         state={workspace.state}
         loading={workspace.loading}
+        selectingKey={workspace.selectingKey}
         providers={workspace.providers}
         onNewSession={workspace.onNewSession}
         onSelectSession={workspace.onSelectSession}

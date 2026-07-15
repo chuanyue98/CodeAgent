@@ -2,6 +2,7 @@ import {
   ChevronDown,
   ChevronRight,
   FolderGit2,
+  Loader2,
   Plus,
   RefreshCw,
   Search,
@@ -45,6 +46,7 @@ type Props = {
   workspace: string;
   state: ReturnType<typeof agentSessionReducer>;
   loading: boolean;
+  selectingKey: string | null;
   providers: ProviderCapabilities[];
   onNewSession: () => void;
   onSelectSession: (session: AgentSession) => void;
@@ -79,6 +81,7 @@ export default function AgentWorkspaceSidebar({
   workspace,
   state,
   loading,
+  selectingKey,
   providers,
   onNewSession,
   onSelectSession,
@@ -269,12 +272,17 @@ export default function AgentWorkspaceSidebar({
                       >
                         <button
                           onClick={() => void onSelectSession(item.session)}
-                          disabled={Boolean(state.activeTurnId)}
+                          disabled={Boolean(state.activeTurnId) || Boolean(selectingKey)}
                           title={`${item.session.cwd} · ${relativeTime(item.session.updatedAt)}`}
                           className="min-w-0 flex-1 rounded-lg px-2 py-2 text-left text-xs disabled:opacity-40"
                         >
-                          <span className="block truncate font-medium">
-                            {item.session.title || 'Untitled conversation'}
+                          <span className="flex items-center gap-1.5">
+                            <span className="block min-w-0 flex-1 truncate font-medium">
+                              {item.session.title || 'Untitled conversation'}
+                            </span>
+                            {selectingKey === item.key && (
+                              <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
+                            )}
                           </span>
                           <span className="mt-0.5 block truncate text-[10px] opacity-70">
                             {item.session.provider} ·{' '}
@@ -284,7 +292,7 @@ export default function AgentWorkspaceSidebar({
                         </button>
                         <button
                           onClick={() => void onRemoveSession(item.session)}
-                          disabled={Boolean(state.activeTurnId)}
+                          disabled={Boolean(state.activeTurnId) || Boolean(selectingKey)}
                           aria-label={`Remove conversation ${item.session.title || item.session.id}`}
                           title="Remove local conversation"
                           className="mr-1 hidden rounded-md p-1.5 text-slate-400 hover:bg-white hover:text-red-600 disabled:opacity-40 group-hover:block focus:block"
@@ -296,11 +304,16 @@ export default function AgentWorkspaceSidebar({
                       <button
                         key={item.key}
                         onClick={() => void onSelectNativeSession(item.session)}
-                        disabled={Boolean(state.activeTurnId)}
+                        disabled={Boolean(state.activeTurnId) || Boolean(selectingKey)}
                         className="w-full rounded-lg px-2 py-2 text-left text-xs text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40"
                       >
-                        <span className="block truncate font-medium">
-                          {item.session.title || 'Untitled conversation'}
+                        <span className="flex items-center gap-1.5">
+                          <span className="block min-w-0 flex-1 truncate font-medium">
+                            {item.session.title || 'Untitled conversation'}
+                          </span>
+                          {selectingKey === item.key && (
+                            <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
+                          )}
                         </span>
                         <span className="mt-0.5 block truncate text-[10px] opacity-60">
                           {item.session.engine} · {item.session.message_count} msgs ·{' '}

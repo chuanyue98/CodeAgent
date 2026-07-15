@@ -43,6 +43,7 @@ export type UseAgentWorkspaceReturn = {
   loading: boolean;
   connecting: boolean;
   connected: boolean;
+  selectingKey: string | null;
   error: string | null;
   showActivity: boolean;
   legacyMode: boolean;
@@ -124,6 +125,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [selectingKey, setSelectingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showActivity, setShowActivity] = useState(false);
   const [legacyMode, setLegacyMode] = useState(false);
@@ -331,6 +333,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     if (state.activeTurnId) return;
     const selectionId = ++selectionRequestRef.current;
     const previousSelection = { workspace, provider: selectedProvider, permissionMode };
+    setSelectingKey(session.id);
     try {
       const resumed = await resumeAgentSession(session.id);
       if (selectionId !== selectionRequestRef.current) return;
@@ -350,6 +353,8 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
         setPermissionMode(previousSelection.permissionMode);
         setError(caught instanceof Error ? caught.message : 'Failed to resume session');
       }
+    } finally {
+      if (selectionId === selectionRequestRef.current) setSelectingKey(null);
     }
   }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, connect]);
 
@@ -362,6 +367,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     }
     const selectionId = ++selectionRequestRef.current;
     const previousSelection = { workspace, provider: selectedProvider, permissionMode };
+    setSelectingKey(`${native.engine}:${native.session_id}`);
     try {
       const imported = await importAgentSession({
         provider: native.engine,
@@ -405,6 +411,8 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
             : 'Failed to import provider session',
         );
       }
+    } finally {
+      if (selectionId === selectionRequestRef.current) setSelectingKey(null);
     }
   }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, connect]);
 
@@ -660,6 +668,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     loading,
     connecting,
     connected,
+    selectingKey,
     error,
     showActivity,
     legacyMode,
