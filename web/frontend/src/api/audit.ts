@@ -31,6 +31,8 @@ export interface FetchAuditEventsParams {
   limit?: number;
 }
 
+import request from '../utils/request';
+
 export async function fetchAuditEvents(
   params: FetchAuditEventsParams = {},
 ): Promise<AuditEventsResponse> {
@@ -42,7 +44,5 @@ export async function fetchAuditEvents(
   if (params.limit) query.set('limit', String(params.limit));
 
   const qs = query.toString();
-  const res = await fetch(`/api/history/audit${qs ? `?${qs}` : ''}`);
-  if (!res.ok) throw new Error('Failed to fetch audit events');
-  return res.json();
+  return request(`/api/history/audit${qs ? `?${qs}` : ''}`);
 }

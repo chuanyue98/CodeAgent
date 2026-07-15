@@ -8,14 +8,16 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple, cast
+from typing import Any, BinaryIO, Callable, Dict, List, Optional, cast
 
+from core.config_manager import ConfigManager
 from core.hook_scanner import HookScanner, get_hooks_to_inject
+from core.link_manager import LinkManager
+from core.lock_manager import LockManager
 from core.plugin_scanner import PluginScanner, get_plugins_to_mount
 from core.prompt_kit import prompt_general, prompt_review
 from core.prompt_scanner import PromptScanner, get_prompts_to_inject
-from core.resource_locator import get_bundled_resource_root, get_default_config_path
-from core.services.config_service import ConfigService
+from core.settings_manager import SettingsManager
 from core.skill_scanner import SkillScanner, get_skills_to_mount
 
 
@@ -95,55 +97,27 @@ class BaseEngine:
         self.name = name
         self.default_model = default_model
         self.root_dir = Path(__file__).resolve().parent.parent
-        self.full_config = self._load_full_config()
+        self.config_manager = ConfigManager(self.root_dir)
+        self.full_config = self.config_manager.full_config
         self.env_manager = EnvironmentManager(self.root_dir)
         self.temp_prompt_name = ".ca_prompt.tmp"
         self._temp_prompt_paths: set[Path] = set()
-        resource_root = self._resolve_resource_root()
+        self.link_manager = LinkManager()
+        self.lock_manager = LockManager()
+        self.settings_manager = SettingsManager(self.EVENT_MAP)
+        resource_root = self.config_manager.resolve_resource_root()
         self.skill_scanner = SkillScanner(resource_root / "skills")
         self.prompt_scanner = PromptScanner(resource_root / "prompt")
-        self.hook_scanner = HookScanner(self._get_hook_search_roots())
+        self.hook_scanner = HookScanner(self.config_manager.get_hook_search_roots(resource_root))
         self.plugin_scanner = PluginScanner(resource_root / "plugins")
 
     def _resolve_resource_root(self) -> Path:
-        """Returns the resource root directory, respecting resource_root in config.json."""
-        resource_root = self.full_config.get("paths", {}).get("resource_root")
-        if resource_root:
-            expanded = str(resource_root).replace(
-                "$CODEAGENT", self.root_dir.as_posix()
-            )
-            resource_path = Path(expanded).expanduser()
-            resolved = (
-                resource_path
-                if resource_path.is_absolute()
-                else self.root_dir / resource_path
-            ).resolve()
-            if resolved.is_dir():
-                return resolved
-        return get_bundled_resource_root(self.root_dir)
+        return self.config_manager.resolve_resource_root()
 
     def _load_full_config(self) -> dict:
-        """Loads the complete configuration using ConfigService.
-
-        Returns:
-            dict: The loaded configuration dictionary, or an empty dict if not found or invalid.
-        """
-        config_service = ConfigService(get_default_config_path(self.root_dir))
-        config, _ = config_service.get_config()
-        return config
+        return self.config_manager.full_config
 
     def _resolve_config_groups(self, section_name: str) -> List[str]:
-        """Resolves configuration groups based on the current working directory.
-
-        It matches the current directory against patterns defined in the configuration
-        and resolves any nested group references.
-
-        Args:
-            section_name (str): The configuration section to resolve (e.g., 'skills', 'prompts').
-
-        Returns:
-            List[str]: A list of resolved item names belonging to the matched group.
-        """
         cfg = self.full_config.get(section_name, {})
         groups = cfg.get("groups", {})
         mappings = cfg.get("project_mapping", [])
@@ -186,16 +160,6 @@ class BaseEngine:
         mapping_key: str,
         value_key: str,
     ) -> Optional[str]:
-        """Retrieves a specific configuration value based on project path mapping.
-
-        Args:
-            section_name (str): The configuration section.
-            mapping_key (str): The key containing the mapping list.
-            value_key (str): The key for the value to retrieve from the matched mapping.
-
-        Returns:
-            Optional[str]: The mapped value if found, otherwise None.
-        """
         cfg = self.full_config.get(section_name, {})
         mappings = cfg.get(mapping_key, [])
         cwd_str = str(Path.cwd().as_posix())
@@ -209,147 +173,22 @@ class BaseEngine:
         return None
 
     def _resolve_path_token(self, raw_path: str) -> Path:
-        """Resolves path tokens ($CWD, $CODEAGENT) in a raw path string.
-
-        Args:
-            raw_path (str): The path string potentially containing tokens.
-
-        Returns:
-            Path: The resolved absolute Path object.
-        """
-        expanded = raw_path.replace("$CWD", str(Path.cwd().as_posix()))
-        expanded = expanded.replace("$CODEAGENT", str(self.root_dir.as_posix()))
-        path_obj = Path(expanded)
-        if path_obj.is_absolute():
-            return path_obj
-        return (self.root_dir / path_obj).resolve()
+        return self.config_manager.resolve_path_token(raw_path)
 
     def _get_skill_search_roots(self) -> List[Path]:
-        """Identifies all root directories where skills should be searched.
-
-        This includes the default skills directory, any project-specific skill roots
-        defined in config.json, and the 'skills' directory in the current working directory.
-
-        Returns:
-            List[Path]: A list of absolute paths to skill search roots.
-        """
-        skill_path_cfg = self.full_config.get("paths", {}).get("skills", "skills")
-        default_root = (self._resolve_resource_root() / skill_path_cfg).resolve()
-
-        cfg = self.full_config.get("skills", {})
-        mappings = cfg.get("project_skill_root_mapping", [])
-        cwd = Path.cwd().resolve()
-        cwd_str = str(cwd.as_posix())
-
-        roots = []
-        for mapping in mappings:
-            pattern = mapping.get("pattern")
-            if pattern and re.search(pattern, cwd_str, re.IGNORECASE):
-                mapped_path = mapping.get("path")
-                if mapped_path:
-                    roots.append(self._resolve_path_token(mapped_path).resolve())
-
-        if cwd != self.root_dir.resolve():
-            project_skills = cwd / "skills"
-            if project_skills.is_dir():
-                if project_skills.resolve() not in roots:
-                    roots.append(project_skills.resolve())
-
-        if default_root not in roots:
-            roots.append(default_root)
-
-        return roots
+        resource_root = self.config_manager.resolve_resource_root()
+        return self.config_manager.get_skill_search_roots(resource_root)
 
     def _get_plugin_search_roots(self) -> List[Path]:
-        """Identifies all root directories where plugins should be searched.
-
-        This includes the default plugins directory and the 'plugins' directory
-        in the current working directory.
-
-        Returns:
-            List[Path]: A list of absolute paths to plugin search roots.
-        """
-        plugin_path_cfg = self.full_config.get("paths", {}).get("plugins", "plugins")
-        default_root = (self._resolve_resource_root() / plugin_path_cfg).resolve()
-
-        roots = []
-        cwd = Path.cwd().resolve()
-
-        if cwd != self.root_dir.resolve():
-            project_plugins = cwd / "plugins"
-            if project_plugins.is_dir():
-                roots.append(project_plugins.resolve())
-
-        if default_root not in roots:
-            roots.append(default_root)
-
-        return roots
+        resource_root = self.config_manager.resolve_resource_root()
+        return self.config_manager.get_plugin_search_roots(resource_root)
 
     def _get_hook_search_roots(self) -> List[Path]:
-        """Identifies all root directories where hooks should be searched.
-
-        This includes the default hooks directory and the 'hooks' directory
-        in the current working directory.
-
-        Returns:
-            List[Path]: A list of absolute paths to hook search roots.
-        """
-        hook_path_cfg = self.full_config.get("paths", {}).get("hooks", "hooks")
-        default_root = (self._resolve_resource_root() / hook_path_cfg).resolve()
-
-        roots = []
-        cwd = Path.cwd().resolve()
-
-        if cwd != self.root_dir.resolve():
-            project_hooks = cwd / "hooks"
-            if project_hooks.is_dir():
-                roots.append(project_hooks.resolve())
-
-        if default_root not in roots:
-            roots.append(default_root)
-
-        return roots
+        resource_root = self.config_manager.resolve_resource_root()
+        return self.config_manager.get_hook_search_roots(resource_root)
 
     def get_current_project_group(self) -> str:
-        """Determines the unified project group name for the current working directory.
-
-        It first checks if the CWD is within CodeAgent itself. If not, it attempts
-         to match the CWD against the 'project_registry' in config.json.
-
-        Returns:
-            str: The matched group name (e.g., 'codeagent', 'some-project'),
-                 or the default group if no match is found.
-        """
-        explicit_group = os.environ.get("CA_PROJECT_GROUP", "").strip()
-        if explicit_group:
-            return explicit_group
-
-        cwd = Path.cwd().resolve()
-        root = self.root_dir.resolve()
-
-        if cwd == root or root in cwd.parents:
-            return "codeagent"
-
-        registry = self.full_config.get("project_registry", [])
-        best_match_group = None
-        max_match_len = -1
-
-        for item in registry:
-            raw_path = item.get("path")
-            if not raw_path:
-                continue
-
-            try:
-                mapping_path = Path(raw_path).resolve()
-                if cwd == mapping_path or mapping_path in cwd.parents:
-                    match_len = len(str(mapping_path.as_posix()))
-                    if match_len > max_match_len:
-                        max_match_len = match_len
-                        best_match_group = item.get("group")
-            except Exception:
-                continue
-
-        return best_match_group or self.full_config.get("default_group", "common")
+        return self.config_manager.get_current_project_group()
 
     def get_skills_to_mount(self) -> List[str]:
         """Retrieves the list of skill names to be mounted for the current project.
@@ -470,50 +309,10 @@ class BaseEngine:
             paths.discard(temp_file_path)
 
     def acquire_resource_lock(self, lock_path: Path) -> BinaryIO:
-        """Acquire an inter-process lock for mutable engine resources."""
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        handle = open(lock_path, "a+b")
-        handle.seek(0, os.SEEK_END)
-        if handle.tell() == 0:
-            handle.write(b"\0")
-            handle.flush()
-        handle.seek(0)
-        if os.name == "nt":
-            import msvcrt
-
-            lock_fn = getattr(msvcrt, "locking")
-            lock_mode = getattr(msvcrt, "LK_LOCK")
-            lock_fn(
-                handle.fileno(),
-                lock_mode,
-                1,
-            )
-        else:
-            import fcntl
-
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        return handle
+        return self.lock_manager.acquire_resource_lock(lock_path)
 
     def release_resource_lock(self, handle: BinaryIO) -> None:
-        """Release a handle returned by :meth:`acquire_resource_lock`."""
-        try:
-            handle.seek(0)
-            if os.name == "nt":
-                import msvcrt
-
-                unlock_fn = getattr(msvcrt, "locking")
-                unlock_mode = getattr(msvcrt, "LK_UNLCK")
-                unlock_fn(
-                    handle.fileno(),
-                    unlock_mode,
-                    1,
-                )
-            else:
-                import fcntl
-
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-        finally:
-            handle.close()
+        self.lock_manager.release_resource_lock(handle)
 
     def run_shell(self, cmd: List[str], env: dict):
         """Executes a command in a subprocess with the given environment.
@@ -541,24 +340,16 @@ class BaseEngine:
             raise SystemExit(result.returncode)
 
     def ensure_skills_link(self, target_link_path: str):
-        """Ensures that skill links are created in the target directory.
-
-        It resolves the skills to be mounted based on the current project group,
-        cleans up any existing stale links, and creates new symlinks or junctions.
-
-        Args:
-            target_link_path (str): The relative path to the directory where skills should be linked.
-        """
         link_path = (Path.cwd() / target_link_path).absolute()
 
         skills_to_mount = self.get_skills_to_mount()
         if not skills_to_mount:
-            self._cleanup_link_dir(link_path)
+            self.link_manager.cleanup_link_dir(link_path)
             return
 
         skill_roots = self._get_skill_search_roots()
 
-        resolved_skills: List[Tuple[str, Path]] = []
+        resolved_skills: List[tuple[str, Path]] = []
         resolved_skill_names = set()
 
         def append_resolved_skill(target_name: str, skill_src: Path):
@@ -599,7 +390,7 @@ class BaseEngine:
                 "Matched skill groups exist, but none of the candidate directories contain a valid SKILL.md. "
                 f"Search roots: {searched_roots}"
             )
-            self._cleanup_link_dir(link_path)
+            self.link_manager.cleanup_link_dir(link_path)
             return
 
         print(
@@ -609,12 +400,12 @@ class BaseEngine:
         link_path.mkdir(parents=True, exist_ok=True)
 
         desired_names = {target_name for target_name, _ in resolved_skills}
-        self._remove_stale_managed_links(link_path, desired_names)
+        self.link_manager.remove_stale_managed_links(link_path, desired_names)
 
         for target_name, skill_src in resolved_skills:
             target_skill_path = link_path / target_name
             try:
-                self._ensure_managed_link(skill_src, target_skill_path, link_path)
+                self.link_manager.ensure_managed_link(skill_src, target_skill_path, link_path)
             except Exception as e:
                 print(f"⚠️ Failed to link skill '{target_name}': {e}")
 
@@ -634,18 +425,12 @@ class BaseEngine:
         return None
 
     def ensure_plugins_link(self):
-        """Ensures that plugin links exist in the engine's plugin directory.
-
-        Uses a 'stable mapping' strategy: if a link already points to the correct
-        source, it is not recreated. Stale links are removed and recreated.
-        No-op if ``_get_plugin_link_dir()`` returns None.
-        """
         plugins_to_mount = self.get_plugins_to_mount()
         link_dir = self._get_plugin_link_dir()
         if link_dir is None:
             return
         if not plugins_to_mount:
-            self._cleanup_link_dir(link_dir)
+            self.link_manager.cleanup_link_dir(link_dir)
             return
         link_dir.mkdir(parents=True, exist_ok=True)
         desired_names = {
@@ -653,7 +438,7 @@ class BaseEngine:
             for plugin_meta in plugins_to_mount
             if plugin_meta.get("name")
         }
-        self._remove_stale_managed_links(link_dir, desired_names)
+        self.link_manager.remove_stale_managed_links(link_dir, desired_names)
 
         mounted_count = 0
         for plugin_meta in plugins_to_mount:
@@ -667,7 +452,7 @@ class BaseEngine:
             target_link = link_dir / plugin_name
 
             try:
-                if self._ensure_managed_link(plugin_src, target_link, link_dir):
+                if self.link_manager.ensure_managed_link(plugin_src, target_link, link_dir):
                     mounted_count += 1
             except Exception as e:
                 print(f"⚠️ Failed to link plugin '{plugin_name}': {e}")
@@ -676,48 +461,15 @@ class BaseEngine:
             print(f"🔌 Ensured {mounted_count} plugin links in {link_dir}")
 
     def cleanup_plugins_link(self):
-        """Removes plugin links from the engine's plugin directory.
-
-        Only removes items verified to be links (symlinks or Windows junctions).
-        No-op if ``_get_plugin_link_dir()`` returns None.
-        """
         link_dir = self._get_plugin_link_dir()
         if link_dir is None:
             return
-        self._cleanup_link_dir(link_dir)
+        self.link_manager.cleanup_link_dir(link_dir)
 
     def _create_skill_link(self, source: Path, target: Path):
-        """Creates a symbolic link or Windows junction from source to target.
-
-        Args:
-            source (Path): The source directory or file.
-            target (Path): The target link path.
-
-        Raises:
-            subprocess.CalledProcessError: If mklink fails on Windows.
-            OSError: If symlink creation fails on other platforms.
-        """
-        try:
-            target.symlink_to(source, target_is_directory=source.is_dir())
-            return
-        except OSError:
-            if os.name != "nt" or not source.is_dir():
-                raise
-
-        subprocess.run(
-            ["cmd", "/c", "mklink", "/j", str(target), str(source)],
-            capture_output=True,
-            check=True,
-        )
+        self.link_manager.create_skill_link(source, target)
 
     def _safe_remove_link(self, path: Path):
-        """Safely removes a link without affecting the target content.
-
-        Handles both standard symlinks and Windows junctions.
-
-        Args:
-            path (Path): The path to the link to remove.
-        """
         if not path.exists() and not path.is_symlink():
             return
 
@@ -743,220 +495,39 @@ class BaseEngine:
     _LINK_MANIFEST = ".codeagent-links.json"
 
     def _load_link_manifest(self, link_path: Path) -> dict[str, str]:
-        manifest_path = link_path / self._LINK_MANIFEST
-        try:
-            data = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                result: dict[str, str] = {}
-                for name, target in data.items():
-                    if not isinstance(name, str) or not isinstance(target, str):
-                        continue
-                    relative = Path(name)
-                    if relative.is_absolute() or ".." in relative.parts:
-                        continue
-                    result[name] = target
-                return result
-        except (OSError, json.JSONDecodeError):
-            pass
-        return {}
+        return self.link_manager.load_manifest(link_path)
 
     def _save_link_manifest(self, link_path: Path, manifest: dict[str, str]) -> None:
-        manifest_path = link_path / self._LINK_MANIFEST
-        if not manifest:
-            manifest_path.unlink(missing_ok=True)
-            return
-        link_path.mkdir(parents=True, exist_ok=True)
-        fd, temp_name = tempfile.mkstemp(
-            dir=link_path, prefix=".codeagent-links.", suffix=".tmp", text=True
-        )
-        temp_path = Path(temp_name)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(manifest, f, indent=2, ensure_ascii=False)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(temp_path, manifest_path)
-        except Exception:
-            temp_path.unlink(missing_ok=True)
-            raise
+        self.link_manager.save_manifest(link_path, manifest)
 
     def _managed_link_matches(self, path: Path, source: Path) -> bool:
-        try:
-            return (
-                self._is_windows_link(path) or path.is_symlink()
-            ) and path.resolve() == source.resolve()
-        except OSError:
-            return False
+        return self.link_manager.managed_link_matches(path, source)
 
     def _ensure_managed_link(self, source: Path, target: Path, link_path: Path) -> bool:
-        """Create a link without replacing user-owned files or links."""
-        manifest = self._load_link_manifest(link_path)
-        relative_name = target.relative_to(link_path).as_posix()
-        previous_source = manifest.get(relative_name)
-
-        if target.exists() or target.is_symlink():
-            if self._managed_link_matches(target, source):
-                if previous_source is not None:
-                    manifest[relative_name] = str(source.resolve())
-                    self._save_link_manifest(link_path, manifest)
-                return False
-            if previous_source and self._managed_link_matches(
-                target, Path(previous_source)
-            ):
-                self._safe_remove_link(target)
-            else:
-                print(f"⚠️ Refusing to replace unmanaged path: {target}")
-                return False
-
-        self._create_skill_link(source, target)
-        manifest[relative_name] = str(source.resolve())
-        self._save_link_manifest(link_path, manifest)
-        return True
+        return self.link_manager.ensure_managed_link(source, target, link_path)
 
     def _remove_stale_managed_links(
         self, link_path: Path, desired_names: set[str]
     ) -> None:
-        manifest = self._load_link_manifest(link_path)
-        for relative_name, source in list(manifest.items()):
-            if relative_name in desired_names:
-                continue
-            target = link_path / relative_name
-            if self._managed_link_matches(target, Path(source)):
-                self._safe_remove_link(target)
-            manifest.pop(relative_name, None)
-        self._save_link_manifest(link_path, manifest)
+        self.link_manager.remove_stale_managed_links(link_path, desired_names)
 
     def _cleanup_link_dir(self, link_path: Path):
-        """Remove only links recorded in CodeAgent's ownership manifest.
-
-        Args:
-            link_path (Path): The directory to clean up.
-        """
-        if not link_path.exists():
-            return
-
-        try:
-            manifest = self._load_link_manifest(link_path)
-            for relative_name, source in manifest.items():
-                item = link_path / relative_name
-                if self._managed_link_matches(item, Path(source)):
-                    self._safe_remove_link(item)
-
-            self._save_link_manifest(link_path, {})
-
-            if not any(link_path.iterdir()):
-                link_path.rmdir()
-        except Exception:
-            pass
+        self.link_manager.cleanup_link_dir(link_path)
 
     def cleanup_skills_link(self, target_link_path: str):
-        """Cleans up injected skill links in the specified directory.
-
-        Args:
-            target_link_path (str): The relative path to the directory containing skill links.
-        """
-        self._cleanup_link_dir((Path.cwd() / target_link_path).absolute())
+        self.link_manager.cleanup_link_dir((Path.cwd() / target_link_path).absolute())
 
     def _is_windows_link(self, path: Path) -> bool:
-        """Verifies if a path is a Windows link or junction point.
-
-        Uses multiple checks including symlink status, reparse point attributes,
-        and mount point status.
-
-        Args:
-            path (Path): The path to check.
-
-        Returns:
-            bool: True if it's a Windows link/junction, False otherwise.
-        """
-        try:
-            if path.is_symlink():
-                return True
-
-            stat_info = path.lstat()
-            attrs = getattr(stat_info, "st_file_attributes", 0)
-            is_reparse = bool(attrs & 1024)
-
-            if is_reparse:
-                return True
-
-            if path.is_mount():
-                return True
-
-            return False
-        except Exception:
-            return False
+        from core.link_manager import is_windows_link
+        return is_windows_link(path)
 
     def inject_hooks_to_settings(
         self, settings_rel_path: str, hooks: List[Dict[str, Any]]
     ):
-        """Injects hook configurations into a settings file (e.g., .gemini/settings.json).
-
-        Creates a backup of the settings file if it doesn't already exist.
-
-        Args:
-            settings_rel_path (str): Relative path to the settings file.
-            hooks (List[Dict[str, Any]]): List of hook metadata dictionaries.
-        """
-        if not hooks:
-            return
-
         settings_path = (Path.cwd() / settings_rel_path).absolute()
-        settings_path.parent.mkdir(parents=True, exist_ok=True)
-
-        backup_path = settings_path.with_suffix(settings_path.suffix + ".bak")
-        if settings_path.exists() and not backup_path.exists():
-            shutil.copy2(settings_path, backup_path)
-            print(f"💾 Created safety backup: {backup_path.name}")
-
-        data = {}
-        if settings_path.exists():
-            try:
-                with open(settings_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-            except Exception:
-                data = {}
-
-        if "hooks" not in data:
-            data["hooks"] = {}
-
-        data["_ca_injected"] = True
-
-        for hook in hooks:
-            event_name = hook.get("event")
-            if not event_name:
-                continue
-            event = self.EVENT_MAP.get(event_name, event_name)
-            if event not in data["hooks"]:
-                data["hooks"][event] = [{"matcher": "*", "hooks": []}]
-
-            target_group = next(
-                (g for g in data["hooks"][event] if g.get("matcher") == "*"), None
-            )
-            if not target_group:
-                target_group = {"matcher": "*", "hooks": []}
-                data["hooks"][event].append(target_group)
-
-            event_hooks = target_group["hooks"]
-            existing = next(
-                (h for h in event_hooks if h.get("name") == hook["name"]), None
-            )
-
-            hook_entry = {
-                "name": hook["name"],
-                "type": "command",
-                "command": hook["command"],
-            }
-
-            if existing:
-                existing.update(hook_entry)
-            else:
-                event_hooks.append(hook_entry)
-
-        with open(settings_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-
-        print(f"✅ Injected {len(hooks)} hooks into {settings_rel_path}")
+        self.settings_manager.inject_hooks(settings_path, hooks)
+        if hooks:
+            print(f"✅ Injected {len(hooks)} hooks into {settings_rel_path}")
 
     def inject_plugins_to_settings(self, settings_rel_path: str):
         """Orchestrates the injection of plugin configurations into a settings file.
@@ -1031,28 +602,8 @@ class BaseEngine:
         return data
 
     def restore_settings(self, settings_rel_path: str):
-        """Restores a settings file from its backup or removes it if it was newly created.
-
-        Args:
-            settings_rel_path (str): Relative path to the settings file to restore.
-        """
         settings_path = (Path.cwd() / settings_rel_path).absolute()
-        backup_path = settings_path.with_suffix(settings_path.suffix + ".bak")
-
-        if backup_path.exists():
-            settings_path.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(str(backup_path), str(settings_path))
-            print(f"♻️ Restored {settings_rel_path} from backup")
-            return
-
-        if settings_path.exists():
-            try:
-                data = self._load_config(settings_path)
-                if isinstance(data, dict) and data.get("_ca_injected") is True:
-                    settings_path.unlink()
-                    print(f"♻️ Removed injected {settings_rel_path}")
-            except Exception:
-                pass
+        self.settings_manager.restore_settings(settings_path)
 
     def execute(self, message: str, model: str, non_interactive: bool = False):
         """Abstract method to execute a message with the LLM engine.

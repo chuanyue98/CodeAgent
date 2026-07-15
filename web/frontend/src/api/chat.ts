@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import request from '../utils/request';
 
 export interface ChatEngine {
   id: string;
@@ -51,15 +52,11 @@ export interface ChatCapabilities {
 }
 
 export async function fetchChatEngines(): Promise<ChatEngine[]> {
-  const res = await fetch('/api/engines');
-  if (!res.ok) throw new Error('Failed to fetch engines');
-  return res.json();
+  return request('/api/engines');
 }
 
 export async function fetchResumableSessions(engine: string, limit = 50): Promise<SessionSummary[]> {
-  const res = await fetch(`/api/history?engine=${encodeURIComponent(engine)}&limit=${limit}`);
-  if (!res.ok) throw new Error('Failed to fetch sessions');
-  const data = await res.json();
+  const data = await request<{ sessions: SessionSummary[] }>(`/api/history?engine=${encodeURIComponent(engine)}&limit=${limit}`);
   return data.sessions;
 }
 
@@ -70,9 +67,7 @@ export async function fetchChatCapabilities(params: {
 }): Promise<ChatCapabilities> {
   const query = new URLSearchParams({ engine: params.engine, group: params.group });
   if (params.project_path) query.set('project_path', params.project_path);
-  const res = await fetch(`/api/chat/capabilities?${query.toString()}`);
-  if (!res.ok) throw new Error('Failed to fetch session capabilities');
-  return res.json();
+  return request(`/api/chat/capabilities?${query.toString()}`);
 }
 
 export async function startChatTurn(params: {
@@ -82,33 +77,20 @@ export async function startChatTurn(params: {
   group?: string;
   project_path: string;
 }): Promise<ChatTurnStatus> {
-  const res = await fetch('/api/chat/turns', {
+  return request('/api/chat/turns', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || 'Failed to start chat turn');
-  }
-  return res.json();
 }
 
 export async function cancelChatTurn(turnId: string): Promise<ChatTurnStatus> {
-  const res = await fetch(`/api/chat/turns/${encodeURIComponent(turnId)}/cancel`, {
+  return request(`/api/chat/turns/${encodeURIComponent(turnId)}/cancel`, {
     method: 'POST',
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || 'Failed to cancel chat turn');
-  }
-  return res.json();
 }
 
 export async function fetchChatTurn(turnId: string): Promise<ChatTurnStatus> {
-  const res = await fetch(`/api/chat/turns/${encodeURIComponent(turnId)}`);
-  if (!res.ok) throw new Error('Failed to fetch chat turn');
-  return res.json();
+  return request(`/api/chat/turns/${encodeURIComponent(turnId)}`);
 }
 
 export interface ChatStreamEvent {

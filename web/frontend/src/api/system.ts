@@ -24,14 +24,12 @@ export interface SystemMetrics {
   log_file_count: number;
 }
 
+import request from '../utils/request';
+
 export async function fetchSystemHealth(): Promise<SystemHealth> {
-  const res = await fetch('/api/system/health');
-  if (!res.ok) throw new Error('Failed to fetch system health');
-  return res.json();
+  return request('/api/system/health');
 }
 
 export async function fetchSystemMetrics(): Promise<SystemMetrics> {
-  const res = await fetch('/api/system/metrics');
-  if (!res.ok) throw new Error('Failed to fetch system metrics');
-  return res.json();
+  return request('/api/system/metrics');
 }

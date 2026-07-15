@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import request from '../utils/request';
 
 export interface LogFile {
   task_id: string;
@@ -13,15 +14,11 @@ export interface LogFileContent {
 }
 
 export async function fetchLogFiles(): Promise<LogFile[]> {
-  const res = await fetch('/api/logs/files');
-  if (!res.ok) throw new Error('Failed to fetch log files');
-  return res.json();
+  return request('/api/logs/files');
 }
 
 export async function fetchLogFile(taskId: string): Promise<LogFileContent> {
-  const res = await fetch(`/api/logs/${encodeURIComponent(taskId)}`);
-  if (!res.ok) throw new Error('Failed to fetch log file');
-  return res.json();
+  return request(`/api/logs/${encodeURIComponent(taskId)}`);
 }
 
 export function useLogStream(taskId: string | null) {

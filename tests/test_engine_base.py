@@ -9,19 +9,44 @@ from core.engine_base import BaseEngine, EnvironmentManager
 class DummyEngine(BaseEngine):
     def __init__(self, root_dir=None):
         if root_dir:
-            # Manually inject root_dir for testing
+            from core.link_manager import LinkManager
+            from core.lock_manager import LockManager
+            from core.settings_manager import SettingsManager
+
             self.root_dir = root_dir
             self.name = "Dummy"
             self.default_model = "dummy-model"
-            self.full_config = self._load_full_config()
+            self.config_manager = _DummyConfigManager(self.root_dir)
+            self.full_config = self.config_manager.full_config
             self.env_manager = EnvironmentManager(self.root_dir)
             self.temp_prompt_name = ".ca_prompt.tmp"
             self._temp_prompt_paths = set()
+            self.link_manager = LinkManager()
+            self.lock_manager = LockManager()
+            self.settings_manager = SettingsManager(self.EVENT_MAP)
         else:
             super().__init__("Dummy", "dummy-model")
 
-    def execute(self, message: str, model: str, non_interactive: bool = False):
-        pass
+
+class _DummyConfigManager:
+    def __init__(self, root_dir):
+        from core.config_manager import ConfigManager
+        self._impl = ConfigManager(root_dir)
+
+    @property
+    def root_dir(self):
+        return self._impl.root_dir
+
+    @property
+    def full_config(self):
+        return self._impl.full_config
+
+    @full_config.setter
+    def full_config(self, value):
+        self._impl.full_config = value
+
+    def __getattr__(self, name):
+        return getattr(self._impl, name)
 
 
 @pytest.fixture
@@ -331,12 +356,13 @@ def test_get_skill_search_roots_with_mapping(mock_engine, tmp_path, monkeypatch)
     custom_skills = tmp_path / "custom_skills"
     custom_skills.mkdir()
 
-    # Configure mapping in engine
+    # Configure mapping in engine (must sync with config_manager)
     mock_engine.full_config["skills"] = {
         "project_skill_root_mapping": [
             {"pattern": ".*mapped.*", "path": str(custom_skills)}
         ]
     }
+    mock_engine.config_manager.full_config = mock_engine.full_config
 
     # Test mapping hit
     mapped_dir = tmp_path / "mapped_project"

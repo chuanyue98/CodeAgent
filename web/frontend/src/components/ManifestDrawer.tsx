@@ -6,7 +6,7 @@ export default function ManifestDrawer() {
   const def = groups[currentGroup] || { skills: [], prompts: [], hooks: [], plugins: [] };
 
   const stats = [
-    { icon: Package, label: 'Skills',  count: def.skills?.length ?? 0,  color: 'text-primary bg-primary/8' },
+    { icon: Package, label: 'Skills',  count: def.skills?.length ?? 0,  color: 'text-primary bg-primary/10' },
     { icon: Anchor,  label: 'Hooks',   count: def.hooks?.length ?? 0,   color: 'text-orange-500 bg-orange-50' },
     { icon: GitBranch, label: 'Prompts', count: def.prompts?.length ?? 0, color: 'text-emerald-500 bg-emerald-50' },
     { icon: Zap, label: 'Plugins', count: def.plugins?.length ?? 0, color: 'text-purple-500 bg-purple-50' },

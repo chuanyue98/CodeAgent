@@ -67,34 +67,26 @@ export interface AnalyticsSummary {
   session_count: number;
 }
 
+import request from '../utils/request';
+
 export async function fetchSummary(): Promise<AnalyticsSummary> {
-  const res = await fetch('/api/analytics/summary');
-  if (!res.ok) throw new Error('Failed to fetch analytics summary');
-  return res.json();
+  return request('/api/analytics/summary');
 }
 
 export async function fetchDaily(): Promise<DailyUsage[]> {
-  const res = await fetch('/api/analytics/daily');
-  if (!res.ok) throw new Error('Failed to fetch daily usage');
-  return res.json();
+  return request('/api/analytics/daily');
 }
 
 export async function fetchMonthly(): Promise<MonthlyUsage[]> {
-  const res = await fetch('/api/analytics/monthly');
-  if (!res.ok) throw new Error('Failed to fetch monthly usage');
-  return res.json();
+  return request('/api/analytics/monthly');
 }
 
 export async function fetchSessions(limit = 100): Promise<SessionUsage[]> {
-  const res = await fetch(`/api/analytics/sessions?limit=${limit}`);
-  if (!res.ok) throw new Error('Failed to fetch sessions');
-  return res.json();
+  return request(`/api/analytics/sessions?limit=${limit}`);
 }
 
 export async function fetchEngines(): Promise<EngineSummary[]> {
-  const res = await fetch('/api/analytics/engines');
-  if (!res.ok) throw new Error('Failed to fetch engine summary');
-  return res.json();
+  return request('/api/analytics/engines');
 }
 
 export interface ModelStat {
@@ -113,14 +105,11 @@ export interface ModelStat {
 }
 
 export async function fetchModels(): Promise<ModelStat[]> {
-  const res = await fetch('/api/analytics/models');
-  if (!res.ok) throw new Error('Failed to fetch model stats');
-  return res.json();
+  return request('/api/analytics/models');
 }
 
 export async function refreshAnalytics(): Promise<void> {
-  const res = await fetch('/api/analytics/refresh', { method: 'POST' });
-  if (!res.ok) throw new Error('Failed to refresh analytics');
+  await request('/api/analytics/refresh', { method: 'POST' });
 }
 
 export function fmtTokens(n: number): string {
