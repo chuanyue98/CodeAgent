@@ -30,6 +30,26 @@ export interface AgentSession {
   status: 'starting' | 'ready' | 'busy' | 'disconnected' | 'error' | 'closed';
   lastSequence: number;
   capabilitySnapshot: ProviderCapabilities;
+  resourceSnapshot: ResourceSnapshot;
+}
+
+export interface ResourceSnapshot {
+  group?: string | null;
+  skills?: string[];
+  prompts?: string[];
+  hooks?: string[];
+  plugins?: string[];
+}
+
+export interface NativeAgentSession {
+  session_id: string;
+  engine: string;
+  project_path: string;
+  started_at: string;
+  ended_at: string | null;
+  message_count: number;
+  title: string;
+  model: string | null;
 }
 
 export interface AgentEvent {

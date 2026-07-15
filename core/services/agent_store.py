@@ -10,7 +10,7 @@ from pathlib import Path
 from core.services.agent_protocol import AgentEvent, AgentSession, wire
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 
 
 class AgentStore:
@@ -54,6 +54,7 @@ class AgentStore:
                         status TEXT NOT NULL,
                         last_sequence INTEGER NOT NULL DEFAULT 0,
                         capability_snapshot TEXT NOT NULL,
+                        resource_snapshot TEXT NOT NULL DEFAULT '{}',
                         UNIQUE(provider, provider_session_id)
                     );
                     CREATE INDEX agent_sessions_updated_idx
@@ -78,6 +79,36 @@ class AgentStore:
                         "INSERT INTO schema_version(version) VALUES (?)",
                         (SCHEMA_VERSION,),
                     )
+                version = SCHEMA_VERSION
+            if version < 2:
+                self._connection.execute(
+                    "ALTER TABLE agent_sessions ADD COLUMN resource_snapshot "
+                    "TEXT NOT NULL DEFAULT '{}'"
+                )
+                self._connection.execute(
+                    "UPDATE schema_version SET version = ?", (2,)
+                )
+                version = 2
+            if version < 3:
+                # Older Gateway versions could persist a stale in-memory
+                # ``last_sequence`` while an adapter event was arriving. Repair
+                # those rows before allocating any more event numbers.
+                self._connection.execute(
+                    """
+                    UPDATE agent_sessions
+                    SET last_sequence = MAX(
+                        last_sequence,
+                        COALESCE((
+                            SELECT MAX(sequence)
+                            FROM agent_events
+                            WHERE agent_events.session_id = agent_sessions.id
+                        ), 0)
+                    )
+                    """
+                )
+                self._connection.execute(
+                    "UPDATE schema_version SET version = ?", (SCHEMA_VERSION,)
+                )
 
     def close(self) -> None:
         with self._lock:
@@ -91,16 +122,20 @@ class AgentStore:
                 INSERT INTO agent_sessions (
                     id, provider, provider_session_id, project_id, cwd, title,
                     model, permission_mode, created_at, updated_at, status,
-                    last_sequence, capability_snapshot
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    last_sequence, capability_snapshot, resource_snapshot
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     provider_session_id=excluded.provider_session_id,
                     project_id=excluded.project_id, cwd=excluded.cwd,
                     title=excluded.title, model=excluded.model,
                     permission_mode=excluded.permission_mode,
                     updated_at=excluded.updated_at, status=excluded.status,
-                    last_sequence=excluded.last_sequence,
-                    capability_snapshot=excluded.capability_snapshot
+                    -- Adapter calls can overlap with a Gateway status update.
+                    -- Never let a stale in-memory session move this counter
+                    -- backwards, or the next event would reuse a primary key.
+                    last_sequence=MAX(agent_sessions.last_sequence, excluded.last_sequence),
+                    capability_snapshot=excluded.capability_snapshot,
+                    resource_snapshot=excluded.resource_snapshot
                 """,
                 (
                     values["id"],
@@ -116,6 +151,7 @@ class AgentStore:
                     values["status"],
                     values["lastSequence"],
                     json.dumps(values["capabilitySnapshot"], ensure_ascii=False),
+                    json.dumps(values["resourceSnapshot"], ensure_ascii=False),
                 ),
             )
 
@@ -136,6 +172,7 @@ class AgentStore:
                 "status": row["status"],
                 "lastSequence": row["last_sequence"],
                 "capabilitySnapshot": json.loads(row["capability_snapshot"]),
+                "resourceSnapshot": json.loads(row["resource_snapshot"] or "{}"),
             }
         )
 
@@ -181,7 +218,18 @@ class AgentStore:
             ).fetchone()
             if row is None:
                 raise KeyError(f"Unknown agent session: {event.session_id}")
-            event.sequence = int(row["last_sequence"]) + 1
+            # Use the event table as a defensive second source of truth. This
+            # also heals a database written by an older Gateway that allowed a
+            # stale session upsert to lower ``last_sequence``.
+            stored = self._connection.execute(
+                "SELECT MAX(sequence) AS max_sequence FROM agent_events "
+                "WHERE session_id = ?",
+                (event.session_id,),
+            ).fetchone()
+            last_sequence = max(
+                int(row["last_sequence"]), int(stored["max_sequence"] or 0)
+            )
+            event.sequence = last_sequence + 1
             payload = wire(event)
             self._connection.execute(
                 "INSERT INTO agent_events(session_id, sequence, event_json, created_at) "

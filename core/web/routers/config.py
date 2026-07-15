@@ -1,5 +1,7 @@
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from core.services.config_service import ConfigService
 from core.resource_locator import get_default_config_path
@@ -23,6 +25,14 @@ class ProjectPayload(BaseModel):
     path: str = Field(min_length=1)
     group: str = Field(min_length=1)
 
+    @field_validator("path", "group")
+    @classmethod
+    def reject_blank_values(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("must not be blank")
+        return normalized
+
 
 class ProxyPayload(BaseModel):
     host: str = Field(min_length=1)
@@ -44,7 +54,7 @@ class ConfigPayload(BaseModel):
     default_mode: str | None = None
     language: str | None = None
     groups: dict[str, GroupDefinitionPayload] | None = None
-    project_registry: list[dict] | None = None
+    project_registry: list[ProjectPayload] | None = None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -54,7 +64,26 @@ class ConfigPayload(BaseModel):
 async def list_projects():
     service = ConfigService(get_config_path())
     config, _ = _load_config(service)
-    return config.get("project_registry", [])
+    projects = config.get("project_registry", [])
+    result = []
+    for project in projects:
+        if not isinstance(project, dict):
+            continue
+        path = project.get("path")
+        group = project.get("group")
+        if not isinstance(path, str) or not isinstance(group, str):
+            continue
+        if not path.strip() or not group.strip():
+            continue
+        result.append(
+            {
+                "path": path,
+                "group": group,
+                "available": bool(path.strip())
+                and Path(path).expanduser().is_dir(),
+            }
+        )
+    return result
 
 
 @router.post("/projects")

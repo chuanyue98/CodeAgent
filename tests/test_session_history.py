@@ -13,7 +13,7 @@ from core.session_history.parsers.claude_parser import (
     parse_claude_session,
     _decode_claude_project_path,
 )
-from core.session_history.parsers.codex_parser import parse_codex_session
+from core.session_history.parsers.codex_parser import _ms_to_iso, parse_codex_session
 from core.session_history.parsers.gemini_parser import parse_gemini_session
 
 
@@ -238,6 +238,14 @@ def test_parse_codex_session(tmp_path):
     assert "optimize" in session.messages[1].content
 
 
+def test_codex_timestamp_parser_accepts_seconds_and_milliseconds():
+    assert _ms_to_iso(1_700_000_000) == "2023-11-14T22:13:20.000Z"
+    assert _ms_to_iso(1_700_000_000_000) == "2023-11-14T22:13:20.000Z"
+    assert _ms_to_iso("2023-11-14T22:13:20Z") == "2023-11-14T22:13:20.000Z"
+    assert _ms_to_iso(None) == ""
+    assert _ms_to_iso("not-a-timestamp") == ""
+
+
 # ─── Gemini parser tests ──────────────────────────────────────────────
 
 
@@ -423,6 +431,51 @@ def test_find_all_sessions_with_project_filter_still_scopes(tmp_path):
 
     sessions = find_all_sessions("E:/demo/project-a", home=tmp_path, engine="claude")
     assert {s.session_id for s in sessions} == {"sess-a"}
+
+
+def test_find_all_sessions_deduplicates_resumed_provider_files(monkeypatch):
+    """Resumed rollout files with one native ID appear as one conversation."""
+    from core.session_history import session_finder
+
+    less_complete = UnifiedSession(
+        session_id="resumed-session",
+        engine=EngineType.CODEX,
+        started_at="2026-07-11T11:00:00.000Z",
+        ended_at="2026-07-11T11:05:00.000Z",
+        messages=[UnifiedMessage(role="user", content="first")],
+        source_file="older.jsonl",
+    )
+    more_complete = UnifiedSession(
+        session_id="resumed-session",
+        engine=EngineType.CODEX,
+        started_at="2026-07-11T10:00:00.000Z",
+        ended_at="2026-07-11T11:04:00.000Z",
+        messages=[
+            UnifiedMessage(role="user", content="first"),
+            UnifiedMessage(role="assistant", content="second"),
+        ],
+        source_file="complete.jsonl",
+    )
+    another_session = UnifiedSession(
+        session_id="another-session",
+        engine=EngineType.CODEX,
+        started_at="2026-07-12T10:00:00.000Z",
+        messages=[UnifiedMessage(role="user", content="newest")],
+    )
+
+    monkeypatch.setattr(
+        session_finder,
+        "find_codex_sessions",
+        lambda project_path, home: [less_complete, more_complete, another_session],
+    )
+
+    sessions = session_finder.find_all_sessions(engine="codex")
+
+    assert [session.session_id for session in sessions] == [
+        "another-session",
+        "resumed-session",
+    ]
+    assert sessions[1] is more_complete
 
 
 # ─── Audit event tests ─────────────────────────────────────────────────

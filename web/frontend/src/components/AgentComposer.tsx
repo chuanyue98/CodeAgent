@@ -1,0 +1,72 @@
+import { useRef } from 'react';
+import { Send, Square } from 'lucide-react';
+
+type Props = {
+  input: string;
+  activeTurnId: string | null;
+  connecting: boolean;
+  canCompose: boolean;
+  composerPlaceholder: string;
+  sessionCapabilitySnapshot: { supportsCancel?: boolean } | undefined;
+  onInputChange: (value: string) => void;
+  onSend: () => void;
+  onCancel: () => void;
+};
+
+export default function AgentComposer({
+  input,
+  activeTurnId,
+  connecting,
+  canCompose,
+  composerPlaceholder,
+  sessionCapabilitySnapshot,
+  onInputChange,
+  onSend,
+  onCancel,
+}: Props) {
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+
+  return (
+    <div className="mt-3 flex items-end gap-2">
+      <textarea
+        ref={composerRef}
+        value={input}
+        rows={1}
+        disabled={Boolean(activeTurnId) || !canCompose}
+        onChange={event => {
+          onInputChange(event.target.value);
+          const el = event.target;
+          el.style.height = 'auto';
+          el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+        }}
+        onKeyDown={event => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            void onSend();
+          }
+        }}
+        placeholder={composerPlaceholder}
+        className="max-h-40 min-h-10 flex-1 resize-none overflow-y-auto rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
+      />
+      {activeTurnId ? (
+        <button
+          onClick={onCancel}
+          disabled={!sessionCapabilitySnapshot?.supportsCancel}
+          aria-label="Cancel turn"
+          className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-red-600 hover:bg-red-100 disabled:opacity-40"
+        >
+          <Square className="h-4 w-4 fill-current" />
+        </button>
+      ) : (
+        <button
+          onClick={() => void onSend()}
+          disabled={!input.trim() || !canCompose || connecting}
+          aria-label="Send message"
+          className="rounded-lg bg-primary p-2.5 text-white hover:bg-primary/90 disabled:opacity-40"
+        >
+          <Send className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+}

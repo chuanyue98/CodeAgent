@@ -74,6 +74,57 @@ async def test_gateway_rejects_unregistered_workspace(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_gateway_imports_existing_provider_session(tmp_path):
+    config, workspace = _config(tmp_path)
+    gateway = AgentGateway(
+        AgentStore(tmp_path / "agent.sqlite3"), config, [FakeAgentAdapter()]
+    )
+    await gateway.start()
+    session = await gateway.import_session(
+        provider="fake",
+        provider_session_id="fake-existing-session",
+        project_id=str(workspace),
+        title="Existing conversation",
+    )
+    assert session.provider_session_id == "fake-existing-session"
+    assert session.title == "Existing conversation"
+    assert gateway.store.find_by_provider_session(
+        "fake", "fake-existing-session"
+    ).id == session.id
+    await gateway.stop()
+
+
+@pytest.mark.asyncio
+async def test_gateway_persists_resource_snapshot(tmp_path):
+    config, workspace = _config(tmp_path)
+    config.write_text(
+        json.dumps(
+            {
+                "project_registry": [{"path": str(workspace), "group": "web"}],
+                "groups": {
+                    "web": {
+                        "skills": ["base/review"],
+                        "prompts": ["base"],
+                        "hooks": ["base/check"],
+                        "plugins": ["base/tools"],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    gateway = AgentGateway(
+        AgentStore(tmp_path / "agent.sqlite3"), config, [FakeAgentAdapter()]
+    )
+    await gateway.start()
+    session = await gateway.create_session(provider="fake", project_id=str(workspace))
+    assert session.resource_snapshot.group == "web"
+    assert session.resource_snapshot.skills == ["base/review"]
+    assert gateway.get_session(session.id).resource_snapshot.plugins == ["base/tools"]
+    await gateway.stop()
+
+
+@pytest.mark.asyncio
 async def test_gateway_replays_only_events_after_sequence(tmp_path):
     config, workspace = _config(tmp_path)
     gateway = AgentGateway(

@@ -36,6 +36,12 @@ function dataString(data: Record<string, unknown>, key: string): string {
   return typeof data[key] === 'string' ? data[key] as string : '';
 }
 
+function eventMessageId(event: AgentEvent, role: 'user' | 'assistant'): string {
+  const turnScope = event.turnId || `sequence-${event.sequence}`;
+  const itemScope = event.itemId || role;
+  return `${turnScope}:${itemScope}`;
+}
+
 export function agentSessionReducer(
   state: AgentSessionState,
   action: AgentSessionAction,
@@ -72,7 +78,7 @@ export function agentSessionReducer(
     next.messages = [
       ...state.messages,
       {
-        id: event.itemId || `user-${event.turnId || event.sequence}`,
+        id: eventMessageId(event, 'user'),
         role: 'user',
         text: dataString(event.data, 'text'),
         turnId: event.turnId,
@@ -81,7 +87,7 @@ export function agentSessionReducer(
   } else if (event.type === 'turn.started') {
     next.activeTurnId = event.turnId;
   } else if (event.type === 'message.delta') {
-    const id = event.itemId || `assistant-${event.turnId || event.sequence}`;
+    const id = eventMessageId(event, 'assistant');
     const delta = dataString(event.data, 'delta');
     const existing = state.messages.find(message => message.id === id);
     next.messages = existing
@@ -90,7 +96,7 @@ export function agentSessionReducer(
         : message)
       : [...state.messages, { id, role: 'assistant', text: delta, turnId: event.turnId, pending: true }];
   } else if (event.type === 'message.completed') {
-    const id = event.itemId || `assistant-${event.turnId || event.sequence}`;
+    const id = eventMessageId(event, 'assistant');
     const text = dataString(event.data, 'text');
     const existing = state.messages.find(message => message.id === id);
     next.messages = existing

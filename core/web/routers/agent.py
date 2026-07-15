@@ -19,8 +19,11 @@ from core.services.agent_protocol import (
     AgentCommand,
     AgentError,
     CreateAgentSessionRequest,
+    AgentEvent,
+    ImportAgentSessionRequest,
     wire,
 )
+from core.session_history.session_finder import find_session_by_id
 
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
@@ -75,6 +78,80 @@ async def create_agent_session(
             title=payload.title,
         )
         return wire(session)
+    except AgentGatewayError as exc:
+        raise _http_error(exc) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/sessions/import", status_code=201)
+async def import_agent_session(
+    payload: ImportAgentSessionRequest, request: Request
+) -> dict:
+    native = await asyncio.to_thread(
+        find_session_by_id,
+        payload.provider_session_id,
+        payload.provider,
+        payload.project_id,
+    )
+    if native is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "native_session_not_found",
+                "message": "Provider session was not found in local history",
+            },
+        )
+    gateway = _gateway(request)
+    existing = gateway.store.find_by_provider_session(
+        payload.provider, payload.provider_session_id
+    )
+    try:
+        session = await gateway.import_session(
+            provider=payload.provider,
+            provider_session_id=payload.provider_session_id,
+            project_id=native.project_path,
+            model=native.model or payload.model,
+            permission_mode=payload.permission_mode,
+            title=native.title or payload.title,
+        )
+        if existing is None:
+            turn_number = 0
+            for index, message in enumerate(native.messages):
+                if message.role == "user":
+                    turn_number += 1
+                turn_id = f"history-{turn_number or 1}"
+                event_type = (
+                    "message.user" if message.role == "user" else "message.completed"
+                )
+                data_key = "text"
+                await gateway.publish(
+                    AgentEvent(
+                        type=event_type,
+                        session_id=session.id,
+                        turn_id=turn_id,
+                        item_id=f"history-message-{index}",
+                        data={data_key: message.content},
+                    )
+                )
+                for tool_index, tool in enumerate(message.tool_calls):
+                    await gateway.publish(
+                        AgentEvent(
+                            type="tool.completed",
+                            session_id=session.id,
+                            turn_id=turn_id,
+                            item_id=f"history-tool-{index}-{tool_index}",
+                            data={
+                                "tool": {
+                                    "name": tool.name,
+                                    "input": tool.args_preview,
+                                    "result": tool.result_preview,
+                                    "status": "completed",
+                                }
+                            },
+                        )
+                    )
+        return wire(gateway.get_session(session.id))
     except AgentGatewayError as exc:
         raise _http_error(exc) from exc
     except Exception as exc:

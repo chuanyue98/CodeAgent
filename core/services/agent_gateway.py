@@ -21,6 +21,7 @@ from core.services.agent_protocol import (
     SessionStatus,
     TurnInput,
     ProviderCapabilities,
+    ResourceSnapshot,
     utc_now,
     wire,
 )
@@ -138,6 +139,32 @@ class AgentGateway:
             "Select a workspace registered in Settings before starting an agent",
         )
 
+    def _resource_snapshot(self, workspace: str) -> ResourceSnapshot:
+        config, _warnings = ConfigService(self.config_path).get_config()
+        requested = Path(workspace).expanduser().resolve()
+        group_name: str | None = None
+        for project in config.get("project_registry", []):
+            if not isinstance(project, dict) or not isinstance(project.get("path"), str):
+                continue
+            if Path(project["path"]).expanduser().resolve() == requested:
+                group_name = project.get("group") if isinstance(project.get("group"), str) else None
+                break
+        definition = config.get("groups", {}).get(group_name or "", {})
+        if not isinstance(definition, dict):
+            definition = {}
+
+        def values(key: str) -> list[str]:
+            raw = definition.get(key, [])
+            return [item for item in raw if isinstance(item, str)] if isinstance(raw, list) else []
+
+        return ResourceSnapshot(
+            group=group_name,
+            skills=values("skills"),
+            prompts=values("prompts"),
+            hooks=values("hooks"),
+            plugins=values("plugins"),
+        )
+
     def get_session(self, session_id: str) -> AgentSession:
         session = self.store.get_session(session_id)
         if session is None:
@@ -171,6 +198,7 @@ class AgentGateway:
                 status_code=503,
             )
         cwd = self._registered_workspace(project_id)
+        resource_snapshot = self._resource_snapshot(cwd)
         provider_session = await adapter.create_session(
             CreateSessionOptions(
                 project_id=cwd,
@@ -190,6 +218,71 @@ class AgentGateway:
             permission_mode=permission_mode,
             status=SessionStatus.READY,
             capability_snapshot=capabilities,
+            resource_snapshot=resource_snapshot,
+        )
+        self.store.upsert_session(session)
+        await self.publish(
+            AgentEvent(
+                type="session.ready",
+                session_id=session.id,
+                data={"session": wire(session)},
+            )
+        )
+        return self.get_session(session.id)
+
+    async def import_session(
+        self,
+        *,
+        provider: str,
+        provider_session_id: str,
+        project_id: str,
+        model: str | None = None,
+        permission_mode: PermissionMode = PermissionMode.WORKSPACE_WRITE,
+        title: str | None = None,
+    ) -> AgentSession:
+        existing = self.store.find_by_provider_session(provider, provider_session_id)
+        if existing is not None:
+            return await self.resume_session(existing.id)
+
+        adapter = self.adapters.get(provider)
+        if adapter is None:
+            raise AgentGatewayError(
+                "provider_not_found", "Provider not found", status_code=404
+            )
+        capabilities = await adapter.capabilities()
+        if not capabilities.available:
+            raise AgentGatewayError(
+                "provider_unavailable",
+                capabilities.unavailable_reason or "Provider is unavailable",
+                status_code=503,
+            )
+        if not capabilities.supports_resume:
+            raise AgentGatewayError(
+                "unsupported_capability",
+                "This provider does not support importing native sessions",
+            )
+        cwd = self._registered_workspace(project_id)
+        resource_snapshot = self._resource_snapshot(cwd)
+        resumed = await adapter.resume_session(
+            provider_session_id,
+            ResumeOptions(
+                cwd=cwd,
+                model=model,
+                permission_mode=permission_mode,
+            ),
+        )
+        session = AgentSession(
+            id=f"agent_{uuid4().hex}",
+            provider=provider,
+            provider_session_id=resumed.id,
+            project_id=cwd,
+            cwd=cwd,
+            title=title,
+            model=resumed.model or model,
+            permission_mode=permission_mode,
+            status=SessionStatus.READY,
+            capability_snapshot=capabilities,
+            resource_snapshot=resource_snapshot,
         )
         self.store.upsert_session(session)
         await self.publish(

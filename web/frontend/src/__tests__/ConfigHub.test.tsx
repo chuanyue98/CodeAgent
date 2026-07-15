@@ -43,4 +43,14 @@ describe('ConfigHub Component', () => {
     expect(remainingProject).toBe(secondProject);
     expect(remainingProject).toHaveValue('/workspace/second');
   });
+
+  test('blocks saving an empty project row', async () => {
+    renderConfigHub();
+    await screen.findAllByRole('combobox', {}, { timeout: 3000 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Project' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save All Changes' }));
+
+    expect(await screen.findByText(/Project path and resource group are required/)).toBeVisible();
+  });
 });

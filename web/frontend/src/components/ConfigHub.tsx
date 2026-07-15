@@ -69,13 +69,26 @@ const ConfigHub: React.FC = () => {
   }, [config, projects, groups]);
 
   const handleSave = async () => {
+    const normalizedProjects = localProjects.map(({ path, group }) => ({
+      path: path.trim(),
+      group: group.trim(),
+    }));
+    if (normalizedProjects.some(project => !project.path || !project.group)) {
+      setError('Project path and resource group are required. Complete or remove empty project rows.');
+      return;
+    }
+    if (new Set(normalizedProjects.map(project => project.path)).size !== normalizedProjects.length) {
+      setError('Each project path can only be registered once.');
+      return;
+    }
+
     try {
       setSaving(true);
 
       const fullConfig = {
         ...localConfig,
         proxy: localProxies.map(({ host, port }) => ({ host, port })),
-        project_registry: localProjects.map(({ path, group }) => ({ path, group })),
+        project_registry: normalizedProjects,
         groups: localGroups
       };
 

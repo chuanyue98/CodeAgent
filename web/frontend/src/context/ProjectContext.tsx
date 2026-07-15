@@ -26,6 +26,7 @@ export interface Config {
 export interface Project {
   path: string;
   group: string;
+  available?: boolean;
 }
 
 export interface GroupDefinition {

@@ -64,3 +64,28 @@ def test_store_delete_cascades_events(tmp_path):
     assert store.get_session("agent_test") is None
     assert store.list_events("agent_test") == []
     store.close()
+
+
+def test_store_never_reuses_an_event_sequence_after_stale_session_upsert(tmp_path):
+    store = AgentStore(tmp_path / "agent.sqlite3")
+    store.upsert_session(_session())
+    store.append_event(AgentEvent(type="session.ready", session_id="agent_test"))
+    store.append_event(AgentEvent(type="turn.started", session_id="agent_test"))
+
+    # Simulate a resume/status update that began before the second event was
+    # persisted and therefore still carries the old sequence number.
+    stale = _session()
+    stale.last_sequence = 1
+    store.upsert_session(stale)
+    assert store.get_session("agent_test").last_sequence == 2
+
+    # Also repair databases created by the old behavior, where the stale
+    # upsert had already lowered the stored counter.
+    store._connection.execute(
+        "UPDATE agent_sessions SET last_sequence = 1 WHERE id = 'agent_test'"
+    )
+    store._connection.commit()
+    event = store.append_event(AgentEvent(type="turn.completed", session_id="agent_test"))
+    assert event.sequence == 3
+    assert store.get_session("agent_test").last_sequence == 3
+    store.close()

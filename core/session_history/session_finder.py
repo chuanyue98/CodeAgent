@@ -9,13 +9,79 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from core.session_history.models import UnifiedSession
+from core.session_history.models import UnifiedMessage, UnifiedSession
 from core.session_history.parsers import (
     find_claude_sessions,
     find_codex_sessions,
     find_gemini_sessions,
     find_opencode_sessions,
 )
+
+
+def _message_key(message: UnifiedMessage) -> tuple[str, str, str, str]:
+    return (message.role, message.timestamp, message.content, message.model)
+
+
+def _merge_duplicate_sessions(
+    current: UnifiedSession, candidate: UnifiedSession
+) -> UnifiedSession:
+    """Merges rollout files while avoiding duplicated conversation prefixes."""
+    current_keys = {_message_key(message) for message in current.messages}
+    candidate_keys = {_message_key(message) for message in candidate.messages}
+    if candidate_keys.issubset(current_keys):
+        return current
+    if current_keys.issubset(candidate_keys):
+        return candidate
+
+    preferred = max(
+        (current, candidate),
+        key=lambda session: (
+            session.ended_at,
+            session.started_at,
+            session.message_count,
+            session.source_file,
+        ),
+    )
+    messages: list[UnifiedMessage] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for message in [*current.messages, *candidate.messages]:
+        key = _message_key(message)
+        if key not in seen:
+            seen.add(key)
+            messages.append(message)
+    messages.sort(key=lambda message: message.timestamp or "9999")
+    starts = [value for value in (current.started_at, candidate.started_at) if value]
+    ends = [value for value in (current.ended_at, candidate.ended_at) if value]
+    return UnifiedSession(
+        session_id=preferred.session_id,
+        engine=preferred.engine,
+        project_path=preferred.project_path or current.project_path or candidate.project_path,
+        started_at=min(starts) if starts else "",
+        ended_at=max(ends) if ends else "",
+        messages=messages,
+        title=preferred.title or current.title or candidate.title,
+        model=preferred.model or current.model or candidate.model,
+        source_file=preferred.source_file,
+    )
+
+
+def _deduplicate_sessions(
+    sessions: list[UnifiedSession],
+) -> list[UnifiedSession]:
+    """Collapses provider files that represent the same logical session.
+
+    Codex can write a new rollout file when a session is resumed while keeping
+    the original session ID. Rollout files can overlap or contain only a
+    continuation, so merge their messages before presenting one session.
+    """
+    by_identity: dict[tuple[str, str], UnifiedSession] = {}
+    for session in sessions:
+        identity = (session.engine.value, session.session_id)
+        current = by_identity.get(identity)
+        by_identity[identity] = (
+            session if current is None else _merge_duplicate_sessions(current, session)
+        )
+    return list(by_identity.values())
 
 
 def find_all_sessions(
@@ -49,6 +115,9 @@ def find_all_sessions(
 
     if engine is None or engine == "opencode":
         all_sessions.extend(find_opencode_sessions(project_path, home))
+
+    # A provider may expose multiple backing files for one logical session.
+    all_sessions = _deduplicate_sessions(all_sessions)
 
     # Sort by start time descending
     all_sessions.sort(key=lambda s: s.started_at, reverse=True)

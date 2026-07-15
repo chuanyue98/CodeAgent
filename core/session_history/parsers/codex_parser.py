@@ -24,20 +24,46 @@ from core.session_history.models import (
 )
 
 
-def _ms_to_iso(ms: int) -> str:
-    """Converts a Unix millisecond timestamp to ISO 8601 string.
+def _ms_to_iso(timestamp: object) -> str:
+    """Converts a Unix seconds or milliseconds timestamp to ISO 8601.
 
     Args:
-        ms: Timestamp in milliseconds.
+        timestamp: Timestamp in seconds or milliseconds. Codex's
+            ``task_complete.completed_at`` uses seconds in some versions.
 
     Returns:
         str: ISO 8601 formatted string (UTC).
     """
-    if not ms:
+    if timestamp is None or timestamp == "":
         return ""
-    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%S.000Z"
-    )
+    if isinstance(timestamp, str):
+        value = timestamp.strip()
+        if not value:
+            return ""
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                timestamp = float(value)
+            except ValueError:
+                return ""
+        else:
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%S.000Z"
+            )
+    if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
+        return ""
+    seconds = float(timestamp)
+    if seconds > 100_000_000_000:
+        seconds /= 1000
+    try:
+        return datetime.fromtimestamp(seconds, tz=timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%S.000Z"
+        )
+    except (OverflowError, OSError, ValueError):
+        return ""
 
 
 def parse_codex_session(file_path: Path) -> Optional[UnifiedSession]:

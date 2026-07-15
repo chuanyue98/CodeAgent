@@ -63,6 +63,13 @@ test('adding a project then saving persists the row', async ({ page }) => {
   ).toHaveValue('/tmp/e2e-project');
 });
 
+test('empty project rows cannot be saved', async ({ page }) => {
+  await gotoConfig(page);
+  await page.getByRole('button', { name: 'Add Project' }).click();
+  await save(page);
+  await expect(page.getByText(/Project path and resource group are required/)).toBeVisible();
+});
+
 test('New Group inline input: Enter confirms, Escape cancels', async ({ page }) => {
   await gotoConfig(page);
   await page.getByRole('button', { name: 'New Group' }).click();

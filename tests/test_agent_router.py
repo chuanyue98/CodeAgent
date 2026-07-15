@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from core.services.agent_adapters.fake import FakeAgentAdapter
 from core.services.agent_gateway import AgentGateway
 from core.services.agent_store import AgentStore
+from core.session_history.models import EngineType, UnifiedMessage, UnifiedSession
 from core.web.routers import agent
 
 
@@ -92,3 +93,39 @@ def test_agent_rest_rejects_unregistered_workspace(tmp_path):
         )
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "workspace_not_registered"
+
+
+def test_agent_imports_native_history_into_replay_events(tmp_path, monkeypatch):
+    app, workspace = _app(tmp_path)
+    native = UnifiedSession(
+        session_id="fake-native-session",
+        engine=EngineType.OPENCODE,
+        project_path=str(workspace),
+        title="Imported history",
+        model="test-model",
+        messages=[
+            UnifiedMessage(role="user", content="old question"),
+            UnifiedMessage(role="assistant", content="old answer"),
+        ],
+    )
+    monkeypatch.setattr(agent, "find_session_by_id", lambda *_args: native)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/agent/sessions/import",
+            json={
+                "provider": "fake",
+                "providerSessionId": native.session_id,
+                "projectId": str(workspace),
+            },
+        )
+        assert response.status_code == 201
+        session_id = response.json()["id"]
+        replay = app.state.agent_gateway.store.list_events(session_id)
+        assert [event.type for event in replay] == [
+            "session.ready",
+            "message.user",
+            "message.completed",
+        ]
+        assert replay[1].data["text"] == "old question"
+        assert replay[2].data["text"] == "old answer"

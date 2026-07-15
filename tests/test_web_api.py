@@ -172,6 +172,7 @@ async def test_projects_api_crud(mock_env):
         resp = await ac.get("/api/projects")
         projects = resp.json()
         assert any(p["path"] == "/p1" for p in projects)
+        assert next(p for p in projects if p["path"] == "/p1")["available"] is False
 
         # Delete
         resp = await ac.delete("/api/projects", params={"path": "/p1"})
@@ -196,6 +197,26 @@ async def test_projects_api_validation_errors(mock_env):
         # Empty path
         resp = await ac.post("/api/projects", json={"path": "", "group": "g1"})
         assert resp.status_code == 422
+
+        # Whitespace-only values
+        resp = await ac.post("/api/projects", json={"path": "   ", "group": "g1"})
+        assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_projects_api_marks_existing_directories_available(mock_env):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.post(
+            "/api/projects", json={"path": str(mock_env), "group": "common"}
+        )
+        assert resp.status_code == 200
+
+        resp = await ac.get("/api/projects")
+
+    project = next(item for item in resp.json() if item["path"] == str(mock_env))
+    assert project["available"] is True
 
 
 @pytest.mark.asyncio
@@ -241,6 +262,22 @@ async def test_config_api(mock_env):
         # Verify
         resp = await ac.get("/api/config")
         assert resp.json()["default_mode"] == "remote"
+
+
+@pytest.mark.asyncio
+async def test_config_api_rejects_blank_project_rows(mock_env):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.post(
+            "/api/config",
+            json={
+                "project_registry": [{"path": "  ", "group": "common"}],
+                "groups": {},
+            },
+        )
+
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio

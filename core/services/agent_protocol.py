@@ -62,6 +62,16 @@ class ProviderCapabilities(ProtocolModel):
     supports_model_switch: bool = False
 
 
+class ResourceSnapshot(ProtocolModel):
+    """Resources configured for a Gateway session at creation time."""
+
+    group: str | None = None
+    skills: list[str] = Field(default_factory=list)
+    prompts: list[str] = Field(default_factory=list)
+    hooks: list[str] = Field(default_factory=list)
+    plugins: list[str] = Field(default_factory=list)
+
+
 class AgentSession(ProtocolModel):
     id: str
     provider: str
@@ -76,6 +86,7 @@ class AgentSession(ProtocolModel):
     status: SessionStatus = SessionStatus.STARTING
     last_sequence: int = 0
     capability_snapshot: ProviderCapabilities
+    resource_snapshot: ResourceSnapshot = Field(default_factory=ResourceSnapshot)
 
 
 class AgentInput(ProtocolModel):
@@ -150,6 +161,15 @@ class CreateAgentSessionRequest(ProtocolModel):
     model: str | None = None
     permission_mode: PermissionMode = PermissionMode.WORKSPACE_WRITE
     title: str | None = None
+
+
+class ImportAgentSessionRequest(ProtocolModel):
+    provider: str
+    provider_session_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    permission_mode: PermissionMode = PermissionMode.WORKSPACE_WRITE
+    title: str | None = None
+    model: str | None = None
 
 
 class AgentCommand(ProtocolModel):

@@ -2,6 +2,7 @@ import request from '../utils/request';
 import type {
   AgentCommand,
   AgentSession,
+  NativeAgentSession,
   PermissionMode,
   ProviderCapabilities,
 } from '../types/agent';
@@ -10,8 +11,31 @@ export function fetchAgentProviders(): Promise<ProviderCapabilities[]> {
   return request('/api/agent/providers');
 }
 
-export function fetchAgentSessions(limit = 100): Promise<AgentSession[]> {
+export function fetchAgentSessions(limit = 500): Promise<AgentSession[]> {
   return request(`/api/agent/sessions?limit=${limit}`);
+}
+
+export async function fetchNativeAgentSessions(
+  provider: string,
+  limit = 500,
+): Promise<NativeAgentSession[]> {
+  const query = new URLSearchParams({ engine: provider, limit: String(limit) });
+  const result = await request<{ sessions: NativeAgentSession[] }>(`/api/history?${query}`);
+  return result.sessions;
+}
+
+export function importAgentSession(payload: {
+  provider: string;
+  providerSessionId: string;
+  projectId: string;
+  permissionMode: PermissionMode;
+  title?: string;
+  model?: string;
+}): Promise<AgentSession> {
+  return request('/api/agent/sessions/import', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function createAgentSession(payload: {
