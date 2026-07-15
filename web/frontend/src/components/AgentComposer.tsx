@@ -1,5 +1,4 @@
-import { useRef } from 'react';
-import { Send, Square } from 'lucide-react';
+import { Loader2, Send, Square } from 'lucide-react';
 
 type Props = {
   input: string;
@@ -8,6 +7,7 @@ type Props = {
   canCompose: boolean;
   composerPlaceholder: string;
   sessionCapabilitySnapshot: { supportsCancel?: boolean } | undefined;
+  setComposerRef: (element: HTMLTextAreaElement | null) => void;
   onInputChange: (value: string) => void;
   onSend: () => void;
   onCancel: () => void;
@@ -20,16 +20,15 @@ export default function AgentComposer({
   canCompose,
   composerPlaceholder,
   sessionCapabilitySnapshot,
+  setComposerRef,
   onInputChange,
   onSend,
   onCancel,
 }: Props) {
-  const composerRef = useRef<HTMLTextAreaElement | null>(null);
-
   return (
     <div className="mt-3 flex items-end gap-2">
       <textarea
-        ref={composerRef}
+        ref={setComposerRef}
         value={input}
         rows={1}
         disabled={Boolean(activeTurnId) || !canCompose}
@@ -64,7 +63,11 @@ export default function AgentComposer({
           aria-label="Send message"
           className="rounded-lg bg-primary p-2.5 text-white hover:bg-primary/90 disabled:opacity-40"
         >
-          <Send className="h-4 w-4" />
+          {connecting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
         </button>
       )}
     </div>

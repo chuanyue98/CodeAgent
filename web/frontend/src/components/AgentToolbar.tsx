@@ -1,5 +1,5 @@
-import { Activity, FolderGit2, Wifi, WifiOff } from 'lucide-react';
-import type { ProviderCapabilities } from '../types/agent';
+import { Activity, FolderGit2, Layers, Wifi, WifiOff } from 'lucide-react';
+import type { PermissionMode, ProviderCapabilities } from '../types/agent';
 
 type Props = {
   validProjects: { path: string; group: string; available?: boolean }[];
@@ -10,10 +10,13 @@ type Props = {
   stateSessionId: string | null;
   stateActiveTurnId: string | null;
   connectionLabel: string;
+  permissionMode: PermissionMode;
+  currentGroup: string;
   onWorkspaceChange: (value: string) => void;
   onProviderChange: (value: string) => void;
   onCurrentGroupChange: (group: string) => void;
   onShowActivityChange: (value: boolean) => void;
+  onPermissionModeChange: (value: PermissionMode) => void;
 };
 
 export default function AgentToolbar({
@@ -25,15 +28,18 @@ export default function AgentToolbar({
   stateSessionId,
   stateActiveTurnId,
   connectionLabel,
+  permissionMode,
+  currentGroup,
   onWorkspaceChange,
   onProviderChange,
   onCurrentGroupChange,
   onShowActivityChange,
+  onPermissionModeChange,
 }: Props) {
   const disabled = Boolean(stateSessionId) || Boolean(stateActiveTurnId);
 
   return (
-    <div className="mb-3 flex items-end gap-2 border-b border-slate-100 pb-3">
+    <div className="mb-3 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-3">
       <label className="min-w-0 flex-1 text-[11px] font-medium text-slate-500">
         Workspace
         <span className="relative mt-1 flex">
@@ -84,6 +90,26 @@ export default function AgentToolbar({
           ))}
         </select>
       </label>
+      <label className="w-36 text-[11px] font-medium text-slate-500">
+        Permission
+        <select
+          aria-label="Permission mode"
+          value={permissionMode}
+          disabled={disabled}
+          onChange={event => onPermissionModeChange(event.target.value as PermissionMode)}
+          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-primary disabled:opacity-60"
+        >
+          <option value="workspace-write">Workspace write</option>
+          <option value="read-only">Read only</option>
+        </select>
+      </label>
+      <span
+        title={`Resources will be attached from the "${currentGroup}" group when this session starts`}
+        className="mb-0.5 flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-[10px] font-semibold text-slate-500"
+      >
+        <Layers className="h-3 w-3" />
+        {currentGroup}
+      </span>
       <span
         title={connectionLabel}
         className={`mb-0.5 flex items-center gap-1 rounded-lg border px-2 py-2 text-[10px] font-semibold ${

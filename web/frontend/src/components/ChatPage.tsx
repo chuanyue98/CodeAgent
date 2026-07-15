@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useMemo, useRef, type ComponentPropsWithoutRef } from 'react';
-import { Send, MessageSquare, Plus, AlertCircle, Loader2, RotateCcw, Copy, Check, Square, FolderGit2 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Send, MessageSquare, Plus, AlertCircle, Loader2, RotateCcw, Square, FolderGit2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useProject } from '../context/ProjectContext';
+import MarkdownMessage from './MarkdownMessage';
 import SessionCapabilities from './SessionCapabilities';
 import {
   cancelChatTurn,
@@ -73,35 +73,6 @@ function extractAssistantText(engine: string, event: Record<string, unknown>): s
     if (typeof value === 'string' && value.trim()) return value;
   }
   return null;
-}
-
-function CodeBlockWrapper({ children, ...props }: ComponentPropsWithoutRef<'pre'>) {
-  const [copied, setCopied] = useState(false);
-  const preRef = useRef<HTMLPreElement>(null);
-
-  const handleCopy = () => {
-    if (!preRef.current) return;
-    const codeText = preRef.current.innerText || '';
-    navigator.clipboard.writeText(codeText).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  return (
-    <div className="relative group/code my-2.5">
-      <button
-        onClick={handleCopy}
-        className="absolute top-2 right-2 p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors border border-slate-700 opacity-0 group-hover/code:opacity-100 focus:opacity-100 z-10"
-        title="Copy code"
-      >
-        {copied ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
-      </button>
-      <pre ref={preRef} className="!bg-slate-900 !text-slate-100 p-4 rounded-xl shadow-inner border border-slate-800 overflow-x-auto text-xs" {...props}>
-        {children}
-      </pre>
-    </div>
-  );
 }
 
 export default function ChatPage() {
@@ -478,31 +449,7 @@ export default function ChatPage() {
               }`}
             >
               {msg.role === 'assistant' ? (
-                <ReactMarkdown
-                  components={{
-                    pre({ children, ...props }) {
-                      return (
-                        <CodeBlockWrapper {...props}>
-                          {children}
-                        </CodeBlockWrapper>
-                      );
-                    },
-                    code({ className, children, ...props }) {
-                      const isInline = !className || !className.includes('language-');
-                      return isInline ? (
-                        <code className="font-mono bg-slate-200/60 px-1.5 py-0.5 rounded text-cyan-800 text-xs" {...props}>
-                          {children}
-                        </code>
-                      ) : (
-                        <code className={`${className} font-mono text-xs`} {...props}>
-                          {children}
-                        </code>
-                      );
-                    }
-                  }}
-                >
-                  {msg.text || '(empty response)'}
-                </ReactMarkdown>
+                <MarkdownMessage text={msg.text || '(empty response)'} />
               ) : (
                 msg.text
               )}
@@ -511,31 +458,7 @@ export default function ChatPage() {
           {sending && (
             <div className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap break-words prose prose-slate bg-slate-50 text-slate-700 border border-slate-100`}>
               {pendingText ? (
-                <ReactMarkdown
-                  components={{
-                    pre({ children, ...props }) {
-                      return (
-                        <CodeBlockWrapper {...props}>
-                          {children}
-                        </CodeBlockWrapper>
-                      );
-                    },
-                    code({ className, children, ...props }) {
-                      const isInline = !className || !className.includes('language-');
-                      return isInline ? (
-                        <code className="font-mono bg-slate-200/60 px-1.5 py-0.5 rounded text-cyan-800 text-xs" {...props}>
-                          {children}
-                        </code>
-                      ) : (
-                        <code className={`${className} font-mono text-xs`} {...props}>
-                          {children}
-                        </code>
-                      );
-                    }
-                  }}
-                >
-                  {pendingText}
-                </ReactMarkdown>
+                <MarkdownMessage text={pendingText} />
               ) : (
                 <span className="flex items-center gap-2 text-slate-400">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" /> Thinking...

@@ -23,6 +23,7 @@ import { initialAgentSessionState } from '../state/agentSessionReducer';
 
 export type UseAgentWorkspaceReturn = {
   projects: { path: string; group: string; available?: boolean }[];
+  currentGroup: string;
   validProjects: { path: string; group: string; available?: boolean }[];
   validProjectPaths: Set<string>;
   providers: ProviderCapabilities[];
@@ -45,10 +46,11 @@ export type UseAgentWorkspaceReturn = {
   connected: boolean;
   selectingKey: string | null;
   error: string | null;
+  onDismissError: () => void;
   showActivity: boolean;
   legacyMode: boolean;
   input: string;
-  permissionMode: string;
+  permissionMode: PermissionMode;
   showScrollToBottom: boolean;
   selectedCapabilities: ProviderCapabilities | undefined;
   availableProviders: ProviderCapabilities[];
@@ -106,7 +108,7 @@ export type UseAgentWorkspaceReturn = {
 };
 
 export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
-  const { projects, setCurrentGroup } = useProject();
+  const { projects, currentGroup, setCurrentGroup } = useProject();
   const [providers, setProviders] = useState<ProviderCapabilities[]>([]);
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [nativeSessionsByProvider, setNativeSessionsByProvider] = useState<Record<string, NativeAgentSession[]>>({});
@@ -424,7 +426,8 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     setConnected(false);
     setError(null);
     dispatch({ type: 'reset' });
-  }, []);
+    focusComposer();
+  }, [focusComposer]);
 
   const removeSession = useCallback(async (session: AgentSession) => {
     if (state.activeTurnId) return;
@@ -509,6 +512,8 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const retryNativeSessions = useCallback(() => {
     if (selectedProvider) loadNativeSessions(selectedProvider, true);
   }, [loadNativeSessions, selectedProvider]);
+
+  const onDismissError = useCallback(() => setError(null), []);
 
   const onToggleExpandedWorkspace = useCallback((path: string) => {
     setExpandedWorkspaces(previous => {
@@ -648,6 +653,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
 
   return {
     projects,
+    currentGroup,
     validProjects,
     validProjectPaths,
     providers,
@@ -670,6 +676,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     connected,
     selectingKey,
     error,
+    onDismissError,
     showActivity,
     legacyMode,
     input,
