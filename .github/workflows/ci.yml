@@ -10,9 +10,6 @@ jobs:
   backend:
     name: Backend — lint & test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -22,10 +19,10 @@ jobs:
         with:
           enable-caching: true   # caches ~/.cache/uv between runs
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.13"
 
       # --frozen honours uv.lock; --all-groups pulls in the [dependency-groups.dev] deps
       - name: Install dependencies
