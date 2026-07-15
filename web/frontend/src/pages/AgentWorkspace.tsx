@@ -1,9 +1,12 @@
+import { Loader2, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import ChatPage from '../components/ChatPage';
 import AgentActivityPanel from '../components/AgentActivityPanel';
 import AgentComposer from '../components/AgentComposer';
 import AgentSessionBanner from '../components/AgentSessionBanner';
 import AgentToolbar from '../components/AgentToolbar';
 import AgentWorkspaceSidebar from '../components/AgentWorkspaceSidebar';
+import MarkdownMessage from '../components/MarkdownMessage';
 import useAgentWorkspace from './useAgentWorkspace';
 
 export default function AgentWorkspace() {
@@ -69,16 +72,19 @@ export default function AgentWorkspace() {
           stateSessionId={workspace.state.session?.id ?? null}
           stateActiveTurnId={workspace.state.activeTurnId}
           connectionLabel={workspace.connectionLabel}
+          permissionMode={workspace.permissionMode}
+          currentGroup={workspace.currentGroup}
           onWorkspaceChange={workspace.onWorkspaceChange}
           onProviderChange={workspace.onProviderChange}
           onCurrentGroupChange={workspace.onSetCurrentGroup}
           onShowActivityChange={workspace.onShowActivityChange}
+          onPermissionModeChange={workspace.onPermissionModeChange}
         />
 
         {workspace.validProjects.length === 0 && (
           <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             Register an available workspace before starting an Agent session.{' '}
-            <a href="/settings/workspace" className="font-semibold underline">Open Workspace settings</a>
+            <Link to="/settings/workspace" className="font-semibold underline">Open Workspace settings</Link>
           </div>
         )}
         {workspace.noGatewayProvider && (
@@ -93,9 +99,18 @@ export default function AgentWorkspace() {
         {workspace.error && (
           <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
             <span className="flex items-center gap-2">{workspace.error}</span>
-            {workspace.error.startsWith('Register this workspace before resuming:') ? (
-              <a href="/settings/workspace" className="shrink-0 font-semibold underline">Open Workspace settings</a>
-            ) : null}
+            <span className="flex shrink-0 items-center gap-3">
+              {workspace.error.startsWith('Register this workspace before resuming:') ? (
+                <Link to="/settings/workspace" className="font-semibold underline">Open Workspace settings</Link>
+              ) : null}
+              <button
+                aria-label="Dismiss error"
+                onClick={workspace.onDismissError}
+                className="rounded-md p-0.5 text-red-400 hover:bg-red-100 hover:text-red-700"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </span>
           </div>
         )}
 
@@ -142,7 +157,7 @@ export default function AgentWorkspace() {
                 )}
               </div>
             )}
-            {workspace.state.messages.map(message => (
+            {workspace.state.messages.filter(message => message.role !== 'assistant' || message.text.trim()).map(message => (
               <div
                 key={message.id}
                 className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm ${
@@ -154,13 +169,13 @@ export default function AgentWorkspace() {
                 }`}
               >
                 {message.role === 'assistant'
-                  ? <div className="prose prose-sm prose-slate max-w-none break-words">{message.text || '…'}</div>
+                  ? <div className="prose prose-sm prose-slate max-w-none break-words"><MarkdownMessage text={message.text} /></div>
                   : <span className="whitespace-pre-wrap">{message.text}</span>}
               </div>
             ))}
             {workspace.state.activeTurnId && !workspace.state.messages.some(message => message.pending) && (
               <div className="flex max-w-[85%] items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-400">
-                Working…
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Working…
               </div>
             )}
           </div>
@@ -196,6 +211,7 @@ export default function AgentWorkspace() {
           canCompose={workspace.canCompose}
           composerPlaceholder={workspace.composerPlaceholder}
           sessionCapabilitySnapshot={workspace.state.session?.capabilitySnapshot}
+          setComposerRef={workspace.setComposerRef}
           onInputChange={workspace.onInputChange}
           onSend={workspace.onSend}
           onCancel={workspace.onCancel}

@@ -50,6 +50,33 @@ describe('agentSessionReducer', () => {
     });
   });
 
+  test('does not create visible messages for empty provider deltas or completions', () => {
+    const emptyDelta = agentSessionReducer(initialAgentSessionState, {
+      type: 'event',
+      event: event(1, 'message.delta', { delta: '   ' }),
+    });
+    const emptyCompleted = agentSessionReducer(emptyDelta, {
+      type: 'event',
+      event: event(2, 'message.completed', { text: '' }),
+    });
+
+    expect(emptyCompleted.messages).toEqual([]);
+    expect(emptyCompleted.lastSequence).toBe(2);
+  });
+
+  test('finishes a visible delta when its completion carries no text', () => {
+    const partial = agentSessionReducer(initialAgentSessionState, {
+      type: 'event',
+      event: event(1, 'message.delta', { delta: 'partial' }),
+    });
+    const completed = agentSessionReducer(partial, {
+      type: 'event',
+      event: event(2, 'message.completed', { text: '' }),
+    });
+
+    expect(completed.messages[0]).toMatchObject({ text: 'partial', pending: false });
+  });
+
   test('keeps OpenCode messages separate when text item ids repeat across turns', () => {
     const firstDelta = agentSessionReducer(initialAgentSessionState, {
       type: 'event',

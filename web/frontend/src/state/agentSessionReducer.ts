@@ -36,6 +36,10 @@ function dataString(data: Record<string, unknown>, key: string): string {
   return typeof data[key] === 'string' ? data[key] as string : '';
 }
 
+function hasVisibleText(text: string): boolean {
+  return text.trim().length > 0;
+}
+
 function eventMessageId(event: AgentEvent, role: 'user' | 'assistant'): string {
   const turnScope = event.turnId || `sequence-${event.sequence}`;
   const itemScope = event.itemId || role;
@@ -89,6 +93,9 @@ export function agentSessionReducer(
   } else if (event.type === 'message.delta') {
     const id = eventMessageId(event, 'assistant');
     const delta = dataString(event.data, 'delta');
+    // Gateways emit empty deltas for tool, heartbeat, and provider-state
+    // events. They belong in activity, not as a visible assistant bubble.
+    if (!hasVisibleText(delta)) return next;
     const existing = state.messages.find(message => message.id === id);
     next.messages = existing
       ? state.messages.map(message => message.id === id
@@ -99,9 +106,10 @@ export function agentSessionReducer(
     const id = eventMessageId(event, 'assistant');
     const text = dataString(event.data, 'text');
     const existing = state.messages.find(message => message.id === id);
+    if (!hasVisibleText(text) && !existing) return next;
     next.messages = existing
       ? state.messages.map(message => message.id === id
-        ? { ...message, text: text || message.text, pending: false }
+        ? { ...message, text: hasVisibleText(text) ? text : message.text, pending: false }
         : message)
       : [...state.messages, { id, role: 'assistant', text, turnId: event.turnId }];
   } else if (event.type === 'approval.request') {
