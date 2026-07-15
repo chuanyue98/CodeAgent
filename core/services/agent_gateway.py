@@ -144,10 +144,16 @@ class AgentGateway:
         requested = Path(workspace).expanduser().resolve()
         group_name: str | None = None
         for project in config.get("project_registry", []):
-            if not isinstance(project, dict) or not isinstance(project.get("path"), str):
+            if not isinstance(project, dict) or not isinstance(
+                project.get("path"), str
+            ):
                 continue
             if Path(project["path"]).expanduser().resolve() == requested:
-                group_name = project.get("group") if isinstance(project.get("group"), str) else None
+                group_name = (
+                    project.get("group")
+                    if isinstance(project.get("group"), str)
+                    else None
+                )
                 break
         definition = config.get("groups", {}).get(group_name or "", {})
         if not isinstance(definition, dict):
@@ -155,7 +161,11 @@ class AgentGateway:
 
         def values(key: str) -> list[str]:
             raw = definition.get(key, [])
-            return [item for item in raw if isinstance(item, str)] if isinstance(raw, list) else []
+            return (
+                [item for item in raw if isinstance(item, str)]
+                if isinstance(raw, list)
+                else []
+            )
 
         return ResourceSnapshot(
             group=group_name,

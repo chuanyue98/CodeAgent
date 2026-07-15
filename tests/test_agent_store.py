@@ -85,7 +85,9 @@ def test_store_never_reuses_an_event_sequence_after_stale_session_upsert(tmp_pat
         "UPDATE agent_sessions SET last_sequence = 1 WHERE id = 'agent_test'"
     )
     store._connection.commit()
-    event = store.append_event(AgentEvent(type="turn.completed", session_id="agent_test"))
+    event = store.append_event(
+        AgentEvent(type="turn.completed", session_id="agent_test")
+    )
     assert event.sequence == 3
     assert store.get_session("agent_test").last_sequence == 3
     store.close()

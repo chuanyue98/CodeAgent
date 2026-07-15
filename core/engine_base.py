@@ -112,7 +112,9 @@ class BaseEngine:
         resource_root = self.config_manager.resolve_resource_root()
         self.skill_scanner = SkillScanner(resource_root / "skills")
         self.prompt_scanner = PromptScanner(resource_root / "prompt")
-        self.hook_scanner = HookScanner(self.config_manager.get_hook_search_roots(resource_root))
+        self.hook_scanner = HookScanner(
+            self.config_manager.get_hook_search_roots(resource_root)
+        )
         self.plugin_scanner = PluginScanner(resource_root / "plugins")
 
     def _resolve_resource_root(self) -> Path:
@@ -411,7 +413,9 @@ class BaseEngine:
         for target_name, skill_src in resolved_skills:
             target_skill_path = link_path / target_name
             try:
-                self.link_manager.ensure_managed_link(skill_src, target_skill_path, link_path)
+                self.link_manager.ensure_managed_link(
+                    skill_src, target_skill_path, link_path
+                )
             except Exception as e:
                 print(f"⚠️ Failed to link skill '{target_name}': {e}")
 
@@ -458,7 +462,9 @@ class BaseEngine:
             target_link = link_dir / plugin_name
 
             try:
-                if self.link_manager.ensure_managed_link(plugin_src, target_link, link_dir):
+                if self.link_manager.ensure_managed_link(
+                    plugin_src, target_link, link_dir
+                ):
                     mounted_count += 1
             except Exception as e:
                 print(f"⚠️ Failed to link plugin '{plugin_name}': {e}")
@@ -525,6 +531,7 @@ class BaseEngine:
 
     def _is_windows_link(self, path: Path) -> bool:
         from core.link_manager import is_windows_link
+
         return is_windows_link(path)
 
     def inject_hooks_to_settings(

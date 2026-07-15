@@ -85,9 +85,7 @@ class AgentStore:
                     "ALTER TABLE agent_sessions ADD COLUMN resource_snapshot "
                     "TEXT NOT NULL DEFAULT '{}'"
                 )
-                self._connection.execute(
-                    "UPDATE schema_version SET version = ?", (2,)
-                )
+                self._connection.execute("UPDATE schema_version SET version = ?", (2,))
                 version = 2
             if version < 3:
                 # Older Gateway versions could persist a stale in-memory

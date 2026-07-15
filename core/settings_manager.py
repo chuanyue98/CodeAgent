@@ -52,9 +52,7 @@ class SettingsManager:
     def __init__(self, event_map: Dict[str, str]):
         self.event_map = event_map
 
-    def inject_hooks(
-        self, settings_path: Path, hooks: List[Dict[str, Any]]
-    ):
+    def inject_hooks(self, settings_path: Path, hooks: List[Dict[str, Any]]):
         """Injects hook configurations into a settings file."""
         if not hooks:
             return

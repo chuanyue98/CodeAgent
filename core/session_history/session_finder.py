@@ -55,7 +55,9 @@ def _merge_duplicate_sessions(
     return UnifiedSession(
         session_id=preferred.session_id,
         engine=preferred.engine,
-        project_path=preferred.project_path or current.project_path or candidate.project_path,
+        project_path=preferred.project_path
+        or current.project_path
+        or candidate.project_path,
         started_at=min(starts) if starts else "",
         ended_at=max(ends) if ends else "",
         messages=messages,

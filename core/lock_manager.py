@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from typing import BinaryIO
 from pathlib import Path
 
@@ -17,7 +18,7 @@ class LockManager:
             handle.write(b"\0")
             handle.flush()
         handle.seek(0)
-        if os.name == "nt":
+        if sys.platform == "win32":
             import msvcrt
 
             msvcrt.locking(
@@ -35,7 +36,7 @@ class LockManager:
         """Release a handle returned by :meth:`acquire_resource_lock`."""
         try:
             handle.seek(0)
-            if os.name == "nt":
+            if sys.platform == "win32":
                 import msvcrt
 
                 msvcrt.locking(
