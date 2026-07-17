@@ -13,7 +13,7 @@ dependencies = [
     "click>=8.0.0",
     "croniter>=2.0.0",
     "fastapi>=0.115.0",
-    "packaging==26.0",
+    "packaging==26.2",
     "pathspec==0.12.1",
     "psutil>=6.0",
     "python-dotenv==1.0.1",
