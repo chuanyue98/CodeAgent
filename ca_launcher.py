@@ -17,6 +17,7 @@ UI_API_PORT = 8524
 UI_DEV_SERVER_HOST = "127.0.0.1"
 UI_DEV_SERVER_PORT = 5173
 UI_DEV_SERVER_START_TIMEOUT = 15
+_ui_dev_process: subprocess.Popen | None = None
 
 configure_console_encoding()
 
@@ -135,6 +136,7 @@ def _ui_dev_server_command():
 
 
 def _start_ui_dev_server():
+    global _ui_dev_process
     if _is_ui_dev_server_running():
         return True
 
@@ -146,7 +148,7 @@ def _start_ui_dev_server():
         return False
 
     frontend_root = _frontend_root()
-    subprocess.Popen(  # noqa: S603
+    _ui_dev_process = subprocess.Popen(  # noqa: S603
         cmd,
         cwd=str(frontend_root),
         stdout=subprocess.DEVNULL,
@@ -161,7 +163,25 @@ def _start_ui_dev_server():
         if _is_ui_dev_server_running():
             return True
         time.sleep(0.25)
+    _stop_ui_dev_server()
     return False
+
+
+def _stop_ui_dev_server() -> None:
+    """Stop only the Vite process started by this invocation."""
+    global _ui_dev_process
+    process = _ui_dev_process
+    _ui_dev_process = None
+    if process is None or process.poll() is not None:
+        return
+    try:
+        process.terminate()
+        process.wait(timeout=2)
+    except (OSError, subprocess.TimeoutExpired):
+        try:
+            process.kill()
+        except OSError:
+            pass
 
 
 def _can_open_browser():
@@ -238,7 +258,7 @@ def run_ui_command():
         return 1
 
     use_dev_server = False
-    if _frontend_source_exists():
+    if os.environ.get("CA_UI_DEV") == "1" and _frontend_source_exists():
         if _is_ui_dev_server_running():
             use_dev_server = True
         else:
@@ -277,9 +297,16 @@ def run_ui_command():
     _open_browser(url)
 
     try:
-        uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
+        uvicorn.run(
+            app,
+            host=os.environ.get("CA_UI_HOST", "127.0.0.1"),
+            port=port,
+            log_level="info",
+        )
     except KeyboardInterrupt:
         pass
+    finally:
+        _stop_ui_dev_server()
     return 0
 
 

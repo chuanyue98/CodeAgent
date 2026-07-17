@@ -231,4 +231,8 @@ else:
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
+        if full_path == "api" or full_path.startswith("api/"):
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=404, detail="API route not found")
         return FileResponse(FRONTEND_DIST / "index.html")

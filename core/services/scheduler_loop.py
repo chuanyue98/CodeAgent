@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from pathlib import Path
 from typing import Callable
@@ -10,6 +11,7 @@ from core.services.schedule_service import ScheduleService
 from core.services.task_service import TaskService
 
 TICK_INTERVAL_SECONDS = 30.0
+logger = logging.getLogger(__name__)
 
 
 async def scheduler_tick_loop(
@@ -24,7 +26,14 @@ async def scheduler_tick_loop(
     FastAPI lifespan and cancelled on shutdown.
     """
     while True:
-        await tick_once(schedule_service, task_runner, get_tasks_root)
+        try:
+            await tick_once(schedule_service, task_runner, get_tasks_root)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # A malformed config or one unexpected scheduler error must not
+            # permanently kill the background loop.
+            logger.exception("Scheduler tick failed; retrying on next interval")
         await asyncio.sleep(tick_interval)
 
 
@@ -42,34 +51,65 @@ async def tick_once(
     now = time.time()
     schedules = await asyncio.to_thread(schedule_service.list_schedules)
     for record in schedules:
-        if not record.get("enabled"):
-            continue
-        next_run_at = record.get("next_run_at")
-        if next_run_at is None or next_run_at > now:
-            continue
-
-        tasks_root = get_tasks_root()
-        task_exists = await asyncio.to_thread(
-            lambda: TaskService(tasks_root).get_task(record["task_name"]) is not None
-        )
-        if not task_exists:
-            await asyncio.to_thread(
-                schedule_service.record_run, record["id"], "task_not_found"
-            )
-            continue
-
         try:
-            await asyncio.to_thread(
+            if not record.get("enabled"):
+                continue
+            next_run_at = record.get("next_run_at")
+            if next_run_at is None or next_run_at > now:
+                continue
+
+            workspace = record.get("workspace")
+            if not workspace:
+                await asyncio.to_thread(
+                    schedule_service.record_run,
+                    record["id"],
+                    "workspace_required",
+                )
+                continue
+
+            tasks_root = get_tasks_root()
+            task_exists = await asyncio.to_thread(
+                lambda: TaskService(tasks_root).get_task(record["task_name"]) is not None
+            )
+            if not task_exists:
+                await asyncio.to_thread(
+                    schedule_service.record_run, record["id"], "task_not_found"
+                )
+                continue
+
+            if hasattr(task_runner, "has_active_task") and task_runner.has_active_task(record["task_name"]):
+                await asyncio.to_thread(
+                    schedule_service.record_run,
+                    record["id"],
+                    "skipped: already_running",
+                )
+                continue
+
+            status = await asyncio.to_thread(
                 task_runner.run_task,
                 record["task_name"],
                 record["engine"],
                 record["group"],
                 tasks_root=tasks_root,
+                workspace=workspace,
             )
+            result_status = getattr(status, "status", "running")
             await asyncio.to_thread(
-                schedule_service.record_run, record["id"], "started"
+                schedule_service.record_run,
+                record["id"],
+                "started" if result_status == "running" else f"failed: {result_status}",
             )
         except ValueError as exc:
             await asyncio.to_thread(
                 schedule_service.record_run, record["id"], f"failed: {exc}"
             )
+        except Exception as exc:
+            logger.exception("Schedule %s failed", record.get("id"))
+            try:
+                await asyncio.to_thread(
+                    schedule_service.record_run,
+                    record["id"],
+                    f"failed: {exc}",
+                )
+            except Exception:
+                logger.exception("Could not persist schedule failure")

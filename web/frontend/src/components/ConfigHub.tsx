@@ -214,33 +214,10 @@ const ConfigHub: React.FC = () => {
             <p className="text-xs text-slate-500">Core system behavior and environment</p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <label htmlFor="config-mode" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Operation Mode</label>
-            <select
-              id="config-mode"
-              value={localConfig.default_mode || 'local'}
-              onChange={(e) => setLocalConfig({ ...localConfig, default_mode: e.target.value })}
-              className="w-full p-3 border border-slate-100 rounded-xl bg-slate-50/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-            >
-              <option value="local">Local Instance</option>
-              <option value="cloud">Cloud Synchronized</option>
-              <option value="hybrid">Hybrid Protocol</option>
-            </select>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="config-language" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Language</label>
-            <select
-              id="config-language"
-              value={localConfig.language || 'hybrid'}
-              onChange={(e) => setLocalConfig({ ...localConfig, language: e.target.value })}
-              className="w-full p-3 border border-slate-100 rounded-xl bg-slate-50/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-            >
-              <option value="en">English (US)</option>
-              <option value="zh">Mandarin (CN)</option>
-              <option value="hybrid">Multilingual</option>
-            </select>
-          </div>
+        <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 text-sm text-slate-600">
+          CodeAgent runs locally. Provider permissions, model selection, and
+          response language are controlled by the selected engine and resource
+          group rather than by a separate global mode switch.
         </div>
 
         <div className="space-y-2 pt-4">

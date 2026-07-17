@@ -96,7 +96,8 @@ def test_main_ui_command(monkeypatch):
         mock_ui.assert_called_once()
 
 
-def test_run_ui_command_uses_existing_vite_server(capsys):
+def test_run_ui_command_uses_existing_vite_server(capsys, monkeypatch):
+    monkeypatch.setenv("CA_UI_DEV", "1")
     mock_open_browser = MagicMock()
     mock_uvicorn = MagicMock()
     mock_server = MagicMock(app=object())
@@ -119,7 +120,8 @@ def test_run_ui_command_uses_existing_vite_server(capsys):
     assert "Detected Vite dev server" in captured.out
 
 
-def test_run_ui_command_starts_vite_server_when_available(capsys):
+def test_run_ui_command_starts_vite_server_when_available(capsys, monkeypatch):
+    monkeypatch.setenv("CA_UI_DEV", "1")
     mock_open_browser = MagicMock()
     mock_uvicorn = MagicMock()
     mock_server = MagicMock(app=object())
@@ -146,7 +148,8 @@ def test_run_ui_command_starts_vite_server_when_available(capsys):
     assert "Starting Vite dev server" in captured.out
 
 
-def test_run_ui_command_falls_back_to_dist_when_vite_start_fails(capsys):
+def test_run_ui_command_falls_back_to_dist_when_vite_start_fails(capsys, monkeypatch):
+    monkeypatch.setenv("CA_UI_DEV", "1")
     mock_open_browser = MagicMock()
     mock_uvicorn = MagicMock()
     mock_server = MagicMock(app=object())

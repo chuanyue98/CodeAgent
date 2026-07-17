@@ -50,6 +50,23 @@ globalThis.fetch = vi.fn().mockImplementation((url: string) => {
   if (url.includes('/api/task')) {
     return Promise.resolve(mockResponse({ exists: false, tasks: [] }));
   }
+  if (url.includes('/api/system/metrics')) {
+    return Promise.resolve(mockResponse({
+      cpu_percent: 10,
+      memory_percent: 20,
+      memory_used_gb: 2,
+      memory_total_gb: 16,
+      disk_percent: 30,
+      disk_used_gb: 10,
+      disk_total_gb: 100,
+      uptime_seconds: 3600,
+      history_file_size_mb: 0,
+      log_file_count: 0,
+    }));
+  }
+  if (url.includes('/api/engines')) {
+    return Promise.resolve(mockResponse([]));
+  }
   if (url.includes('/api/hooks')) {
     return Promise.resolve(mockResponse([]));
   }

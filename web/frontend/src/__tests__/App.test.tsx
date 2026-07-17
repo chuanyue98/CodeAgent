@@ -15,8 +15,9 @@ function renderWithRouter(initialPath = '/skills') {
 }
 
 describe('App Layout and Navigation', () => {
-  test('renders the five workflow navigation links', () => {
+  test('renders the five workflow navigation links', async () => {
     renderWithRouter();
+    await screen.findByRole('heading', { name: /Skills/i });
     expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Agent' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Automations' })).toBeInTheDocument();

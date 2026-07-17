@@ -68,7 +68,7 @@ Start the Web UI analytics dashboard.
 ca ui
 ```
 
-Opens the dashboard at `http://127.0.0.1:8524`. Auto-detects and starts the Vite dev server if frontend source is available. Falls back to built static files.
+Opens the dashboard at `http://127.0.0.1:8524` and serves the built static UI. Run Vite directly from `web/frontend` for development; set `CA_UI_DEV=1` when `ca ui` should manage that dev server.
 
 ### `history`
 

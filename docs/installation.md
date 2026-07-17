@@ -87,7 +87,8 @@ Requires the `codex` CLI tool. See [OpenAI's documentation](https://platform.ope
 
 ## Configuration
 
-After installation, copy and customize the environment template:
+After installation, copy and customize the environment template if you use
+the optional repository automation integrations:
 
 ```bash
 cp .env.example .env

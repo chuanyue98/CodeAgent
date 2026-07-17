@@ -60,6 +60,7 @@ class ScheduleService:
         group: str,
         cron_expr: str,
         enabled: bool = True,
+        workspace: str | None = None,
     ) -> dict:
         if engine not in _VALID_ENGINES:
             raise ValueError(f"Invalid engine: {engine!r}")
@@ -71,6 +72,7 @@ class ScheduleService:
             "task_name": task_name,
             "engine": engine,
             "group": group,
+            "workspace": workspace,
             "cron_expr": cron_expr,
             "enabled": enabled,
             "created_at": time.time(),
@@ -104,7 +106,14 @@ class ScheduleService:
                     record["next_run_at"] = _compute_next_run(new_cron_expr)
                 elif fields.get("enabled") is True and not record.get("enabled"):
                     record["next_run_at"] = _compute_next_run(record["cron_expr"])
-                for key in ("cron_expr", "enabled", "task_name", "engine", "group"):
+                for key in (
+                    "cron_expr",
+                    "enabled",
+                    "task_name",
+                    "engine",
+                    "group",
+                    "workspace",
+                ):
                     if fields.get(key) is not None:
                         record[key] = fields[key]
                 found = record

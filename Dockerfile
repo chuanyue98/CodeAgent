@@ -13,7 +13,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 
 # Install Python dependencies (layer caching)
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md setup.py ./
 RUN uv sync --frozen --no-dev
 
 # Copy runtime assets
@@ -28,9 +28,10 @@ COPY ca_launcher.py ca_launcher.py
 COPY config.json config.json
 COPY setup.py setup.py
 
-# Frontend build (optional — skip if dist/ is not present)
-COPY web/frontend/dist/ web/frontend/dist/ 2>/dev/null || true
+# The release pipeline builds the frontend before building this image.
+COPY web/frontend/dist/ web/frontend/dist/
 
 EXPOSE 8524
 
+ENV CA_UI_HOST=0.0.0.0
 CMD ["python", "ca_launcher.py", "ui"]

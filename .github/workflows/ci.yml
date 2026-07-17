@@ -38,7 +38,7 @@ jobs:
         run: uv run mypy core engines ca_launcher.py
 
       - name: Test
-        run: uv run pytest --tb=short -q --cov --cov-report=term-missing
+        run: uv run pytest --tb=short -q --cov --cov-fail-under=60 --cov-report=term-missing
 
       - name: Build wheel and verify runtime assets
         run: |
@@ -74,6 +74,9 @@ jobs:
 
       - name: Build (tsc + Vite)
         run: bun run build
+
+      - name: Bundle size budget
+        run: test "$(du -sk dist | cut -f1)" -le 2048
 
   # ── Playwright E2E (real backend, real browser, fake engine CLIs) ─────────
   e2e:
@@ -123,4 +126,3 @@ jobs:
           name: playwright-report
           path: web/frontend/playwright-report/
           retention-days: 14
-

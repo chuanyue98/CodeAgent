@@ -34,6 +34,7 @@ class TaskRunStatus:
     log_path: str
     start_time: float
     session_id: Optional[str] = None
+    workspace: Optional[str] = None
 
 
 class TaskRunner:
@@ -54,6 +55,7 @@ class TaskRunner:
         engine: str,
         group: str = "common",
         tasks_root: Path | None = None,
+        workspace: str | None = None,
     ) -> TaskRunStatus:
         """Starts a task in the background using the specified engine."""
         import time
@@ -64,6 +66,10 @@ class TaskRunner:
             raise ValueError(f"Invalid group name: {group!r}")
         if engine not in {"claude", "gemini", "opencode", "codex"}:
             raise ValueError(f"Invalid engine: {engine!r}")
+
+        working_dir = Path(workspace).expanduser().resolve() if workspace else Path.cwd()
+        if not working_dir.is_dir():
+            raise ValueError(f"Invalid workspace: {workspace!r}")
 
         task_id = f"{task_name}_{time.time_ns()}"
         log_file = self.log_dir / f"{task_id}.log"
@@ -84,7 +90,7 @@ class TaskRunner:
             with open(log_file, "w", encoding="utf-8") as f:
                 process = subprocess.Popen(
                     cmd,
-                    cwd=str(Path.cwd()),
+                    cwd=str(working_dir),
                     stdout=f,
                     stderr=subprocess.STDOUT,
                     stdin=subprocess.DEVNULL,
@@ -102,6 +108,7 @@ class TaskRunner:
                 status="running",
                 log_path=str(log_file),
                 start_time=time.time(),
+                workspace=str(working_dir),
             )
             self.active_runs[task_id] = status
             self._processes[task_id] = process
@@ -115,6 +122,7 @@ class TaskRunner:
                 status=f"failed: {e}",
                 log_path=str(log_file),
                 start_time=time.time(),
+                workspace=str(working_dir),
             )
             self.active_runs[task_id] = status
             self._persist(status)
@@ -216,6 +224,7 @@ class TaskRunner:
                 log_path=record.log_path,
                 start_time=record.start_time,
                 session_id=record.session_id,
+                workspace=record.workspace,
             )
             self.active_runs[record.task_id] = status
 
@@ -231,6 +240,7 @@ class TaskRunner:
                 log_path=run.log_path,
                 start_time=run.start_time,
                 session_id=run.session_id,
+                workspace=run.workspace,
             )
         )
 
@@ -287,6 +297,19 @@ class TaskRunner:
         for task_id in list(self.active_runs.keys()):
             self.get_status(task_id)
         return list(self.active_runs.values())
+
+    def has_active_task(self, task_name: str) -> bool:
+        """Return whether a task with this name is already running.
+
+        Schedules use this as a conservative overlap guard.  A task name is
+        embedded in the generated run id, so this remains compatible with
+        persisted records created before workspace metadata was introduced.
+        """
+        prefix = f"{task_name}_"
+        return any(
+            run.task_id.startswith(prefix) and run.status == "running"
+            for run in self.active_runs.values()
+        )
 
     def get_status(self, task_id: str) -> Optional[TaskRunStatus]:
         """Checks if a background task is still running and updates its status."""

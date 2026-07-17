@@ -4,6 +4,7 @@ no real engine CLI or ca_launcher.py is spawned in CI."""
 
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -17,8 +18,8 @@ class _FakeRunner:
     def __init__(self):
         self.calls: list[tuple] = []
 
-    def run_task(self, task_name, engine, group, tasks_root=None):
-        self.calls.append((task_name, engine, group))
+    def run_task(self, task_name, engine, group, tasks_root=None, workspace=None):
+        self.calls.append((task_name, engine, group, workspace))
         return SimpleNamespace(
             task_id=f"{task_name}_1",
             engine=engine,
@@ -40,6 +41,14 @@ def fake_runner(monkeypatch):
 @pytest.fixture(autouse=True)
 def isolated_config(tmp_path, monkeypatch):
     monkeypatch.setenv("CA_CONFIG_PATH", str(tmp_path / "config.json"))
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("CA_TEST_WORKSPACE", str(workspace))
+    (tmp_path / "config.json").write_text(
+        '{"project_registry": [{"path": "%s", "group": "common"}], "groups": {}}'
+        % str(workspace).replace("\\", "\\\\"),
+        encoding="utf-8",
+    )
 
 
 @pytest.mark.asyncio
@@ -53,6 +62,7 @@ async def test_create_and_list_schedule():
                 "task_name": "nightly-review",
                 "engine": "claude",
                 "group": "common",
+                "workspace": os.environ["CA_TEST_WORKSPACE"],
                 "cron_expr": "0 9 * * *",
             },
         )
@@ -76,6 +86,7 @@ async def test_create_schedule_invalid_cron_returns_400():
             json={
                 "task_name": "task",
                 "engine": "claude",
+                "workspace": os.environ["CA_TEST_WORKSPACE"],
                 "cron_expr": "not a cron",
             },
         )
@@ -90,7 +101,7 @@ async def test_update_schedule_toggles_enabled():
     ) as ac:
         create = await ac.post(
             "/api/schedules",
-            json={"task_name": "task", "engine": "claude", "cron_expr": "* * * * *"},
+                json={"task_name": "task", "engine": "claude", "workspace": os.environ["CA_TEST_WORKSPACE"], "cron_expr": "* * * * *"},
         )
         schedule_id = create.json()["id"]
 
@@ -119,7 +130,7 @@ async def test_delete_schedule():
     ) as ac:
         create = await ac.post(
             "/api/schedules",
-            json={"task_name": "task", "engine": "claude", "cron_expr": "* * * * *"},
+            json={"task_name": "task", "engine": "claude", "workspace": os.environ["CA_TEST_WORKSPACE"], "cron_expr": "* * * * *"},
         )
         schedule_id = create.json()["id"]
 
@@ -150,6 +161,7 @@ async def test_run_now_invokes_runner_and_records_status(fake_runner):
                 "task_name": "nightly-review",
                 "engine": "claude",
                 "group": "work",
+                "workspace": os.environ["CA_TEST_WORKSPACE"],
                 "cron_expr": "* * * * *",
             },
         )
@@ -158,7 +170,9 @@ async def test_run_now_invokes_runner_and_records_status(fake_runner):
         response = await ac.post(f"/api/schedules/{schedule_id}/run-now")
 
     assert response.status_code == 200
-    assert fake_runner.calls == [("nightly-review", "claude", "work")]
+    assert fake_runner.calls == [
+        ("nightly-review", "claude", "work", os.environ["CA_TEST_WORKSPACE"])
+    ]
 
 
 @pytest.mark.asyncio

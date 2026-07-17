@@ -36,6 +36,7 @@ class CreateScheduleRequest(BaseModel):
     task_name: str
     engine: str
     group: str = "common"
+    workspace: str
     cron_expr: str
     enabled: bool = True
 
@@ -46,6 +47,7 @@ class UpdateScheduleRequest(BaseModel):
     task_name: str | None = None
     engine: str | None = None
     group: str | None = None
+    workspace: str | None = None
     cron_expr: str | None = None
     enabled: bool | None = None
 
@@ -61,7 +63,12 @@ def create_schedule(req: CreateScheduleRequest) -> dict:
     """Creates a new cron schedule targeting an existing file-based Task."""
     try:
         return _service().create_schedule(
-            req.task_name, req.engine, req.group, req.cron_expr, req.enabled
+            req.task_name,
+            req.engine,
+            req.group,
+            req.cron_expr,
+            req.enabled,
+            tasks_router.resolve_registered_workspace(req.workspace),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -71,8 +78,13 @@ def create_schedule(req: CreateScheduleRequest) -> dict:
 def update_schedule(schedule_id: str, req: UpdateScheduleRequest) -> dict:
     """Updates a schedule's fields (e.g. toggling enabled, editing cron_expr)."""
     try:
+        fields = req.model_dump(exclude_unset=True)
+        if fields.get("workspace") is not None:
+            fields["workspace"] = tasks_router.resolve_registered_workspace(
+                fields["workspace"]
+            )
         return _service().update_schedule(
-            schedule_id, **req.model_dump(exclude_unset=True)
+            schedule_id, **fields
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -99,14 +111,27 @@ def run_now(schedule_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Schedule not found")
 
     try:
+        workspace = record.get("workspace")
+        if not workspace:
+            raise HTTPException(
+                status_code=409,
+                detail="Schedule has no workspace; edit it before running",
+            )
+        workspace = tasks_router.resolve_registered_workspace(workspace)
+        if hasattr(tasks_router._runner, "has_active_task") and tasks_router._runner.has_active_task(record["task_name"]):
+            raise HTTPException(status_code=409, detail="Task is already running")
         status = tasks_router._runner.run_task(
             record["task_name"],
             record["engine"],
             record["group"],
             tasks_root=tasks_router.get_tasks_root(),
+            workspace=workspace,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    service.record_run(schedule_id, "started", advance_schedule=False)
+    if getattr(status, "status", "running") != "running":
+        service.record_run(schedule_id, f"failed: {status.status}", advance_schedule=False)
+    else:
+        service.record_run(schedule_id, "started", advance_schedule=False)
     return status.__dict__

@@ -18,16 +18,12 @@ describe('ConfigHub Component', () => {
   test('renders config data from context', async () => {
     renderConfigHub();
 
-    // Wait until the selects appear (config loaded from context)
-    const selects = await screen.findAllByRole('combobox', {}, { timeout: 3000 });
-    // Global mock returns default_mode: 'local', language: 'en'
-    expect(selects[0]).toHaveValue('local');
-    expect(selects[1]).toHaveValue('en');
+    await screen.findByText(/CodeAgent runs locally/);
   });
 
   test('preserves editable row identity when an earlier project is removed', async () => {
     renderConfigHub();
-    await screen.findAllByRole('combobox', {}, { timeout: 3000 });
+    await screen.findByText(/CodeAgent runs locally/, {}, { timeout: 3000 });
 
     fireEvent.click(screen.getByRole('button', { name: 'Add Project' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add Project' }));
@@ -46,7 +42,7 @@ describe('ConfigHub Component', () => {
 
   test('blocks saving an empty project row', async () => {
     renderConfigHub();
-    await screen.findAllByRole('combobox', {}, { timeout: 3000 });
+    await screen.findByText(/CodeAgent runs locally/, {}, { timeout: 3000 });
 
     fireEvent.click(screen.getByRole('button', { name: 'Add Project' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save All Changes' }));

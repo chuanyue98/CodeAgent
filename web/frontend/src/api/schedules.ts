@@ -3,6 +3,7 @@ export interface Schedule {
   task_name: string;
   engine: string;
   group: string;
+  workspace: string | null;
   cron_expr: string;
   enabled: boolean;
   created_at: number;
@@ -15,6 +16,7 @@ export interface CreateScheduleParams {
   task_name: string;
   engine: string;
   group?: string;
+  workspace: string;
   cron_expr: string;
   enabled?: boolean;
 }
@@ -25,6 +27,7 @@ export interface UpdateScheduleParams {
   task_name?: string;
   engine?: string;
   group?: string;
+  workspace?: string;
   cron_expr?: string;
   enabled?: boolean;
 }

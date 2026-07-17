@@ -243,8 +243,9 @@ pre-commit install
 # Linting
 ruff check .
 
-# Type checking
-mypy .
+# Type checking (the two skill script trees intentionally contain duplicate
+# module names, so type-check the application packages explicitly)
+mypy core engines ca_launcher.py
 
 # Tests
 pytest
@@ -260,8 +261,11 @@ The analytics dashboard is built with React + Vite + TypeScript + Tailwind:
 ```bash
 cd web/frontend
 bun install        # or npm install
-bun run dev        # Start Vite dev server
+bun run dev        # Start Vite directly for development
 bun run build      # Production build
+
+# From the repository root, `ca ui` serves the committed/built UI. Set
+# CA_UI_DEV=1 only when you explicitly want it to manage a Vite dev server.
 ```
 
 ## Documentation

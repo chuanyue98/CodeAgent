@@ -12,8 +12,13 @@ services:
       - ./ca_launcher.py:/app/ca_launcher.py
       - ./config.json:/app/config.json
       # Persist analytics and task logs
-      - ./.ca_analytics_history.jsonl:/app/.ca_analytics_history.jsonl
+      - ./.ca_analytics_history.jsonl:/root/.ca_analytics_history.jsonl
       - ./.ca_task_logs:/app/.ca_task_logs
+      - ./.codeagent-home:/root/.codeagent
+      - ./.codex:/root/.codex
+      - ./.claude:/root/.claude
+      - ./.gemini:/root/.gemini
+      - ./.opencode:/root/.config/opencode
     environment:
       - CA_DEBUG=1
     restart: unless-stopped
