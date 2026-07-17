@@ -15,37 +15,9 @@ async function gotoConfig(page: Page): Promise<void> {
 const save = (page: Page) =>
   page.getByRole('button', { name: 'Save All Changes' }).click();
 
-const modeSelect = (page: Page) =>
-  page.locator('select').filter({ has: page.locator('option[value="cloud"]') });
-const langSelect = (page: Page) =>
-  page.locator('select').filter({ has: page.locator('option[value="zh"]') });
-
-test('changing Operation Mode and saving persists across reload', async ({
-  page,
-}) => {
+test('describes the local runtime model', async ({ page }) => {
   await gotoConfig(page);
-  await modeSelect(page).selectOption('cloud');
-  await save(page);
-  await page.reload();
-  await waitForH2(page, 'Workspace');
-  await expect(modeSelect(page)).toHaveValue('cloud');
-});
-
-test('changing Language and saving persists across reload', async ({ page }) => {
-  await gotoConfig(page);
-  await langSelect(page).selectOption('zh');
-  await save(page);
-  await page.reload();
-  await waitForH2(page, 'Workspace');
-  await expect(langSelect(page)).toHaveValue('zh');
-});
-
-test('unsaved changes are lost on reload', async ({ page }) => {
-  await gotoConfig(page);
-  await modeSelect(page).selectOption('hybrid');
-  await page.reload();
-  await waitForH2(page, 'Workspace');
-  await expect(modeSelect(page)).toHaveValue('local');
+  await expect(page.getByText(/CodeAgent runs locally/)).toBeVisible();
 });
 
 test('adding a project then saving persists the row', async ({ page }) => {

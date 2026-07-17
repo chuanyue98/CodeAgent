@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useReducer } from 'react';
+import { useCallback, useEffect, useRef, useState, useReducer } from 'react';
 import { useProject } from '../context/ProjectContext';
 import {
   createAgentSession,
@@ -6,21 +6,18 @@ import {
   fetchAgentProviders,
   fetchAgentHistory,
   fetchAgentSessions,
-  fetchNativeAgentSessions,
   importAgentSession,
   resumeAgentSession,
   sendAgentCommand,
   agentEventsUrl,
 } from '../api/agent';
 import { agentSessionReducer } from '../state/agentSessionReducer';
+import { SESSION_PAGE_SIZE } from '../utils/agentWorkspaceHelpers';
 import type { ConversationListItem } from '../utils/agentWorkspaceHelpers';
-import {
-  deduplicateNativeSessions,
-  SESSION_PAGE_SIZE,
-  workspaceLabel,
-} from '../utils/agentWorkspaceHelpers';
 import type { AgentEvent, AgentSession, NativeAgentSession, ProviderCapabilities, ApprovalDecision, PermissionMode } from '../types/agent';
 import { initialAgentSessionState } from '../state/agentSessionReducer';
+import useNativeAgentSessions from './useNativeAgentSessions';
+import useAgentWorkspaceSessions from './useAgentWorkspaceSessions';
 
 export type UseAgentWorkspaceReturn = {
   projects: { path: string; group: string; available?: boolean }[];
@@ -49,7 +46,6 @@ export type UseAgentWorkspaceReturn = {
   error: string | null;
   onDismissError: () => void;
   showActivity: boolean;
-  legacyMode: boolean;
   input: string;
   permissionMode: PermissionMode;
   showScrollToBottom: boolean;
@@ -100,7 +96,6 @@ export type UseAgentWorkspaceReturn = {
   onProviderChange: (value: string) => void;
   onPermissionModeChange: (value: PermissionMode) => void;
   onShowActivityChange: (value: boolean) => void;
-  onSetLegacyMode: () => void;
   onSetCurrentGroup: (group: string) => void;
   onInputChange: (value: string) => void;
   focusComposer: () => void;
@@ -114,9 +109,6 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const { projects, currentGroup, setCurrentGroup } = useProject();
   const [providers, setProviders] = useState<ProviderCapabilities[]>([]);
   const [sessions, setSessions] = useState<AgentSession[]>([]);
-  const [nativeSessionsByProvider, setNativeSessionsByProvider] = useState<Record<string, NativeAgentSession[]>>({});
-  const [nativeLoadingProviders, setNativeLoadingProviders] = useState<Set<string>>(new Set());
-  const [nativeSessionErrors, setNativeSessionErrors] = useState<Record<string, string>>({});
   const [selectedProvider, setSelectedProvider] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
   const [gatewaySessionLimit, setGatewaySessionLimit] = useState(SESSION_PAGE_SIZE);
@@ -133,14 +125,11 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const [selectingKey, setSelectingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showActivity, setShowActivity] = useState(false);
-  const [legacyMode, setLegacyMode] = useState(false);
   const [input, setInput] = useState('');
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [state, dispatch] = useReducer(agentSessionReducer, initialAgentSessionState);
   const stateRef = useRef(state);
   const socketRef = useRef<WebSocket | null>(null);
-  const nativeSessionsCacheRef = useRef<Map<string, NativeAgentSession[]>>(new Map());
-  const nativeSessionsRequestRef = useRef<Map<string, Promise<NativeAgentSession[]>>>(new Map());
   const selectionRequestRef = useRef(0);
   const intentionalClose = useRef(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -151,6 +140,13 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const loadOlderHistoryRef = useRef<() => void>(() => {});
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const {
+    nativeSessionsByProvider,
+    nativeLoadingProviders,
+    nativeSessionErrors,
+    loadNativeSessions,
+    removeNativeSession,
+  } = useNativeAgentSessions(providers, selectedProvider);
 
   const focusComposer = useCallback(() => {
     composerRef.current?.focus();
@@ -193,65 +189,30 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     void refresh();
   }, [refresh]);
 
-  const loadNativeSessions = useCallback(async (provider: string, force = false) => {
-    if (!provider) return;
-    if (force) nativeSessionsCacheRef.current.delete(provider);
-    const cached = nativeSessionsCacheRef.current.get(provider);
-    if (cached) {
-      setNativeSessionsByProvider(previous => ({ ...previous, [provider]: cached }));
-      return;
-    }
-    setNativeLoadingProviders(previous => new Set(previous).add(provider));
-    setNativeSessionErrors(previous => {
-      const next = { ...previous };
-      delete next[provider];
-      return next;
-    });
-    let request = nativeSessionsRequestRef.current.get(provider);
-    if (!request) {
-      request = fetchNativeAgentSessions(provider)
-        .then(result => {
-          nativeSessionsCacheRef.current.set(provider, result);
-          return result;
-        })
-        .finally(() => nativeSessionsRequestRef.current.delete(provider));
-      nativeSessionsRequestRef.current.set(provider, request);
-    }
-    try {
-      const result = await request;
-      setNativeSessionsByProvider(previous => ({ ...previous, [provider]: result }));
-    } catch {
-      setNativeSessionErrors(previous => ({
-        ...previous,
-        [provider]: 'Provider history could not be loaded.',
-      }));
-    } finally {
-      setNativeLoadingProviders(previous => {
-        const next = new Set(previous);
-        next.delete(provider);
-        return next;
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    if (selectedProvider) void loadNativeSessions(selectedProvider);
-  }, [loadNativeSessions, selectedProvider]);
-
-  useEffect(() => {
-    providers.filter(provider => provider.available).forEach(provider => {
-      void loadNativeSessions(provider.providerId);
-    });
-  }, [loadNativeSessions, providers]);
-
-  const validProjects = useMemo(
-    () => projects.filter(project => project.path.trim() && project.available !== false),
-    [projects],
-  );
-  const validProjectPaths = useMemo(
-    () => new Set(validProjects.map(project => project.path)),
-    [validProjects],
-  );
+  const {
+    validProjects,
+    validProjectPaths,
+    allNativeSessions,
+    normalizedSessionSearch,
+    filteredGatewaySessions,
+    recentSessions,
+    mappedProviderSessions,
+    filteredNativeSessions,
+    resumableNativeSessions,
+    unavailableNativeSessions,
+    visibleNativeSessions,
+    visibleUnavailableSessions,
+    workspaceConversations,
+  } = useAgentWorkspaceSessions({
+    projects,
+    sessions,
+    nativeSessionsByProvider,
+    sessionSearch,
+    gatewaySessionLimit,
+    nativeSessionLimit,
+    unavailableSessionLimit,
+    workspace,
+  });
 
   useEffect(() => {
     if (!state.session && !validProjects.some(project => project.path === workspace)) {
@@ -442,15 +403,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
         imported,
         ...previous.filter(session => session.id !== imported.id),
       ]);
-      setNativeSessionsByProvider(previous => {
-        const providerSessions = previous[native.engine] || [];
-        const next = providerSessions.filter(
-          session =>
-            !(session.engine === native.engine && session.session_id === native.session_id),
-        );
-        nativeSessionsCacheRef.current.set(native.engine, next);
-        return { ...previous, [native.engine]: next };
-      });
+      removeNativeSession(native.engine, native.session_id);
       setWorkspace(imported.projectId);
       setSelectedProvider(imported.provider);
       setNativeSessionLimit(SESSION_PAGE_SIZE);
@@ -476,7 +429,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     } finally {
       if (selectionId === selectionRequestRef.current) setSelectingKey(null);
     }
-  }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, connect, loadInitialHistory]);
+  }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, connect, loadInitialHistory, removeNativeSession]);
 
   const newSession = useCallback(() => {
     selectionRequestRef.current += 1;
@@ -601,96 +554,6 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const noGatewayProvider = !loading && availableProviders.length === 0;
   const nativeSessionsLoading = nativeLoadingProviders.has(selectedProvider);
   const nativeSessionsError = nativeSessionErrors[selectedProvider] || null;
-  const allNativeSessions = deduplicateNativeSessions(
-    Object.values(nativeSessionsByProvider).flat(),
-  );
-  const normalizedSessionSearch = sessionSearch.trim().toLocaleLowerCase();
-  const filteredGatewaySessions = useMemo(
-    () => sessions.filter(session => !normalizedSessionSearch || [
-      session.title,
-      session.provider,
-      session.cwd,
-      session.model,
-      session.status,
-    ].some(value => value?.toLocaleLowerCase().includes(normalizedSessionSearch))),
-    [normalizedSessionSearch, sessions],
-  );
-  const recentSessions = useMemo(
-    () => filteredGatewaySessions.slice(0, gatewaySessionLimit),
-    [filteredGatewaySessions, gatewaySessionLimit],
-  );
-  const mappedProviderSessions = useMemo(
-    () => new Set(sessions.map(session => `${session.provider}:${session.providerSessionId}`)),
-    [sessions],
-  );
-  const filteredNativeSessions = useMemo(
-    () => allNativeSessions
-      .filter(session => !mappedProviderSessions.has(`${session.engine}:${session.session_id}`))
-      .filter(session => !normalizedSessionSearch || [
-        session.title,
-        session.engine,
-        session.project_path,
-        session.model,
-      ].some(value => value?.toLocaleLowerCase().includes(normalizedSessionSearch))),
-    [allNativeSessions, mappedProviderSessions, normalizedSessionSearch],
-  );
-  const resumableNativeSessions = useMemo(
-    () => filteredNativeSessions.filter(session => validProjectPaths.has(session.project_path)),
-    [filteredNativeSessions, validProjectPaths],
-  );
-  const unavailableNativeSessions = useMemo(
-    () => filteredNativeSessions.filter(session => !validProjectPaths.has(session.project_path)),
-    [filteredNativeSessions, validProjectPaths],
-  );
-  const visibleNativeSessions = useMemo(
-    () => resumableNativeSessions.slice(0, nativeSessionLimit),
-    [resumableNativeSessions, nativeSessionLimit],
-  );
-  const visibleUnavailableSessions = useMemo(
-    () => unavailableNativeSessions.slice(0, unavailableSessionLimit),
-    [unavailableNativeSessions, unavailableSessionLimit],
-  );
-  const workspaceConversations = useMemo(() => {
-    const byWorkspace = new Map<string, ConversationListItem[]>(
-      validProjects.map(project => [project.path, []]),
-    );
-    recentSessions.forEach(session => {
-      const items = byWorkspace.get(session.projectId);
-      if (!items) return;
-      items.push({
-        source: 'gateway',
-        key: session.id,
-        projectPath: session.projectId,
-        updatedAt: session.updatedAt,
-        session,
-      });
-    });
-    visibleNativeSessions.forEach(session => {
-      const items = byWorkspace.get(session.project_path);
-      if (!items) return;
-      items.push({
-        source: 'native',
-        key: `${session.engine}:${session.session_id}`,
-        projectPath: session.project_path,
-        updatedAt: session.ended_at || session.started_at,
-        session,
-      });
-    });
-    return validProjects
-      .map(project => ({
-        path: project.path,
-        label: workspaceLabel(project.path),
-        conversations: (byWorkspace.get(project.path) || []).sort(
-          (left, right) => right.updatedAt.localeCompare(left.updatedAt),
-        ),
-      }))
-      .filter(group => group.conversations.length > 0 || !normalizedSessionSearch)
-      .sort((left, right) => {
-        if (left.path === workspace) return -1;
-        if (right.path === workspace) return 1;
-        return left.label.localeCompare(right.label);
-      });
-  }, [normalizedSessionSearch, recentSessions, validProjects, visibleNativeSessions, workspace]);
   const unavailableHistoryExpanded = showUnavailableHistory || Boolean(normalizedSessionSearch);
   const connectionLabel = connecting
     ? 'Connecting'
@@ -741,7 +604,6 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     error,
     onDismissError,
     showActivity,
-    legacyMode,
     input,
     permissionMode,
     showScrollToBottom,
@@ -792,7 +654,6 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     onProviderChange: setSelectedProvider,
     onPermissionModeChange: setPermissionMode,
     onShowActivityChange: setShowActivity,
-    onSetLegacyMode: () => setLegacyMode(true),
     onSetCurrentGroup: setCurrentGroup,
     onInputChange: setInput,
     focusComposer,

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Query, Body
 from core.services.task_service import TaskService
 from core.services.config_service import ConfigService
@@ -14,6 +16,29 @@ _runner = TaskRunner(ROOT_DIR)
 
 def get_tasks_root():
     return resolve_resource_path("tasks", "CA_TASKS_ROOT")
+
+
+def resolve_registered_workspace(workspace: str) -> str:
+    """Resolve a workspace and require it to be in the project registry."""
+    requested = Path(workspace).expanduser().resolve()
+    if not requested.is_dir():
+        raise HTTPException(
+            status_code=400, detail="Workspace is not an existing directory"
+        )
+    config, warnings = ConfigService(get_config_path()).get_config()
+    if warnings:
+        raise HTTPException(status_code=500, detail=warnings[0])
+    registered = {
+        Path(item["path"]).expanduser().resolve()
+        for item in config.get("project_registry", [])
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
+    }
+    if requested not in registered:
+        raise HTTPException(
+            status_code=400,
+            detail="Workspace must be registered in Settings before running a task",
+        )
+    return str(requested)
 
 
 @router.get("/tasks")
@@ -83,13 +108,21 @@ async def run_task(
     name: str,
     engine: str = Body(..., embed=True),
     group: str = Body("common", embed=True),
+    workspace: str = Body(..., embed=True),
 ):
     """Launches a task in the background with the selected engine."""
     task_service = TaskService(get_tasks_root())
     if task_service.get_task(name) is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    resolved_workspace = resolve_registered_workspace(workspace)
     try:
-        return _runner.run_task(name, engine, group, tasks_root=get_tasks_root())
+        return _runner.run_task(
+            name,
+            engine,
+            group,
+            tasks_root=get_tasks_root(),
+            workspace=resolved_workspace,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

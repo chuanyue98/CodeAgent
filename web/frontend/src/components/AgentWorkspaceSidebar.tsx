@@ -60,7 +60,6 @@ type Props = {
   onToggleExpandedWorkspace: (path: string) => void;
   onToggleCollapsedWorkspace: (path: string) => void;
   onShowUnavailableHistoryChange: (value: boolean) => void;
-  onSetLegacyMode: () => void;
 };
 
 export default function AgentWorkspaceSidebar({
@@ -95,7 +94,6 @@ export default function AgentWorkspaceSidebar({
   onToggleExpandedWorkspace,
   onToggleCollapsedWorkspace,
   onShowUnavailableHistoryChange,
-  onSetLegacyMode,
 }: Props) {
   const selectedCapabilities = providers.find(provider => provider.providerId === selectedProvider);
   const nativeSessionsLoading = nativeLoadingProviders.has(selectedProvider);
@@ -430,12 +428,6 @@ export default function AgentWorkspaceSidebar({
           </>
         )}
       </div>
-      <button
-        onClick={onSetLegacyMode}
-        className="mt-3 border-t border-slate-100 pt-3 text-left text-[11px] text-slate-400 hover:text-slate-700"
-      >
-        Open legacy chat <ChevronRight className="inline h-3 w-3" />
-      </button>
     </aside>
   );
 }

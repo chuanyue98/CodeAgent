@@ -14,11 +14,11 @@ class _FakeTaskRunner:
         self.calls: list[tuple] = []
         self._raise_error = raise_error
 
-    def run_task(self, task_name, engine, group, tasks_root=None):
-        self.calls.append((task_name, engine, group))
+    def run_task(self, task_name, engine, group, tasks_root=None, workspace=None):
+        self.calls.append((task_name, engine, group, workspace))
         if self._raise_error:
             raise ValueError("boom")
-        return None
+        return type("Status", (), {"status": "running"})()
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def tasks_root(tmp_path):
 @pytest.mark.asyncio
 async def test_tick_fires_due_schedule(schedule_service, tasks_root):
     record = schedule_service.create_schedule(
-        "nightly-review", "claude", "common", "* * * * *"
+        "nightly-review", "claude", "common", "* * * * *", workspace=str(tasks_root)
     )
     # Manually backdate next_run_at to make it due, regardless of the cron
     # expression's real next fire time.
@@ -48,7 +48,7 @@ async def test_tick_fires_due_schedule(schedule_service, tasks_root):
     runner = _FakeTaskRunner()
     await tick_once(schedule_service, runner, lambda: tasks_root)
 
-    assert runner.calls == [("nightly-review", "claude", "common")]
+    assert runner.calls == [("nightly-review", "claude", "common", str(tasks_root))]
     updated = schedule_service.get_schedule(record["id"])
     assert updated["last_run_status"] == "started"
     assert updated["last_run_at"] is not None
@@ -58,7 +58,12 @@ async def test_tick_fires_due_schedule(schedule_service, tasks_root):
 @pytest.mark.asyncio
 async def test_tick_skips_disabled_schedule(schedule_service, tasks_root):
     record = schedule_service.create_schedule(
-        "nightly-review", "claude", "common", "* * * * *", enabled=False
+        "nightly-review",
+        "claude",
+        "common",
+        "* * * * *",
+        enabled=False,
+        workspace=str(tasks_root),
     )
     config, _ = schedule_service.config_service.get_config()
     config["schedules"][0]["next_run_at"] = time.time() - 1
@@ -74,7 +79,7 @@ async def test_tick_skips_disabled_schedule(schedule_service, tasks_root):
 @pytest.mark.asyncio
 async def test_tick_skips_not_yet_due_schedule(schedule_service, tasks_root):
     record = schedule_service.create_schedule(
-        "nightly-review", "claude", "common", "0 0 1 1 *"
+        "nightly-review", "claude", "common", "0 0 1 1 *", workspace=str(tasks_root)
     )  # once a year — not due now
 
     runner = _FakeTaskRunner()
@@ -87,7 +92,7 @@ async def test_tick_skips_not_yet_due_schedule(schedule_service, tasks_root):
 @pytest.mark.asyncio
 async def test_tick_marks_missing_task_without_crashing(schedule_service, tasks_root):
     record = schedule_service.create_schedule(
-        "does-not-exist", "claude", "common", "* * * * *"
+        "does-not-exist", "claude", "common", "* * * * *", workspace=str(tasks_root)
     )
     config, _ = schedule_service.config_service.get_config()
     config["schedules"][0]["next_run_at"] = time.time() - 1
@@ -106,7 +111,7 @@ async def test_tick_marks_missing_task_without_crashing(schedule_service, tasks_
 @pytest.mark.asyncio
 async def test_tick_records_failure_without_crashing(schedule_service, tasks_root):
     record = schedule_service.create_schedule(
-        "nightly-review", "claude", "common", "* * * * *"
+        "nightly-review", "claude", "common", "* * * * *", workspace=str(tasks_root)
     )
     config, _ = schedule_service.config_service.get_config()
     config["schedules"][0]["next_run_at"] = time.time() - 1
@@ -115,6 +120,6 @@ async def test_tick_records_failure_without_crashing(schedule_service, tasks_roo
     runner = _FakeTaskRunner(raise_error=True)
     await tick_once(schedule_service, runner, lambda: tasks_root)
 
-    assert runner.calls == [("nightly-review", "claude", "common")]
+    assert runner.calls == [("nightly-review", "claude", "common", str(tasks_root))]
     status = schedule_service.get_schedule(record["id"])["last_run_status"]
     assert status.startswith("failed:")

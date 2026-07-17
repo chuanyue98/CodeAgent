@@ -43,6 +43,7 @@ interface RunStatus {
   status: 'running' | 'completed' | 'failed' | 'stopped';
   log_path: string;
   start_time: number;
+  workspace?: string;
 }
 
 interface Task {
@@ -164,7 +165,10 @@ function TaskDetail({
   activeRun,
   onBack,
   onRun,
-  onStop
+  onStop,
+  workspace,
+  projects,
+  onWorkspaceChange,
 }: {
   task: Task;
   engines: Engine[];
@@ -172,6 +176,9 @@ function TaskDetail({
   onBack: () => void;
   onRun: (engine: string) => void;
   onStop: (id: string) => void;
+  workspace: string;
+  projects: { path: string; group: string; available?: boolean }[];
+  onWorkspaceChange: (workspace: string) => void;
 }) {
   const [selectedEngine, setSelectedEngine] = useState(engines[0]?.id || 'gemini');
 
@@ -197,6 +204,17 @@ function TaskDetail({
             </button>
           ) : (
             <>
+              <select
+                aria-label="Workspace"
+                value={workspace}
+                onChange={e => onWorkspaceChange(e.target.value)}
+                className="max-w-56 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="" disabled>Select workspace</option>
+                {projects.filter(project => project.available !== false).map(project => (
+                  <option key={project.path} value={project.path}>{project.path}</option>
+                ))}
+              </select>
               <select
                 value={selectedEngine}
                 onChange={(e) => setSelectedEngine(e.target.value)}
@@ -362,7 +380,15 @@ const TaskDashboard: React.FC = () => {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const { currentGroup } = useProject();
+  const { currentGroup, projects } = useProject();
+  const [workspace, setWorkspace] = useState('');
+
+  useEffect(() => {
+    if (!workspace || !projects.some(project => project.path === workspace && project.available !== false)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setWorkspace(projects.find(project => project.available !== false)?.path || '');
+    }
+  }, [projects, workspace]);
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -417,20 +443,26 @@ const TaskDashboard: React.FC = () => {
   }, [currentGroup, runs]);
 
   const runTask = async (engine: string) => {
-    if (!selected) return;
+    if (!selected || !workspace) {
+      setError('Select a workspace before running a task');
+      return;
+    }
     try {
       const res = await fetch(`/api/tasks/${selected.name}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ engine, group: currentGroup || 'common' })
+        body: JSON.stringify({ engine, group: currentGroup || 'common', workspace })
       });
       if (res.ok) {
         const status: RunStatus = await res.json();
         setActiveRunId(status.task_id);
         void fetchRuns();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `Task failed to start (${res.status})`);
       }
     } catch (e) {
-      console.error('Failed to run task', e);
+      setError(e instanceof Error ? e.message : 'Failed to run task');
     }
   };
 
@@ -522,6 +554,9 @@ const TaskDashboard: React.FC = () => {
         onBack={() => setSelected(null)}
         onRun={runTask}
         onStop={stopTask}
+        workspace={workspace}
+        projects={projects}
+        onWorkspaceChange={setWorkspace}
       />
     );
 

@@ -28,15 +28,23 @@ function formatTimestamp(ts: number | null): string {
 }
 
 export default function CronPage() {
-  const { currentGroup } = useProject();
+  const { currentGroup, projects } = useProject();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [taskName, setTaskName] = useState('');
   const [engine, setEngine] = useState('');
   const [cronExpr, setCronExpr] = useState('0 9 * * *');
+  const [workspace, setWorkspace] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!workspace || !projects.some(project => project.path === workspace && project.available !== false)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setWorkspace(projects.find(project => project.available !== false)?.path || '');
+    }
+  }, [projects, workspace]);
 
   const loadSchedules = useCallback(() => {
     fetchSchedules()
@@ -70,7 +78,7 @@ export default function CronPage() {
   }, [loadSchedules]);
 
   const handleCreate = async () => {
-    if (!taskName || !engine || !cronExpr.trim()) return;
+    if (!taskName || !engine || !workspace || !cronExpr.trim()) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -78,6 +86,7 @@ export default function CronPage() {
         task_name: taskName,
         engine,
         group: currentGroup || 'common',
+        workspace,
         cron_expr: cronExpr.trim(),
       });
       loadSchedules();
@@ -120,6 +129,21 @@ export default function CronPage() {
       <section className="w-full lg:w-80 shrink-0 glass-card p-5 space-y-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
           <Clock className="w-4 h-4" /> New Schedule
+        </div>
+
+        <div>
+          <label className="text-xs text-slate-400 font-medium block mb-1">Workspace</label>
+          <select
+            aria-label="Workspace"
+            value={workspace}
+            onChange={e => setWorkspace(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
+          >
+            <option value="" disabled>Select workspace</option>
+            {projects.filter(project => project.available !== false).map(project => (
+              <option key={project.path} value={project.path}>{project.path}</option>
+            ))}
+          </select>
         </div>
 
         <div>
@@ -172,7 +196,7 @@ export default function CronPage() {
 
         <button
           onClick={() => void handleCreate()}
-          disabled={submitting || !taskName || !engine || !cronExpr.trim()}
+          disabled={submitting || !taskName || !engine || !workspace || !cronExpr.trim()}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-95 transition-all"
         >
           <Plus className="w-4 h-4" /> Create Schedule
@@ -225,6 +249,9 @@ export default function CronPage() {
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-mono">
                     {schedule.cron_expr}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-primary/5 text-primary rounded truncate max-w-56">
+                    {schedule.workspace || 'Workspace required'}
                   </span>
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-3">
