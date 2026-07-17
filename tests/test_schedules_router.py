@@ -101,7 +101,12 @@ async def test_update_schedule_toggles_enabled():
     ) as ac:
         create = await ac.post(
             "/api/schedules",
-                json={"task_name": "task", "engine": "claude", "workspace": os.environ["CA_TEST_WORKSPACE"], "cron_expr": "* * * * *"},
+            json={
+                "task_name": "task",
+                "engine": "claude",
+                "workspace": os.environ["CA_TEST_WORKSPACE"],
+                "cron_expr": "* * * * *",
+            },
         )
         schedule_id = create.json()["id"]
 
@@ -130,7 +135,12 @@ async def test_delete_schedule():
     ) as ac:
         create = await ac.post(
             "/api/schedules",
-            json={"task_name": "task", "engine": "claude", "workspace": os.environ["CA_TEST_WORKSPACE"], "cron_expr": "* * * * *"},
+            json={
+                "task_name": "task",
+                "engine": "claude",
+                "workspace": os.environ["CA_TEST_WORKSPACE"],
+                "cron_expr": "* * * * *",
+            },
         )
         schedule_id = create.json()["id"]
 

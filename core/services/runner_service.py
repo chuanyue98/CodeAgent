@@ -67,7 +67,9 @@ class TaskRunner:
         if engine not in {"claude", "gemini", "opencode", "codex"}:
             raise ValueError(f"Invalid engine: {engine!r}")
 
-        working_dir = Path(workspace).expanduser().resolve() if workspace else Path.cwd()
+        working_dir = (
+            Path(workspace).expanduser().resolve() if workspace else Path.cwd()
+        )
         if not working_dir.is_dir():
             raise ValueError(f"Invalid workspace: {workspace!r}")
 

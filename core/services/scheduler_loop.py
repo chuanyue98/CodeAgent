@@ -69,7 +69,9 @@ async def tick_once(
 
             tasks_root = get_tasks_root()
             task_exists = await asyncio.to_thread(
-                lambda: TaskService(tasks_root).get_task(record["task_name"]) is not None
+                lambda: (
+                    TaskService(tasks_root).get_task(record["task_name"]) is not None
+                )
             )
             if not task_exists:
                 await asyncio.to_thread(
@@ -77,7 +79,9 @@ async def tick_once(
                 )
                 continue
 
-            if hasattr(task_runner, "has_active_task") and task_runner.has_active_task(record["task_name"]):
+            if hasattr(task_runner, "has_active_task") and task_runner.has_active_task(
+                record["task_name"]
+            ):
                 await asyncio.to_thread(
                     schedule_service.record_run,
                     record["id"],

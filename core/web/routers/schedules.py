@@ -83,9 +83,7 @@ def update_schedule(schedule_id: str, req: UpdateScheduleRequest) -> dict:
             fields["workspace"] = tasks_router.resolve_registered_workspace(
                 fields["workspace"]
             )
-        return _service().update_schedule(
-            schedule_id, **fields
-        )
+        return _service().update_schedule(schedule_id, **fields)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -118,7 +116,9 @@ def run_now(schedule_id: str) -> dict:
                 detail="Schedule has no workspace; edit it before running",
             )
         workspace = tasks_router.resolve_registered_workspace(workspace)
-        if hasattr(tasks_router._runner, "has_active_task") and tasks_router._runner.has_active_task(record["task_name"]):
+        if hasattr(
+            tasks_router._runner, "has_active_task"
+        ) and tasks_router._runner.has_active_task(record["task_name"]):
             raise HTTPException(status_code=409, detail="Task is already running")
         status = tasks_router._runner.run_task(
             record["task_name"],
@@ -131,7 +131,9 @@ def run_now(schedule_id: str) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if getattr(status, "status", "running") != "running":
-        service.record_run(schedule_id, f"failed: {status.status}", advance_schedule=False)
+        service.record_run(
+            schedule_id, f"failed: {status.status}", advance_schedule=False
+        )
     else:
         service.record_run(schedule_id, "started", advance_schedule=False)
     return status.__dict__

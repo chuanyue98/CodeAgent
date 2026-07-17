@@ -44,7 +44,9 @@ class RunStore:
                     )
                     """
                 )
-                con.execute("CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status)")
+                con.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status)"
+                )
                 columns = {row[1] for row in con.execute("PRAGMA table_info(runs)")}
                 if "workspace" not in columns:
                     con.execute("ALTER TABLE runs ADD COLUMN workspace TEXT")
@@ -71,7 +73,7 @@ class RunStore:
                         run.start_time,
                         run.session_id,
                         run.workspace,
-                    )
+                    ),
                 )
 
     def get(self, task_id: str) -> Optional[TaskRunRecord]:

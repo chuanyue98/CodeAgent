@@ -58,7 +58,12 @@ async def test_tick_fires_due_schedule(schedule_service, tasks_root):
 @pytest.mark.asyncio
 async def test_tick_skips_disabled_schedule(schedule_service, tasks_root):
     record = schedule_service.create_schedule(
-        "nightly-review", "claude", "common", "* * * * *", enabled=False, workspace=str(tasks_root)
+        "nightly-review",
+        "claude",
+        "common",
+        "* * * * *",
+        enabled=False,
+        workspace=str(tasks_root),
     )
     config, _ = schedule_service.config_service.get_config()
     config["schedules"][0]["next_run_at"] = time.time() - 1

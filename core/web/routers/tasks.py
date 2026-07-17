@@ -22,7 +22,9 @@ def resolve_registered_workspace(workspace: str) -> str:
     """Resolve a workspace and require it to be in the project registry."""
     requested = Path(workspace).expanduser().resolve()
     if not requested.is_dir():
-        raise HTTPException(status_code=400, detail="Workspace is not an existing directory")
+        raise HTTPException(
+            status_code=400, detail="Workspace is not an existing directory"
+        )
     config, warnings = ConfigService(get_config_path()).get_config()
     if warnings:
         raise HTTPException(status_code=500, detail=warnings[0])
