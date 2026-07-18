@@ -74,7 +74,7 @@ jobs:
         run: test "$(du -sk dist | cut -f1)" -le 2048
 
       - name: Upload production UI
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: web/frontend/dist/
@@ -110,7 +110,7 @@ jobs:
           uv build --wheel --out-dir /tmp/codeagent-dist
           python -c "import zipfile; from pathlib import Path; wheel=next(Path('/tmp/codeagent-dist').glob('*.whl')); names=set(zipfile.ZipFile(wheel).namelist()); required=('prompt/base/general.basic.md','skills/base/skill-creator/SKILL.md','web/frontend/dist/index.html'); assert all(any(name.endswith(item) for name in names) for item in required)"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: codeagent-wheel
           path: /tmp/codeagent-dist/*.whl
@@ -174,7 +174,7 @@ jobs:
 
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: web/frontend/playwright-report/
