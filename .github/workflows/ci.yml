@@ -40,11 +40,6 @@ jobs:
       - name: Test
         run: uv run pytest --tb=short -q --cov --cov-fail-under=60 --cov-report=term-missing
 
-      - name: Build wheel and verify runtime assets
-        run: |
-          uv build --wheel --out-dir /tmp/codeagent-dist
-          uv run python -c "import zipfile; from pathlib import Path; wheel=next(Path('/tmp/codeagent-dist').glob('*.whl')); names=set(zipfile.ZipFile(wheel).namelist()); required=('prompt/base/general.basic.md','skills/base/skill-creator/SKILL.md','web/frontend/dist/index.html'); assert all(any(name.endswith(item) for name in names) for item in required)"
-
   # ── React / Vite frontend ─────────────────────────────────────────────────
   frontend:
     name: Frontend — lint, test & build
@@ -77,6 +72,64 @@ jobs:
 
       - name: Bundle size budget
         run: test "$(du -sk dist | cut -f1)" -le 2048
+
+      - name: Upload production UI
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: web/frontend/dist/
+          retention-days: 1
+
+  # ── Release artifacts use the frontend built and tested above ────────────
+  package:
+    name: Package — wheel with current UI
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Replace committed UI with tested artifact
+        run: rm -rf web/frontend/dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: web/frontend/dist
+
+      - name: Build wheel and verify runtime assets
+        run: |
+          uv build --wheel --out-dir /tmp/codeagent-dist
+          python -c "import zipfile; from pathlib import Path; wheel=next(Path('/tmp/codeagent-dist').glob('*.whl')); names=set(zipfile.ZipFile(wheel).namelist()); required=('prompt/base/general.basic.md','skills/base/skill-creator/SKILL.md','web/frontend/dist/index.html'); assert all(any(name.endswith(item) for name in names) for item in required)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codeagent-wheel
+          path: /tmp/codeagent-dist/*.whl
+
+  container:
+    name: Package — Docker image
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Replace committed UI with tested artifact
+        run: rm -rf web/frontend/dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: web/frontend/dist
+      - name: Build image
+        run: docker build -t codeagent:ci .
 
   # ── Playwright E2E (real backend, real browser, fake engine CLIs) ─────────
   e2e:

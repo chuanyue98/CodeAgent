@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from core.services.runner_service import TaskRunner
+from core.services.runner_service import TaskAlreadyRunningError, TaskRunner
 from core.task_lib import get_tasks_dir
 
 
@@ -101,3 +101,54 @@ def test_task_runner_kill_all_missing_from_active_runs(tmp_path):
     runner.kill_all()
     time.sleep(0.1)
     assert dummy_proc.poll() is not None
+
+
+def test_overlap_guard_refreshes_completed_process_status(tmp_path):
+    (tmp_path / "ca_launcher.py").write_text("pass\n", encoding="utf-8")
+    runner = TaskRunner(tmp_path)
+    run = runner.run_task(
+        "review",
+        "codex",
+        "common",
+        workspace=str(tmp_path),
+        prevent_overlap=True,
+    )
+    runner._processes[run.task_id].wait(timeout=5)
+
+    assert runner.has_active_task("review", workspace=str(tmp_path)) is False
+    assert runner.get_status(run.task_id).status == "completed"
+
+
+def test_overlap_guard_is_atomic_and_scoped_to_workspace(tmp_path):
+    (tmp_path / "ca_launcher.py").write_text(
+        "import time\ntime.sleep(10)\n", encoding="utf-8"
+    )
+    other_workspace = tmp_path / "other"
+    other_workspace.mkdir()
+    runner = TaskRunner(tmp_path)
+    runner.run_task(
+        "review",
+        "codex",
+        "common",
+        workspace=str(tmp_path),
+        prevent_overlap=True,
+    )
+
+    with pytest.raises(TaskAlreadyRunningError):
+        runner.run_task(
+            "review",
+            "codex",
+            "common",
+            workspace=str(tmp_path),
+            prevent_overlap=True,
+        )
+
+    second = runner.run_task(
+        "review",
+        "codex",
+        "common",
+        workspace=str(other_workspace),
+        prevent_overlap=True,
+    )
+    assert second.status == "running"
+    runner.kill_all()

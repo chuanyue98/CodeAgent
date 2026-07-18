@@ -1,10 +1,14 @@
-from pathlib import Path
-
 from fastapi import APIRouter, HTTPException, Query, Body
 from core.services.task_service import TaskService
 from core.services.config_service import ConfigService
 from core.services.skill_service import SkillService
-from core.services.runner_service import TaskRunner
+from core.services.runner_service import TaskAlreadyRunningError, TaskRunner
+from core.services.workspace_service import (
+    RegisteredWorkspace,
+    WorkspaceConfigError,
+    WorkspaceResolutionError,
+    resolve_registered_workspace as resolve_workspace,
+)
 from core.web.resource_paths import ROOT_DIR, resolve_resource_path
 from core.web.routers.config import get_config_path
 
@@ -18,27 +22,14 @@ def get_tasks_root():
     return resolve_resource_path("tasks", "CA_TASKS_ROOT")
 
 
-def resolve_registered_workspace(workspace: str) -> str:
+def resolve_registered_workspace(workspace: str) -> RegisteredWorkspace:
     """Resolve a workspace and require it to be in the project registry."""
-    requested = Path(workspace).expanduser().resolve()
-    if not requested.is_dir():
-        raise HTTPException(
-            status_code=400, detail="Workspace is not an existing directory"
-        )
-    config, warnings = ConfigService(get_config_path()).get_config()
-    if warnings:
-        raise HTTPException(status_code=500, detail=warnings[0])
-    registered = {
-        Path(item["path"]).expanduser().resolve()
-        for item in config.get("project_registry", [])
-        if isinstance(item, dict) and isinstance(item.get("path"), str)
-    }
-    if requested not in registered:
-        raise HTTPException(
-            status_code=400,
-            detail="Workspace must be registered in Settings before running a task",
-        )
-    return str(requested)
+    try:
+        return resolve_workspace(ConfigService(get_config_path()), workspace)
+    except WorkspaceConfigError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except WorkspaceResolutionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/tasks")
@@ -119,10 +110,13 @@ async def run_task(
         return _runner.run_task(
             name,
             engine,
-            group,
+            resolved_workspace.group,
             tasks_root=get_tasks_root(),
-            workspace=resolved_workspace,
+            workspace=resolved_workspace.path,
+            prevent_overlap=True,
         )
+    except TaskAlreadyRunningError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

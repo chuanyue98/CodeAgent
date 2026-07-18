@@ -20,13 +20,9 @@ import useNativeAgentSessions from './useNativeAgentSessions';
 import useAgentWorkspaceSessions from './useAgentWorkspaceSessions';
 
 export type UseAgentWorkspaceReturn = {
-  projects: { path: string; group: string; available?: boolean }[];
   currentGroup: string;
   validProjects: { path: string; group: string; available?: boolean }[];
-  validProjectPaths: Set<string>;
   providers: ProviderCapabilities[];
-  sessions: AgentSession[];
-  nativeSessionsByProvider: Record<string, NativeAgentSession[]>;
   nativeLoadingProviders: Set<string>;
   nativeSessionErrors: Record<string, string>;
   selectedProvider: string;
@@ -52,22 +48,15 @@ export type UseAgentWorkspaceReturn = {
   loadingOlderMessages: boolean;
   hasOlderMessages: boolean;
   selectedCapabilities: ProviderCapabilities | undefined;
-  availableProviders: ProviderCapabilities[];
   noGatewayProvider: boolean;
-  nativeSessionsLoading: boolean;
-  nativeSessionsError: string | null;
-  allNativeSessions: NativeAgentSession[];
   normalizedSessionSearch: string;
   filteredGatewaySessions: AgentSession[];
   recentSessions: AgentSession[];
-  mappedProviderSessions: Set<string>;
-  filteredNativeSessions: NativeAgentSession[];
   resumableNativeSessions: NativeAgentSession[];
   unavailableNativeSessions: NativeAgentSession[];
   visibleNativeSessions: NativeAgentSession[];
   visibleUnavailableSessions: NativeAgentSession[];
   workspaceConversations: { path: string; label: string; conversations: ConversationListItem[] }[];
-  unavailableHistoryExpanded: boolean;
   connectionLabel: string;
   canCompose: boolean;
   composerPlaceholder: string;
@@ -82,8 +71,6 @@ export type UseAgentWorkspaceReturn = {
   onCancel: () => void;
   onRespondApproval: (approvalId: string, decision: ApprovalDecision) => void;
   onConnect: (session: AgentSession, afterSequence?: number, reset?: boolean) => Promise<WebSocket>;
-  onRefresh: () => Promise<void>;
-  onLoadNativeSessions: (provider: string, force?: boolean) => void;
   onRetryNativeSessions: () => void;
   onSearchChange: (value: string) => void;
   onGatewayLimitChange: (value: number) => void;
@@ -191,13 +178,9 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
 
   const {
     validProjects,
-    validProjectPaths,
-    allNativeSessions,
     normalizedSessionSearch,
     filteredGatewaySessions,
     recentSessions,
-    mappedProviderSessions,
-    filteredNativeSessions,
     resumableNativeSessions,
     unavailableNativeSessions,
     visibleNativeSessions,
@@ -552,9 +535,6 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const selectedCapabilities = providers.find(provider => provider.providerId === selectedProvider);
   const availableProviders = providers.filter(provider => provider.available);
   const noGatewayProvider = !loading && availableProviders.length === 0;
-  const nativeSessionsLoading = nativeLoadingProviders.has(selectedProvider);
-  const nativeSessionsError = nativeSessionErrors[selectedProvider] || null;
-  const unavailableHistoryExpanded = showUnavailableHistory || Boolean(normalizedSessionSearch);
   const connectionLabel = connecting
     ? 'Connecting'
     : connected
@@ -578,13 +558,9 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     + (sessionResourceSnapshot?.plugins?.length ?? 0);
 
   return {
-    projects,
     currentGroup,
     validProjects,
-    validProjectPaths,
     providers,
-    sessions,
-    nativeSessionsByProvider,
     nativeLoadingProviders,
     nativeSessionErrors,
     selectedProvider,
@@ -610,22 +586,15 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     loadingOlderMessages,
     hasOlderMessages,
     selectedCapabilities,
-    availableProviders,
     noGatewayProvider,
-    nativeSessionsLoading,
-    nativeSessionsError,
-    allNativeSessions,
     normalizedSessionSearch,
     filteredGatewaySessions,
     recentSessions,
-    mappedProviderSessions,
-    filteredNativeSessions,
     resumableNativeSessions,
     unavailableNativeSessions,
     visibleNativeSessions,
     visibleUnavailableSessions,
     workspaceConversations,
-    unavailableHistoryExpanded,
     connectionLabel,
     canCompose,
     composerPlaceholder,
@@ -640,8 +609,6 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     onCancel: cancel,
     onRespondApproval: respondApproval,
     onConnect: connect,
-    onRefresh: refresh,
-    onLoadNativeSessions: loadNativeSessions,
     onRetryNativeSessions: retryNativeSessions,
     onSearchChange: setSessionSearch,
     onGatewayLimitChange: setGatewaySessionLimit,

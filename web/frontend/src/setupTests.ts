@@ -47,6 +47,9 @@ globalThis.fetch = vi.fn().mockImplementation((url: string) => {
       common:    { skills: ['base/commit-message'], prompts: [], hooks: [], plugins: [] },
     }));
   }
+  if (url.endsWith('/api/tasks')) {
+    return Promise.resolve(mockResponse([]));
+  }
   if (url.includes('/api/task')) {
     return Promise.resolve(mockResponse({ exists: false, tasks: [] }));
   }

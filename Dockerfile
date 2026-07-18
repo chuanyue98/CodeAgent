@@ -15,6 +15,7 @@ WORKDIR /app
 # Install Python dependencies (layer caching)
 COPY pyproject.toml uv.lock README.md setup.py ./
 RUN uv sync --frozen --no-dev
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy runtime assets
 COPY core/ core/
@@ -25,8 +26,6 @@ COPY hooks/ hooks/
 COPY plugins/ plugins/
 COPY tasks/ tasks/
 COPY ca_launcher.py ca_launcher.py
-COPY config.json config.json
-COPY setup.py setup.py
 
 # The release pipeline builds the frontend before building this image.
 COPY web/frontend/dist/ web/frontend/dist/

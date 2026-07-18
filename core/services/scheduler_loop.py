@@ -6,9 +6,15 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from core.services.runner_service import TaskRunner
+from core.services.runner_service import TaskAlreadyRunningError, TaskRunner
 from core.services.schedule_service import ScheduleService
 from core.services.task_service import TaskService
+from core.services.workspace_service import (
+    WorkspaceConfigError,
+    WorkspaceNotRegisteredError,
+    WorkspaceResolutionError,
+    resolve_registered_workspace,
+)
 
 TICK_INTERVAL_SECONDS = 30.0
 logger = logging.getLogger(__name__)
@@ -59,11 +65,39 @@ async def tick_once(
                 continue
 
             workspace = record.get("workspace")
-            if not workspace:
+            if not isinstance(workspace, str) or not workspace:
                 await asyncio.to_thread(
                     schedule_service.record_run,
                     record["id"],
                     "workspace_required",
+                )
+                continue
+
+            try:
+                registered_workspace = await asyncio.to_thread(
+                    resolve_registered_workspace,
+                    schedule_service.config_service,
+                    workspace,
+                )
+            except WorkspaceNotRegisteredError:
+                await asyncio.to_thread(
+                    schedule_service.record_run,
+                    record["id"],
+                    "workspace_unregistered",
+                )
+                continue
+            except WorkspaceResolutionError as exc:
+                await asyncio.to_thread(
+                    schedule_service.record_run,
+                    record["id"],
+                    f"workspace_invalid: {exc}",
+                )
+                continue
+            except WorkspaceConfigError as exc:
+                await asyncio.to_thread(
+                    schedule_service.record_run,
+                    record["id"],
+                    f"workspace_config_error: {exc}",
                 )
                 continue
 
@@ -79,29 +113,35 @@ async def tick_once(
                 )
                 continue
 
-            if hasattr(task_runner, "has_active_task") and task_runner.has_active_task(
-                record["task_name"]
-            ):
+            try:
+                status = await asyncio.to_thread(
+                    task_runner.run_task,
+                    record["task_name"],
+                    record["engine"],
+                    registered_workspace.group,
+                    tasks_root=tasks_root,
+                    workspace=registered_workspace.path,
+                    prevent_overlap=True,
+                )
+            except TaskAlreadyRunningError:
                 await asyncio.to_thread(
                     schedule_service.record_run,
                     record["id"],
                     "skipped: already_running",
                 )
                 continue
-
-            status = await asyncio.to_thread(
-                task_runner.run_task,
-                record["task_name"],
-                record["engine"],
-                record["group"],
-                tasks_root=tasks_root,
-                workspace=workspace,
-            )
             result_status = getattr(status, "status", "running")
+            recorded_status = (
+                "started"
+                if result_status == "running"
+                else str(result_status)
+                if str(result_status).startswith("failed")
+                else f"failed: {result_status}"
+            )
             await asyncio.to_thread(
                 schedule_service.record_run,
                 record["id"],
-                "started" if result_status == "running" else f"failed: {result_status}",
+                recorded_status,
             )
         except ValueError as exc:
             await asyncio.to_thread(
