@@ -28,7 +28,10 @@ def resolve_registered_workspace(
     config_service: ConfigService, workspace: str
 ) -> RegisteredWorkspace:
     """Resolve a workspace and return its authoritative registered group."""
-    requested = Path(workspace).expanduser().resolve()
+    try:
+        requested = Path(workspace).expanduser().resolve()
+    except (OSError, ValueError) as exc:
+        raise WorkspaceResolutionError("Workspace path is invalid") from exc
     if not requested.is_dir():
         raise WorkspaceResolutionError("Workspace is not an existing directory")
 
@@ -43,7 +46,11 @@ def resolve_registered_workspace(
         group = item.get("group")
         if not isinstance(path, str) or not isinstance(group, str) or not group:
             continue
-        if Path(path).expanduser().resolve() == requested:
+        try:
+            resolved_path = Path(path).expanduser().resolve()
+        except (OSError, ValueError):
+            continue
+        if resolved_path == requested:
             return RegisteredWorkspace(path=str(requested), group=group)
 
     raise WorkspaceNotRegisteredError(

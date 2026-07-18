@@ -49,6 +49,7 @@ class TaskRunner:
         self.root_dir = root_dir
         self.active_runs: Dict[str, TaskRunStatus] = {}
         self._processes: Dict[str, subprocess.Popen] = {}
+        self._stopping_tasks: set[str] = set()
         self._run_lock = threading.RLock()
         self.log_dir = self.root_dir / ".ca_task_logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -370,46 +371,70 @@ class TaskRunner:
         """Terminates a background task."""
         with self._run_lock:
             run = self.active_runs.get(task_id)
-            if not run or run.pid is None or run.status != "running":
+            if (
+                not run
+                or run.pid is None
+                or run.status != "running"
+                or task_id in self._stopping_tasks
+            ):
                 return False
+            self._stopping_tasks.add(task_id)
+            pid = run.pid
+            proc = self._processes.get(task_id)
 
+        try:
+            if sys.platform == "win32":
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(pid)],
+                    capture_output=True,
+                )
+            else:
+                os.killpg(os.getpgid(pid), signal.SIGTERM)
+            if proc is not None:
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    pass
+        except Exception:
+            with self._run_lock:
+                self._stopping_tasks.discard(task_id)
+            return False
+
+        with self._run_lock:
             try:
-                if sys.platform == "win32":
-                    subprocess.run(
-                        ["taskkill", "/F", "/T", "/PID", str(run.pid)],
-                        capture_output=True,
-                    )
-                else:
-                    os.killpg(os.getpgid(run.pid), signal.SIGTERM)
-                proc = self._processes.pop(task_id, None)
-                if proc is not None:
-                    try:
-                        proc.wait(timeout=2)
-                    except subprocess.TimeoutExpired:
-                        pass
+                if self._processes.get(task_id) is proc:
+                    self._processes.pop(task_id, None)
                 run.status = "stopped"
                 self._persist(run)
                 return True
             except Exception:
                 return False
+            finally:
+                self._stopping_tasks.discard(task_id)
 
     def kill_all(self):
         """Terminates all active processes immediately."""
         with self._run_lock:
-            for task_id, process in list(self._processes.items()):
-                try:
-                    process.terminate()
-                    process.wait(timeout=1.0)
-                except Exception:
-                    try:
-                        process.kill()
-                        process.wait()
-                    except Exception:
-                        pass
+            processes_to_kill = list(self._processes.items())
+            self._processes.clear()
+            runs_to_persist: list[TaskRunStatus] = []
+            for task_id, _process in processes_to_kill:
                 if task_id in self.active_runs:
                     self.active_runs[task_id].status = "stopped"
-                    self._persist(self.active_runs[task_id])
-            self._processes.clear()
+                    runs_to_persist.append(self.active_runs[task_id])
+
+        for run in runs_to_persist:
+            self._persist(run)
+        for _task_id, process in processes_to_kill:
+            try:
+                process.terminate()
+                process.wait(timeout=1.0)
+            except Exception:
+                try:
+                    process.kill()
+                    process.wait()
+                except Exception:
+                    pass
 
     def _is_process_running(self, pid: int) -> bool:
         try:

@@ -1,11 +1,16 @@
 import json
+import threading
 import time
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.services.runner_service import TaskAlreadyRunningError, TaskRunner
+from core.services.runner_service import (
+    TaskAlreadyRunningError,
+    TaskRunner,
+    TaskRunStatus,
+)
 from core.task_lib import get_tasks_dir
 
 
@@ -70,7 +75,6 @@ def test_failed_task_start_is_still_queryable(tmp_path):
 def test_task_runner_kill_all(tmp_path):
     from core.services.runner_service import TaskRunner
     import time
-    from unittest.mock import MagicMock
 
     runner = TaskRunner(tmp_path)
     # Start a dummy long-running command (like sleep 10)
@@ -152,3 +156,70 @@ def test_overlap_guard_is_atomic_and_scoped_to_workspace(tmp_path):
     )
     assert second.status == "running"
     runner.kill_all()
+
+
+def _assert_runner_lock_is_available_from_another_thread(runner):
+    acquired: list[bool] = []
+
+    def acquire_lock():
+        locked = runner._run_lock.acquire(timeout=0.5)
+        acquired.append(locked)
+        if locked:
+            runner._run_lock.release()
+
+    thread = threading.Thread(target=acquire_lock)
+    thread.start()
+    thread.join(timeout=1)
+    assert acquired == [True]
+
+
+def test_stop_task_waits_without_holding_runner_lock(tmp_path):
+    runner = TaskRunner(tmp_path)
+    process = MagicMock()
+    process.wait.side_effect = lambda timeout: (
+        _assert_runner_lock_is_available_from_another_thread(runner)
+    )
+    run = TaskRunStatus(
+        task_id="review_1",
+        engine="codex",
+        pid=123,
+        status="running",
+        log_path=str(tmp_path / "review.log"),
+        start_time=0,
+        workspace=str(tmp_path),
+    )
+    runner.active_runs[run.task_id] = run
+    runner._processes[run.task_id] = process
+
+    with (
+        patch("core.services.runner_service.os.getpgid", return_value=123),
+        patch("core.services.runner_service.os.killpg"),
+    ):
+        assert runner.stop_task(run.task_id) is True
+
+    assert run.status == "stopped"
+    assert run.task_id not in runner._processes
+
+
+def test_kill_all_waits_without_holding_runner_lock(tmp_path):
+    runner = TaskRunner(tmp_path)
+    process = MagicMock()
+    process.wait.side_effect = lambda timeout=0: (
+        _assert_runner_lock_is_available_from_another_thread(runner)
+    )
+    run = TaskRunStatus(
+        task_id="review_1",
+        engine="codex",
+        pid=123,
+        status="running",
+        log_path=str(tmp_path / "review.log"),
+        start_time=0,
+        workspace=str(tmp_path),
+    )
+    runner.active_runs[run.task_id] = run
+    runner._processes[run.task_id] = process
+
+    runner.kill_all()
+
+    assert run.status == "stopped"
+    assert runner._processes == {}
