@@ -67,16 +67,20 @@ export default function useNativeAgentSessions(
         setNativeSessionsByProvider(previous => ({ ...previous, [provider]: result }));
       }
     } catch {
-      setNativeSessionErrors(previous => ({
-        ...previous,
-        [provider]: 'Provider history could not be loaded.',
-      }));
+      if (requestVersionRef.current.get(provider) === version) {
+        setNativeSessionErrors(previous => ({
+          ...previous,
+          [provider]: 'Provider history could not be loaded.',
+        }));
+      }
     } finally {
-      setNativeLoadingProviders(previous => {
-        const next = new Set(previous);
-        next.delete(provider);
-        return next;
-      });
+      if (requestVersionRef.current.get(provider) === version) {
+        setNativeLoadingProviders(previous => {
+          const next = new Set(previous);
+          next.delete(provider);
+          return next;
+        });
+      }
     }
   }, []);
 
@@ -91,6 +95,11 @@ export default function useNativeAgentSessions(
   }, [loadNativeSessions, providers]);
 
   const removeNativeSession = useCallback((provider: string, sessionId: string) => {
+    requestVersionRef.current.set(
+      provider,
+      (requestVersionRef.current.get(provider) || 0) + 1,
+    );
+    requestsRef.current.delete(provider);
     setNativeSessionsByProvider(previous => {
       const providerSessions = previous[provider] || [];
       const next = providerSessions.filter(
@@ -98,6 +107,11 @@ export default function useNativeAgentSessions(
       );
       cacheRef.current.set(provider, next);
       return { ...previous, [provider]: next };
+    });
+    setNativeLoadingProviders(previous => {
+      const next = new Set(previous);
+      next.delete(provider);
+      return next;
     });
   }, []);
 

@@ -9,37 +9,40 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type {
-  AgentSession,
-  NativeAgentSession,
-  ProviderCapabilities,
-} from '../types/agent';
+import type { AgentSession, NativeAgentSession, ProviderCapabilities } from '../types/agent';
 import {
   agentSessionReducer,
 } from '../state/agentSessionReducer';
-import type { ConversationListItem } from '../utils/agentWorkspaceHelpers';
 import {
   SESSION_PAGE_SIZE,
-  deduplicateNativeSessions,
   relativeTime,
   sessionStatusLabel,
   workspaceLabel,
 } from '../utils/agentWorkspaceHelpers';
+import type { ConversationListItem } from '../utils/agentWorkspaceHelpers';
 
 const PAGE_SIZE = SESSION_PAGE_SIZE;
 
 type Props = {
-  validProjects: { path: string; group: string; available?: boolean }[];
-  validProjectPaths: Set<string>;
-  sessions: AgentSession[];
-  nativeSessionsByProvider: Record<string, NativeAgentSession[]>;
   nativeLoadingProviders: Set<string>;
   nativeSessionErrors: Record<string, string>;
   selectedProvider: string;
   sessionSearch: string;
+  normalizedSessionSearch: string;
+  filteredGatewaySessions: AgentSession[];
+  recentSessions: AgentSession[];
   gatewaySessionLimit: number;
   nativeSessionLimit: number;
   unavailableSessionLimit: number;
+  resumableNativeSessions: NativeAgentSession[];
+  unavailableNativeSessions: NativeAgentSession[];
+  visibleNativeSessions: NativeAgentSession[];
+  visibleUnavailableSessions: NativeAgentSession[];
+  workspaceConversations: {
+    path: string;
+    label: string;
+    conversations: ConversationListItem[];
+  }[];
   showUnavailableHistory: boolean;
   expandedWorkspaces: Set<string>;
   collapsedWorkspaces: Set<string>;
@@ -63,17 +66,21 @@ type Props = {
 };
 
 export default function AgentWorkspaceSidebar({
-  validProjects,
-  validProjectPaths,
-  sessions,
-  nativeSessionsByProvider,
   nativeLoadingProviders,
   nativeSessionErrors,
   selectedProvider,
   sessionSearch,
+  normalizedSessionSearch,
+  filteredGatewaySessions,
+  recentSessions,
   gatewaySessionLimit,
   nativeSessionLimit,
   unavailableSessionLimit,
+  resumableNativeSessions,
+  unavailableNativeSessions,
+  visibleNativeSessions,
+  visibleUnavailableSessions,
+  workspaceConversations,
   showUnavailableHistory,
   expandedWorkspaces,
   collapsedWorkspaces,
@@ -98,81 +105,6 @@ export default function AgentWorkspaceSidebar({
   const selectedCapabilities = providers.find(provider => provider.providerId === selectedProvider);
   const nativeSessionsLoading = nativeLoadingProviders.has(selectedProvider);
   const nativeSessionsError = nativeSessionErrors[selectedProvider] || null;
-  const allNativeSessions = deduplicateNativeSessions(
-    Object.values(nativeSessionsByProvider).flat(),
-  );
-  const normalizedSessionSearch = sessionSearch.trim().toLocaleLowerCase();
-  const filteredGatewaySessions = sessions.filter(session => !normalizedSessionSearch || [
-    session.title,
-    session.provider,
-    session.cwd,
-    session.model,
-    session.status,
-  ].some(value => value?.toLocaleLowerCase().includes(normalizedSessionSearch)));
-  const recentSessions = filteredGatewaySessions.slice(0, gatewaySessionLimit);
-  const mappedProviderSessions = new Set(
-    sessions.map(session => `${session.provider}:${session.providerSessionId}`),
-  );
-  const filteredNativeSessions = allNativeSessions
-    .filter(session => !mappedProviderSessions.has(`${session.engine}:${session.session_id}`))
-    .filter(session => !normalizedSessionSearch || [
-      session.title,
-      session.engine,
-      session.project_path,
-      session.model,
-    ].some(value => value?.toLocaleLowerCase().includes(normalizedSessionSearch)));
-  const resumableNativeSessions = filteredNativeSessions.filter(session =>
-    validProjectPaths.has(session.project_path),
-  );
-  const unavailableNativeSessions = filteredNativeSessions.filter(session =>
-    !validProjectPaths.has(session.project_path),
-  );
-  const visibleNativeSessions = resumableNativeSessions.slice(0, nativeSessionLimit);
-  const visibleUnavailableSessions = unavailableNativeSessions.slice(
-    0,
-    unavailableSessionLimit,
-  );
-  const workspaceConversations = (() => {
-    const byWorkspace = new Map<string, ConversationListItem[]>(
-      validProjects.map(project => [project.path, []]),
-    );
-    recentSessions.forEach(session => {
-      const items = byWorkspace.get(session.projectId);
-      if (!items) return;
-      items.push({
-        source: 'gateway',
-        key: session.id,
-        projectPath: session.projectId,
-        updatedAt: session.updatedAt,
-        session,
-      });
-    });
-    visibleNativeSessions.forEach(session => {
-      const items = byWorkspace.get(session.project_path);
-      if (!items) return;
-      items.push({
-        source: 'native',
-        key: `${session.engine}:${session.session_id}`,
-        projectPath: session.project_path,
-        updatedAt: session.ended_at || session.started_at,
-        session,
-      });
-    });
-    return validProjects
-      .map(project => ({
-        path: project.path,
-        label: workspaceLabel(project.path),
-        conversations: (byWorkspace.get(project.path) || []).sort(
-          (left, right) => right.updatedAt.localeCompare(left.updatedAt),
-        ),
-      }))
-      .filter(group => group.conversations.length > 0 || !normalizedSessionSearch)
-      .sort((left, right) => {
-        if (left.path === workspace) return -1;
-        if (right.path === workspace) return 1;
-        return left.label.localeCompare(right.label);
-      });
-  })();
   const unavailableHistoryExpanded =
     showUnavailableHistory || Boolean(normalizedSessionSearch);
 

@@ -448,10 +448,11 @@ const TaskDashboard: React.FC = () => {
       return;
     }
     try {
+      const project = projects.find(item => item.path === workspace);
       const res = await fetch(`/api/tasks/${selected.name}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ engine, group: currentGroup || 'common', workspace })
+        body: JSON.stringify({ engine, group: project?.group || 'common', workspace })
       });
       if (res.ok) {
         const status: RunStatus = await res.json();

@@ -1,7 +1,9 @@
 import pytest
 import json
+from types import SimpleNamespace
 from httpx import ASGITransport, AsyncClient
 from core.web import server
+from core.web.routers import tasks as tasks_router
 from core.web.server import app
 
 
@@ -120,6 +122,49 @@ async def test_list_tasks(mock_env, tmp_path):
     upgrade = next(t for t in data if t["name"] == "upgrade")
     assert upgrade["hasStages"] is True
     assert upgrade["stages"][0]["status"] == "已完成"
+
+
+@pytest.mark.asyncio
+async def test_run_task_uses_registered_group_and_atomic_overlap(mock_env, monkeypatch):
+    workspace = mock_env / "workspace"
+    workspace.mkdir()
+    config_path = mock_env / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["project_registry"] = [{"path": str(workspace), "group": "work"}]
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    (mock_env / "tasks" / "review.md").write_text("# Review\n", encoding="utf-8")
+    calls = []
+
+    class FakeRunner:
+        def run_task(self, name, engine, group, **kwargs):
+            calls.append((name, engine, group, kwargs))
+            return SimpleNamespace(
+                task_id="review_1",
+                engine=engine,
+                pid=1,
+                status="running",
+                log_path="/tmp/review.log",
+                start_time=0,
+                session_id=None,
+                workspace=str(workspace),
+            )
+
+    monkeypatch.setattr(tasks_router, "_runner", FakeRunner())
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.post(
+            "/api/tasks/review/run",
+            json={
+                "engine": "codex",
+                "group": "common",
+                "workspace": str(workspace),
+            },
+        )
+
+    assert response.status_code == 200
+    assert calls[0][2] == "work"
+    assert calls[0][3]["prevent_overlap"] is True
 
 
 @pytest.mark.asyncio

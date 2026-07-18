@@ -15,17 +15,21 @@ export default function AgentWorkspace() {
   return (
     <div className="flex min-h-full gap-3 lg:h-full">
       <AgentWorkspaceSidebar
-        validProjects={workspace.validProjects}
-        validProjectPaths={workspace.validProjectPaths}
-        sessions={workspace.sessions}
-        nativeSessionsByProvider={workspace.nativeSessionsByProvider}
         nativeLoadingProviders={workspace.nativeLoadingProviders}
         nativeSessionErrors={workspace.nativeSessionErrors}
         selectedProvider={workspace.selectedProvider}
         sessionSearch={workspace.sessionSearch}
+        normalizedSessionSearch={workspace.normalizedSessionSearch}
+        filteredGatewaySessions={workspace.filteredGatewaySessions}
+        recentSessions={workspace.recentSessions}
         gatewaySessionLimit={workspace.gatewaySessionLimit}
         nativeSessionLimit={workspace.nativeSessionLimit}
         unavailableSessionLimit={workspace.unavailableSessionLimit}
+        resumableNativeSessions={workspace.resumableNativeSessions}
+        unavailableNativeSessions={workspace.unavailableNativeSessions}
+        visibleNativeSessions={workspace.visibleNativeSessions}
+        visibleUnavailableSessions={workspace.visibleUnavailableSessions}
+        workspaceConversations={workspace.workspaceConversations}
         showUnavailableHistory={workspace.showUnavailableHistory}
         expandedWorkspaces={workspace.expandedWorkspaces}
         collapsedWorkspaces={workspace.collapsedWorkspaces}

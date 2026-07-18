@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Clock, Plus, Trash2, Play, AlertCircle, PauseCircle, PlayCircle } from 'lucide-react';
+import { Clock, Plus, Trash2, Play, AlertCircle, PauseCircle, PlayCircle, Pencil, X } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import {
   fetchSchedules,
@@ -28,7 +28,7 @@ function formatTimestamp(ts: number | null): string {
 }
 
 export default function CronPage() {
-  const { currentGroup, projects } = useProject();
+  const { projects } = useProject();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -36,6 +36,7 @@ export default function CronPage() {
   const [engine, setEngine] = useState('');
   const [cronExpr, setCronExpr] = useState('0 9 * * *');
   const [workspace, setWorkspace] = useState('');
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -77,24 +78,50 @@ export default function CronPage() {
     return () => clearInterval(id);
   }, [loadSchedules]);
 
-  const handleCreate = async () => {
+  const handleSave = async () => {
     if (!taskName || !engine || !workspace || !cronExpr.trim()) return;
     setSubmitting(true);
     setError(null);
     try {
-      await createSchedule({
+      const project = projects.find(item => item.path === workspace);
+      const values = {
         task_name: taskName,
         engine,
-        group: currentGroup || 'common',
+        group: project?.group || 'common',
         workspace,
         cron_expr: cronExpr.trim(),
-      });
+      };
+      if (editingScheduleId) {
+        await updateSchedule(editingScheduleId, values);
+      } else {
+        await createSchedule(values);
+      }
+      setEditingScheduleId(null);
       loadSchedules();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create schedule');
+      setError(
+        e instanceof Error
+          ? e.message
+          : editingScheduleId
+            ? 'Failed to update schedule'
+            : 'Failed to create schedule',
+      );
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleEdit = (schedule: Schedule) => {
+    const availableWorkspaces = projects.filter(project => project.available !== false);
+    const scheduleWorkspace = availableWorkspaces.some(
+      project => project.path === schedule.workspace,
+    ) ? schedule.workspace : availableWorkspaces[0]?.path;
+    setEditingScheduleId(schedule.id);
+    setTaskName(schedule.task_name);
+    setEngine(schedule.engine);
+    setCronExpr(schedule.cron_expr);
+    setWorkspace(scheduleWorkspace || '');
+    setError(null);
   };
 
   const toggleEnabled = async (schedule: Schedule) => {
@@ -109,6 +136,7 @@ export default function CronPage() {
   const handleDelete = async (id: string) => {
     try {
       await deleteSchedule(id);
+      if (editingScheduleId === id) setEditingScheduleId(null);
       loadSchedules();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to delete schedule');
@@ -128,7 +156,7 @@ export default function CronPage() {
     <div className="flex flex-col lg:flex-row gap-4 min-h-full lg:h-full">
       <section className="w-full lg:w-80 shrink-0 glass-card p-5 space-y-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-          <Clock className="w-4 h-4" /> New Schedule
+          <Clock className="w-4 h-4" /> {editingScheduleId ? 'Edit Schedule' : 'New Schedule'}
         </div>
 
         <div>
@@ -195,12 +223,21 @@ export default function CronPage() {
         </div>
 
         <button
-          onClick={() => void handleCreate()}
+          onClick={() => void handleSave()}
           disabled={submitting || !taskName || !engine || !workspace || !cronExpr.trim()}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-95 transition-all"
         >
-          <Plus className="w-4 h-4" /> Create Schedule
+          {editingScheduleId ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          {editingScheduleId ? 'Save Schedule' : 'Create Schedule'}
         </button>
+        {editingScheduleId && (
+          <button
+            onClick={() => setEditingScheduleId(null)}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50"
+          >
+            <X className="w-4 h-4" /> Cancel Editing
+          </button>
+        )}
       </section>
 
       <div className="flex-1 min-w-0 glass-card p-5 flex flex-col">
@@ -264,6 +301,13 @@ export default function CronPage() {
                 </div>
               </div>
 
+              <button
+                onClick={() => handleEdit(schedule)}
+                title="Edit"
+                className="shrink-0 p-1.5 text-slate-400 hover:text-primary transition-colors"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
               <button
                 onClick={() => void handleRunNow(schedule.id)}
                 title="Run now"
