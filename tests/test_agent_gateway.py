@@ -7,7 +7,14 @@ import pytest
 
 from core.services.agent_adapters.fake import FakeAgentAdapter
 from core.services.agent_gateway import AgentGateway, AgentGatewayError
-from core.services.agent_protocol import AgentCommand, AgentEvent, AgentInput, TurnInput
+from core.services.agent_protocol import (
+    AdapterEvent,
+    AgentCommand,
+    AgentEvent,
+    AgentInput,
+    SessionStatus,
+    TurnInput,
+)
 from core.services.agent_store import AgentStore
 
 
@@ -161,4 +168,41 @@ async def test_gateway_disconnects_subscriber_that_falls_behind(tmp_path):
     assert queue not in gateway._subscribers.get(session.id, set())
     assert (await queue.get()).type == "test.two"
     assert await queue.get() is None
+    await gateway.stop()
+
+
+@pytest.mark.asyncio
+async def test_gateway_marks_provider_sessions_error_when_adapter_events_crash(
+    tmp_path,
+):
+    """If an adapter's events() stream raises (the underlying CLI process
+    died, a protocol error, etc.), every session owned by that provider must
+    flip to ERROR — a client polling/subscribed to it needs to know it's
+    dead rather than silently stop receiving updates."""
+
+    class CrashingAdapter(FakeAgentAdapter):
+        async def events(self):
+            while True:
+                event = await self._events.get()
+                if event is None:
+                    return
+                if event.type == "crash":
+                    raise RuntimeError("adapter process died")
+                yield event
+
+    config, workspace = _config(tmp_path)
+    adapter = CrashingAdapter()
+    gateway = AgentGateway(AgentStore(tmp_path / "agent.sqlite3"), config, [adapter])
+    await gateway.start()
+    session = await gateway.create_session(provider="fake", project_id=str(workspace))
+    other = await gateway.create_session(provider="fake", project_id=str(workspace))
+
+    await adapter._events.put(AdapterEvent(type="crash", provider_session_id="x"))
+    for _ in range(50):
+        if gateway.get_session(session.id).status == SessionStatus.ERROR:
+            break
+        await asyncio.sleep(0.01)
+
+    assert gateway.get_session(session.id).status == SessionStatus.ERROR
+    assert gateway.get_session(other.id).status == SessionStatus.ERROR
     await gateway.stop()

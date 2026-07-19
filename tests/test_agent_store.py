@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import sqlite3
+
+import pytest
+
 from core.services.agent_protocol import (
     AgentEvent,
     AgentSession,
@@ -111,4 +115,143 @@ def test_store_pages_recent_events_in_chronological_order(tmp_path):
     )
     assert [event.sequence for event in latest] == [4, 5]
     assert [event.sequence for event in earlier] == [2, 3]
+    store.close()
+
+
+_V1_SESSIONS_TABLE = """
+    CREATE TABLE agent_sessions (
+        id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        provider_session_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        cwd TEXT NOT NULL,
+        title TEXT,
+        model TEXT,
+        permission_mode TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        status TEXT NOT NULL,
+        last_sequence INTEGER NOT NULL DEFAULT 0,
+        capability_snapshot TEXT NOT NULL,
+        UNIQUE(provider, provider_session_id)
+    );
+    CREATE TABLE agent_events (
+        session_id TEXT NOT NULL,
+        sequence INTEGER NOT NULL,
+        event_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(session_id, sequence)
+    );
+"""
+
+
+def test_store_migrates_a_v1_database_and_adds_resource_snapshot(tmp_path):
+    """Recovers a pre-resource_snapshot database, as if opened after an
+    upgrade — the ALTER TABLE path only runs against a database that
+    predates the column, never against one AgentStore itself created."""
+    path = tmp_path / "agent.sqlite3"
+    raw = sqlite3.connect(path)
+    raw.executescript(
+        "CREATE TABLE schema_version (version INTEGER NOT NULL);"
+        "INSERT INTO schema_version(version) VALUES (1);" + _V1_SESSIONS_TABLE
+    )
+    raw.commit()
+    raw.close()
+
+    store = AgentStore(path)
+    columns = {
+        row["name"]
+        for row in store._connection.execute("PRAGMA table_info(agent_sessions)")
+    }
+    assert "resource_snapshot" in columns
+    version = store._connection.execute(
+        "SELECT version FROM schema_version"
+    ).fetchone()["version"]
+    assert version == SCHEMA_VERSION
+    store.close()
+
+
+def test_store_migrates_a_v2_database_and_repairs_stale_last_sequence(tmp_path):
+    """Recovers a v2 database (has resource_snapshot, predates the
+    last_sequence repair) whose session counter fell behind its own event
+    log — the exact corruption test_store_never_reuses_an_event_sequence...
+    guards against at runtime, but here as something already on disk."""
+    path = tmp_path / "agent.sqlite3"
+    raw = sqlite3.connect(path)
+    raw.executescript(
+        "CREATE TABLE schema_version (version INTEGER NOT NULL);"
+        "INSERT INTO schema_version(version) VALUES (2);"
+        + _V1_SESSIONS_TABLE.replace(
+            "UNIQUE(provider, provider_session_id)",
+            "resource_snapshot TEXT NOT NULL DEFAULT '{}',"
+            "UNIQUE(provider, provider_session_id)",
+        )
+    )
+    raw.execute(
+        "INSERT INTO agent_sessions (id, provider, provider_session_id, "
+        "project_id, cwd, permission_mode, created_at, updated_at, status, "
+        "last_sequence, capability_snapshot) VALUES "
+        "('agent_test', 'fake', 'provider_test', '/tmp/p', '/tmp/p', "
+        "'workspace-write', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', "
+        '\'ready\', 1, \'{"providerId": "fake", "displayName": "Fake"}\')'
+    )
+    raw.execute(
+        "INSERT INTO agent_events(session_id, sequence, event_json, created_at) "
+        "VALUES ('agent_test', 5, '{}', '2024-01-01T00:00:00Z')"
+    )
+    raw.commit()
+    raw.close()
+
+    store = AgentStore(path)
+    assert store.get_session("agent_test").last_sequence == 5
+    version = store._connection.execute(
+        "SELECT version FROM schema_version"
+    ).fetchone()["version"]
+    assert version == SCHEMA_VERSION
+    store.close()
+
+
+def test_store_recovers_from_a_schema_version_row_with_no_tables(tmp_path):
+    """A crash between creating schema_version and the real tables leaves a
+    row (version 0) but no agent_sessions/agent_events — recovery must
+    UPDATE that row rather than INSERT a duplicate one."""
+    path = tmp_path / "agent.sqlite3"
+    raw = sqlite3.connect(path)
+    raw.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
+    raw.execute("INSERT INTO schema_version(version) VALUES (0)")
+    raw.commit()
+    raw.close()
+
+    store = AgentStore(path)
+    rows = store._connection.execute("SELECT version FROM schema_version").fetchall()
+    assert [row["version"] for row in rows] == [SCHEMA_VERSION]
+    store.upsert_session(_session())
+    assert store.get_session("agent_test") is not None
+    store.close()
+
+
+def test_store_rejects_a_schema_version_newer_than_supported(tmp_path):
+    path = tmp_path / "agent.sqlite3"
+    raw = sqlite3.connect(path)
+    raw.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
+    raw.execute("INSERT INTO schema_version(version) VALUES (?)", (SCHEMA_VERSION + 1,))
+    raw.commit()
+    raw.close()
+
+    with pytest.raises(RuntimeError, match="newer than supported"):
+        AgentStore(path)
+
+
+def test_append_event_rejects_an_unknown_session(tmp_path):
+    store = AgentStore(tmp_path / "agent.sqlite3")
+    with pytest.raises(KeyError):
+        store.append_event(AgentEvent(type="turn.started", session_id="missing"))
+    store.close()
+
+
+def test_trim_events_rejects_a_non_positive_keep(tmp_path):
+    store = AgentStore(tmp_path / "agent.sqlite3")
+    store.upsert_session(_session())
+    with pytest.raises(ValueError):
+        store.trim_events("agent_test", keep=0)
     store.close()
