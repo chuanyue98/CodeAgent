@@ -83,6 +83,20 @@ export default function AgentWorkspace() {
               <p className="font-semibold">No interactive provider is available</p>
               <p className="mt-0.5">{workspace.providers[0]?.unavailableReason || 'The Agent Gateway could not start.'}</p>
             </div>
+            {workspace.gatewayStatus.legacyFallback && (
+              <Link to="/agent/legacy" className="shrink-0 font-semibold underline">Open legacy Chat</Link>
+            )}
+          </div>
+        )}
+        {!workspace.loading && !workspace.gatewayStatus.enabled && (
+          <div className="mb-3 flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+            <div>
+              <p className="font-semibold">Agent Gateway is disabled</p>
+              <p className="mt-0.5">Enable it in configuration to use persistent provider sessions.</p>
+            </div>
+            {workspace.gatewayStatus.legacyFallback && (
+              <Link to="/agent/legacy" className="shrink-0 font-semibold underline">Open legacy Chat</Link>
+            )}
           </div>
         )}
         {workspace.error && (

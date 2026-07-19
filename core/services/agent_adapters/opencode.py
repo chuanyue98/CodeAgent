@@ -449,7 +449,13 @@ class OpenCodeAdapter:
         session_id = data.get("sessionID")
         if not isinstance(session_id, str):
             return []
-        turn_id = data.get("assistantMessageID") or self._active_turns.get(session_id)
+        # The turn id we hand back to callers from start_turn() is the
+        # "admitted" message id from the initial prompt response, which is
+        # what all subsequent events must be tagged with for callers to
+        # correlate them. OpenCode's own assistantMessageID (used below only
+        # as a fallback for turns we didn't initiate) is a different id, so
+        # the already-tracked value always takes priority.
+        turn_id = self._active_turns.get(session_id) or data.get("assistantMessageID")
         item_id = data.get("textID") or data.get("callID")
 
         def event(kind: str, event_data: dict[str, Any] | None = None) -> AdapterEvent:
@@ -462,10 +468,11 @@ class OpenCodeAdapter:
             )
 
         if event_type == "session.next.step.started":
-            assistant_id = data.get("assistantMessageID")
-            if isinstance(assistant_id, str):
-                self._active_turns[session_id] = assistant_id
-                turn_id = assistant_id
+            if session_id not in self._active_turns:
+                assistant_id = data.get("assistantMessageID")
+                if isinstance(assistant_id, str):
+                    self._active_turns[session_id] = assistant_id
+                    turn_id = assistant_id
             return [event("turn.started")]
         if event_type == "session.next.text.delta":
             return [event("message.delta", {"delta": data.get("delta", "")})]

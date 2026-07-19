@@ -22,9 +22,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi import Query
 from pydantic import BaseModel, Field
 from fastapi.responses import StreamingResponse
@@ -34,7 +35,21 @@ from core.services.config_service import ConfigService
 from core.web.resource_paths import ROOT_DIR
 from core.web.routers.config import get_config_path
 
-router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+def _require_legacy_fallback() -> None:
+    config, _warnings = ConfigService(get_config_path()).get_config()
+    raw = config.get("agent_gateway", {}) if isinstance(config, dict) else {}
+    enabled = bool(raw.get("legacy_fallback", True))
+    override = os.environ.get("CA_AGENT_LEGACY_FALLBACK")
+    if override is not None:
+        enabled = override.strip().lower() not in {"0", "false", "no", "off"}
+    if not enabled:
+        raise HTTPException(status_code=404, detail="Legacy Chat fallback is disabled")
+
+
+router = APIRouter(
+    prefix="/api/chat", tags=["chat"], dependencies=[Depends(_require_legacy_fallback)]
+)
 
 # Separate singleton from tasks.py's — chat turns (.jsonl) and task runs
 # (.log) are distinct entities tracked under distinct id prefixes/log

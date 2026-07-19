@@ -47,6 +47,18 @@ def _http_error(exc: AgentGatewayError) -> HTTPException:
     )
 
 
+@router.get("/status")
+async def get_agent_gateway_status(request: Request) -> dict:
+    status = getattr(request.app.state, "agent_gateway_status", None)
+    if not isinstance(status, dict):
+        status = {
+            "enabled": getattr(request.app.state, "agent_gateway", None) is not None,
+            "legacyFallback": False,
+            "providers": {},
+        }
+    return status
+
+
 @router.get("/providers")
 async def list_agent_providers(request: Request) -> list[dict]:
     try:

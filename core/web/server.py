@@ -37,6 +37,34 @@ CONFIG_PATH = get_config_path()
 FRONTEND_DIST = resolve_resource_path("web/frontend/dist", "CA_FRONTEND_DIST")
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def get_agent_gateway_settings(config: dict) -> dict:
+    raw = config.get("agent_gateway", {})
+    provider_config = raw.get("providers", {})
+    providers = {
+        name: _env_bool(
+            f"CA_AGENT_PROVIDER_{name.upper()}",
+            bool(provider_config.get(name, True)),
+        )
+        for name in ("codex", "claude", "opencode", "gemini")
+    }
+    return {
+        "enabled": _env_bool(
+            "CA_AGENT_GATEWAY_ENABLED", bool(raw.get("enabled", True))
+        ),
+        "legacyFallback": _env_bool(
+            "CA_AGENT_LEGACY_FALLBACK", bool(raw.get("legacy_fallback", True))
+        ),
+        "providers": providers,
+    }
+
+
 def _get_roots():
     return (
         resolve_resource_path("skills", "CA_SKILLS_ROOT"),
@@ -131,6 +159,7 @@ async def lifespan(app: FastAPI):
     from core.services.agent_adapters.claude import ClaudeAdapter
     from core.services.agent_adapters.codex import CodexAdapter
     from core.services.agent_adapters.fake import FakeAgentAdapter
+    from core.services.agent_adapters.gemini import GeminiAdapter
     from core.services.agent_adapters.opencode import OpenCodeAdapter
     from core.services.agent_gateway import AgentGateway
     from core.services.agent_store import AgentStore
@@ -138,18 +167,34 @@ async def lifespan(app: FastAPI):
     agent_db = os.environ.get(
         "CA_AGENT_DB", str(Path.home() / ".codeagent" / "agent-gateway.sqlite3")
     )
-    adapters: list[AgentAdapter] = (
-        [FakeAgentAdapter()]
-        if os.environ.get("CA_AGENT_GATEWAY_FAKE") == "1"
-        else [CodexAdapter(), ClaudeAdapter(), OpenCodeAdapter()]
-    )
-    agent_gateway = AgentGateway(
-        AgentStore(agent_db),
-        get_config_path(),
-        adapters,
+    config, _warnings = ConfigService(get_config_path()).get_config()
+    gateway_settings = get_agent_gateway_settings(config)
+    app.state.agent_gateway_status = gateway_settings
+    adapter_factories = {
+        "codex": CodexAdapter,
+        "claude": ClaudeAdapter,
+        "opencode": OpenCodeAdapter,
+        "gemini": GeminiAdapter,
+    }
+    adapters: list[AgentAdapter] = []
+    if gateway_settings["enabled"]:
+        adapters = (
+            [FakeAgentAdapter()]
+            if os.environ.get("CA_AGENT_GATEWAY_FAKE") == "1"
+            else [
+                adapter_factories[name]()
+                for name, enabled in gateway_settings["providers"].items()
+                if enabled
+            ]
+        )
+    agent_gateway = (
+        AgentGateway(AgentStore(agent_db), get_config_path(), adapters)
+        if gateway_settings["enabled"]
+        else None
     )
     app.state.agent_gateway = agent_gateway
-    await agent_gateway.start()
+    if agent_gateway is not None:
+        await agent_gateway.start()
     schedule_service = ScheduleService(ConfigService(get_config_path()))
     scheduler_task = asyncio.create_task(
         scheduler_tick_loop(schedule_service, _task_runner, get_tasks_root)
@@ -161,7 +206,8 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
-    await agent_gateway.stop()
+    if agent_gateway is not None:
+        await agent_gateway.stop()
     app.state.agent_gateway = None
 
     # Clean up background subprocesses

@@ -30,6 +30,11 @@ def _app(tmp_path):
             [FakeAgentAdapter()],
         )
         app.state.agent_gateway = gateway
+        app.state.agent_gateway_status = {
+            "enabled": True,
+            "legacyFallback": True,
+            "providers": {"fake": True},
+        }
         await gateway.start()
         yield
         await gateway.stop()
@@ -42,6 +47,12 @@ def _app(tmp_path):
 def test_agent_rest_and_websocket_ack_event_and_replay(tmp_path):
     app, workspace = _app(tmp_path)
     with TestClient(app) as client:
+        status = client.get("/api/agent/status")
+        assert status.json() == {
+            "enabled": True,
+            "legacyFallback": True,
+            "providers": {"fake": True},
+        }
         providers = client.get("/api/agent/providers")
         assert providers.status_code == 200
         assert providers.json()[0]["available"] is True

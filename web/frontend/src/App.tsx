@@ -30,6 +30,7 @@ const LogViewer = lazy(() => import('./components/LogViewer'));
 const SessionsPage = lazy(() => import('./components/SessionsPage'));
 const AuditTrail = lazy(() => import('./components/AuditTrail'));
 const AgentWorkspace = lazy(() => import('./pages/AgentWorkspace'));
+const ChatPage = lazy(() => import('./components/ChatPage'));
 const CronPage = lazy(() => import('./components/CronPage'));
 const McpPage = lazy(() => import('./components/McpPage'));
 
@@ -125,6 +126,7 @@ function App() {
                 >
                   <Route index element={<Navigate to="web" replace />} />
                   <Route path="web" element={<AgentWorkspace />} />
+                  <Route path="legacy" element={<ChatPage />} />
                   <Route path="terminal" element={<LaunchPad />} />
                 </Route>
 

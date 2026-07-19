@@ -1,6 +1,12 @@
 export type PermissionMode = 'workspace-write' | 'read-only';
 export type ApprovalDecision = 'accept' | 'acceptForSession' | 'decline' | 'cancel';
 
+export interface AgentGatewayStatus {
+  enabled: boolean;
+  legacyFallback: boolean;
+  providers: Record<string, boolean>;
+}
+
 export interface ProviderCapabilities {
   providerId: string;
   displayName: string;

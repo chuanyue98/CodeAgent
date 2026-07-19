@@ -3,6 +3,7 @@ import { useProject } from '../context/ProjectContext';
 import {
   createAgentSession,
   deleteAgentSession,
+  fetchAgentGatewayStatus,
   fetchAgentProviders,
   fetchAgentHistory,
   fetchAgentSessions,
@@ -14,7 +15,7 @@ import {
 import { agentSessionReducer } from '../state/agentSessionReducer';
 import { SESSION_PAGE_SIZE } from '../utils/agentWorkspaceHelpers';
 import type { ConversationListItem } from '../utils/agentWorkspaceHelpers';
-import type { AgentEvent, AgentSession, NativeAgentSession, ProviderCapabilities, ApprovalDecision, PermissionMode } from '../types/agent';
+import type { AgentEvent, AgentGatewayStatus, AgentSession, NativeAgentSession, ProviderCapabilities, ApprovalDecision, PermissionMode } from '../types/agent';
 import { initialAgentSessionState } from '../state/agentSessionReducer';
 import useNativeAgentSessions from './useNativeAgentSessions';
 import useAgentWorkspaceSessions from './useAgentWorkspaceSessions';
@@ -23,6 +24,7 @@ export type UseAgentWorkspaceReturn = {
   currentGroup: string;
   validProjects: { path: string; group: string; available?: boolean }[];
   providers: ProviderCapabilities[];
+  gatewayStatus: AgentGatewayStatus;
   nativeLoadingProviders: Set<string>;
   nativeSessionErrors: Record<string, string>;
   selectedProvider: string;
@@ -95,6 +97,11 @@ export type UseAgentWorkspaceReturn = {
 export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const { projects, currentGroup, setCurrentGroup } = useProject();
   const [providers, setProviders] = useState<ProviderCapabilities[]>([]);
+  const [gatewayStatus, setGatewayStatus] = useState<AgentGatewayStatus>({
+    enabled: true,
+    legacyFallback: false,
+    providers: {},
+  });
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [selectedProvider, setSelectedProvider] = useState('');
   const [sessionSearch, setSessionSearch] = useState('');
@@ -154,10 +161,11 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [providerList, sessionList] = await Promise.all([
-        fetchAgentProviders(),
-        fetchAgentSessions(),
-      ]);
+      const status = await fetchAgentGatewayStatus();
+      const [providerList, sessionList] = status.enabled
+        ? await Promise.all([fetchAgentProviders(), fetchAgentSessions()])
+        : [[], []];
+      setGatewayStatus(status);
       setProviders(providerList);
       setSessions(sessionList);
       setSelectedProvider(previous =>
@@ -534,7 +542,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
 
   const selectedCapabilities = providers.find(provider => provider.providerId === selectedProvider);
   const availableProviders = providers.filter(provider => provider.available);
-  const noGatewayProvider = !loading && availableProviders.length === 0;
+  const noGatewayProvider = !loading && gatewayStatus.enabled && availableProviders.length === 0;
   const connectionLabel = connecting
     ? 'Connecting'
     : connected
@@ -561,6 +569,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     currentGroup,
     validProjects,
     providers,
+    gatewayStatus,
     nativeLoadingProviders,
     nativeSessionErrors,
     selectedProvider,

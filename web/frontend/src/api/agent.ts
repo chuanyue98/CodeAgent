@@ -2,11 +2,16 @@ import request from '../utils/request';
 import type {
   AgentCommand,
   AgentEvent,
+  AgentGatewayStatus,
   AgentSession,
   NativeAgentSession,
   PermissionMode,
   ProviderCapabilities,
 } from '../types/agent';
+
+export function fetchAgentGatewayStatus(): Promise<AgentGatewayStatus> {
+  return request('/api/agent/status');
+}
 
 export function fetchAgentProviders(): Promise<ProviderCapabilities[]> {
   return request('/api/agent/providers');

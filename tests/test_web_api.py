@@ -56,6 +56,29 @@ async def test_health_check():
     assert response.json() == {"status": "ok"}
 
 
+def test_agent_gateway_settings_support_config_and_environment(monkeypatch):
+    config = {
+        "agent_gateway": {
+            "enabled": False,
+            "legacy_fallback": False,
+            "providers": {"gemini": False, "codex": True},
+        }
+    }
+    monkeypatch.setenv("CA_AGENT_GATEWAY_ENABLED", "1")
+    monkeypatch.setenv("CA_AGENT_PROVIDER_CODEX", "false")
+
+    settings = server.get_agent_gateway_settings(config)
+
+    assert settings["enabled"] is True
+    assert settings["legacyFallback"] is False
+    assert settings["providers"] == {
+        "codex": False,
+        "claude": True,
+        "opencode": True,
+        "gemini": False,
+    }
+
+
 @pytest.mark.asyncio
 async def test_api_root_without_built_frontend():
     async with AsyncClient(

@@ -88,6 +88,24 @@ def registered_project(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_legacy_chat_endpoints_are_disabled_by_config(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"agent_gateway": {"legacy_fallback": False}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(chat_router, "get_config_path", lambda: config_path)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get("/api/chat/capabilities", params={"engine": "codex"})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Legacy Chat fallback is disabled"
+
+
+@pytest.mark.asyncio
 async def test_start_chat_turn_returns_running_status(fake_runner, registered_project):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
