@@ -65,3 +65,18 @@ def test_get_doctor_sections_returns_sections():
     sections = doctor.get_doctor_sections(fix=False)
     assert len(sections) > 0
     assert all(isinstance(s, doctor.Section) for s in sections)
+
+
+def test_lightweight_resolver_uses_config_manager(tmp_path, monkeypatch):
+    for directory in ("skills", "prompt", "hooks", "plugins"):
+        (tmp_path / directory).mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    resolver = doctor._LightweightResolver(
+        tmp_path,
+        {"groups": {"codeagent": {"skills": []}}, "default_group": "common"},
+    )
+
+    assert resolver.get_current_project_group() == "codeagent"
+    assert resolver._get_skill_search_roots() == [(tmp_path / "skills").resolve()]
+    assert resolver.get_skills_to_mount()[0] == []

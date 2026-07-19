@@ -363,6 +363,10 @@ class _LightweightResolver:
                 self_inner.name = "doctor"
                 self_inner.default_model = ""
                 self_inner.root_dir = root
+                from core.config_manager import ConfigManager
+
+                self_inner.config_manager = ConfigManager(root)
+                self_inner.config_manager.full_config = cfg
                 self_inner.full_config = cfg
                 from core.engine_base import EnvironmentManager
 
@@ -373,12 +377,13 @@ class _LightweightResolver:
                 from core.hook_scanner import HookScanner
                 from core.plugin_scanner import PluginScanner
 
-                self_inner.skill_scanner = SkillScanner(root / "skills")
-                self_inner.prompt_scanner = PromptScanner(root / "prompt")
+                resource_root = self_inner.config_manager.resolve_resource_root()
+                self_inner.skill_scanner = SkillScanner(resource_root / "skills")
+                self_inner.prompt_scanner = PromptScanner(resource_root / "prompt")
                 self_inner.hook_scanner = HookScanner(
                     self_inner._get_hook_search_roots()
                 )
-                self_inner.plugin_scanner = PluginScanner(root / "plugins")
+                self_inner.plugin_scanner = PluginScanner(resource_root / "plugins")
 
             def execute(self_inner, *a, **kw):
                 raise NotImplementedError
