@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import json
 import os
 import subprocess
@@ -215,6 +217,54 @@ def test_pty_websocket_closes_cleanly_when_spawn_fails(tmp_path, monkeypatch):
             ) as ws:
                 ws.receive_json()
     assert exc_info.value.code == 1011
+
+    assert len(opened_fds) == 1
+    with pytest.raises(OSError):
+        os.close(opened_fds[0])
+
+
+def test_pty_websocket_closes_master_fd_when_spawn_is_cancelled(tmp_path, monkeypatch):
+    """asyncio.CancelledError (e.g. the client vanishing mid-connect, which
+    cancels the handler task while it's awaiting create_subprocess_exec) is
+    a BaseException, not an Exception -- a bare `except OSError`/`except
+    Exception` around the spawn wouldn't catch it, so master_fd would leak
+    on every cancelled connection attempt instead of just outright spawn
+    failures."""
+    if sys.platform == "win32":
+        pytest.skip("PTY sessions are POSIX-only")
+    app = _app(tmp_path, monkeypatch)
+
+    import pty as stdlib_pty
+
+    opened_fds: list[int] = []
+    real_openpty = stdlib_pty.openpty
+
+    def _tracking_openpty():
+        master_fd, slave_fd = real_openpty()
+        opened_fds.append(master_fd)
+        return master_fd, slave_fd
+
+    async def _cancelled(*args, **kwargs):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(stdlib_pty, "openpty", _tracking_openpty)
+    monkeypatch.setattr(pty_router.asyncio, "create_subprocess_exec", _cancelled)
+
+    # The cancellation surfaces as a plain CancelledError re-raised out of
+    # the route (not the WebSocketDisconnect FastAPI normally translates
+    # unhandled exceptions into), and TestClient's background-thread/loop
+    # bridging re-wraps it as concurrent.futures.CancelledError and can let
+    # it escape either from the websocket context or only once TestClient
+    # itself tears down -- assert on the whole block.
+    with pytest.raises(
+        (WebSocketDisconnect, asyncio.CancelledError, concurrent.futures.CancelledError)
+    ):
+        with TestClient(app) as client:
+            with client.websocket_connect(
+                "/api/pty/ws",
+                params={"engine": "claude", "cwd": app.state.workspace},
+            ) as ws:
+                ws.receive_json()
 
     assert len(opened_fds) == 1
     with pytest.raises(OSError):

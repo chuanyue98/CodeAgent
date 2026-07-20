@@ -122,13 +122,18 @@ async def pty_websocket(
             )
         finally:
             os.close(slave_fd)
-    except OSError as exc:
-        # Spawn failed (e.g. out of file descriptors/processes) -- the
-        # slave fd is already closed above, but master_fd was opened
-        # before this try and nothing else owns it yet, so it must be
-        # closed here or it leaks for the life of the server process.
+    except BaseException as exc:
+        # Spawn failed (e.g. out of file descriptors/processes) or the await
+        # was cancelled (e.g. the client vanished mid-connect -- raised as
+        # asyncio.CancelledError, a BaseException, not an Exception, so it
+        # must be caught here too). Either way the slave fd is already
+        # closed above, but master_fd was opened before this try and
+        # nothing else owns it yet, so it must be closed here or it leaks
+        # for the life of the server process.
         with contextlib.suppress(OSError):
             os.close(master_fd)
+        if not isinstance(exc, OSError):
+            raise
         with contextlib.suppress(Exception):
             await websocket.close(code=1011, reason=f"Failed to start session: {exc}")
         return
