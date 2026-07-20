@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -57,6 +58,10 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [groups, setGroups] = useState<Record<string, GroupDefinition>>({});
   const [availableGroups, setAvailableGroups] = useState<string[]>(['codeagent', 'common', 'work', 'web']);
   const [error, setError] = useState<string | null>(null);
+  const currentGroupRef = useRef(currentGroup);
+  useEffect(() => {
+    currentGroupRef.current = currentGroup;
+  }, [currentGroup]);
 
   const refreshConfig = useCallback(async () => {
     try {
@@ -83,7 +88,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
 
       setAvailableGroups(Array.from(groupSet));
 
-      if (!groupSet.has(currentGroup)) {
+      if (!groupSet.has(currentGroupRef.current)) {
         setCurrentGroup('codeagent');
       }
     } catch (err) {
@@ -92,7 +97,12 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       console.error('Failed to refresh project context:', err);
       setConfig({});
     }
-  }, [currentGroup]);
+    // Stable identity (no currentGroup dependency) -- refreshConfig must not
+    // change identity on every group switch, or the mount-only effect below
+    // (deps: [refreshConfig]) would re-fetch /api/config on every
+    // setCurrentGroup call and could silently revert a just-made selection
+    // if the freshly-fetched group list hasn't caught up yet.
+  }, []);
 
   const updateConfig = useCallback(async (newConfig: Config) => {
     try {

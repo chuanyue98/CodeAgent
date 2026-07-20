@@ -51,8 +51,15 @@ export default function useAgentWorkspaceSessions({
     [normalizedSessionSearch, sessions],
   );
   const recentSessions = useMemo(
-    () => filteredGatewaySessions.slice(0, gatewaySessionLimit),
-    [filteredGatewaySessions, gatewaySessionLimit],
+    // The page-size limit is for the default (unfiltered) "recent N, load
+    // more" view. Applying it before workspaceConversations groups by
+    // workspace would silently drop a workspace whose search matches all
+    // happen to sort past the limit in the global list -- so while
+    // searching, show every match instead of a truncated window of them.
+    () => normalizedSessionSearch
+      ? filteredGatewaySessions
+      : filteredGatewaySessions.slice(0, gatewaySessionLimit),
+    [filteredGatewaySessions, gatewaySessionLimit, normalizedSessionSearch],
   );
   const mappedProviderSessions = useMemo(
     () => new Set(sessions.map(session => `${session.provider}:${session.providerSessionId}`)),
@@ -78,12 +85,16 @@ export default function useAgentWorkspaceSessions({
     [filteredNativeSessions, validProjectPaths],
   );
   const visibleNativeSessions = useMemo(
-    () => resumableNativeSessions.slice(0, nativeSessionLimit),
-    [resumableNativeSessions, nativeSessionLimit],
+    () => normalizedSessionSearch
+      ? resumableNativeSessions
+      : resumableNativeSessions.slice(0, nativeSessionLimit),
+    [resumableNativeSessions, nativeSessionLimit, normalizedSessionSearch],
   );
   const visibleUnavailableSessions = useMemo(
-    () => unavailableNativeSessions.slice(0, unavailableSessionLimit),
-    [unavailableNativeSessions, unavailableSessionLimit],
+    () => normalizedSessionSearch
+      ? unavailableNativeSessions
+      : unavailableNativeSessions.slice(0, unavailableSessionLimit),
+    [unavailableNativeSessions, unavailableSessionLimit, normalizedSessionSearch],
   );
   const workspaceConversations = useMemo(() => {
     const byWorkspace = new Map<string, ConversationListItem[]>(

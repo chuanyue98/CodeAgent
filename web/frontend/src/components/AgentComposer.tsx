@@ -4,6 +4,7 @@ type Props = {
   input: string;
   activeTurnId: string | null;
   connecting: boolean;
+  sending: boolean;
   canCompose: boolean;
   composerPlaceholder: string;
   sessionCapabilitySnapshot: { supportsCancel?: boolean } | undefined;
@@ -17,6 +18,7 @@ export default function AgentComposer({
   input,
   activeTurnId,
   connecting,
+  sending,
   canCompose,
   composerPlaceholder,
   sessionCapabilitySnapshot,
@@ -59,11 +61,11 @@ export default function AgentComposer({
       ) : (
         <button
           onClick={() => void onSend()}
-          disabled={!input.trim() || !canCompose || connecting}
+          disabled={!input.trim() || !canCompose || connecting || sending}
           aria-label="Send message"
           className="rounded-lg bg-primary p-2.5 text-white hover:bg-primary/90 disabled:opacity-40"
         >
-          {connecting ? (
+          {connecting || sending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <Send className="h-4 w-4" />
