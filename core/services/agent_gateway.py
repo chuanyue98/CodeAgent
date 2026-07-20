@@ -118,7 +118,17 @@ class AgentGateway:
                 )
         return results
 
-    def _registered_workspace(self, project_id: str) -> str:
+    def _registered_workspace(self, project_id: str) -> tuple[str, str]:
+        """Resolve and validate a requested workspace against the registry.
+
+        Returns ``(cwd, identity)``: ``cwd`` is the fully resolved path used
+        to actually launch the provider CLI, while ``identity`` is the
+        registry's own path string for that entry. The two can differ on
+        Windows (``resolve()`` always normalizes to backslashes) or when the
+        registry entry uses ``~``/relative segments -- callers must persist
+        ``identity`` as the session's project_id so it stays byte-equal to
+        what ``GET /api/projects`` returns for the frontend to match on.
+        """
         config, warnings = ConfigService(self.config_path).get_config()
         if warnings:
             raise AgentGatewayError("config_error", warnings[0], status_code=500)
@@ -133,7 +143,7 @@ class AgentGateway:
             ):
                 continue
             if Path(project["path"]).expanduser().resolve() == requested:
-                return str(requested)
+                return str(requested), project["path"]
         raise AgentGatewayError(
             "workspace_not_registered",
             "Select a workspace registered in Settings before starting an agent",
@@ -207,11 +217,11 @@ class AgentGateway:
                 capabilities.unavailable_reason or "Provider is unavailable",
                 status_code=503,
             )
-        cwd = self._registered_workspace(project_id)
+        cwd, project_identity = self._registered_workspace(project_id)
         resource_snapshot = self._resource_snapshot(cwd)
         provider_session = await adapter.create_session(
             CreateSessionOptions(
-                project_id=cwd,
+                project_id=project_identity,
                 cwd=cwd,
                 model=model,
                 permission_mode=permission_mode,
@@ -221,7 +231,7 @@ class AgentGateway:
             id=f"agent_{uuid4().hex}",
             provider=provider,
             provider_session_id=provider_session.id,
-            project_id=cwd,
+            project_id=project_identity,
             cwd=cwd,
             title=title,
             model=provider_session.model or model,
@@ -271,7 +281,7 @@ class AgentGateway:
                 "unsupported_capability",
                 "This provider does not support importing native sessions",
             )
-        cwd = self._registered_workspace(project_id)
+        cwd, project_identity = self._registered_workspace(project_id)
         resource_snapshot = self._resource_snapshot(cwd)
         resumed = await adapter.resume_session(
             provider_session_id,
@@ -285,7 +295,7 @@ class AgentGateway:
             id=f"agent_{uuid4().hex}",
             provider=provider,
             provider_session_id=resumed.id,
-            project_id=cwd,
+            project_id=project_identity,
             cwd=cwd,
             title=title,
             model=resumed.model or model,
