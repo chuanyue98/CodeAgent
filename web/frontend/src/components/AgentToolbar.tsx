@@ -40,7 +40,7 @@ export default function AgentToolbar({
 
   return (
     <div className="mb-3 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-3">
-      <label className="min-w-0 flex-1 text-[11px] font-medium text-slate-500">
+      <label className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">
         Workspace
         <span className="relative mt-1 flex">
           <FolderGit2 className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />

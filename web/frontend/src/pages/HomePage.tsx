@@ -11,7 +11,7 @@ const QUICK_ACTIONS = [
   {
     to: '/agent/terminal',
     title: 'Local Terminal',
-    description: 'Open a provider CLI in a separate terminal on this machine.',
+    description: 'Open a provider CLI in an in-browser terminal, running on this machine.',
     icon: Terminal,
   },
   {
