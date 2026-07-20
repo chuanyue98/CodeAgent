@@ -95,6 +95,72 @@ def test_pty_websocket_notifies_and_closes_when_process_exits_on_its_own(
                 ws.receive_json()
 
 
+def test_pty_websocket_drains_buffered_output_before_exit_message(
+    tmp_path, monkeypatch
+):
+    """A process that writes output and exits immediately must not have
+    its trailing output truncated by a race between the process dying and
+    pty.py still draining the PTY master's buffer. This locks in the
+    correct end-to-end behavior (full output arrives before "exit"); the
+    race itself depends on OS/event-loop scheduling timing this harness
+    can't force deterministically, so this isn't a guaranteed repro of the
+    old bug on every run/platform -- see the router's pump_exit comment
+    for why waiting on the natural EOF drain (vs. tearing the reader down
+    immediately on process exit) is the actual fix."""
+    if sys.platform == "win32":
+        pytest.skip("PTY sessions are POSIX-only")
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/api/pty/ws",
+            params={"engine": "claude", "cwd": app.state.workspace},
+        ) as ws:
+            message = ws.receive_json()
+            while "READY" not in message["data"]:
+                message = ws.receive_json()
+
+            ws.send_json({"type": "input", "data": "burst\n"})
+
+            collected = ""
+            message = ws.receive_json()
+            while message.get("type") != "exit":
+                collected += message["data"]
+                message = ws.receive_json()
+            assert message["code"] == 0
+
+    assert "BURST_DONE" in collected
+    assert collected.count("X") == 2_000
+
+
+def test_pty_websocket_rejects_non_dict_client_messages(tmp_path, monkeypatch):
+    """A client can send any valid JSON over the socket, not just an
+    object -- a bare string/number/list must be ignored rather than crash
+    the connection with AttributeError from message.get(...)."""
+    if sys.platform == "win32":
+        pytest.skip("PTY sessions are POSIX-only")
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/api/pty/ws",
+            params={"engine": "claude", "cwd": app.state.workspace},
+        ) as ws:
+            message = ws.receive_json()
+            while "READY" not in message["data"]:
+                message = ws.receive_json()
+
+            ws.send_json("just a string, not an object")
+            ws.send_json([1, 2, 3])
+
+            # The connection must still be alive and processing real
+            # messages after the malformed ones.
+            ws.send_json({"type": "input", "data": "still alive\n"})
+            message = ws.receive_json()
+            while "ECHO:still alive" not in message["data"]:
+                message = ws.receive_json()
+
+            ws.send_json({"type": "input", "data": "exit\n"})
+
+
 def test_pty_websocket_terminates_process_on_abrupt_disconnect(tmp_path, monkeypatch):
     if sys.platform == "win32":
         pytest.skip("PTY sessions are POSIX-only")

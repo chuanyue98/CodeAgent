@@ -11,14 +11,22 @@ from __future__ import annotations
 import asyncio
 import codecs
 import contextlib
-import fcntl
 import os
 import struct
 import sys
-import termios
 from pathlib import Path
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+
+try:
+    # POSIX-only; core/web/server.py imports this router unconditionally,
+    # so a top-level import failure here would crash the whole server on
+    # Windows before pty_capability()'s own platform check ever runs.
+    import fcntl
+    import termios
+except ImportError:  # pragma: no cover - exercised only on Windows
+    fcntl = None  # type: ignore[assignment]
+    termios = None  # type: ignore[assignment]
 
 from core.services.config_service import ConfigService
 from core.web.routers.config import get_config_path
@@ -146,9 +154,16 @@ async def pty_websocket(
 
     async def pump_exit() -> None:
         returncode = await process.wait()
-        with contextlib.suppress(ValueError):
-            loop.remove_reader(master_fd)
-        await output_queue.put(None)
+        # _on_readable removes the reader and signals pump_output itself
+        # once it sees real EOF on the PTY master. Wait for that natural
+        # drain here (shielded so our own timeout below can't cancel it)
+        # instead of tearing the reader down ourselves right away, or any
+        # output still buffered in the kernel when the process exits would
+        # race with -- and often lose to -- this task, truncating the
+        # tail of the output. Bounded in case an orphaned descendant still
+        # holds the slave fd open and EOF never naturally arrives.
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(asyncio.shield(output_task), timeout=2)
         with contextlib.suppress(Exception):
             await websocket.send_json({"type": "exit", "code": returncode})
         process_exited.set()
@@ -169,6 +184,8 @@ async def pty_websocket(
                     await receive_task
                 break
             message = receive_task.result()
+            if not isinstance(message, dict):
+                continue
             kind = message.get("type")
             if kind == "input":
                 data = message.get("data")
