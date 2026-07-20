@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -176,6 +177,48 @@ def test_pty_websocket_terminates_process_on_abrupt_disconnect(tmp_path, monkeyp
         ["pgrep", "-f", "fake_pty_engine.py"], capture_output=True, text=True
     )
     assert result.stdout.strip() == ""
+
+
+def test_pty_websocket_closes_cleanly_when_spawn_fails(tmp_path, monkeypatch):
+    """If create_subprocess_exec itself fails (e.g. EMFILE/ENOMEM), the PTY
+    master fd opened just before it must still be closed rather than
+    leaking for the life of the server process, and the client must get a
+    clean close instead of a hung/aborted connection."""
+    if sys.platform == "win32":
+        pytest.skip("PTY sessions are POSIX-only")
+    app = _app(tmp_path, monkeypatch)
+
+    import pty as stdlib_pty
+
+    opened_fds: list[int] = []
+    real_openpty = stdlib_pty.openpty
+
+    def _tracking_openpty():
+        master_fd, slave_fd = real_openpty()
+        opened_fds.append(master_fd)
+        return master_fd, slave_fd
+
+    async def _boom(*args, **kwargs):
+        raise OSError("fork failed")
+
+    # pty.py does `import pty` lazily inside the handler, which resolves to
+    # this same cached sys.modules entry -- patching it here reaches that
+    # local binding too.
+    monkeypatch.setattr(stdlib_pty, "openpty", _tracking_openpty)
+    monkeypatch.setattr(pty_router.asyncio, "create_subprocess_exec", _boom)
+
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(
+                "/api/pty/ws",
+                params={"engine": "claude", "cwd": app.state.workspace},
+            ) as ws:
+                ws.receive_json()
+    assert exc_info.value.code == 1011
+
+    assert len(opened_fds) == 1
+    with pytest.raises(OSError):
+        os.close(opened_fds[0])
 
 
 def test_pty_websocket_rejects_unknown_engine(tmp_path, monkeypatch):

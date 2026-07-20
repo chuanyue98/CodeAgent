@@ -108,19 +108,30 @@ async def pty_websocket(
     }
 
     try:
-        process = await asyncio.create_subprocess_exec(
-            sys.executable,
-            str(_CA_LAUNCHER),
-            engine,
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            cwd=str(working_dir),
-            env=env,
-            start_new_session=True,
-        )
-    finally:
-        os.close(slave_fd)
+        try:
+            process = await asyncio.create_subprocess_exec(
+                sys.executable,
+                str(_CA_LAUNCHER),
+                engine,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                cwd=str(working_dir),
+                env=env,
+                start_new_session=True,
+            )
+        finally:
+            os.close(slave_fd)
+    except OSError as exc:
+        # Spawn failed (e.g. out of file descriptors/processes) -- the
+        # slave fd is already closed above, but master_fd was opened
+        # before this try and nothing else owns it yet, so it must be
+        # closed here or it leaks for the life of the server process.
+        with contextlib.suppress(OSError):
+            os.close(master_fd)
+        with contextlib.suppress(Exception):
+            await websocket.close(code=1011, reason=f"Failed to start session: {exc}")
+        return
 
     loop = asyncio.get_running_loop()
     output_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
