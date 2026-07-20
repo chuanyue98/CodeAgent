@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from typing import BinaryIO
 from pathlib import Path
 
@@ -10,26 +11,38 @@ class LockManager:
     """Manages inter-process file locking for engine resources."""
 
     def acquire_resource_lock(self, lock_path: Path) -> BinaryIO:
-        """Acquire an inter-process lock for mutable engine resources."""
+        """Acquire an inter-process lock for mutable engine resources.
+
+        Blocks until the lock is free, matching ``flock(LOCK_EX)``'s
+        semantics on POSIX. ``msvcrt.locking()`` only retries for ~10s
+        before raising, so on Windows this polls in a loop instead to get
+        the same block-until-free behavior rather than failing out from
+        under a second concurrent process that's still holding the lock.
+        """
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         handle = open(lock_path, "a+b")
-        handle.seek(0, os.SEEK_END)
-        if handle.tell() == 0:
-            handle.write(b"\0")
-            handle.flush()
-        handle.seek(0)
-        if sys.platform == "win32":
-            import msvcrt
+        try:
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            if sys.platform == "win32":
+                import msvcrt
 
-            msvcrt.locking(
-                handle.fileno(),
-                msvcrt.LK_LOCK,
-                1,
-            )
-        else:
-            import fcntl
+                while True:
+                    try:
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                        break
+                    except OSError:
+                        time.sleep(0.25)
+            else:
+                import fcntl
 
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        except BaseException:
+            handle.close()
+            raise
         return handle
 
     def release_resource_lock(self, handle: BinaryIO) -> None:

@@ -18,6 +18,7 @@ from claude_agent_sdk import (
 
 from core.services.agent_adapters.claude import ClaudeAdapter
 from core.services.agent_protocol import (
+    AdapterEvent,
     AgentInput,
     ApprovalDecision,
     CreateSessionOptions,
@@ -153,6 +154,23 @@ async def test_claude_approval_cancel_denies_with_interrupt():
     result = await asyncio.wait_for(future, timeout=1)
     assert isinstance(result, PermissionResultDeny)
     assert result.interrupt is True
+
+
+@pytest.mark.asyncio
+async def test_claude_put_event_drops_oldest_under_backpressure():
+    adapter = ClaudeAdapter(queue_size=2)
+    adapter._put_event(AdapterEvent(type="a", provider_session_id="s"))
+    adapter._put_event(AdapterEvent(type="b", provider_session_id="s"))
+    # Queue is now full (size 2); this third put must drop "a" rather than
+    # block, and leave a backpressure error behind for the consumer.
+    adapter._put_event(AdapterEvent(type="c", provider_session_id="s"))
+
+    first = await asyncio.wait_for(adapter._events.get(), timeout=1)
+    second = await asyncio.wait_for(adapter._events.get(), timeout=1)
+    assert first.type == "b"
+    assert second.type == "error"
+    assert second.data["code"] == "provider_backpressure"
+    assert adapter._events.empty()
 
 
 @pytest.mark.asyncio

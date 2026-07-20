@@ -24,6 +24,7 @@ from core.web.routers import (
     mcp,
     plugins,
     prompts,
+    pty,
     schedules,
     skills,
     system,
@@ -238,6 +239,7 @@ app.include_router(logs.router)
 app.include_router(mcp.router)
 app.include_router(plugins.router)
 app.include_router(prompts.router)
+app.include_router(pty.router)
 app.include_router(schedules.router)
 app.include_router(skills.router)
 app.include_router(system.router)

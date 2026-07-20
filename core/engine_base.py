@@ -380,9 +380,16 @@ class BaseEngine:
 
             if skill_src:
                 if skill_src.is_dir() and not (skill_src / "SKILL.md").exists():
+                    found_sub_skill = False
                     for sub_item in skill_src.iterdir():
                         if sub_item.is_dir() and (sub_item / "SKILL.md").exists():
                             append_resolved_skill(sub_item.name, sub_item)
+                            found_sub_skill = True
+                    if not found_sub_skill:
+                        print(
+                            f"⚠️ Warning: Skill '{skill_name}' resolved to {skill_src}, "
+                            "but it has no SKILL.md (directly or in a subdirectory) -- skipped."
+                        )
                 else:
                     append_resolved_skill(skill_name.split("/")[-1], skill_src)
             else:
@@ -492,11 +499,18 @@ class BaseEngine:
         try:
             if os.name == "nt":
                 if path.is_dir():
-                    subprocess.run(
+                    result = subprocess.run(
                         ["cmd", "/c", "rmdir", str(path)],
                         capture_output=True,
                         check=False,
                     )
+                    if result.returncode != 0:
+                        detail = (
+                            result.stderr.decode(errors="replace").strip()
+                            or result.stdout.decode(errors="replace").strip()
+                            or f"rmdir exited with code {result.returncode}"
+                        )
+                        print(f"⚠️ Security: Failed to remove link {path}: {detail}")
                 else:
                     path.unlink(missing_ok=True)
             else:

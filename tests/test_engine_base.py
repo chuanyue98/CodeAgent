@@ -275,6 +275,64 @@ def test_ensure_skills_link_does_not_replace_regular_file(monkeypatch, tmp_path)
     assert collision.read_text(encoding="utf-8") == "user-owned"
 
 
+def test_ensure_skills_link_warns_when_resolved_dir_has_no_skill_md(
+    monkeypatch, tmp_path, capsys
+):
+    """A skill group directory that resolves but contains no SKILL.md
+    (directly or in a subdirectory) -- e.g. an empty or half-written skill
+    -- must not be dropped silently; the user needs to see why it didn't
+    mount."""
+    engine = DummyEngine(root_dir=tmp_path / "ca")
+    engine.root_dir.mkdir()
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    monkeypatch.chdir(project_root)
+
+    builtin_root = tmp_path / "builtin-root"
+    broken = builtin_root / "broken-skill"
+    broken.mkdir(parents=True)
+    (broken / "notes.txt").write_text("oops", encoding="utf-8")
+
+    good = builtin_root / "good-skill"
+    good.mkdir(parents=True)
+    (good / "SKILL.md").write_text("good", encoding="utf-8")
+
+    monkeypatch.setattr(
+        engine, "get_skills_to_mount", lambda: ["broken-skill", "good-skill"]
+    )
+    monkeypatch.setattr(engine, "_get_skill_search_roots", lambda: [builtin_root])
+
+    engine.ensure_skills_link(".gemini/skills")
+
+    output = capsys.readouterr().out
+    assert "broken-skill" in output
+    assert "no SKILL.md" in output
+
+    mounted_root = project_root / ".gemini" / "skills"
+    assert (mounted_root / "good-skill" / "SKILL.md").exists()
+    assert not (mounted_root / "broken-skill").exists()
+
+
+def test_safe_remove_link_reports_windows_rmdir_failure(mock_engine, tmp_path, capsys):
+    target = tmp_path / "linked-dir"
+    target.mkdir()
+
+    with patch("os.name", "nt"):
+        with patch.object(Path, "is_symlink", return_value=True):
+            with patch.object(Path, "is_dir", return_value=True):
+                with patch("subprocess.run") as mock_run:
+                    mock_run.return_value = MagicMock(
+                        returncode=1,
+                        stderr=b"Access is denied.",
+                        stdout=b"",
+                    )
+                    mock_engine._safe_remove_link(target)
+
+    output = capsys.readouterr().out
+    assert "Access is denied" in output
+
+
 def test_create_skill_link_unix(mock_engine, tmp_path):
     source = tmp_path / "source"
     source.mkdir()

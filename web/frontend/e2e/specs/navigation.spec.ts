@@ -40,7 +40,7 @@ test('Agent workspace combines Web Agent and Local Terminal modes', async ({ pag
   await sections.getByRole('link', { name: 'Local Terminal' }).click();
   await waitForH2(page, 'Local Terminal');
   await expect(page).toHaveURL(/\/agent\/terminal$/);
-  await expect(page.getByText('This is a local launcher, not an in-browser terminal.')).toBeVisible();
+  await expect(page.getByText('Opens the provider CLI in an in-browser terminal, running on the machine hosting CodeAgent.')).toBeVisible();
 });
 
 test('command palette opens via Ctrl/Cmd+K, filters, and navigates', async ({ page }) => {

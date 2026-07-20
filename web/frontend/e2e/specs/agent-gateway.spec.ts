@@ -188,6 +188,43 @@ test('shows a retry action when provider history fails', async ({ page }) => {
   await expect(page.getByText('Provider history could not be loaded.')).not.toBeVisible();
 });
 
+test('a fast double-submit on a brand-new conversation creates only one session', async ({ page }) => {
+  // Regression test: send() used to gate on `connecting`, which is only
+  // set once connect() runs -- but a new conversation first awaits
+  // createAgentSession() *before* connect() is ever called, leaving a
+  // window where a second rapid submit raced a second POST /sessions.
+  let createSessionRequests = 0;
+  await page.route('**/api/agent/sessions', async route => {
+    if (route.request().method() === 'POST') {
+      createSessionRequests += 1;
+      // Widen the race window: without this, the real gateway round trip
+      // is fast enough locally that the second submit's send() call
+      // always sees state.session already populated, masking the race.
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    return route.continue();
+  });
+
+  await gotoAgent(page);
+  const composer = page.getByPlaceholder(/Message/);
+  // Two distinct messages submitted back to back, before the first
+  // createAgentSession() round trip can possibly resolve and populate
+  // state.session -- both see state.session === null and, without the
+  // fix, both fire their own POST /sessions.
+  await composer.fill('first message');
+  await composer.press('Enter');
+  await composer.fill('second message');
+  await composer.press('Enter');
+
+  await expect(page.locator('main')).toContainText('Echo: first message');
+  // The second submit is correctly rejected while the first is still in
+  // flight (sendingRef guard) rather than firing a second session -- the
+  // typed text stays put in the composer instead of being silently lost,
+  // so the user can just press Enter again once the first turn lands.
+  await expect(composer).toHaveValue('second message');
+  expect(createSessionRequests).toBe(1);
+});
+
 test('restoring a conversation restores its workspace resource group', async ({ page, baseURL }) => {
   const projectsResponse = await fetch(`${baseURL}/api/projects`);
   const projects = await projectsResponse.json() as Array<{ path: string }>;

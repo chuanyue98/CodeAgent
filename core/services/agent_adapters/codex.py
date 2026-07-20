@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import shutil
 from collections.abc import AsyncIterator
 from typing import Any
@@ -22,6 +23,8 @@ from core.services.agent_protocol import (
     TurnInput,
     wire,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class CodexProtocolError(RuntimeError):
@@ -92,7 +95,14 @@ class CodexAdapter:
                 await asyncio.wait_for(process.wait(), timeout=3)
             except TimeoutError:
                 process.kill()
-                await process.wait()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=5)
+                except TimeoutError:
+                    logger.warning(
+                        "Codex app-server process (pid=%s) did not exit after "
+                        "SIGKILL; abandoning it to avoid blocking shutdown",
+                        process.pid,
+                    )
         for task in (self._reader_task, self._stderr_task):
             if task:
                 task.cancel()

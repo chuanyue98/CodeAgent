@@ -217,6 +217,7 @@ export default function AgentWorkspace() {
           input={workspace.input}
           activeTurnId={workspace.state.activeTurnId}
           connecting={workspace.connecting}
+          sending={workspace.sending}
           canCompose={workspace.canCompose}
           composerPlaceholder={workspace.composerPlaceholder}
           sessionCapabilitySnapshot={workspace.state.session?.capabilitySnapshot}

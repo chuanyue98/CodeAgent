@@ -54,6 +54,8 @@ def get_tasks_dir(directory: Union[str, Path] = TASKS_DIR) -> Path:
         config_path = get_default_config_path(codeagent_root)
         try:
             config = json.loads(config_path.read_text(encoding="utf-8-sig"))
+            if not isinstance(config, dict):
+                raise TypeError("config.json must contain a JSON object")
             resource_root = config.get("paths", {}).get("resource_root")
             if resource_root:
                 expanded = str(resource_root).replace(
@@ -63,7 +65,7 @@ def get_tasks_dir(directory: Union[str, Path] = TASKS_DIR) -> Path:
                 if not resolved_root.is_absolute():
                     resolved_root = codeagent_root / resolved_root
                 return (resolved_root / TASKS_DIR).resolve()
-        except (OSError, json.JSONDecodeError, TypeError):
+        except (OSError, json.JSONDecodeError, TypeError, AttributeError):
             pass
 
         return get_bundled_resource_root(codeagent_root) / TASKS_DIR
@@ -505,9 +507,15 @@ def handle_task_mode(
         )
         selection = task_name
     else:
+        # A task literally named e.g. "deploy+rollback" or "3-5" must win
+        # over the combination/range syntax below -- otherwise it can never
+        # be selected by name, since "+"/range parsing runs unconditionally
+        # on anything containing those characters.
+        available_tasks = list_tasks(directory, file_suffix=file_suffix)
+        is_literal_task_name = task_arg in available_tasks
+
         combination_selection: Optional[List[str]] = None
-        if "+" in task_arg:
-            available_tasks = list_tasks(directory, file_suffix=file_suffix)
+        if "+" in task_arg and not is_literal_task_name:
             if not available_tasks:
                 print(
                     "❌ Error: No tasks available in current directory", file=sys.stderr
@@ -522,7 +530,11 @@ def handle_task_mode(
                 print(f"❌ Error: {exc}", file=sys.stderr)
                 sys.exit(1)
 
-        range_tuple = parse_range_expression(task_arg) if allow_range else None
+        range_tuple = (
+            parse_range_expression(task_arg)
+            if (allow_range and not is_literal_task_name)
+            else None
+        )
         if combination_selection is not None:
             selection = combination_selection
         elif range_tuple is not None:

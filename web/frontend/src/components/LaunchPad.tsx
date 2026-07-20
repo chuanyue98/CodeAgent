@@ -1,25 +1,14 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, ExternalLink, Loader2 } from 'lucide-react';
-import request from '../utils/request';
+import { AlertTriangle, TerminalSquare, X } from 'lucide-react';
+import { fetchPtyStatus } from '../api/pty';
+import { useProject } from '../context/ProjectContext';
+import BrowserTerminal from './BrowserTerminal';
 
 interface Engine {
   id: string;
   name: string;
   description: string;
   color: string;
-}
-
-interface LaunchCapability {
-  available: boolean;
-  terminal: string | null;
-  mode: 'local_gui';
-  reason?: string | null;
-}
-
-interface LaunchResult {
-  status: 'launched';
-  engine: string;
-  terminal: string;
 }
 
 const ENGINES: Engine[] = [
@@ -30,53 +19,89 @@ const ENGINES: Engine[] = [
 ];
 
 export default function LaunchPad() {
-  const [launching, setLaunching] = useState<string | null>(null);
-  const [lastLaunched, setLastLaunched] = useState<string | null>(null);
-  const [lastTerminal, setLastTerminal] = useState<string | null>(null);
-  const [capability, setCapability] = useState<LaunchCapability | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { projects } = useProject();
+  const validProjects = projects.filter(project => project.path.trim() && project.available !== false);
+
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [reason, setReason] = useState<string | null>(null);
+  const [selectedProject, setSelectedProject] = useState('');
+  const [activeSession, setActiveSession] = useState<{ engine: string; cwd: string } | null>(null);
 
   useEffect(() => {
-    request<LaunchCapability>('/api/launch/status')
-      .then(setCapability)
-      .catch(err => setError(err instanceof Error ? err.message : 'Failed to detect local terminal support'));
+    fetchPtyStatus()
+      .then(status => {
+        setAvailable(status.available);
+        setReason(status.reason);
+      })
+      .catch(err => {
+        setAvailable(false);
+        setReason(err instanceof Error ? err.message : 'Failed to detect browser terminal support');
+      });
   }, []);
 
-  async function launch(engine: string) {
-    setLaunching(engine);
-    setError(null);
-    try {
-      const result = await request<LaunchResult>(`/api/launch/${engine}`, { method: 'POST' });
-      setLastLaunched(engine);
-      setLastTerminal(result.terminal);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to open local terminal');
-    } finally {
-      setLaunching(null);
-    }
+  const effectiveProject = validProjects.some(project => project.path === selectedProject)
+    ? selectedProject
+    : (validProjects[0]?.path ?? '');
+
+  if (activeSession) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium text-slate-700">
+            {ENGINES.find(engine => engine.id === activeSession.engine)?.name} · {activeSession.cwd}
+          </div>
+          <button
+            onClick={() => setActiveSession(null)}
+            className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+          >
+            <X size={14} /> Close terminal
+          </button>
+        </div>
+        <BrowserTerminal
+          engine={activeSession.engine}
+          cwd={activeSession.cwd}
+          onExit={() => {}}
+        />
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
       <div className="space-y-2">
         <p className="text-sm text-slate-600">
-          Opens the provider CLI in a separate terminal window on the machine running CodeAgent.
+          Opens the provider CLI in an in-browser terminal, running on the machine hosting CodeAgent.
         </p>
-        <p className="text-xs text-slate-400">This is a local launcher, not an in-browser terminal.</p>
       </div>
 
-      {capability && !capability.available && (
+      {available === false && (
         <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <p className="font-semibold">Local terminal unavailable</p>
-            <p className="mt-0.5 text-xs">{capability.reason}</p>
+            <p className="font-semibold">Browser terminal unavailable</p>
+            <p className="mt-0.5 text-xs">{reason}</p>
           </div>
         </div>
       )}
 
-      {error && (
-        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      {validProjects.length === 0 ? (
+        <div role="status" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Register a project in Settings before opening a terminal.
+        </div>
+      ) : (
+        <div className="max-w-sm space-y-1">
+          <label htmlFor="launchpad-project" className="text-xs font-medium text-slate-500">Workspace</label>
+          <select
+            id="launchpad-project"
+            value={effectiveProject}
+            onChange={event => setSelectedProject(event.target.value)}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          >
+            {validProjects.map(project => (
+              <option key={project.path} value={project.path}>{project.path}</option>
+            ))}
+          </select>
+        </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -88,22 +113,19 @@ export default function LaunchPad() {
             <div className="space-y-1">
               <div className="font-semibold text-slate-800">{engine.name}</div>
               <div className="text-xs text-slate-500">{engine.description}</div>
-              {lastLaunched === engine.id && (
-                <div className="text-xs text-emerald-600 font-medium">Opened in {lastTerminal}</div>
-              )}
             </div>
 
             <button
-              onClick={() => launch(engine.id)}
-              disabled={launching !== null || !capability?.available}
+              onClick={() => setActiveSession({ engine: engine.id, cwd: effectiveProject })}
+              disabled={!available || !effectiveProject}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all
-                ${launching !== null || !capability?.available
+                ${!available || !effectiveProject
                   ? 'opacity-50 cursor-not-allowed'
                   : 'hover:scale-105 active:scale-95 cursor-pointer'}
                 ${engine.color}`}
             >
-              {launching === engine.id ? <Loader2 size={15} className="animate-spin" /> : <ExternalLink size={15} />}
-              {launching === engine.id ? 'Opening…' : 'Open terminal'}
+              <TerminalSquare size={15} />
+              Open terminal
             </button>
           </div>
         ))}

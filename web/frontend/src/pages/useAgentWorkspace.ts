@@ -39,6 +39,7 @@ export type UseAgentWorkspaceReturn = {
   state: ReturnType<typeof agentSessionReducer>;
   loading: boolean;
   connecting: boolean;
+  sending: boolean;
   connected: boolean;
   selectingKey: string | null;
   error: string | null;
@@ -115,6 +116,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('workspace-write');
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
+  const [sending, setSending] = useState(false);
   const [connected, setConnected] = useState(false);
   const [selectingKey, setSelectingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -126,6 +128,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const socketRef = useRef<WebSocket | null>(null);
   const selectionRequestRef = useRef(0);
   const intentionalClose = useRef(false);
+  const sendingRef = useRef(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const historyCursorRef = useRef<number | null>(null);
@@ -245,6 +248,13 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const connect = useCallback((session: AgentSession, afterSequence = 0, reset = true) => {
     intentionalClose.current = true;
     if (socketRef.current) {
+      // Clear every handler, not just onclose -- a frame the old socket
+      // already has in flight can still fire onmessage/onerror after
+      // close() returns, and those would otherwise dispatch into the
+      // reducer state for whichever session is now current.
+      socketRef.current.onopen = null;
+      socketRef.current.onmessage = null;
+      socketRef.current.onerror = null;
       socketRef.current.onclose = null;
       socketRef.current.close();
     }
@@ -257,7 +267,14 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     return new Promise<WebSocket>((resolve, reject) => {
       const socket = new WebSocket(agentEventsUrl(session.id, afterSequence));
       socketRef.current = socket;
+      const timer = window.setTimeout(() => {
+        if (socket.readyState !== WebSocket.OPEN) {
+          socket.close();
+          reject(new Error('Agent connection timed out'));
+        }
+      }, 10_000);
       socket.onopen = () => {
+        window.clearTimeout(timer);
         setConnecting(false);
         setConnected(true);
         resolve(socket);
@@ -277,6 +294,11 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
       };
       socket.onerror = () => {
         setError('Agent connection failed');
+        // A no-op if onopen already resolved -- only settles the promise
+        // for a connection that failed before ever opening, instead of
+        // leaving callers (e.g. selectSession's spinner) blocked on this
+        // promise until the 10s timeout below fires with a stale message.
+        reject(new Error('Agent connection failed'));
       };
       socket.onclose = () => {
         setConnecting(false);
@@ -284,14 +306,8 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
         if (!intentionalClose.current) {
           setError('Agent connection closed. Reconnect to continue from the last event.');
         }
+        reject(new Error('Agent connection closed'));
       };
-      const timer = window.setTimeout(() => {
-        if (socket.readyState !== WebSocket.OPEN) {
-          socket.close();
-          reject(new Error('Agent connection timed out'));
-        }
-      }, 10_000);
-      socket.addEventListener('open', () => window.clearTimeout(timer), { once: true });
     });
   }, []);
 
@@ -425,7 +441,13 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const newSession = useCallback(() => {
     selectionRequestRef.current += 1;
     intentionalClose.current = true;
-    socketRef.current?.close();
+    if (socketRef.current) {
+      socketRef.current.onopen = null;
+      socketRef.current.onmessage = null;
+      socketRef.current.onerror = null;
+      socketRef.current.onclose = null;
+      socketRef.current.close();
+    }
     socketRef.current = null;
     setConnected(false);
     setError(null);
@@ -450,11 +472,17 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
 
   const send = useCallback(async () => {
     const text = input.trim();
-    if (!text || state.activeTurnId || connecting) return;
+    // sendingRef guards the gap createAgentSession() awaits through, before
+    // connect() ever sets `connecting` -- without it, a fast double-Enter
+    // on a brand-new conversation races two createAgentSession calls and
+    // ends up with two backend sessions for one message.
+    if (!text || state.activeTurnId || connecting || sendingRef.current) return;
     if (!workspace || !selectedProvider) {
       setError('Select a registered workspace and an available provider');
       return;
     }
+    sendingRef.current = true;
+    setSending(true);
     setInput('');
     if (composerRef.current) composerRef.current.style.height = 'auto';
     try {
@@ -481,6 +509,9 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     } catch (caught) {
       setInput(text);
       setError(caught instanceof Error ? caught.message : 'Failed to start turn');
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
     }
   }, [input, state.activeTurnId, state.session, connecting, workspace, selectedProvider, permissionMode, connect]);
 
@@ -584,6 +615,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     state,
     loading,
     connecting,
+    sending,
     connected,
     selectingKey,
     error,

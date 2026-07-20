@@ -8,12 +8,44 @@ import pytest
 
 from core.services.agent_adapters.opencode import OpenCodeAdapter
 from core.services.agent_protocol import (
+    AdapterEvent,
     AgentInput,
     ApprovalDecision,
     CreateSessionOptions,
     PermissionMode,
     TurnInput,
 )
+
+
+@pytest.mark.asyncio
+async def test_opencode_stop_gives_up_if_process_never_reaps_after_kill():
+    """A hung child that doesn't die even under SIGKILL (e.g. stuck in
+    uninterruptible I/O) must not block shutdown forever — stop() has to
+    give up and move on rather than await process.wait() unboundedly."""
+
+    class StubProcess:
+        pid = 4242
+        returncode = None
+
+        def terminate(self):
+            pass
+
+        def kill(self):
+            pass
+
+        async def wait(self):
+            await asyncio.sleep(999)
+
+    adapter = OpenCodeAdapter()
+    adapter._process = StubProcess()
+
+    start = asyncio.get_event_loop().time()
+    await asyncio.wait_for(adapter.stop(), timeout=20)
+    elapsed = asyncio.get_event_loop().time() - start
+    # Bounded by the two 5s waits inside stop() itself (terminate, then
+    # kill), nowhere near the stub's 999s wait().
+    assert elapsed < 15
+    assert adapter._process is None
 
 
 def test_opencode_translates_text_delta():
@@ -182,6 +214,23 @@ async def test_opencode_cancel_turn_clears_pending_approvals_for_session(monkeyp
 
     assert "perm-1" not in adapter._pending_approvals
     assert adapter._pending_approvals["perm-2"] == "session-2"
+
+
+@pytest.mark.asyncio
+async def test_opencode_put_event_drops_oldest_under_backpressure():
+    adapter = OpenCodeAdapter(queue_size=2)
+    adapter._put_event(AdapterEvent(type="a", provider_session_id="s"))
+    adapter._put_event(AdapterEvent(type="b", provider_session_id="s"))
+    # Queue is now full (size 2); this third put must drop "a" rather than
+    # block, and leave a backpressure error behind for the consumer.
+    adapter._put_event(AdapterEvent(type="c", provider_session_id="s"))
+
+    first = await asyncio.wait_for(adapter._events.get(), timeout=1)
+    second = await asyncio.wait_for(adapter._events.get(), timeout=1)
+    assert first.type == "b"
+    assert second.type == "error"
+    assert second.data["code"] == "provider_backpressure"
+    assert adapter._events.empty()
 
 
 @pytest.mark.asyncio

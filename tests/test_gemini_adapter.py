@@ -17,6 +17,37 @@ from core.services.agent_protocol import (
 
 
 @pytest.mark.asyncio
+async def test_gemini_stop_gives_up_if_process_never_reaps_after_kill():
+    """A hung child that doesn't die even under SIGKILL (e.g. stuck in
+    uninterruptible I/O) must not block shutdown forever — stop() has to
+    give up and move on rather than await process.wait() unboundedly."""
+
+    class StubProcess:
+        pid = 4242
+        returncode = None
+
+        def terminate(self):
+            pass
+
+        def kill(self):
+            pass
+
+        async def wait(self):
+            await asyncio.sleep(999)
+
+    adapter = GeminiAdapter()
+    adapter._process = StubProcess()
+
+    start = asyncio.get_event_loop().time()
+    await asyncio.wait_for(adapter.stop(), timeout=15)
+    elapsed = asyncio.get_event_loop().time() - start
+    # Bounded by the 3s terminate-wait + 5s kill-wait inside stop() itself,
+    # nowhere near the stub's 999s wait().
+    assert elapsed < 10
+    assert adapter._process is None
+
+
+@pytest.mark.asyncio
 async def test_gemini_create_session_enforces_plan_and_model(monkeypatch):
     adapter = GeminiAdapter()
     requests: list[tuple[str, dict]] = []

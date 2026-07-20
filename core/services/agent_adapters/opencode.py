@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import os
 import secrets
 import shutil
@@ -25,6 +26,8 @@ from core.services.agent_protocol import (
     ResumeOptions,
     TurnInput,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class OpenCodeProtocolError(RuntimeError):
@@ -141,7 +144,14 @@ class OpenCodeAdapter:
                 await asyncio.wait_for(process.wait(), timeout=5)
             except TimeoutError:
                 process.kill()
-                await process.wait()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=5)
+                except TimeoutError:
+                    logger.warning(
+                        "OpenCode process (pid=%s) did not exit after SIGKILL; "
+                        "abandoning it to avoid blocking shutdown",
+                        process.pid,
+                    )
         for task in (self._sse_task, self._stdout_task, self._stderr_task):
             if task:
                 task.cancel()

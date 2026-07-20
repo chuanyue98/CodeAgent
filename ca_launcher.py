@@ -36,7 +36,12 @@ def _looks_like_project_root(path: Path):
 
 
 def _project_root():
-    cwd = Path.cwd().resolve()
+    try:
+        cwd = Path.cwd().resolve()
+    except OSError:
+        # The working directory was removed/unmounted out from under this
+        # process -- fall back to the installed location instead of crashing.
+        return _installed_root()
     for candidate in (cwd, *cwd.parents):
         if _looks_like_project_root(candidate):
             return candidate
@@ -208,8 +213,12 @@ def _extract_proxy_candidates(proxy_cfg):
         return [
             (e.get("host", "127.0.0.1"), int(e["port"]))
             for e in proxy_cfg
-            if "port" in e
+            if isinstance(e, dict) and "port" in e
         ]
+    if not isinstance(proxy_cfg, dict):
+        # A malformed config.json (e.g. "proxy": true from a typo) must fall
+        # back to the defaults below rather than crash with an AttributeError.
+        proxy_cfg = {}
     host = proxy_cfg.get("host", "127.0.0.1")
     port = proxy_cfg.get("port")
     ports = ([int(port)] if port is not None else []) + [3065, 3067, 3066, 1087]
@@ -331,6 +340,24 @@ Examples:
 """
 
 
+def _reserved_command_can_handle(cmd, parent_ctx, cmd_name, rest):
+    """A registered command name (new/doctor/ui/history) can also be the
+    start of free-form prompt text, e.g. ``ca new is broken, please fix``.
+    Only commit to the subcommand if the remaining tokens actually parse as
+    valid arguments (and, for a subgroup like ``history``, name a real
+    sub-subcommand) -- otherwise the whole line is an engine launch prompt.
+    """
+    try:
+        sub_ctx = cmd.make_context(cmd_name, list(rest), parent=parent_ctx)
+    except click.UsageError:
+        return False
+    if isinstance(cmd, click.Group) and rest:
+        first = rest[0]
+        if not first.startswith("-") and cmd.get_command(sub_ctx, first) is None:
+            return False
+    return True
+
+
 class CodeAgentGroup(click.Group):
     """Click group that routes non-subcommand arguments to engine launch.
 
@@ -344,9 +371,12 @@ class CodeAgentGroup(click.Group):
         if args:
             cmd_name = args[0]
             cmd = self.get_command(ctx, cmd_name)
-            if cmd is not None:
+            if cmd is not None and _reserved_command_can_handle(
+                cmd, ctx, cmd_name, args[1:]
+            ):
                 return cmd_name, cmd, args[1:]
-        # Unknown leading token: forward *all* original args to engine launch.
+        # Unknown leading token (or a reserved name that doesn't actually
+        # parse as that command): forward *all* original args to engine launch.
         launch = self.get_command(ctx, "_launch")
         return "_launch", launch, args
 
@@ -359,8 +389,14 @@ def _ensure_project_on_path(root):
 def _launch_engine(ctx, args):
     """Build and run the engine subprocess.
 
-    ``args`` is the list of tokens that follow the (optional) engine name and
-    have already had ``--proxy`` / ``-y`` / ``--help`` stripped by click.
+    ``args`` is the list of tokens that follow the (optional) engine name.
+    ``--proxy`` / ``-y`` / ``--yolo`` / ``--help`` are only consumed by click
+    when they appear *before* the engine name (``allow_interspersed_args``
+    is off) -- anywhere else they're literal prompt text passed straight
+    through, not flags.
+
+    Returns the launched engine's exit code so it propagates all the way up
+    through ``main()`` to ``ca``'s own process exit status.
     """
     obj = ctx.ensure_object(dict)
     child_env = obj.get("child_env")
@@ -385,7 +421,7 @@ def _launch_engine(ctx, args):
 
     target_script = engine_script_map[engine_name]
     cmd = [sys.executable, target_script] + extra_params
-    subprocess.run(cmd, env=child_env)
+    return subprocess.run(cmd, env=child_env).returncode
 
 
 @click.group(
@@ -394,12 +430,23 @@ def _launch_engine(ctx, args):
     context_settings=dict(
         ignore_unknown_options=True,
         allow_extra_args=True,
-        allow_interspersed_args=True,
+        # False so ``--proxy``/``-y`` are only recognized before the engine
+        # name (as documented in EPILOG); a prompt that merely *mentions*
+        # one of those words after the engine name must reach the engine
+        # verbatim rather than being silently consumed as a real flag.
+        allow_interspersed_args=False,
     ),
     epilog=EPILOG,
 )
 @click.option("--proxy", is_flag=True, help="Enable proxy from config.json")
-@click.option("-y", "--yolo", is_flag=True, default=True, help="Enable YOLO mode")
+@click.option(
+    "-y",
+    "--yolo",
+    is_flag=True,
+    flag_value=True,
+    default=True,
+    help="Enable YOLO mode",
+)
 @click.pass_context
 def cli(ctx, proxy, yolo):
     """CodeAgent: Professional AI Engineering Shell."""
@@ -431,7 +478,7 @@ def cli(ctx, proxy, yolo):
 
     # No subcommand (and no leading token) -> launch the default engine.
     if ctx.invoked_subcommand is None:
-        _launch_engine(ctx, [])
+        return _launch_engine(ctx, [])
 
 
 @cli.command(
@@ -443,7 +490,7 @@ def cli(ctx, proxy, yolo):
 @click.pass_context
 def _launch(ctx, args):
     """Forward arbitrary arguments to an engine launch."""
-    _launch_engine(ctx, list(args))
+    return _launch_engine(ctx, list(args))
 
 
 @cli.command()
@@ -487,7 +534,12 @@ def new(ctx, name):
     if not tasks_dir.is_absolute():
         tasks_dir = root / tasks_dir
 
-    rel_tasks_path = os.path.relpath(tasks_dir, Path.cwd())
+    try:
+        rel_tasks_path = os.path.relpath(tasks_dir, Path.cwd())
+    except ValueError:
+        # Windows raises when tasks_dir and cwd are on different drives --
+        # fall back to the absolute path rather than crash.
+        rel_tasks_path = str(tasks_dir)
     target_file = os.path.join(rel_tasks_path, f"{task_name}.md").replace("\\", "/")
 
     # 确定启动命令：使用默认引擎 (opencode) 运行 interview 任务
@@ -503,7 +555,7 @@ def new(ctx, name):
         f"请启动‘任务编排专家 (Task Authoring)’模式，目标是为 CodeAgent 编写一个新的自动化任务剧本，文件名为：{target_file}",
     ]
 
-    subprocess.run(cmd, env=child_env)
+    return subprocess.run(cmd, env=child_env).returncode
 
 
 def _history_list(ctx, engine):

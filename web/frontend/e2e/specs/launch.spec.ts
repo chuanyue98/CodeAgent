@@ -7,53 +7,52 @@ test.beforeEach(async ({ baseURL }) => {
 });
 
 async function gotoLaunch(page: Page): Promise<void> {
-  await page.route('**/api/launch/status', route => route.fulfill({
-    contentType: 'application/json',
-    body: JSON.stringify({ available: true, terminal: 'xterm', mode: 'local_gui' }),
-  }));
-  await page.route(/\/api\/launch\/(claude|gemini|opencode|codex)$/, route => {
-    const engine = route.request().url().split('/').pop();
-    return route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({ status: 'launched', engine, terminal: 'xterm' }),
-    });
-  });
   await page.goto('/launch');
   await waitForH2(page, 'Local Terminal');
   await expect(cardByText(page, 'Claude')).toBeVisible();
+  // Seeded by /api/__e2e_reset: one registered project pointing at $HOME.
+  await expect(page.locator('#launchpad-project')).not.toHaveValue('');
 }
 
-test('clicking launch shows the launched state for that engine', async ({
-  page,
-}) => {
+test('opening an engine streams its output into an in-browser terminal', async ({ page }) => {
   await gotoLaunch(page);
-  const claudeCard = cardByText(page, 'Claude');
-  await claudeCard.getByRole('button').click();
-  await expect(claudeCard).toContainText('Opened in xterm', { timeout: 15000 });
+  const codexCard = cardByText(page, 'Codex');
+  await codexCard.getByRole('button', { name: 'Open terminal' }).click();
+
+  await expect(page.locator('.xterm')).toBeVisible();
+  // The fake `codex` binary (web/frontend/e2e/fixtures/fake-engines) sleeps
+  // 4s on a headless-launch invocation, then prints this line and exits —
+  // proving output actually streamed from the spawned process, not a stub.
+  await expect(page.locator('.xterm-accessibility-tree')).toContainText(
+    '(fake codex) ok:',
+    { timeout: 10000 },
+  );
+  // The process exiting on its own must be surfaced, not leave a silently
+  // dead connection.
+  await expect(page.getByText(/Session ended \(exit code/)).toBeVisible();
 });
 
-test('each engine card is independently launchable', async ({ page }) => {
+test('closing a terminal returns to the engine picker', async ({ page }) => {
   await gotoLaunch(page);
-  for (const name of ['Claude', 'Gemini', 'OpenCode', 'Codex']) {
-    const card = cardByText(page, name);
-    await card.getByRole('button').click();
-    await expect(card).toContainText('Opened in xterm', { timeout: 15000 });
-  }
+  await cardByText(page, 'Claude').getByRole('button', { name: 'Open terminal' }).click();
+  await expect(page.locator('.xterm')).toBeVisible();
+
+  await page.getByRole('button', { name: /Close terminal/i }).click();
+  await expect(cardByText(page, 'Claude')).toBeVisible();
+  await expect(cardByText(page, 'Codex')).toBeVisible();
 });
 
-test('unavailable local terminal is explained and launch actions are disabled', async ({ page }) => {
-  await page.route('**/api/launch/status', route => route.fulfill({
+test('unavailable browser terminal is explained and launch actions are disabled', async ({ page }) => {
+  await page.route('**/api/pty/status', route => route.fulfill({
     contentType: 'application/json',
     body: JSON.stringify({
       available: false,
-      terminal: null,
-      mode: 'local_gui',
-      reason: 'No supported GUI terminal emulator was found on the CodeAgent server',
+      reason: 'Browser terminal is not supported on Windows yet',
     }),
   }));
 
   await page.goto('/launch');
   await waitForH2(page, 'Local Terminal');
-  await expect(page.getByText('Local terminal unavailable')).toBeVisible();
+  await expect(page.getByText('Browser terminal unavailable')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open terminal' }).first()).toBeDisabled();
 });
