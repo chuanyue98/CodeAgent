@@ -200,8 +200,10 @@ def test_main_engine_selection(monkeypatch):
 
 
 def test_main_default_engine_with_proxy(monkeypatch, capsys):
-    # Test default engine (gemini) with proxy flag
-    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "some task", "--proxy"])
+    # --proxy must precede the prompt/engine name (documented in EPILOG) to
+    # be recognized as a real flag -- see
+    # test_proxy_word_after_prompt_is_not_treated_as_a_flag for the opposite.
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "--proxy", "some task"])
     with patch("ca_launcher.is_tcp_port_open", return_value=True):
         with patch("subprocess.run") as mock_run:
             ca_launcher.main()
@@ -211,6 +213,24 @@ def test_main_default_engine_with_proxy(monkeypatch, capsys):
             assert "HTTP_PROXY" in kwargs["env"]
             captured = capsys.readouterr()
             assert "🌐 代理已启用" in captured.out
+
+
+def test_proxy_word_after_prompt_is_not_treated_as_a_flag(monkeypatch):
+    # allow_interspersed_args=False means --proxy/-y appearing after the
+    # engine name are literal prompt text, not flags that get silently
+    # consumed -- otherwise merely mentioning "--proxy" in a task
+    # description would turn the proxy on and delete the word from the
+    # prompt sent to the engine.
+    monkeypatch.setattr(
+        "sys.argv",
+        ["ca_launcher.py", "claude", "do", "something", "--proxy", "settings"],
+    )
+    with patch("subprocess.run") as mock_run:
+        ca_launcher.main()
+        args, kwargs = mock_run.call_args
+        assert "start_claude_code.py" in args[0][1]
+        assert kwargs["env"] is None
+        assert args[0][2:] == ["do", "something", "--proxy", "settings", "-y"]
 
 
 def test_main_passes_dash_p_through_to_engine(monkeypatch):
@@ -223,3 +243,96 @@ def test_main_passes_dash_p_through_to_engine(monkeypatch):
         assert "-p" in cmd
         assert "hello" in cmd
         assert kwargs["env"] is None
+
+
+def test_prompt_starting_with_a_reserved_word_still_launches_the_engine(monkeypatch):
+    # "new"/"doctor"/"ui"/"history" are registered subcommand names, but a
+    # prompt that happens to start with one of those words (e.g. "new" as
+    # in "tell me what's new") must still reach the engine instead of
+    # crashing with click's "unexpected extra arguments".
+    monkeypatch.setattr(
+        "sys.argv", ["ca_launcher.py", "new", "is", "broken", "please", "fix"]
+    )
+    with patch("subprocess.run") as mock_run:
+        ca_launcher.main()
+        args, kwargs = mock_run.call_args
+        cmd = args[0]
+        assert "start_gemini.py" in cmd[1]
+        assert cmd[2:] == ["new", "is", "broken", "please", "fix", "-y"]
+
+
+def test_history_prompt_words_still_launch_the_engine(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv", ["ca_launcher.py", "history", "please", "explain", "this"]
+    )
+    with patch("subprocess.run") as mock_run:
+        ca_launcher.main()
+        args, kwargs = mock_run.call_args
+        cmd = args[0]
+        assert "start_gemini.py" in cmd[1]
+        assert cmd[2:] == ["history", "please", "explain", "this", "-y"]
+
+
+def test_new_command_with_a_real_name_still_dispatches_to_new(monkeypatch):
+    # Confirms the reserved-word fallback doesn't break genuine subcommand
+    # usage -- "ca new my-task" must still create a task draft, not launch
+    # the default engine with "new my-task" as a prompt.
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "new", "my-task"])
+    with patch("subprocess.run") as mock_run:
+        ca_launcher.main()
+        args, kwargs = mock_run.call_args
+        cmd = args[0]
+        assert "start_opencode.py" in cmd[1]
+        assert "tasks/my-task.md" in cmd[2]
+
+
+def test_engine_exit_code_propagates_to_ca_process_exit(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "claude", "do", "something"])
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=7)
+        assert ca_launcher.main() == 7
+
+
+def test_yolo_flag_is_not_inverted(monkeypatch):
+    # -y/--yolo is documented as "enable YOLO mode" and defaults to True;
+    # explicitly passing it must not flip the parsed value to False.
+    captured = {}
+    original = ca_launcher._launch_engine
+
+    def spy(ctx, args):
+        captured["yolo"] = ctx.obj["yolo"]
+        return original(ctx, args)
+
+    monkeypatch.setattr(ca_launcher, "_launch_engine", spy)
+    with patch("subprocess.run"):
+        ca_launcher.cli.main(["-y", "claude", "hi"], standalone_mode=False)
+    assert captured["yolo"] is True
+
+
+def test_build_proxy_env_falls_back_on_malformed_proxy_config():
+    config = {"proxy": True}
+    child_env, host, port, scheme = ca_launcher.build_proxy_env(config)
+    assert host == "127.0.0.1"
+    assert isinstance(port, int)
+
+
+def test_project_root_survives_a_deleted_cwd(monkeypatch, tmp_path):
+    def raise_oserror():
+        raise OSError("No such file or directory")
+
+    monkeypatch.setattr(ca_launcher.Path, "cwd", staticmethod(raise_oserror))
+    with patch("ca_launcher._installed_root", return_value=tmp_path / "installed"):
+        assert ca_launcher._project_root() == tmp_path / "installed"
+
+
+def test_new_command_falls_back_to_absolute_path_on_relpath_failure(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "new", "my-task"])
+
+    def raise_value_error(*_args, **_kwargs):
+        raise ValueError("path is on mount 'D:', start on mount 'C:'")
+
+    with patch("ca_launcher.os.path.relpath", side_effect=raise_value_error):
+        with patch("subprocess.run") as mock_run:
+            ca_launcher.main()
+            args, _kwargs = mock_run.call_args
+            assert "my-task.md" in args[0][2]

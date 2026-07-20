@@ -75,6 +75,72 @@ def test_read_task_prompt_missing(tmp_path):
         task_lib.read_task_prompt(missing)
 
 
+def test_handle_task_mode_literal_name_wins_over_combination_syntax(
+    tmp_path, monkeypatch
+):
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    (tasks_dir / "deploy+rollback.md").write_text("# Deploy and rollback")
+    monkeypatch.setenv("CA_TASKS_ROOT", str(tasks_dir))
+
+    content = task_lib.handle_task_mode("deploy+rollback")
+
+    assert content is not None
+    assert "Deploy and rollback" in content
+
+
+def test_handle_task_mode_still_combines_when_no_literal_match(tmp_path, monkeypatch):
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    (tasks_dir / "a.md").write_text("# A")
+    (tasks_dir / "b.md").write_text("# B")
+    monkeypatch.setenv("CA_TASKS_ROOT", str(tasks_dir))
+
+    content = task_lib.handle_task_mode("a+b")
+
+    assert content is not None
+    assert "# A" in content and "# B" in content
+
+
+def test_handle_task_mode_literal_name_wins_over_range_syntax(tmp_path, monkeypatch):
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    (tasks_dir / "3-5.md").write_text("# Literally named 3-5")
+    monkeypatch.setenv("CA_TASKS_ROOT", str(tasks_dir))
+
+    content = task_lib.handle_task_mode("3-5", allow_range=True)
+
+    assert content is not None
+    assert "Literally named 3-5" in content
+
+
+def test_get_tasks_dir_falls_back_when_config_is_not_an_object(tmp_path, monkeypatch):
+    monkeypatch.delenv("CA_TASKS_ROOT", raising=False)
+    config_path = tmp_path / "config.json"
+    config_path.write_text("[]")
+    monkeypatch.setattr(task_lib, "get_default_config_path", lambda root: config_path)
+
+    # Must fall back to the bundled resource root instead of raising
+    # AttributeError from calling .get() on a non-dict parsed config.
+    result = task_lib.get_tasks_dir()
+    assert result is not None
+
+
+def test_get_tasks_dir_falls_back_when_paths_section_is_not_an_object(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("CA_TASKS_ROOT", raising=False)
+    config_path = tmp_path / "config.json"
+    config_path.write_text('{"paths": "oops"}')
+    monkeypatch.setattr(task_lib, "get_default_config_path", lambda root: config_path)
+
+    # config itself is a dict (passes the isinstance guard), but
+    # config["paths"] is a string -- .get("resource_root") on it must not
+    # raise AttributeError uncaught.
+    result = task_lib.get_tasks_dir()
+    assert result is not None
+
+
 def test_set_additional_template_search_paths_appends(tmp_path):
     original = list(task_lib._ADDITIONAL_TEMPLATE_SEARCH_PATHS)
     try:
