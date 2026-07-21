@@ -370,6 +370,130 @@ def test_claude_to_codex_round_trip(tmp_path, monkeypatch):
     assert any("Hello, World" in m.content for m in assistant_msgs)
 
 
+def _init_opencode_db(db_path):
+    """Creates an OpenCode-shaped SQLite db with the columns write_opencode_session uses."""
+    import sqlite3
+
+    con = sqlite3.connect(str(db_path))
+    with con:
+        con.execute(
+            """CREATE TABLE project (
+                id TEXT PRIMARY KEY, worktree TEXT NOT NULL, vcs TEXT, name TEXT,
+                time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL,
+                sandboxes TEXT NOT NULL
+            )"""
+        )
+        con.execute(
+            """CREATE TABLE session (
+                id TEXT PRIMARY KEY, project_id TEXT NOT NULL, parent_id TEXT, slug TEXT NOT NULL,
+                directory TEXT NOT NULL, title TEXT NOT NULL, version TEXT NOT NULL,
+                model TEXT, cost REAL, tokens_input INTEGER, tokens_output INTEGER,
+                tokens_reasoning INTEGER, tokens_cache_read INTEGER, tokens_cache_write INTEGER,
+                time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL,
+                time_compacting INTEGER, time_archived INTEGER, workspace_id TEXT, path TEXT,
+                agent TEXT, metadata TEXT, summary_additions INTEGER, summary_deletions INTEGER,
+                summary_files INTEGER, summary_diffs TEXT, share_url TEXT, permission TEXT
+            )"""
+        )
+        con.execute(
+            """CREATE TABLE message (
+                id TEXT PRIMARY KEY, session_id TEXT NOT NULL, time_created INTEGER NOT NULL,
+                time_updated INTEGER NOT NULL, data TEXT NOT NULL
+            )"""
+        )
+        con.execute(
+            """CREATE TABLE part (
+                id TEXT PRIMARY KEY, message_id TEXT NOT NULL, session_id TEXT NOT NULL,
+                time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL
+            )"""
+        )
+    con.close()
+
+
+def test_write_opencode_session_reuses_existing_project(tmp_path, monkeypatch):
+    """A session converted into a project OpenCode already knows about must link
+    to that project's real id, not a fabricated one — otherwise OpenCode's own
+    `session list` silently omits it even though the row is well-formed."""
+    import sqlite3
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    db_path = tmp_path / ".local" / "share" / "opencode" / "opencode.db"
+    db_path.parent.mkdir(parents=True)
+    _init_opencode_db(db_path)
+
+    worktree = "E:/demo/test"
+    real_project_id = "c9434f3bddc889db7641bd25b90bf4dd956544a5"  # opaque id OpenCode assigned
+    con = sqlite3.connect(str(db_path))
+    with con:
+        con.execute(
+            "INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) "
+            "VALUES (?, ?, 1700000000000, 1700000000000, '[]')",
+            (real_project_id, worktree),
+        )
+    con.close()
+
+    session = UnifiedSession(
+        session_id="orig-session",
+        engine=EngineType.CLAUDE,
+        project_path="E:\\demo\\test",  # backslash form, as Claude records cwd on Windows
+        messages=[
+            UnifiedMessage(role="user", content="hello"),
+            UnifiedMessage(role="assistant", content="hi there"),
+        ],
+    )
+
+    from core.session_history.writers.opencode_writer import write_opencode_session
+
+    new_id = write_opencode_session(session)
+
+    con = sqlite3.connect(str(db_path))
+    row = con.execute(
+        "SELECT project_id, directory FROM session WHERE id = ?", (new_id,)
+    ).fetchone()
+    project_count = con.execute(
+        "SELECT COUNT(*) FROM project WHERE worktree = ?", (worktree,)
+    ).fetchone()[0]
+    con.close()
+
+    assert row[0] == real_project_id
+    assert row[1] == worktree
+    assert project_count == 1  # reused, not duplicated
+
+
+def test_write_opencode_session_creates_project_when_missing(tmp_path, monkeypatch):
+    """No prior project row for the target worktree — one must be created so the
+    session isn't left pointing at a nonexistent project."""
+    import sqlite3
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    db_path = tmp_path / ".local" / "share" / "opencode" / "opencode.db"
+    db_path.parent.mkdir(parents=True)
+    _init_opencode_db(db_path)
+
+    session = UnifiedSession(
+        session_id="orig-session",
+        engine=EngineType.CLAUDE,
+        project_path="E:\\demo\\brand-new-project",
+        messages=[UnifiedMessage(role="user", content="hello")],
+    )
+
+    from core.session_history.writers.opencode_writer import write_opencode_session
+
+    new_id = write_opencode_session(session)
+
+    con = sqlite3.connect(str(db_path))
+    session_row = con.execute(
+        "SELECT project_id FROM session WHERE id = ?", (new_id,)
+    ).fetchone()
+    project_row = con.execute(
+        "SELECT worktree FROM project WHERE id = ?", (session_row[0],)
+    ).fetchone()
+    con.close()
+
+    assert project_row is not None
+    assert project_row[0] == "E:/demo/brand-new-project"
+
+
 # ─── Session finder tests ─────────────────────────────────────────────
 
 

@@ -8,8 +8,8 @@ following OpenCode's native schema.
 
 from __future__ import annotations
 
-import hashlib
 import json
+import secrets
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -23,6 +23,40 @@ if TYPE_CHECKING:
 def _now_ms() -> int:
     """Returns current UTC time as Unix milliseconds."""
     return int(datetime.now(tz=timezone.utc).timestamp() * 1000)
+
+
+def _find_or_create_project(con: sqlite3.Connection, worktree: str, now_ms: int) -> str:
+    """Finds the OpenCode project row for a worktree path, creating it if absent.
+
+    OpenCode's ``session.project_id`` is a foreign key into the ``project``
+    table, and the id is an opaque token assigned by OpenCode itself (not a
+    deterministic function of the path we could reproduce). Fabricating an
+    id here would leave the session pointing at a project row that never
+    exists, which makes OpenCode's own ``session list`` silently omit it
+    even though the row is otherwise well-formed.
+
+    Args:
+        con: Open connection to the OpenCode SQLite database.
+        worktree: The project's forward-slash-normalized worktree path.
+        now_ms: Current time in Unix milliseconds, used if a row is created.
+
+    Returns:
+        str: The id of the matching (or newly created) project row.
+    """
+    row = con.execute(
+        "SELECT id FROM project WHERE worktree = ?", (worktree,)
+    ).fetchone()
+    if row:
+        return row[0]
+
+    new_project_id = secrets.token_hex(20)
+    con.execute(
+        """INSERT INTO project (
+            id, worktree, vcs, name, time_created, time_updated, sandboxes
+        ) VALUES (?, ?, NULL, NULL, ?, ?, '[]')""",
+        (new_project_id, worktree, now_ms, now_ms),
+    )
+    return new_project_id
 
 
 def _find_opencode_db() -> Path | None:
@@ -62,9 +96,7 @@ def write_opencode_session(session: UnifiedSession) -> str:
 
     new_session_id = f"ses_{uuid.uuid4().hex[:24]}"
     now_ms = _now_ms()
-
-    # Generate a project ID (deterministic from path, stable across processes)
-    project_id = f"pro_{hashlib.sha256(session.project_path.encode()).hexdigest()[:16]}"
+    worktree = session.project_path.replace("\\", "/")
 
     # Model JSON
     model_json = json.dumps(
@@ -77,6 +109,8 @@ def write_opencode_session(session: UnifiedSession) -> str:
     con = sqlite3.connect(str(db_path))
 
     try:
+        project_id = _find_or_create_project(con, worktree, now_ms)
+
         # Insert session row
         con.execute(
             """INSERT INTO session (
@@ -92,13 +126,13 @@ def write_opencode_session(session: UnifiedSession) -> str:
                 new_session_id,
                 project_id,
                 new_session_id[-12:],  # slug
-                session.project_path,
+                worktree,
                 session.title or session.first_user_message[:80] or "Converted session",
                 "1.0.0",
                 model_json,
                 now_ms,  # time_created
                 now_ms,  # time_updated
-                session.project_path,  # path
+                worktree,  # path
             ),
         )
 
@@ -113,7 +147,7 @@ def write_opencode_session(session: UnifiedSession) -> str:
                 "role": msg.role,
                 "mode": "build",
                 "agent": "build",
-                "path": {"cwd": session.project_path, "root": session.project_path},
+                "path": {"cwd": worktree, "root": worktree},
                 "cost": 0,
                 "tokens": {"total": 0, "input": 0, "output": 0, "reasoning": 0},
                 "modelID": session.model or "unknown",
