@@ -44,6 +44,9 @@ def test_acquire_resource_lock_closes_handle_on_locking_failure(tmp_path, monkey
             raise OSError("simulated lock failure")
 
         monkeypatch.setattr(msvcrt, "locking", raise_locking)
+        # Permanent failure means every one of the ~30-minute retry budget's
+        # attempts fails -- skip the real sleeps between them.
+        monkeypatch.setattr("core.lock_manager.time.sleep", lambda _seconds: None)
     else:
         import fcntl
 

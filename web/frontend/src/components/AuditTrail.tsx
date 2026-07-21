@@ -1,6 +1,21 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, ChevronDown, ChevronUp, Clock, Wrench, MessageSquare, AlertCircle, X, RefreshCw } from 'lucide-react';
-import { fetchAuditEvents, type AuditEvent, type AuditEventType } from '../api/audit';
+import { Search, Filter, ChevronDown, ChevronUp, Clock, Wrench, MessageSquare, AlertCircle, X, RefreshCw, TerminalSquare, Check } from 'lucide-react';
+import { fetchAuditEvents, convertAndLaunchSession, type AuditEvent, type AuditEventType } from '../api/audit';
+
+const ENGINE_LABELS: Record<string, string> = {
+  claude: 'Claude',
+  gemini: 'Gemini',
+  opencode: 'OpenCode',
+  codex: 'Codex',
+};
+
+const ALL_ENGINES = Object.keys(ENGINE_LABELS);
+
+type ConvertState =
+  | { status: 'idle' }
+  | { status: 'loading'; targetEngine: string }
+  | { status: 'success'; targetEngine: string; message: string }
+  | { status: 'error'; targetEngine: string; message: string };
 
 interface SessionMessage {
   role: string;
@@ -37,6 +52,7 @@ export default function AuditTrail() {
   const [drawerSession, setDrawerSession] = useState<{ engine: string; sessionId: string; project: string } | null>(null);
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [convertState, setConvertState] = useState<ConvertState>({ status: 'idle' });
 
   const load = () => {
     setLoading(true);
@@ -54,6 +70,11 @@ export default function AuditTrail() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(load, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setConvertState({ status: 'idle' });
+  }, [drawerSession]);
 
   useEffect(() => {
     if (!drawerSession) {
@@ -107,6 +128,30 @@ export default function AuditTrail() {
 
   const toggleType = (type: AuditEventType) => {
     setSelectedTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
+  };
+
+  const handleConvert = async (targetEngine: string) => {
+    if (!drawerSession) return;
+    setConvertState({ status: 'loading', targetEngine });
+    try {
+      const result = await convertAndLaunchSession({
+        sourceEngine: drawerSession.engine,
+        sessionId: drawerSession.sessionId,
+        targetEngine,
+        projectPath: drawerSession.project,
+      });
+      setConvertState({
+        status: 'success',
+        targetEngine,
+        message: `Opened in ${ENGINE_LABELS[targetEngine] ?? targetEngine} — new session ${result.new_session_id}`,
+      });
+    } catch (err) {
+      setConvertState({
+        status: 'error',
+        targetEngine,
+        message: err instanceof Error ? err.message : 'Conversion failed',
+      });
+    }
   };
 
   if (loading) {
@@ -309,6 +354,35 @@ export default function AuditTrail() {
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            <div className="mb-4 pb-4 border-b border-slate-100">
+              <p className="text-xs text-slate-400 font-medium mb-2">Convert &amp; open in another engine</p>
+              <div className="flex flex-wrap gap-2">
+                {ALL_ENGINES.filter(engine => engine !== drawerSession.engine).map(engine => (
+                  <button
+                    key={engine}
+                    disabled={convertState.status === 'loading'}
+                    onClick={() => handleConvert(engine)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <TerminalSquare className="w-3.5 h-3.5" />
+                    {ENGINE_LABELS[engine]}
+                    {convertState.status === 'loading' && convertState.targetEngine === engine && '…'}
+                  </button>
+                ))}
+              </div>
+              {convertState.status === 'success' && (
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-emerald-600">
+                  <Check className="w-3.5 h-3.5 shrink-0" /> {convertState.message}
+                </p>
+              )}
+              {convertState.status === 'error' && (
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-red-600">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {convertState.message}
+                </p>
+              )}
+            </div>
+
             {sessionLoading && <p className="text-xs text-slate-400">Loading...</p>}
             {!sessionLoading && sessionDetail && (
               <div className="space-y-3">

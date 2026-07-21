@@ -24,8 +24,27 @@ def test_skips_invalid_registry_paths(tmp_path):
     assert resolved.group == "work"
 
 
-def test_rejects_invalid_requested_path(tmp_path):
+def test_rejects_invalid_requested_path(tmp_path, monkeypatch):
+    """A path the OS itself refuses to resolve (embedded null byte, etc.)
+    must map to the "invalid" error, not fall through to the "missing
+    directory" one. Whether a given string actually triggers that at the
+    OS level is platform- and Python-version-dependent (e.g. an embedded
+    null byte raises on POSIX but pathlib silently tolerates it on
+    Windows), so the failure is injected directly instead of relying on
+    a string that happens to trip it on whatever machine runs this."""
     config_service = ConfigService(tmp_path / "config.json")
+
+    class _UnresolvablePath:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def expanduser(self):
+            return self
+
+        def resolve(self):
+            raise ValueError("embedded null byte")
+
+    monkeypatch.setattr("core.services.workspace_service.Path", _UnresolvablePath)
 
     try:
         resolve_registered_workspace(config_service, "\0invalid")

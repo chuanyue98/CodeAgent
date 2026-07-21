@@ -32,7 +32,10 @@ async def test_list_log_files_returns_empty_when_dir_missing(tmp_path, monkeypat
 
 @pytest.mark.asyncio
 async def test_list_log_files_reports_existing_logs(logs_dir):
-    (logs_dir / "task-1.log").write_text("hello\n", encoding="utf-8")
+    # write_bytes, not write_text: text mode's universal-newline translation
+    # would write "\r\n" on Windows, making the on-disk size 7 bytes instead
+    # of the 6 this test asserts against.
+    (logs_dir / "task-1.log").write_bytes(b"hello\n")
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
