@@ -33,7 +33,10 @@ class ClaudeEngine(BaseEngine):
     }
 
     def __init__(self):
-        super().__init__("Claude", "claude-3-5-sonnet")
+        # Claude CLI has no --model flag in build_command(); the actual model
+        # is whatever the local `claude` CLI is configured to use, so there's
+        # no accurate value to store here.
+        super().__init__("Claude", "")
 
     def build_command(self, message: str, non_interactive: bool) -> List[str]:
         cmd = [self.CLAUDE_COMMAND, self.CLAUDE_SKIP_PERMISSIONS_FLAG]
@@ -120,7 +123,7 @@ def main():
         register_signal_handler()
 
         final_command = engine.build_command(concise_msg, args.non_interactive)
-        print(f"🚀 Launching {engine.name} ({engine.default_model})...")
+        print(f"🚀 Launching {engine.name}...")
 
         engine.run_shell(final_command, env)
     finally:
