@@ -44,9 +44,7 @@ def test_rejects_invalid_requested_path(tmp_path, monkeypatch):
         def resolve(self):
             raise ValueError("embedded null byte")
 
-    monkeypatch.setattr(
-        "core.services.workspace_service.Path", _UnresolvablePath
-    )
+    monkeypatch.setattr("core.services.workspace_service.Path", _UnresolvablePath)
 
     try:
         resolve_registered_workspace(config_service, "\0invalid")

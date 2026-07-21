@@ -422,7 +422,9 @@ def test_write_opencode_session_reuses_existing_project(tmp_path, monkeypatch):
     _init_opencode_db(db_path)
 
     worktree = "E:/demo/test"
-    real_project_id = "c9434f3bddc889db7641bd25b90bf4dd956544a5"  # opaque id OpenCode assigned
+    real_project_id = (
+        "c9434f3bddc889db7641bd25b90bf4dd956544a5"  # opaque id OpenCode assigned
+    )
     con = sqlite3.connect(str(db_path))
     with con:
         con.execute(
