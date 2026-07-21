@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Activity,
   CheckCircle2,
@@ -115,6 +115,13 @@ function GenerateTaskModal({
 
   const nameValid = NAME_PATTERN.test(name);
 
+  const isMounted = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
   const handleSubmit = async () => {
     if (!nameValid || !title.trim() || !description.trim()) return;
     setError(null);
@@ -132,24 +139,35 @@ function GenerateTaskModal({
       const status: { task_id: string } = await res.json();
 
       const poll = async () => {
-        const runRes = await fetch(`/api/tasks/runs/${status.task_id}`);
-        if (!runRes.ok) throw new Error('Lost track of the generation run');
-        const { status: runStatus } = await runRes.json();
-        if (runStatus.status === 'running') {
-          setTimeout(() => void poll(), GENERATE_POLL_MS);
-          return;
-        }
-        const tasksRes = await fetch('/api/tasks');
-        const tasks: { name: string }[] = tasksRes.ok ? await tasksRes.json() : [];
-        if (tasks.some(t => t.name === name)) {
-          onCreated(name);
-        } else {
-          setError(`AI did not finish writing the task file (run status: ${runStatus.status}). Try again, or fill it in manually.`);
+        try {
+          const runRes = await fetch(`/api/tasks/runs/${status.task_id}`);
+          if (!runRes.ok) throw new Error('Lost track of the generation run');
+          const { status: runStatus } = await runRes.json();
+          if (!isMounted.current) return;
+
+          if (runStatus.status === 'running') {
+            setTimeout(() => void poll(), GENERATE_POLL_MS);
+            return;
+          }
+          const tasksRes = await fetch('/api/tasks');
+          const tasks: { name: string }[] = tasksRes.ok ? await tasksRes.json() : [];
+          if (!isMounted.current) return;
+
+          if (tasks.some(t => t.name === name)) {
+            onCreated(name);
+          } else {
+            setError(`AI did not finish writing the task file (run status: ${runStatus.status}). Try again, or fill it in manually.`);
+            setPhase('failed');
+          }
+        } catch (e) {
+          if (!isMounted.current) return;
+          setError(e instanceof Error ? e.message : 'Failed to generate task');
           setPhase('failed');
         }
       };
       void poll();
     } catch (e) {
+      if (!isMounted.current) return;
       setError(e instanceof Error ? e.message : 'Failed to generate task');
       setPhase('failed');
     }

@@ -48,8 +48,6 @@ class TaskService:
         path = self.tasks_root / f"{name}.md"
         if not path.resolve().is_relative_to(self.tasks_root.resolve()):
             raise ValueError("Invalid task name")
-        if path.exists():
-            raise FileExistsError(f"Task '{name}' already exists")
 
         content = (
             f"# {title or name}\n\n"
@@ -58,7 +56,14 @@ class TaskService:
             f"## Instructions (指令)\n{instructions}\n\n"
             f"## Verification (验证)\n{verification}\n"
         )
-        path.write_text(content, encoding="utf-8")
+        try:
+            # Exclusive-create ("x") makes the existence check and the write
+            # atomic, closing the TOCTOU window a separate exists()-then-write
+            # would leave between two concurrent requests for the same name.
+            with path.open("x", encoding="utf-8") as f:
+                f.write(content)
+        except FileExistsError as exc:
+            raise FileExistsError(f"Task '{name}' already exists") from exc
         return self._parse_task(path, full_content=True)
 
     def get_task(self, name: str, log_path: str | None = None) -> dict | None:

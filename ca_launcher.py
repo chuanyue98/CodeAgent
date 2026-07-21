@@ -442,7 +442,10 @@ def _ensure_project_registered(root: Path, config: dict) -> None:
         is_new_group = new_name not in config.get("groups", {})
     else:
         try:
-            chosen_group = groups[int(choice) - 1]
+            idx = int(choice) - 1
+            if idx < 0:
+                raise IndexError
+            chosen_group = groups[idx]
         except (ValueError, IndexError):
             print("⚠️ 无效输入, 跳过注册。")
             return
