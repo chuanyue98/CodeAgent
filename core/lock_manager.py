@@ -30,11 +30,18 @@ class LockManager:
             if sys.platform == "win32":
                 import msvcrt
 
-                while True:
+                # Generous enough to outlast a real interactive session
+                # holding the lock, but bounded so a permanently stuck or
+                # OS-refused lock still surfaces as an error instead of
+                # hanging forever.
+                max_attempts = 7200  # ~30 minutes at 0.25s per attempt
+                for attempt in range(max_attempts):
                     try:
                         msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
                         break
                     except OSError:
+                        if attempt == max_attempts - 1:
+                            raise
                         time.sleep(0.25)
             else:
                 import fcntl

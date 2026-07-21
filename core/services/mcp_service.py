@@ -220,6 +220,8 @@ def _run_cli(cmd: list[str], cwd: str) -> None:
             cwd=cwd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=20,
         )
     except subprocess.TimeoutExpired as exc:

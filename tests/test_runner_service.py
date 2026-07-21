@@ -1,4 +1,6 @@
+import contextlib
 import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -191,10 +193,19 @@ def test_stop_task_waits_without_holding_runner_lock(tmp_path):
     runner.active_runs[run.task_id] = run
     runner._processes[run.task_id] = process
 
-    with (
-        patch("core.services.runner_service.os.getpgid", return_value=123),
-        patch("core.services.runner_service.os.killpg"),
-    ):
+    # getpgid/killpg (the POSIX kill path) don't exist as os-module attributes
+    # on Windows, and patch() refuses to patch an attribute that isn't there;
+    # subprocess.run (the Windows taskkill path) is mocked on every platform
+    # so this never sends a real kill signal to whatever PID 123 happens to
+    # be on the machine running the test.
+    with contextlib.ExitStack() as patches:
+        patches.enter_context(patch("core.services.runner_service.subprocess.run"))
+        if hasattr(os, "getpgid"):
+            patches.enter_context(
+                patch("core.services.runner_service.os.getpgid", return_value=123)
+            )
+        if hasattr(os, "killpg"):
+            patches.enter_context(patch("core.services.runner_service.os.killpg"))
         assert runner.stop_task(run.task_id) is True
 
     assert run.status == "stopped"
