@@ -17,7 +17,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
-          enable-caching: true   # caches ~/.cache/uv between runs
+          enable-cache: true   # caches ~/.cache/uv between runs
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v6
@@ -146,7 +146,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
-          enable-caching: true
+          enable-cache: true
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v6
