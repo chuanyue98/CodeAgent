@@ -2,6 +2,7 @@ import {
   ChevronDown,
   ChevronRight,
   FolderGit2,
+  History,
   Loader2,
   Plus,
   RefreshCw,
@@ -20,6 +21,7 @@ import {
   workspaceLabel,
 } from '../utils/agentWorkspaceHelpers';
 import type { ConversationListItem } from '../utils/agentWorkspaceHelpers';
+import { buildEventsLink } from '../utils/sessionLink';
 
 const PAGE_SIZE = SESSION_PAGE_SIZE;
 
@@ -231,27 +233,39 @@ export default function AgentWorkspaceSidebar({
                         </button>
                       </div>
                     ) : (
-                      <button
+                      <div
                         key={item.key}
-                        onClick={() => void onSelectNativeSession(item.session)}
-                        disabled={Boolean(state.activeTurnId) || Boolean(selectingKey)}
-                        className="w-full rounded-lg px-2 py-2 text-left text-xs text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40"
+                        className="group flex items-center gap-1 rounded-lg text-slate-600 transition-colors hover:bg-slate-50"
                       >
-                        <span className="flex items-center gap-1.5">
-                          <span className="block min-w-0 flex-1 truncate font-medium">
-                            {item.session.title || 'Untitled conversation'}
+                        <button
+                          onClick={() => void onSelectNativeSession(item.session)}
+                          disabled={Boolean(state.activeTurnId) || Boolean(selectingKey)}
+                          className="min-w-0 flex-1 rounded-lg px-2 py-2 text-left text-xs disabled:opacity-40"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <span className="block min-w-0 flex-1 truncate font-medium">
+                              {item.session.title || 'Untitled conversation'}
+                            </span>
+                            {selectingKey === item.key && (
+                              <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
+                            )}
                           </span>
-                          {selectingKey === item.key && (
-                            <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
-                          )}
-                        </span>
-                        <span className="mt-0.5 block truncate text-[10px] opacity-60">
-                          {item.session.engine} · {item.session.message_count} msgs ·{' '}
-                          {relativeTime(
-                            item.session.ended_at || item.session.started_at,
-                          )}
-                        </span>
-                      </button>
+                          <span className="mt-0.5 block truncate text-[10px] opacity-60">
+                            {item.session.engine} · {item.session.message_count} msgs ·{' '}
+                            {relativeTime(
+                              item.session.ended_at || item.session.started_at,
+                            )}
+                          </span>
+                        </button>
+                        <Link
+                          to={buildEventsLink(item.session.engine, item.session.session_id, item.session.project_path)}
+                          title="View in Events"
+                          aria-label="View in Events"
+                          className="mr-1 hidden rounded-md p-1.5 text-slate-400 hover:bg-white hover:text-primary group-hover:block focus:block"
+                        >
+                          <History className="h-3.5 w-3.5" />
+                        </Link>
+                      </div>
                     ),
                   )}
                 </div>
@@ -335,12 +349,20 @@ export default function AgentWorkspaceSidebar({
                       session.ended_at || session.started_at,
                     )}
                   </span>
-                  <Link
-                    to="/settings/workspace"
-                    className="mt-1 inline-block text-[10px] font-semibold text-primary hover:underline"
-                  >
-                    Register workspace
-                  </Link>
+                  <span className="mt-1 flex items-center gap-2">
+                    <Link
+                      to="/settings/workspace"
+                      className="inline-block text-[10px] font-semibold text-primary hover:underline"
+                    >
+                      Register workspace
+                    </Link>
+                    <Link
+                      to={buildEventsLink(session.engine, session.session_id, session.project_path)}
+                      className="inline-block text-[10px] font-semibold text-primary hover:underline"
+                    >
+                      View in Events
+                    </Link>
+                  </span>
                 </div>
               ))}
             {unavailableHistoryExpanded &&
