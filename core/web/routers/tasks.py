@@ -93,8 +93,24 @@ async def generate_task(
         raise HTTPException(status_code=400, detail=f"Invalid engine: {engine!r}")
     if not is_valid_task_name(name):
         raise HTTPException(status_code=400, detail="Task name must match [\\w.-]+")
-    if (get_tasks_root() / f"{name}.md").exists():
-        raise HTTPException(status_code=409, detail=f"Task '{name}' already exists")
+
+    tasks_root = get_tasks_root()
+    tasks_root.mkdir(parents=True, exist_ok=True)
+    path = tasks_root / f"{name}.md"
+    if not path.resolve().is_relative_to(tasks_root.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid task name")
+    try:
+        # Exclusive-create ("x") reserves the filename atomically so a second
+        # concurrent /api/tasks/generate call for the same name fails fast
+        # instead of racing the exists()-then-write TOCTOU window. The
+        # background agent overwrites this empty placeholder with real
+        # content using its own (non-exclusive) file write tools.
+        with path.open("x", encoding="utf-8"):
+            pass
+    except FileExistsError as exc:
+        raise HTTPException(
+            status_code=409, detail=f"Task '{name}' already exists"
+        ) from exc
 
     message = _GENERATE_TASK_PROMPT.format(
         name=name, title=title, description=description.strip()
@@ -104,6 +120,10 @@ async def generate_task(
             engine, message, group="codeagent", project_path=str(ROOT_DIR)
         )
     except ValueError as exc:
+        # Dispatch failed synchronously, before any agent could have started
+        # writing the file: release the reserved name instead of leaving a
+        # dangling empty placeholder that would 409 all future retries.
+        path.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return status.__dict__
 

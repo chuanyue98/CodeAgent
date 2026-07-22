@@ -112,10 +112,12 @@ function GenerateTaskModal({
   const [engine, setEngine] = useState(engines[0]?.id || 'opencode');
   const [phase, setPhase] = useState<'form' | 'generating' | 'failed'>('form');
   const [error, setError] = useState<string | null>(null);
+  const [runId, setRunId] = useState<string | null>(null);
 
   const nameValid = NAME_PATTERN.test(name);
 
   const isMounted = useRef(true);
+  const cancelled = useRef(false);
   useEffect(() => {
     return () => {
       isMounted.current = false;
@@ -125,6 +127,7 @@ function GenerateTaskModal({
   const handleSubmit = async () => {
     if (!nameValid || !title.trim() || !description.trim()) return;
     setError(null);
+    cancelled.current = false;
     setPhase('generating');
     try {
       const res = await fetch('/api/tasks/generate', {
@@ -137,13 +140,16 @@ function GenerateTaskModal({
         throw new Error(body.detail || `Failed to start generation (${res.status})`);
       }
       const status: { task_id: string } = await res.json();
+      if (!isMounted.current) return;
+      setRunId(status.task_id);
 
       const poll = async () => {
+        if (cancelled.current) return;
         try {
           const runRes = await fetch(`/api/tasks/runs/${status.task_id}`);
           if (!runRes.ok) throw new Error('Lost track of the generation run');
           const { status: runStatus } = await runRes.json();
-          if (!isMounted.current) return;
+          if (!isMounted.current || cancelled.current) return;
 
           if (runStatus.status === 'running') {
             setTimeout(() => void poll(), GENERATE_POLL_MS);
@@ -151,7 +157,7 @@ function GenerateTaskModal({
           }
           const tasksRes = await fetch('/api/tasks');
           const tasks: { name: string }[] = tasksRes.ok ? await tasksRes.json() : [];
-          if (!isMounted.current) return;
+          if (!isMounted.current || cancelled.current) return;
 
           if (tasks.some(t => t.name === name)) {
             onCreated(name);
@@ -160,7 +166,7 @@ function GenerateTaskModal({
             setPhase('failed');
           }
         } catch (e) {
-          if (!isMounted.current) return;
+          if (!isMounted.current || cancelled.current) return;
           setError(e instanceof Error ? e.message : 'Failed to generate task');
           setPhase('failed');
         }
@@ -173,13 +179,36 @@ function GenerateTaskModal({
     }
   };
 
+  const cancelGeneration = async () => {
+    cancelled.current = true;
+    if (runId) {
+      try {
+        const res = await fetch(`/api/tasks/runs/${runId}/stop`, { method: 'POST' });
+        if (!res.ok) console.error('Failed to stop generation run', res.status);
+      } catch (e) {
+        console.error('Failed to stop generation run', e);
+      }
+    }
+    if (!isMounted.current) return;
+    setError(null);
+    setPhase('form');
+  };
+
+  const closeModal = () => {
+    if (phase === 'generating') {
+      void cancelGeneration();
+    } else {
+      onClose();
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 pt-[10vh] overflow-y-auto"
       role="presentation"
-      onClick={phase === 'form' ? onClose : undefined}
+      onClick={closeModal}
       onKeyDown={event => {
-        if (event.key === 'Escape' && phase === 'form') onClose();
+        if (event.key === 'Escape') closeModal();
       }}
     >
       <div
@@ -193,17 +222,22 @@ function GenerateTaskModal({
           <h2 className="text-lg font-semibold tracking-tight flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" /> Generate Task with AI
           </h2>
-          {phase === 'form' && (
-            <button onClick={onClose} aria-label="Close" className="p-1 text-slate-400 hover:text-slate-700 transition-colors">
-              <X className="w-5 h-5" />
-            </button>
-          )}
+          <button onClick={closeModal} aria-label="Close" className="p-1 text-slate-400 hover:text-slate-700 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {phase === 'generating' && (
           <div className="flex flex-col items-center justify-center gap-3 py-10 text-slate-500">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
             <p className="text-sm">{engine} is writing tasks/{name}.md…</p>
+            <button
+              onClick={() => void cancelGeneration()}
+              className="flex items-center gap-2 px-4 py-2 mt-2 bg-red-50 text-red-600 rounded-xl text-sm font-bold border border-red-100 hover:bg-red-100 transition-colors"
+            >
+              <StopCircle className="w-4 h-4" />
+              Cancel
+            </button>
           </div>
         )}
 
