@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, ChevronDown, ChevronUp, Clock, DollarSign, FileText, AlertCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Search, Filter, ChevronDown, ChevronUp, Clock, DollarSign, FileText, AlertCircle, ArrowUpRight } from 'lucide-react';
 import { fetchSessions, type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
+import { buildEventsLink } from '../utils/sessionLink';
 
 type SortKey = 'lastActivity' | 'cost' | 'tokens';
 type SortDir = 'asc' | 'desc';
@@ -250,10 +252,17 @@ export default function SessionsPage() {
                     ) : (
                       <p className="text-xs text-slate-400">No model breakdown available</p>
                     )}
-                    <div className="mt-2 pt-2 border-t border-slate-50 flex flex-wrap gap-4 text-xs text-slate-500">
+                    <div className="mt-2 pt-2 border-t border-slate-50 flex flex-wrap items-center gap-4 text-xs text-slate-500">
                       <span>Cache write: {fmtTokens(session.cacheCreationTokens)}</span>
                       <span>Cache read: {fmtTokens(session.cacheReadTokens)}</span>
                       <span className="font-mono text-slate-400 truncate">{session.sessionId}</span>
+                      <Link
+                        to={buildEventsLink(session.target, session.sessionId, session.projectPath)}
+                        onClick={event => event.stopPropagation()}
+                        className="ml-auto flex items-center gap-1 font-medium text-primary hover:underline"
+                      >
+                        View in Events <ArrowUpRight className="h-3 w-3" />
+                      </Link>
                     </div>
                   </div>
                 )}

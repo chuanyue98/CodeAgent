@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Search, Filter, ChevronDown, ChevronUp, Clock, Wrench, MessageSquare, AlertCircle, X, RefreshCw, TerminalSquare, Check } from 'lucide-react';
 import { fetchAuditEvents, convertAndLaunchSession, type AuditEvent, type AuditEventType } from '../api/audit';
 import request from '../utils/request';
@@ -52,6 +53,21 @@ export default function AuditTrail() {
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [convertState, setConvertState] = useState<ConvertState>({ status: 'idle' });
+  const [searchParams] = useSearchParams();
+
+  // Deep link support: /activity/events?session=&engine=&project= auto-opens
+  // the matching session's detail drawer, so other pages (History, Workspaces)
+  // can link straight to a session instead of making the user re-search for it.
+  useEffect(() => {
+    const session = searchParams.get('session');
+    const engine = searchParams.get('engine');
+    const project = searchParams.get('project');
+    if (session && engine && project) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDrawerSession({ engine, sessionId: session, project });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const load = () => {
     setLoading(true);
