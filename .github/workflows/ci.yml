@@ -38,7 +38,7 @@ jobs:
         run: uv run mypy core engines ca_launcher.py
 
       - name: Test
-        run: uv run pytest --tb=short -q --cov --cov-fail-under=60 --cov-report=term-missing
+        run: uv run pytest --tb=short -q --cov --cov-fail-under=74 --cov-report=term-missing
 
   # ── React / Vite frontend ─────────────────────────────────────────────────
   frontend:

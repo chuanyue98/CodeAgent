@@ -48,3 +48,29 @@ def write_fake_cli(
 def recorded_argv(bin_dir: Path, name: str) -> list[str]:
     """Return the argv recorded by the fake CLI named ``name``."""
     return json.loads((bin_dir / f"{name}_argv.json").read_text(encoding="utf-8"))
+
+
+def write_fake_chat_cli(tmp_path: Path) -> Path:
+    """Write a fake chat-engine CLI that emits JSONL matching a real engine's
+    session-id field.
+
+    Unlike ``write_fake_cli`` (which records argv for later inspection), this
+    fake is invoked directly via ``sys.executable <script>`` rather than
+    resolved off PATH by name, so no ``.bat``/shebang platform shimming is
+    needed here.
+
+    argv: [session_field, message, resumed_session_id?]
+    Emits one JSON line with the given field set to either the resumed id
+    (if provided) or a freshly synthesized one, plus the message echoed
+    back so tests can assert the command was built correctly.
+    """
+    script = tmp_path / "fake_cli.py"
+    script.write_text(
+        "import json, os, sys\n"
+        "field, message = sys.argv[1], sys.argv[2]\n"
+        "resumed = sys.argv[3] if len(sys.argv) > 3 else None\n"
+        "session_id = resumed or 'new-session-123'\n"
+        "print(json.dumps({field: session_id, 'echo': message, 'cwd': os.getcwd()}))\n",
+        encoding="utf-8",
+    )
+    return script
