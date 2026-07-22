@@ -66,8 +66,7 @@ export default function AuditTrail() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setDrawerSession({ engine, sessionId: session, project });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams]);
 
   const load = () => {
     setLoading(true);
