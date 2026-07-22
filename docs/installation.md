@@ -61,12 +61,13 @@ pre-commit install
 
 ## Frontend Setup
 
-The analytics dashboard requires additional frontend dependencies:
+The analytics dashboard requires additional frontend dependencies, and `web/frontend/dist/` (a build artifact) is not committed to git, so it must be built at least once:
 
 ```bash
 cd web/frontend
 bun install      # recommended
 # or: npm install
+bun run build     # or: npm run build
 ```
 
 ## Optional Dependencies

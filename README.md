@@ -264,8 +264,10 @@ bun install        # or npm install
 bun run dev        # Start Vite directly for development
 bun run build      # Production build
 
-# From the repository root, `ca ui` serves the committed/built UI. Set
-# CA_UI_DEV=1 only when you explicitly want it to manage a Vite dev server.
+# `web/frontend/dist/` is a build artifact and is not committed to git.
+# From the repository root, `ca ui` serves that build, so run `bun run build`
+# (or `npm run build`) at least once after cloning. Set CA_UI_DEV=1 only when
+# you explicitly want it to manage a Vite dev server instead.
 ```
 
 ## Documentation
