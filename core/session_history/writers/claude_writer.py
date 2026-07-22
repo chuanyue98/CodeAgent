@@ -108,7 +108,7 @@ def write_claude_session(session: UnifiedSession) -> str:
                 content_blocks.append({"type": "text", "text": msg.content})
             for tc in msg.tool_calls:
                 try:
-                    input_obj = json.loads(tc.args_preview) if tc.args_preview else {}
+                    input_obj: Any = json.loads(tc.args_preview) if tc.args_preview else {}
                 except (json.JSONDecodeError, TypeError):
                     input_obj = {}
                 content_blocks.append(
