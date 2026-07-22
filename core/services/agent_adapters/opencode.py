@@ -16,6 +16,11 @@ import urllib.request
 from collections.abc import AsyncIterator
 from typing import Any
 
+from core.services.agent_adapters._event_queue import (
+    iter_events,
+    put_event_dropping_oldest,
+)
+from core.services.agent_adapters._process_lifecycle import graceful_terminate
 from core.services.agent_protocol import (
     AdapterEvent,
     ApprovalDecision,
@@ -138,20 +143,12 @@ class OpenCodeAdapter:
                 pass
         process = self._process
         self._process = None
-        if process and process.returncode is None:
-            process.terminate()
-            try:
-                await asyncio.wait_for(process.wait(), timeout=5)
-            except TimeoutError:
-                process.kill()
-                try:
-                    await asyncio.wait_for(process.wait(), timeout=5)
-                except TimeoutError:
-                    logger.warning(
-                        "OpenCode process (pid=%s) did not exit after SIGKILL; "
-                        "abandoning it to avoid blocking shutdown",
-                        process.pid,
-                    )
+        await graceful_terminate(
+            process,
+            logger=logger,
+            label="OpenCode",
+            terminate_timeout=5,
+        )
         for task in (self._sse_task, self._stdout_task, self._stderr_task):
             if task:
                 task.cancel()
@@ -276,12 +273,8 @@ class OpenCodeAdapter:
         if decision == ApprovalDecision.CANCEL:
             await self.cancel_turn(session_id, self._active_turns.get(session_id, ""))
 
-    async def events(self) -> AsyncIterator[AdapterEvent]:
-        while True:
-            event = await self._events.get()
-            if event is None:
-                return
-            yield event
+    def events(self) -> AsyncIterator[AdapterEvent]:
+        return iter_events(self._events)
 
     async def _prompt(
         self, provider_session_id: str, turn: TurnInput, *, delivery: str
@@ -412,24 +405,7 @@ class OpenCodeAdapter:
             self._sse_response = None
 
     def _put_event(self, event: AdapterEvent) -> None:
-        try:
-            self._events.put_nowait(event)
-        except asyncio.QueueFull:
-            try:
-                self._events.get_nowait()
-            except asyncio.QueueEmpty:
-                pass
-            self._events.put_nowait(
-                AdapterEvent(
-                    type="error",
-                    provider_session_id="",
-                    data={
-                        "code": "provider_backpressure",
-                        "message": "OpenCode event queue overflowed",
-                        "retryable": True,
-                    },
-                )
-            )
+        put_event_dropping_oldest(self._events, event, label="OpenCode")
 
     def _emit_global_error(self, message: str) -> None:
         self._put_event(
