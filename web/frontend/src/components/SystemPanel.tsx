@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, Cpu, HardDrive, Clock, FileText } from 'lucide-react';
 import { fetchSystemMetrics, type SystemMetrics } from '../api/system';
+import usePolling from '../hooks/usePolling';
 
 function colorFor(value: number, thresholds: [number, number]): string {
   if (value > thresholds[1]) return 'text-red-600 bg-red-50';
@@ -34,12 +35,7 @@ export default function SystemPanel() {
     }
   }, []);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadMetrics();
-    const interval = setInterval(() => { void loadMetrics(); }, 5000);
-    return () => clearInterval(interval);
-  }, [loadMetrics]);
+  usePolling(loadMetrics, 5000);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

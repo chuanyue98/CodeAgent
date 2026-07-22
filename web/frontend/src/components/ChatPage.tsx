@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Send, MessageSquare, Plus, AlertCircle, Loader2, RotateCcw, Square, FolderGit2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useProject } from '../context/ProjectContext';
+import request from '../utils/request';
 import MarkdownMessage from './MarkdownMessage';
 import SessionCapabilities from './SessionCapabilities';
 import {
@@ -175,24 +176,15 @@ export default function ChatPage() {
     }
     setError(null);
     try {
-      const res = await fetch(
+      const detail = await request<{ messages: SessionDetailMessage[] }>(
         `/api/history/${session.engine}/${session.session_id}?project=${encodeURIComponent(session.project_path)}`,
       );
-      if (res.ok) {
-        const detail = await res.json();
-        const priorMessages: SessionDetailMessage[] = detail.messages || [];
-        setMessages(
-          priorMessages
-            .filter(m => m.role === 'user' || m.role === 'assistant')
-            .map(m => ({ role: m.role as 'user' | 'assistant', text: m.content || '' })),
-        );
-      } else {
-        setError('Failed to load session history');
-        setActiveSessionId(null);
-        setActiveProjectPath(null);
-        setUnregisteredSessionPath(null);
-        setMessages([]);
-      }
+      const priorMessages: SessionDetailMessage[] = detail.messages || [];
+      setMessages(
+        priorMessages
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => ({ role: m.role as 'user' | 'assistant', text: m.content || '' })),
+      );
     } catch {
       setError('Failed to load session history');
       setActiveSessionId(null);

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Clock, Plus, Trash2, Play, AlertCircle, PauseCircle, PlayCircle, Pencil, X } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import usePolling from '../hooks/usePolling';
+import request from '../utils/request';
 import {
   fetchSchedules,
   createSchedule,
@@ -54,29 +56,22 @@ export default function CronPage() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/tasks')
-      .then(res => res.json())
-      .then((list: Task[]) => {
+    request<Task[]>('/api/tasks')
+      .then((list) => {
         setTasks(list);
         if (list.length > 0) setTaskName(prev => prev || list[0].name);
       })
       .catch(() => setError('Failed to load tasks'));
 
-    fetch('/api/engines')
-      .then(res => res.json())
-      .then((list: Engine[]) => {
+    request<Engine[]>('/api/engines')
+      .then((list) => {
         setEngines(list);
         if (list.length > 0) setEngine(prev => prev || list[0].id);
       })
       .catch(() => setError('Failed to load engines'));
+  }, []);
 
-    loadSchedules();
-  }, [loadSchedules]);
-
-  useEffect(() => {
-    const id = setInterval(loadSchedules, POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [loadSchedules]);
+  usePolling(loadSchedules, POLL_INTERVAL_MS);
 
   const handleSave = async () => {
     if (!taskName || !engine || !workspace || !cronExpr.trim()) return;

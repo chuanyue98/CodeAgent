@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Search, Filter, ChevronDown, ChevronUp, Clock, Wrench, MessageSquare, AlertCircle, X, RefreshCw, TerminalSquare, Check } from 'lucide-react';
 import { fetchAuditEvents, convertAndLaunchSession, type AuditEvent, type AuditEventType } from '../api/audit';
+import request from '../utils/request';
 
 const ENGINE_LABELS: Record<string, string> = {
   claude: 'Claude',
@@ -34,9 +35,7 @@ interface SessionDetail {
 }
 
 async function fetchSessionDetail(engine: string, sessionId: string, project: string): Promise<SessionDetail> {
-  const res = await fetch(`/api/history/${engine}/${sessionId}?project=${encodeURIComponent(project)}`);
-  if (!res.ok) throw new Error('Failed to fetch session detail');
-  return res.json();
+  return request<SessionDetail>(`/api/history/${engine}/${sessionId}?project=${encodeURIComponent(project)}`);
 }
 
 export default function AuditTrail() {

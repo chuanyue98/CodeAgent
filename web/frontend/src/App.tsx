@@ -1,10 +1,11 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { Menu, X, AlertCircle } from 'lucide-react';
 import CommandPalette from './components/CommandPalette';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import SectionLayout from './components/SectionLayout';
 import SystemPanel from './components/SystemPanel';
+import ErrorBoundary from './components/shared/ErrorBoundary';
 import { useProject } from './context/ProjectContext';
 import {
   ACTIVITY_TABS,
@@ -33,6 +34,23 @@ const AgentWorkspace = lazy(() => import('./pages/AgentWorkspace'));
 const ChatPage = lazy(() => import('./components/ChatPage'));
 const CronPage = lazy(() => import('./components/CronPage'));
 const McpPage = lazy(() => import('./components/McpPage'));
+
+const routeFallback = (
+  <div className="flex h-96 items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
+);
+
+/**
+ * Gives each lazy-loaded page its own error + suspense boundary, so a
+ * render error (or a slow chunk load) in one page can't blank the whole
+ * app shell (nav/sidebar/other pages stay interactive).
+ */
+function page(element: ReactNode) {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={routeFallback}>{element}</Suspense>
+    </ErrorBoundary>
+  );
+}
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -115,79 +133,77 @@ function App() {
             </div>
           )}
           <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1 md:pr-2">
-            <Suspense fallback={<div className="flex h-96 items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}>
-              <Routes>
-                <Route path="/" element={<Navigate to="/home" replace />} />
-                <Route path="/home" element={<HomePage />} />
+            <Routes>
+              <Route path="/" element={<Navigate to="/home" replace />} />
+              <Route path="/home" element={page(<HomePage />)} />
 
+              <Route
+                path="/agent"
+                element={<SectionLayout label="Agent" description="Conversations and local provider terminals in one workspace." tabs={AGENT_TABS} />}
+              >
+                <Route index element={<Navigate to="web" replace />} />
+                <Route path="web" element={page(<AgentWorkspace />)} />
+                <Route path="legacy" element={page(<ChatPage />)} />
+                <Route path="terminal" element={page(<LaunchPad />)} />
+              </Route>
+
+              <Route
+                path="/automations"
+                element={<SectionLayout label="Automations" description="Run repeatable work and manage schedules." tabs={AUTOMATION_TABS} />}
+              >
+                <Route index element={<Navigate to="tasks" replace />} />
+                <Route path="tasks" element={page(<TaskDashboard />)} />
+                <Route path="schedules" element={page(<CronPage />)} />
+              </Route>
+
+              <Route
+                path="/activity"
+                element={<SectionLayout label="Activity" description="Conversation history, agent events, usage, and logs." tabs={ACTIVITY_TABS} />}
+              >
+                <Route index element={<Navigate to="history" replace />} />
+                <Route path="history" element={page(<SessionsPage />)} />
+                <Route path="events" element={page(<AuditTrail />)} />
+                <Route path="analytics" element={page(<Analytics />)} />
+                <Route path="logs" element={page(<LogViewer />)} />
+              </Route>
+
+              <Route
+                path="/settings"
+                element={<SectionLayout label="Settings" description="Workspace configuration, capabilities, and system health." tabs={SETTINGS_TABS} />}
+              >
+                <Route index element={<Navigate to="workspace" replace />} />
+                <Route path="workspace" element={page(<ConfigHub />)} />
                 <Route
-                  path="/agent"
-                  element={<SectionLayout label="Agent" description="Conversations and local provider terminals in one workspace." tabs={AGENT_TABS} />}
+                  path="capabilities"
+                  element={<SectionLayout label="Capabilities" description="Resources configured for the selected project group." tabs={CAPABILITY_TABS} />}
                 >
-                  <Route index element={<Navigate to="web" replace />} />
-                  <Route path="web" element={<AgentWorkspace />} />
-                  <Route path="legacy" element={<ChatPage />} />
-                  <Route path="terminal" element={<LaunchPad />} />
+                  <Route index element={<Navigate to="skills" replace />} />
+                  <Route path="skills" element={page(<SkillGallery />)} />
+                  <Route path="prompts" element={page(<PromptsGallery />)} />
+                  <Route path="hooks" element={page(<HooksGallery />)} />
+                  <Route path="plugins" element={page(<PluginGallery />)} />
+                  <Route path="mcp" element={page(<McpPage />)} />
                 </Route>
+                <Route path="system" element={page(<SystemPage />)} />
+              </Route>
 
-                <Route
-                  path="/automations"
-                  element={<SectionLayout label="Automations" description="Run repeatable work and manage schedules." tabs={AUTOMATION_TABS} />}
-                >
-                  <Route index element={<Navigate to="tasks" replace />} />
-                  <Route path="tasks" element={<TaskDashboard />} />
-                  <Route path="schedules" element={<CronPage />} />
-                </Route>
-
-                <Route
-                  path="/activity"
-                  element={<SectionLayout label="Activity" description="Conversation history, agent events, usage, and logs." tabs={ACTIVITY_TABS} />}
-                >
-                  <Route index element={<Navigate to="history" replace />} />
-                  <Route path="history" element={<SessionsPage />} />
-                  <Route path="events" element={<AuditTrail />} />
-                  <Route path="analytics" element={<Analytics />} />
-                  <Route path="logs" element={<LogViewer />} />
-                </Route>
-
-                <Route
-                  path="/settings"
-                  element={<SectionLayout label="Settings" description="Workspace configuration, capabilities, and system health." tabs={SETTINGS_TABS} />}
-                >
-                  <Route index element={<Navigate to="workspace" replace />} />
-                  <Route path="workspace" element={<ConfigHub />} />
-                  <Route
-                    path="capabilities"
-                    element={<SectionLayout label="Capabilities" description="Resources configured for the selected project group." tabs={CAPABILITY_TABS} />}
-                  >
-                    <Route index element={<Navigate to="skills" replace />} />
-                    <Route path="skills" element={<SkillGallery />} />
-                    <Route path="prompts" element={<PromptsGallery />} />
-                    <Route path="hooks" element={<HooksGallery />} />
-                    <Route path="plugins" element={<PluginGallery />} />
-                    <Route path="mcp" element={<McpPage />} />
-                  </Route>
-                  <Route path="system" element={<SystemPage />} />
-                </Route>
-
-                <Route path="/launch" element={<Navigate to="/agent/terminal" replace />} />
-                <Route path="/chat" element={<Navigate to="/agent/web" replace />} />
-                <Route path="/dashboard" element={<Navigate to="/automations/tasks" replace />} />
-                <Route path="/cron" element={<Navigate to="/automations/schedules" replace />} />
-                <Route path="/logs" element={<Navigate to="/activity/logs" replace />} />
-                <Route path="/analytics" element={<Navigate to="/activity/analytics" replace />} />
-                <Route path="/sessions" element={<Navigate to="/activity/history" replace />} />
-                <Route path="/audit" element={<Navigate to="/activity/events" replace />} />
-                <Route path="/skills" element={<Navigate to="/settings/capabilities/skills" replace />} />
-                <Route path="/prompts" element={<Navigate to="/settings/capabilities/prompts" replace />} />
-                <Route path="/hooks" element={<Navigate to="/settings/capabilities/hooks" replace />} />
-                <Route path="/plugins" element={<Navigate to="/settings/capabilities/plugins" replace />} />
-                <Route path="/mcp" element={<Navigate to="/settings/capabilities/mcp" replace />} />
-                <Route path="/config" element={<Navigate to="/settings/workspace" replace />} />
-                <Route path="/system" element={<Navigate to="/settings/system" replace />} />
-                <Route path="*" element={<Navigate to="/home" replace />} />
-              </Routes>
-            </Suspense>
+              <Route path="/launch" element={<Navigate to="/agent/terminal" replace />} />
+              <Route path="/chat" element={<Navigate to="/agent/web" replace />} />
+              <Route path="/dashboard" element={<Navigate to="/automations/tasks" replace />} />
+              <Route path="/cron" element={<Navigate to="/automations/schedules" replace />} />
+              <Route path="/logs" element={<Navigate to="/activity/logs" replace />} />
+              <Route path="/analytics" element={<Navigate to="/activity/analytics" replace />} />
+              <Route path="/sessions" element={<Navigate to="/activity/history" replace />} />
+              <Route path="/audit" element={<Navigate to="/activity/events" replace />} />
+              <Route path="/skills" element={<Navigate to="/settings/capabilities/skills" replace />} />
+              <Route path="/prompts" element={<Navigate to="/settings/capabilities/prompts" replace />} />
+              <Route path="/hooks" element={<Navigate to="/settings/capabilities/hooks" replace />} />
+              <Route path="/plugins" element={<Navigate to="/settings/capabilities/plugins" replace />} />
+              <Route path="/mcp" element={<Navigate to="/settings/capabilities/mcp" replace />} />
+              <Route path="/config" element={<Navigate to="/settings/workspace" replace />} />
+              <Route path="/system" element={<Navigate to="/settings/system" replace />} />
+              <Route path="*" element={<Navigate to="/home" replace />} />
+            </Routes>
           </div>
         </main>
 

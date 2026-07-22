@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Server, Plus, Trash2, AlertCircle, Info } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import request from '../utils/request';
 import { fetchMcpServers, addMcpServer, removeMcpServer, type McpServer } from '../api/mcp';
 
 interface Engine {
@@ -45,9 +46,8 @@ export default function McpPage() {
   );
 
   useEffect(() => {
-    fetch('/api/engines')
-      .then(res => res.json())
-      .then((list: Engine[]) => {
+    request<Engine[]>('/api/engines')
+      .then((list) => {
         setEngines(list);
         if (list.length > 0) setSelectedEngine(prev => prev || list[0].id);
       })
