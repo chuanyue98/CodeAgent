@@ -260,7 +260,7 @@ export default function AgentWorkspaceSidebar({
                         <Link
                           to={buildEventsLink(item.session.engine, item.session.session_id, item.session.project_path)}
                           title="View in Events"
-                          aria-label={`View ${item.session.title || 'conversation'} in Events`}
+                          aria-label="View in Events"
                           className="mr-1 hidden rounded-md p-1.5 text-slate-400 hover:bg-white hover:text-primary group-hover:block focus:block"
                         >
                           <History className="h-3.5 w-3.5" />
