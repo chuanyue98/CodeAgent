@@ -23,6 +23,10 @@ from claude_agent_sdk import (
     ToolUseBlock,
 )
 
+from core.services.agent_adapters._event_queue import (
+    iter_events,
+    put_event_dropping_oldest,
+)
 from core.services.agent_protocol import (
     AdapterEvent,
     ApprovalDecision,
@@ -240,12 +244,8 @@ class ClaudeAdapter:
             )
         future.set_result(result)
 
-    async def events(self) -> AsyncIterator[AdapterEvent]:
-        while True:
-            event = await self._events.get()
-            if event is None:
-                return
-            yield event
+    def events(self) -> AsyncIterator[AdapterEvent]:
+        return iter_events(self._events)
 
     def _require_started(self) -> None:
         if not self._started:
@@ -502,21 +502,4 @@ class ClaudeAdapter:
         return []
 
     def _put_event(self, event: AdapterEvent) -> None:
-        try:
-            self._events.put_nowait(event)
-        except asyncio.QueueFull:
-            try:
-                self._events.get_nowait()
-            except asyncio.QueueEmpty:
-                pass
-            self._events.put_nowait(
-                AdapterEvent(
-                    type="error",
-                    provider_session_id="",
-                    data={
-                        "code": "provider_backpressure",
-                        "message": "Claude event queue overflowed",
-                        "retryable": True,
-                    },
-                )
-            )
+        put_event_dropping_oldest(self._events, event, label="Claude")
