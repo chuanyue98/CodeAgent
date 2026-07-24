@@ -131,13 +131,14 @@ async def tick_once(
                 )
                 continue
             result_status = getattr(status, "status", "running")
-            recorded_status = (
-                "started"
-                if result_status == "running"
-                else str(result_status)
-                if str(result_status).startswith("failed")
-                else f"failed: {result_status}"
-            )
+            if result_status == "running":
+                recorded_status = "started"
+            elif str(result_status).startswith("failed"):
+                recorded_status = str(result_status)
+            elif result_status in ("completed", "success"):
+                recorded_status = str(result_status)
+            else:
+                recorded_status = f"failed: {result_status}"
             await asyncio.to_thread(
                 schedule_service.record_run,
                 record["id"],

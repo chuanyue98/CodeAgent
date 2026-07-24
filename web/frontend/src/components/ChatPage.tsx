@@ -16,6 +16,7 @@ import {
 } from '../api/chat';
 
 interface ChatMessage {
+  id: string;
   role: 'user' | 'assistant' | 'error';
   text: string;
 }
@@ -179,11 +180,11 @@ export default function ChatPage() {
       const detail = await request<{ messages: SessionDetailMessage[] }>(
         `/api/history/${session.engine}/${session.session_id}?project=${encodeURIComponent(session.project_path)}`,
       );
-      const priorMessages: SessionDetailMessage[] = detail.messages || [];
+      const priorMessages: SessionDetailMessage[] = detail?.messages || [];
       setMessages(
         priorMessages
           .filter(m => m.role === 'user' || m.role === 'assistant')
-          .map(m => ({ role: m.role as 'user' | 'assistant', text: m.content || '' })),
+          .map(m => ({ id: crypto.randomUUID(), role: m.role as 'user' | 'assistant', text: m.content || '' })),
       );
     } catch {
       setError('Failed to load session history');
@@ -199,10 +200,10 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages(prev => {
       if (done.status !== 'completed') {
-        return [...prev, { role: 'error', text: `Turn ${done.status}` }];
+        return [...prev, { id: crypto.randomUUID(), role: 'error' as const, text: `Turn ${done.status}` }];
       }
       if (pendingText) {
-        return [...prev, { role: 'assistant', text: pendingText }];
+        return [...prev, { id: crypto.randomUUID(), role: 'assistant' as const, text: pendingText }];
       }
       return prev;
     });
@@ -236,7 +237,7 @@ export default function ChatPage() {
       return;
     }
 
-    setMessages(prev => [...prev, { role: 'user', text }]);
+    setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'user' as const, text }]);
     setInput('');
     requestAnimationFrame(() => {
       if (composerRef.current) composerRef.current.style.height = 'auto';
@@ -429,9 +430,9 @@ export default function ChatPage() {
                 : 'Select a registered workspace to start.'}
             </p>
           )}
-          {messages.map((msg, i) => (
+          {messages.map((msg) => (
             <div
-              key={i}
+              key={msg.id}
               className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap break-words prose prose-slate ${
                 msg.role === 'user'
                   ? 'ml-auto bg-primary/10 text-slate-800'

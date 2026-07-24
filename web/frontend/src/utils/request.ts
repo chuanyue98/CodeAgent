@@ -37,7 +37,7 @@ async function request<T = unknown>(url: string, config: RequestConfig = {}): Pr
 
     const text = await response.text();
     if (!text) {
-      return undefined as T;
+      throw new Error('Server returned an empty response body');
     }
 
     return JSON.parse(text) as T;

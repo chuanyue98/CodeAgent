@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
+from core.utils.atomic_write import atomic_write
+
 if TYPE_CHECKING:
     from core.session_history.models import UnifiedSession
 
@@ -118,6 +120,6 @@ def write_gemini_session(session: UnifiedSession) -> str:
             }
             lines.append(json.dumps(msg_row, ensure_ascii=False))
 
-    # Write the file
-    file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # Write the file atomically to prevent corruption on crash
+    atomic_write(file_path, "\n".join(lines) + "\n")
     return new_session_id
