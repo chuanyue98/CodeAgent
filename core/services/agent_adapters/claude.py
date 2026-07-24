@@ -301,7 +301,12 @@ class ClaudeAdapter:
                 )
             )
             try:
-                return await future
+                return await asyncio.wait_for(future, timeout=300)
+            except asyncio.TimeoutError:
+                return PermissionResultDeny(
+                    message="Approval timed out after 300 seconds of inactivity",
+                    interrupt=True,
+                )
             finally:
                 self._pending_approvals.pop(approval_id, None)
 
@@ -363,6 +368,20 @@ class ClaudeAdapter:
         finally:
             self._active_turns.pop(session_id, None)
             self._current_message_ids.pop(session_id, None)
+            self._cleanup_session_tools(session_id)
+
+    def _cleanup_session_tools(self, session_id: str) -> None:
+        """Removes all ``_started_tools`` entries for a session.
+
+        ``_started_tools`` is normally drained as each ``ToolResultBlock``
+        arrives, but when a turn is interrupted (stream error, cancellation,
+        or a tool that never returns a result) those entries would leak
+        forever. This is invoked from the turn lifecycle cleanup path
+        (completed / failed / cancelled) so the set cannot grow unbounded.
+        """
+        self._started_tools = {
+            (sid, tool_id) for sid, tool_id in self._started_tools if sid != session_id
+        }
 
     def _translate_message(
         self, session_id: str, turn_id: str, message: Any

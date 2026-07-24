@@ -35,7 +35,20 @@ export default function SystemPanel() {
     }
   }, []);
 
-  usePolling(loadMetrics, 5000);
+  // Fetch once on mount so metrics are ready before the popover is first
+  // opened. The recurring poll below is gated on visibility, so without this
+  // initial fetch the popover would show "Loading…" the first time it opens.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadMetrics();
+  }, [loadMetrics]);
+
+  // Only poll while the popover is visible. When the panel is closed the
+  // interval is torn down so we don't hit the metrics endpoint every 5s for
+  // a hidden panel. `immediate` is disabled because the mount effect above
+  // already seeds data, and re-fetching on every open would also wipe a
+  // transient error before the user has a chance to see/retry it.
+  usePolling(loadMetrics, 5000, open, { immediate: false });
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
