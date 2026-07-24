@@ -6,6 +6,8 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core.utils.atomic_write import atomic_write
+
 
 class SettingsFile:
     """Reads and writes a JSON settings file with atomic backup."""
@@ -23,8 +25,7 @@ class SettingsFile:
             return {}
 
     def save(self, data: Any):
-        with open(self.path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        atomic_write(self.path, json.dumps(data, indent=2, ensure_ascii=False))
 
     def create_backup(self) -> Optional[Path]:
         backup_path = self.path.with_suffix(self.path.suffix + ".bak")

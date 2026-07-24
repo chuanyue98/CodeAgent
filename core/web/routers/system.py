@@ -44,7 +44,7 @@ async def get_metrics():
     try:
         cpu = await asyncio.to_thread(psutil.cpu_percent, 0.1)
         mem = psutil.virtual_memory()
-        disk = psutil.disk_usage("/")
+        disk = psutil.disk_usage(str(Path.home().anchor))
         uptime = time.time() - psutil.boot_time()
 
         history_path = Path.home() / ".ca_analytics_history.jsonl"

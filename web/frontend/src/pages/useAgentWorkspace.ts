@@ -69,6 +69,7 @@ export type UseAgentWorkspaceReturn = {
   onNewSession: () => void;
   onSelectSession: (session: AgentSession) => void;
   onSelectNativeSession: (native: NativeAgentSession) => void;
+  onRegisterAndResumeNativeSession: (native: NativeAgentSession) => void;
   onRemoveSession: (session: AgentSession) => void;
   onSend: () => void;
   onCancel: () => void;
@@ -96,7 +97,7 @@ export type UseAgentWorkspaceReturn = {
 };
 
 export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
-  const { projects, currentGroup, setCurrentGroup } = useProject();
+  const { projects, currentGroup, setCurrentGroup, config, updateConfig } = useProject();
   const [providers, setProviders] = useState<ProviderCapabilities[]>([]);
   const [gatewayStatus, setGatewayStatus] = useState<AgentGatewayStatus>({
     enabled: true,
@@ -386,13 +387,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     }
   }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, connect, loadInitialHistory]);
 
-  const selectNativeSession = useCallback(async (native: NativeAgentSession) => {
-    if (state.activeTurnId) return;
-    const registered = validProjects.some(project => project.path === native.project_path);
-    if (!registered) {
-      setError(`Register this workspace before resuming: ${native.project_path}`);
-      return;
-    }
+  const resumeNativeSessionUnchecked = useCallback(async (native: NativeAgentSession) => {
     const selectionId = ++selectionRequestRef.current;
     const previousSelection = { workspace, provider: selectedProvider, permissionMode };
     setSelectingKey(`${native.engine}:${native.session_id}`);
@@ -436,7 +431,36 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     } finally {
       if (selectionId === selectionRequestRef.current) setSelectingKey(null);
     }
-  }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, connect, loadInitialHistory, removeNativeSession]);
+  }, [workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, connect, loadInitialHistory, removeNativeSession]);
+
+  const selectNativeSession = useCallback(async (native: NativeAgentSession) => {
+    if (state.activeTurnId) return;
+    const registered = validProjects.some(project => project.path === native.project_path);
+    if (!registered) {
+      setError(`Register this workspace before resuming: ${native.project_path}`);
+      return;
+    }
+    await resumeNativeSessionUnchecked(native);
+  }, [state.activeTurnId, validProjects, resumeNativeSessionUnchecked]);
+
+  const registerAndResumeNativeSession = useCallback(async (native: NativeAgentSession) => {
+    if (state.activeTurnId) return;
+    setSelectingKey(`${native.engine}:${native.session_id}`);
+    try {
+      await updateConfig({
+        ...(config || {}),
+        project_registry: [
+          ...(config?.project_registry || []),
+          { path: native.project_path, group: currentGroup || 'common' },
+        ],
+      });
+    } catch (caught) {
+      setSelectingKey(null);
+      setError(caught instanceof Error ? caught.message : 'Failed to register workspace');
+      return;
+    }
+    await resumeNativeSessionUnchecked(native);
+  }, [state.activeTurnId, config, currentGroup, updateConfig, resumeNativeSessionUnchecked]);
 
   const newSession = useCallback(() => {
     selectionRequestRef.current += 1;
@@ -645,6 +669,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     onNewSession: newSession,
     onSelectSession: selectSession,
     onSelectNativeSession: selectNativeSession,
+    onRegisterAndResumeNativeSession: registerAndResumeNativeSession,
     onRemoveSession: removeSession,
     onSend: send,
     onCancel: cancel,

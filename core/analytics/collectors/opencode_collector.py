@@ -79,6 +79,7 @@ def scan_opencode_usage(
 
     since_ms = _iso_to_ms(since_timestamp)
     entries: List[RawUsageEntry] = []
+    con = None
     try:
         con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         con.row_factory = sqlite3.Row
@@ -107,9 +108,11 @@ def scan_opencode_usage(
             """,
             (since_ms,),
         ).fetchall()
-        con.close()
     except sqlite3.Error:
         return []
+    finally:
+        if con is not None:
+            con.close()
 
     for row in rows:
         try:

@@ -23,9 +23,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from core.session_history.audit import build_audit_events
 from core.session_history.session_finder import (
@@ -34,6 +35,54 @@ from core.session_history.session_finder import (
 )
 
 router = APIRouter(prefix="/api")
+
+VALID_ENGINES = {"claude", "codex", "gemini", "opencode"}
+
+
+def _validate_source_file_path(source_file: str, engine: str) -> Path:
+    """Validates that *source_file* resides within the allowed engine history
+    directory, preventing path-traversal attacks via a tampered JSONL field.
+
+    Raises:
+        HTTPException(400): If the path is empty or does not exist.
+        HTTPException(403): If the resolved path escapes the allowed directory.
+    """
+    if not source_file:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Session source file path is empty"},
+        )
+
+    home = Path.home()
+    file_path = Path(source_file).resolve()
+
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(
+            status_code=400,
+            detail={"error": f"Session source file path is invalid: {source_file}"},
+        )
+
+    allowed_dirs: list[Path] = []
+    if engine == "claude":
+        allowed_dirs.append((home / ".claude" / "projects").resolve())
+    elif engine == "codex":
+        allowed_dirs.append((home / ".codex" / "sessions").resolve())
+    elif engine == "gemini":
+        allowed_dirs.append((home / ".gemini" / "tmp").resolve())
+    elif engine == "opencode":
+        allowed_dirs.append((home / ".opencode").resolve())
+        allowed_dirs.append((home / ".local" / "share" / "opencode").resolve())
+
+    for allowed in allowed_dirs:
+        if file_path.is_relative_to(allowed):
+            return file_path
+
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "error": "Source file path is outside allowed engine history directories",
+        },
+    )
 
 
 def _parse_ts(ts: str) -> datetime:
@@ -55,6 +104,15 @@ class ConvertRequest(BaseModel):
     session_id: str
     target_engine: str
     project_path: str
+
+    @field_validator("source_engine", "target_engine")
+    @classmethod
+    def validate_engine(cls, v: str) -> str:
+        if v not in VALID_ENGINES:
+            raise ValueError(
+                f"Invalid engine '{v}'. Must be one of: {', '.join(sorted(VALID_ENGINES))}"
+            )
+        return v
 
 
 @router.get("/history")
@@ -148,7 +206,7 @@ async def get_session_detail(
     Returns:
         dict: Full session data with messages, or 404 if not found.
     """
-    session = find_session_by_id(session_id, engine, project)
+    session = await asyncio.to_thread(find_session_by_id, session_id, engine, project)
     if not session:
         raise HTTPException(
             status_code=404,
@@ -177,7 +235,9 @@ async def convert_session(req: ConvertRequest) -> dict:
     # Import here to avoid circular dependencies and only load when needed
     from core.session_history.writers import write_session
 
-    session = find_session_by_id(req.session_id, req.source_engine, req.project_path)
+    session = await asyncio.to_thread(
+        find_session_by_id, req.session_id, req.source_engine, req.project_path
+    )
     if not session:
         raise HTTPException(
             status_code=404,
@@ -188,7 +248,7 @@ async def convert_session(req: ConvertRequest) -> dict:
         )
 
     try:
-        new_id = write_session(session, req.target_engine)
+        new_id = await asyncio.to_thread(write_session, session, req.target_engine)
         return {
             "status": "ok",
             "new_session_id": new_id,
@@ -211,14 +271,16 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
     """
     from core.session_history.writers import write_session
 
-    session = find_session_by_id(req.session_id, req.source_engine, req.project_path)
+    session = await asyncio.to_thread(
+        find_session_by_id, req.session_id, req.source_engine, req.project_path
+    )
     if not session:
         raise HTTPException(
             status_code=404, detail={"error": "Source session not found"}
         )
 
     try:
-        new_id = write_session(session, req.target_engine)
+        new_id = await asyncio.to_thread(write_session, session, req.target_engine)
     except Exception as e:
         raise HTTPException(
             status_code=500, detail={"error": f"Conversion failed: {e}"}
@@ -226,7 +288,7 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
 
     # Launch the engine in a visible terminal (same mechanism as /api/launch).
     import sys
-    from pathlib import Path
+
     from core.web.routers.launch import launch_in_terminal
 
     _CA_LAUNCHER = Path(__file__).resolve().parents[3] / "ca_launcher.py"
@@ -257,9 +319,8 @@ async def delete_session(
 ) -> dict:
     """Deletes a specific session from local history storage."""
     import sqlite3
-    from pathlib import Path
 
-    session = find_session_by_id(session_id, engine, project)
+    session = await asyncio.to_thread(find_session_by_id, session_id, engine, project)
     if not session:
         raise HTTPException(
             status_code=404,
@@ -270,27 +331,12 @@ async def delete_session(
             },
         )
 
+    validated_path = _validate_source_file_path(session.source_file or "", engine)
+
     if engine == "opencode":
-        if not session.source_file:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "Session source file path is empty",
-                    "session_id": session_id,
-                },
-            )
-        db_path = Path(session.source_file)
-        if not db_path.exists() or not db_path.is_file():
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": f"Session source file path is invalid: {session.source_file}",
-                    "session_id": session_id,
-                },
-            )
         con = None
         try:
-            con = sqlite3.connect(str(db_path))
+            con = sqlite3.connect(str(validated_path))
             with con:
                 con.execute("DELETE FROM part WHERE session_id = ?", (session_id,))
                 con.execute("DELETE FROM message WHERE session_id = ?", (session_id,))
@@ -303,25 +349,8 @@ async def delete_session(
             if con is not None:
                 con.close()
     else:
-        if not session.source_file:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "Session source file path is empty",
-                    "session_id": session_id,
-                },
-            )
-        file_path = Path(session.source_file)
-        if not file_path.exists() or not file_path.is_file():
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": f"Session source file path is invalid: {session.source_file}",
-                    "session_id": session_id,
-                },
-            )
         try:
-            file_path.unlink()
+            validated_path.unlink()
         except OSError as e:
             raise HTTPException(
                 status_code=500, detail={"error": f"Failed to delete session file: {e}"}

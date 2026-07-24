@@ -117,6 +117,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       const msg = err instanceof Error ? err.message : 'Failed to update config';
       setError(msg);
       console.error('Failed to update config:', err);
+      throw err;
     }
   }, [refreshConfig]);
 

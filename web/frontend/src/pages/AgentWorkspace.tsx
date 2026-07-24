@@ -41,6 +41,7 @@ export default function AgentWorkspace() {
         onNewSession={workspace.onNewSession}
         onSelectSession={workspace.onSelectSession}
         onSelectNativeSession={workspace.onSelectNativeSession}
+        onRegisterAndResumeNativeSession={workspace.onRegisterAndResumeNativeSession}
         onRemoveSession={workspace.onRemoveSession}
         onRetryNativeSessions={workspace.onRetryNativeSessions}
         onSearchChange={workspace.onSearchChange}

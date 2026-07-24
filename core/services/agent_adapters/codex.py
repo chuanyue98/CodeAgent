@@ -227,14 +227,20 @@ class CodexAdapter:
         await self._transport.write(message)
 
     async def _handle_server_request(self, message: dict[str, Any]) -> None:
-        method = message["method"]
+        method = message.get("method")
+        if method is None:
+            logger.warning("Server request missing 'method' field, skipping")
+            return
         params = message.get("params") or {}
+        request_id = message.get("id")
+        if request_id is None:
+            logger.warning("Server request missing 'id' field, skipping: %s", method)
+            return
         if method in {
             "item/commandExecution/requestApproval",
             "item/fileChange/requestApproval",
             "item/permissions/requestApproval",
         }:
-            request_id = message["id"]
             approval_id = f"codex:{request_id}"
             self._approval_requests[approval_id] = (request_id, method)
             self._put_event(
@@ -259,7 +265,7 @@ class CodexAdapter:
             return
         await self._write(
             {
-                "id": message["id"],
+                "id": request_id,
                 "error": {"code": -32601, "message": f"Unsupported request: {method}"},
             }
         )
