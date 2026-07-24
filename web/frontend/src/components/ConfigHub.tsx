@@ -42,7 +42,18 @@ const ConfigHub: React.FC = () => {
   const [newGroupName, setNewGroupName] = useState('');
   const newGroupInputRef = useRef<HTMLInputElement>(null);
 
+  // Tracks whether the user has unsaved local edits. While dirty, the sync
+  // effect below must NOT overwrite local state from context (which would
+  // discard those edits). It is cleared after a successful save so the next
+  // context refresh can repopulate local state with the persisted values.
+  const [isDirty, setIsDirty] = useState(false);
+
   useEffect(() => {
+    // Context data may change (e.g. a resource toggle in another view calls
+    // refreshConfig). If the user has unsaved edits here, keep them and skip
+    // the reset; we only re-sync from context when there are no local edits.
+    if (isDirty) return;
+
     if (config) {
       const cloned = deepClone(config);
       if (!cloned.proxy) cloned.proxy = [];
@@ -66,7 +77,7 @@ const ConfigHub: React.FC = () => {
       setLocalGroups(deepClone(groups));
       setLoading(false);
     }
-  }, [config, projects, groups]);
+  }, [config, projects, groups, isDirty]);
 
   const handleSave = async () => {
     const normalizedProjects = localProjects.map(({ path, group }) => ({
@@ -99,6 +110,10 @@ const ConfigHub: React.FC = () => {
 
       await refreshConfig();
       setError(null);
+      // Local edits are now persisted. Clear the dirty flag so the sync effect
+      // (re-triggered by refreshConfig) is allowed to repopulate local state
+      // from the freshly-fetched context.
+      setIsDirty(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -107,12 +122,14 @@ const ConfigHub: React.FC = () => {
   };
 
   const updateProxy = (uiId: string, field: keyof ProxyConfig, value: string | number) => {
+    setIsDirty(true);
     setLocalProxies(current => current.map(proxy => (
       proxy.uiId === uiId ? { ...proxy, [field]: value } : proxy
     )));
   };
 
   const addProxy = () => {
+    setIsDirty(true);
     setLocalProxies(current => [
       ...current,
       { uiId: createEditableRowId('proxy'), host: '127.0.0.1', port: 7890 },
@@ -120,11 +137,13 @@ const ConfigHub: React.FC = () => {
   };
 
   const removeProxy = (uiId: string) => {
+    setIsDirty(true);
     setLocalProxies(current => current.filter(proxy => proxy.uiId !== uiId));
   };
 
   // Project Registry Handlers
   const addProject = () => {
+    setIsDirty(true);
     setLocalProjects(current => [
       ...current,
       { uiId: createEditableRowId('project'), path: '', group: 'common' },
@@ -132,12 +151,14 @@ const ConfigHub: React.FC = () => {
   };
 
   const updateProject = (uiId: string, field: keyof Project, value: string) => {
+    setIsDirty(true);
     setLocalProjects(current => current.map(project => (
       project.uiId === uiId ? { ...project, [field]: value } : project
     )));
   };
 
   const removeProject = (uiId: string) => {
+    setIsDirty(true);
     setLocalProjects(current => current.filter(project => project.uiId !== uiId));
   };
 
@@ -151,6 +172,7 @@ const ConfigHub: React.FC = () => {
   const confirmAddGroup = () => {
     const name = newGroupName.trim().toLowerCase().replace(/\s+/g, '-');
     if (name && !localGroups[name]) {
+      setIsDirty(true);
       setLocalGroups({
         ...localGroups,
         [name]: { skills: [], prompts: [], hooks: [], plugins: [] }
@@ -167,6 +189,7 @@ const ConfigHub: React.FC = () => {
 
   const removeGroup = (name: string) => {
     if (window.confirm(`Delete group "${name}"?`)) {
+      setIsDirty(true);
       const newGroups = { ...localGroups };
       delete newGroups[name];
       setLocalGroups(newGroups);
@@ -230,6 +253,7 @@ const ConfigHub: React.FC = () => {
               type="text"
               value={localConfig.paths?.resource_root || ''}
               onChange={(e) => {
+                setIsDirty(true);
                 const newPaths = { ...(localConfig.paths || {}), resource_root: e.target.value };
                 setLocalConfig({ ...localConfig, paths: newPaths });
               }}

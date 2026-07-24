@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Terminal, AlertCircle, Wifi, WifiOff } from 'lucide-react';
 import { fetchLogFiles, fetchLogFile, useLogStream, type LogFile } from '../api/logs';
 import usePolling from '../hooks/usePolling';
@@ -49,10 +49,13 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
     }
   }, [streamLines, autoScroll, initialContent]);
 
-  const allLines = [
-    ...(initialContent ?? '').split('\n'),
-    ...(selectedTaskId ? streamLines : []),
-  ].filter((l: string) => l.trim());
+  const allLines = useMemo(
+    () => [
+      ...(initialContent ?? '').split('\n'),
+      ...(selectedTaskId ? streamLines : []),
+    ].filter((l: string) => l.trim()),
+    [initialContent, selectedTaskId, streamLines],
+  );
 
   return (
     <div className="glass-card flex flex-col h-full">

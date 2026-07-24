@@ -50,6 +50,7 @@ class GeminiAdapter:
             is_stopping=lambda: self._stopping,
         )
         self._pending_approvals: dict[str, tuple[Any, list[dict[str, Any]], str]] = {}
+        self._approval_timeouts: dict[str, asyncio.Task] = {}
         self._turn_tasks: dict[str, asyncio.Task] = {}
         self._active_turns: dict[str, str] = {}
         self._message_text: dict[tuple[str, str], str] = {}
@@ -111,6 +112,9 @@ class GeminiAdapter:
         self._process = None
         await graceful_terminate(process, logger=logger, label="Gemini ACP")
         await self._transport.detach()
+        for task in self._approval_timeouts.values():
+            task.cancel()
+        self._approval_timeouts.clear()
         self._pending_approvals.clear()
         self._active_turns.clear()
         self._message_text.clear()
@@ -287,39 +291,67 @@ class GeminiAdapter:
     async def respond_to_approval(
         self, approval_id: str, decision: ApprovalDecision
     ) -> None:
-        pending = self._pending_approvals.pop(approval_id, None)
+        pending = self._pending_approvals.get(approval_id)
         if pending is None:
             raise GeminiProtocolError("Approval request is no longer pending")
         request_id, options, _session_id = pending
-        if decision == ApprovalDecision.CANCEL:
-            outcome = {"outcome": "cancelled"}
-        else:
-            desired_kind = {
-                ApprovalDecision.ACCEPT: "allow_once",
-                ApprovalDecision.ACCEPT_FOR_SESSION: "allow_always",
-                ApprovalDecision.DECLINE: "reject_once",
-            }[decision]
-            selected = next(
-                (option for option in options if option.get("kind") == desired_kind),
-                None,
-            )
-            if selected is None and decision == ApprovalDecision.ACCEPT_FOR_SESSION:
+        try:
+            if decision == ApprovalDecision.CANCEL:
+                outcome = {"outcome": "cancelled"}
+            else:
+                desired_kind = {
+                    ApprovalDecision.ACCEPT: "allow_once",
+                    ApprovalDecision.ACCEPT_FOR_SESSION: "allow_always",
+                    ApprovalDecision.DECLINE: "reject_once",
+                }[decision]
                 selected = next(
                     (
                         option
                         for option in options
-                        if option.get("kind") == "allow_once"
+                        if option.get("kind") == desired_kind
                     ),
                     None,
                 )
-            if selected is None:
-                raise GeminiProtocolError(
-                    f"Gemini did not offer a {desired_kind} permission option"
+                if selected is None and decision == ApprovalDecision.ACCEPT_FOR_SESSION:
+                    selected = next(
+                        (
+                            option
+                            for option in options
+                            if option.get("kind") == "allow_once"
+                        ),
+                        None,
+                    )
+                if selected is None:
+                    raise GeminiProtocolError(
+                        f"Gemini did not offer a {desired_kind} permission option"
+                    )
+                outcome = {"outcome": "selected", "optionId": selected["optionId"]}
+            await self._write(
+                {"jsonrpc": "2.0", "id": request_id, "result": {"outcome": outcome}}
+            )
+        except Exception:
+            # Validation failed or the write raised. The entry is still
+            # pending at this point, so make sure the server receives *some*
+            # response (a JSON-RPC error) instead of hanging forever, then
+            # remove the pending entry and surface the error to the caller.
+            try:
+                await self._write(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "error": {
+                            "code": -32603,
+                            "message": "Failed to resolve approval",
+                        },
+                    }
                 )
-            outcome = {"outcome": "selected", "optionId": selected["optionId"]}
-        await self._write(
-            {"jsonrpc": "2.0", "id": request_id, "result": {"outcome": outcome}}
-        )
+            except Exception:
+                pass
+            self._pending_approvals.pop(approval_id, None)
+            self._cancel_approval_timeout(approval_id)
+            raise
+        self._pending_approvals.pop(approval_id, None)
+        self._cancel_approval_timeout(approval_id)
 
     def events(self) -> AsyncIterator[AdapterEvent]:
         return iter_events(self._events)
@@ -351,6 +383,44 @@ class GeminiAdapter:
     async def _write(self, message: dict[str, Any]) -> None:
         await self._transport.write(message)
 
+    def _cancel_approval_timeout(self, approval_id: str) -> None:
+        """Cancels a pending approval timeout watcher, if any."""
+        task = self._approval_timeouts.pop(approval_id, None)
+        if task is not None:
+            task.cancel()
+
+    async def _timeout_approval(self, approval_id: str) -> None:
+        """Auto-responds to an approval after 5 minutes so the server is never left waiting indefinitely.
+
+        Runs as a background task scheduled when the approval request arrives.
+        If the user responds in time the task is cancelled via
+        :meth:`_cancel_approval_timeout`; otherwise it sends a ``cancelled``
+        outcome to the server and clears the pending entry.
+        """
+        try:
+            await asyncio.sleep(300)
+        except asyncio.CancelledError:
+            return
+        pending = self._pending_approvals.pop(approval_id, None)
+        self._approval_timeouts.pop(approval_id, None)
+        if pending is None:
+            return
+        request_id = pending[0]
+        logger.warning(
+            "Gemini approval %s timed out after 300s; sending cancelled response",
+            approval_id,
+        )
+        try:
+            await self._write(
+                {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {"outcome": "cancelled"},
+                }
+            )
+        except Exception:
+            logger.debug("Failed to send timeout response for %s", approval_id)
+
     async def _handle_server_request(self, message: dict[str, Any]) -> None:
         method = message["method"]
         params = message.get("params") or {}
@@ -360,6 +430,9 @@ class GeminiAdapter:
             options = params.get("options") or []
             session_id = params.get("sessionId", "")
             self._pending_approvals[approval_id] = (request_id, options, session_id)
+            self._approval_timeouts[approval_id] = asyncio.create_task(
+                self._timeout_approval(approval_id)
+            )
             tool_call = params.get("toolCall") or {}
             raw_input = tool_call.get("rawInput")
             command = raw_input.get("command") if isinstance(raw_input, dict) else None

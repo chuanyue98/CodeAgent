@@ -280,11 +280,20 @@ class CodexEngine(BaseEngine):
         config_path = self._get_user_config_path()
         config_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 备份全局配置
+        # 备份全局配置。不再依赖 ``not backup_path.exists()`` 仅首次创建：
+        # 每次都刷新备份（覆盖旧的），确保即使上一轮崩溃导致备份缺失也能
+        # 重新建立。但若 config 已带有本工具的注入痕迹（说明上次崩溃未还
+        # 原），则保留现有干净备份，避免把脏 config 覆盖掉干净备份导致后续
+        # 永久无法还原。
         backup_path = config_path.with_suffix(".toml.bak")
-        if config_path.exists() and not backup_path.exists():
-            shutil.copy2(config_path, backup_path)
-            print(f"💾 Created safety backup of global config: {backup_path.name}")
+        if config_path.exists():
+            try:
+                current_content = config_path.read_text(encoding="utf-8")
+            except Exception:
+                current_content = ""
+            if self.MARKETPLACE_NAME not in current_content:
+                shutil.copy2(config_path, backup_path)
+                print(f"💾 Created safety backup of global config: {backup_path.name}")
 
         data = self._load_config(config_path)
         data = self._format_plugins_for_settings(data, plugins)
@@ -297,7 +306,9 @@ class CodexEngine(BaseEngine):
         backup_path = config_path.with_suffix(".toml.bak")
 
         if backup_path.exists():
-            os.replace(str(backup_path), str(config_path))
+            # 使用 copy 而非 move(os.replace) 还原，保留备份副本，确保下一轮
+            # 仍可从干净备份还原（即使本轮再次崩溃）。
+            shutil.copy2(str(backup_path), str(config_path))
             print("♻️ Restored global config.toml from backup")
         elif config_path.exists():
             # 如果没有备份但文件存在，检查是否由 CodeAgent 创建

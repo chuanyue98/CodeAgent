@@ -51,6 +51,7 @@ class CodexAdapter:
             on_crash=self._emit_crash_event,
         )
         self._approval_requests: dict[str, tuple[Any, str]] = {}
+        self._approval_timeouts: dict[str, asyncio.Task] = {}
         self._unavailable_reason: str | None = None
 
     async def start(self) -> None:
@@ -97,6 +98,10 @@ class CodexAdapter:
         self._process = None
         await graceful_terminate(process, logger=logger, label="Codex app-server")
         await self._transport.detach()
+        for task in self._approval_timeouts.values():
+            task.cancel()
+        self._approval_timeouts.clear()
+        self._approval_requests.clear()
 
     async def capabilities(self) -> ProviderCapabilities:
         running = self._process is not None and self._process.returncode is None
@@ -194,7 +199,10 @@ class CodexAdapter:
         if pending is None:
             raise CodexProtocolError("Approval request is no longer pending")
         request_id, _method = pending
-        await self._write({"id": request_id, "result": {"decision": decision}})
+        try:
+            await self._write({"id": request_id, "result": {"decision": decision}})
+        finally:
+            self._cancel_approval_timeout(approval_id)
 
     def events(self) -> AsyncIterator[AdapterEvent]:
         return iter_events(self._events)
@@ -226,6 +234,40 @@ class CodexAdapter:
     async def _write(self, message: dict[str, Any]) -> None:
         await self._transport.write(message)
 
+    def _cancel_approval_timeout(self, approval_id: str) -> None:
+        """Cancels a pending approval timeout watcher, if any."""
+        task = self._approval_timeouts.pop(approval_id, None)
+        if task is not None:
+            task.cancel()
+
+    async def _timeout_approval(self, approval_id: str) -> None:
+        """Auto-responds to an approval after 5 minutes so the server is never left waiting indefinitely.
+
+        Runs as a background task scheduled when the approval request arrives.
+        If the user responds in time the task is cancelled via
+        :meth:`_cancel_approval_timeout`; otherwise it sends a ``decline``
+        decision to the server and clears the pending entry.
+        """
+        try:
+            await asyncio.sleep(300)
+        except asyncio.CancelledError:
+            return
+        pending = self._approval_requests.pop(approval_id, None)
+        self._approval_timeouts.pop(approval_id, None)
+        if pending is None:
+            return
+        request_id = pending[0]
+        logger.warning(
+            "Codex approval %s timed out after 300s; sending decline response",
+            approval_id,
+        )
+        try:
+            await self._write(
+                {"id": request_id, "result": {"decision": ApprovalDecision.DECLINE}}
+            )
+        except Exception:
+            logger.debug("Failed to send timeout response for %s", approval_id)
+
     async def _handle_server_request(self, message: dict[str, Any]) -> None:
         method = message.get("method")
         if method is None:
@@ -243,6 +285,9 @@ class CodexAdapter:
         }:
             approval_id = f"codex:{request_id}"
             self._approval_requests[approval_id] = (request_id, method)
+            self._approval_timeouts[approval_id] = asyncio.create_task(
+                self._timeout_approval(approval_id)
+            )
             self._put_event(
                 AdapterEvent(
                     type="approval.request",
