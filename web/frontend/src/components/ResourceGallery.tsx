@@ -92,12 +92,18 @@ function ResourceGallery({
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    if (resourceData) {
-      const categories = Object.keys(resourceData);
-      if (categories.length > 0 && !selectedCategory) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setSelectedCategory(categories[0]);
-      }
+    if (!resourceData) return;
+    const categories = Object.keys(resourceData);
+    // Reset the selected category when the data changes and the previously
+    // selected one no longer exists (e.g. after a workspace switch, backend
+    // restart, or category rename). Without this, resourceData[selectedCategory]
+    // becomes undefined and .filter() throws, bubbling up to the ErrorBoundary
+    // and blanking the page.
+    const stillValid = selectedCategory && categories.includes(selectedCategory);
+    const next = categories.length === 0 ? null : stillValid ? selectedCategory : categories[0];
+    if (next !== selectedCategory) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedCategory(next);
     }
   }, [resourceData, selectedCategory]);
 
@@ -105,7 +111,7 @@ function ResourceGallery({
     groups[currentGroup]?.[resourceType]?.includes(itemId) ?? false;
 
   const filteredItems = selectedCategory && resourceData
-    ? resourceData[selectedCategory].filter(item =>
+    ? (resourceData[selectedCategory] ?? []).filter(item =>
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.description.toLowerCase().includes(searchTerm.toLowerCase())
       )

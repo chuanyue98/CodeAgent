@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Send, MessageSquare, Plus, AlertCircle, Loader2, RotateCcw, Square, FolderGit2 } from 'lucide-react';
+import { Send, MessageSquare, Plus, AlertCircle, Loader2, RotateCcw, Square, FolderGit2, ArrowDown } from 'lucide-react';
 import { Link } from 'react-router';
 import { useProject } from '../context/ProjectContext';
 import request from '../utils/request';
@@ -94,6 +94,9 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  // Pauses auto-scroll while the user is reading history, so streaming
+  // output no longer yanks them back to the bottom on every token.
+  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
 
   const { events, done, error: streamError } = useChatTurnStream(turnId);
 
@@ -226,8 +229,21 @@ export default function ChatPage() {
   }, [streamError]);
 
   useEffect(() => {
+    if (isUserScrolledUp) return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, pendingText]);
+  }, [messages, pendingText, isUserScrolledUp]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setIsUserScrolledUp(distanceFromBottom > 120);
+  };
+
+  const scrollToBottom = () => {
+    setIsUserScrolledUp(false);
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  };
 
   const send = async () => {
     const text = input.trim();
@@ -422,7 +438,8 @@ export default function ChatPage() {
           />
         )}
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 pr-1">
+        <div className="relative flex min-h-0 flex-1">
+          <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto space-y-3 pr-1">
           {messages.length === 0 && !sending && (
             <p className="text-sm text-slate-400 text-center py-8">
               {activeProjectPath
@@ -458,6 +475,17 @@ export default function ChatPage() {
                 </span>
               )}
             </div>
+          )}
+          </div>
+          {isUserScrolledUp && (
+            <button
+              type="button"
+              onClick={scrollToBottom}
+              aria-label="Jump to latest message"
+              className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-full bg-slate-800 px-3 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-slate-700"
+            >
+              <ArrowDown className="h-3.5 w-3.5" /> Jump to latest
+            </button>
           )}
         </div>
 

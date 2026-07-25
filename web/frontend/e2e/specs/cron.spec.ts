@@ -41,6 +41,7 @@ test('deleting a schedule returns to the empty state', async ({ page }) => {
   await page.getByLabel('Engine').selectOption('claude');
   await page.getByPlaceholder('0 9 * * *').fill('0 0 * * *');
   await page.getByRole('button', { name: 'Create Schedule' }).click();
+  page.once('dialog', dialog => dialog.accept());
   await page.getByTitle('Delete').click();
   await expect(page.getByText('No schedules yet.')).toBeVisible();
 });
