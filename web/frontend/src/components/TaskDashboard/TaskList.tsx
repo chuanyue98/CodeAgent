@@ -28,14 +28,14 @@ export default function TaskList({
   onManualCreateClick: () => void;
 }) {
   return (
-    <div className="p-8 max-w-3xl mx-auto space-y-8 pb-20">
-      <div className="flex justify-between items-end pb-4">
-        <div>
-          <h2 className="text-3xl font-semibold tracking-tight flex items-center gap-3">
-            <Activity className="w-8 h-8 text-primary" />
-            Tasks
-          </h2>
-          <p className="text-sm text-slate-500 mt-1">{tasks.length} tasks available</p>
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5 pb-20">
+      {/* The app shell already renders "Tasks" as the page's <h1>, so a second
+          oversized title here just pushed the actual content below the fold. */}
+      <div className="flex flex-wrap justify-between items-center gap-3 pb-1">
+        <div className="min-w-0">
+          <p className="text-sm text-slate-500">
+            {tasks.length} task{tasks.length === 1 ? '' : 's'} available · reusable prompts you can run on any engine or put on a schedule
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -55,8 +55,32 @@ export default function TaskList({
       </div>
 
       {tasks.length === 0 && (
-        <div className="flex items-center justify-center py-16 text-slate-400">
-          <p className="text-sm font-medium">No tasks found. Create one to get started.</p>
+        <div className="glass-card flex flex-col items-center gap-3 px-6 py-12 text-center">
+          <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+            <Activity className="w-6 h-6" />
+          </div>
+          <div className="max-w-md space-y-1.5">
+            <p className="text-sm font-semibold text-slate-800">No tasks yet</p>
+            <p className="text-xs leading-5 text-slate-500">
+              A task is a Markdown file describing work you repeat — a code review pass, a
+              changelog, a dependency audit. Once it exists you can run it against any engine,
+              in any registered workspace, or on a cron schedule.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+            <button
+              onClick={onGenerateClick}
+              className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:opacity-90 transition-all font-semibold shadow-lg shadow-primary/20 active:scale-95 text-sm"
+            >
+              <Sparkles className="w-4 h-4" /> Describe it, let AI write it
+            </button>
+            <button
+              onClick={onManualCreateClick}
+              className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all font-semibold text-sm"
+            >
+              <Plus className="w-4 h-4" /> Write it myself
+            </button>
+          </div>
         </div>
       )}
 

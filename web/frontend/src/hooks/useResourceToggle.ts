@@ -4,6 +4,7 @@ import { useProject, type GroupDefinition } from '../context/ProjectContext';
 
 interface ToggleResult {
   toggleError: string | null;
+  dismissToggleError: () => void;
   toggleResource: (
     resourceType: keyof GroupDefinition,
     resourceId: string,
@@ -59,7 +60,9 @@ function useResourceToggle(): ToggleResult {
     [currentGroup, groups, refreshConfig]
   );
 
-  return { toggleError, toggleResource };
+  const dismissToggleError = useCallback(() => setToggleError(null), []);
+
+  return { toggleError, dismissToggleError, toggleResource };
 }
 
 export default useResourceToggle;

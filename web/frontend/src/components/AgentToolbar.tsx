@@ -1,5 +1,6 @@
 import { Activity, FolderGit2, Layers, Wifi, WifiOff } from 'lucide-react';
 import type { PermissionMode, ProviderCapabilities } from '../types/agent';
+import { workspaceLabel } from '../utils/agentWorkspaceHelpers';
 
 type Props = {
   validProjects: { path: string; group: string; available?: boolean }[];
@@ -14,7 +15,6 @@ type Props = {
   currentGroup: string;
   onWorkspaceChange: (value: string) => void;
   onProviderChange: (value: string) => void;
-  onCurrentGroupChange: (group: string) => void;
   onShowActivityChange: (value: boolean) => void;
   onPermissionModeChange: (value: PermissionMode) => void;
 };
@@ -32,15 +32,17 @@ export default function AgentToolbar({
   currentGroup,
   onWorkspaceChange,
   onProviderChange,
-  onCurrentGroupChange,
   onShowActivityChange,
   onPermissionModeChange,
 }: Props) {
   const disabled = Boolean(stateSessionId) || Boolean(stateActiveTurnId);
+  const activeProject = validProjects.find(project => project.path === workspace);
 
   return (
     <div className="mb-3 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-3">
-      <label className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">
+      {/* basis-56 (not flex-1 alone) so the most important control keeps a
+          readable width and the row wraps instead of shrinking it to "Sele…". */}
+      <label className="min-w-0 flex-1 basis-56 text-[11px] font-medium text-slate-500">
         Workspace
         <span className="relative mt-1 flex">
           <FolderGit2 className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
@@ -49,22 +51,28 @@ export default function AgentToolbar({
             value={workspace}
             disabled={disabled}
             onChange={event => {
+              // Selecting a workspace also switches the resource group --
+              // ProjectContext owns that pairing, so no extra call here.
               onWorkspaceChange(event.target.value);
-              const project = validProjects.find(
-                item => item.path === event.target.value,
-              );
-              if (project) onCurrentGroupChange(project.group);
             }}
             className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-8 text-xs outline-none focus:border-primary disabled:opacity-60"
           >
             <option value="">Select a registered workspace</option>
             {validProjects.map(project => (
               <option key={project.path} value={project.path}>
-                {project.path}
+                {workspaceLabel(project.path)} — {project.path}
               </option>
             ))}
           </select>
         </span>
+        {activeProject && (
+          // No `title` here on purpose: the sidebar already exposes each
+          // workspace row under title={path}, and a second element carrying
+          // the same path makes that row ambiguous to title-based lookups.
+          <span className="mt-1 block truncate text-[10px] font-normal text-slate-400">
+            {activeProject.path}
+          </span>
+        )}
       </label>
       <label className="w-40 text-[11px] font-medium text-slate-500">
         Provider
@@ -90,16 +98,24 @@ export default function AgentToolbar({
           ))}
         </select>
       </label>
-      <label className="w-36 text-[11px] font-medium text-slate-500">
+      <label className="w-40 text-[11px] font-medium text-slate-500">
         Permission
         <select
           aria-label="Permission mode"
+          // Permission mode is the highest-consequence control here, and
+          // "workspace-write" says nothing about what it permits. Spell out
+          // the blast radius rather than assuming the term is understood.
+          title={
+            permissionMode === 'workspace-write'
+              ? 'The agent may read and write files inside the selected workspace, and ask before running commands.'
+              : 'The agent may read files only. It cannot modify anything in the workspace.'
+          }
           value={permissionMode}
           disabled={disabled}
           onChange={event => onPermissionModeChange(event.target.value as PermissionMode)}
           className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-primary disabled:opacity-60"
         >
-          <option value="workspace-write">Workspace write</option>
+          <option value="workspace-write">Can edit files</option>
           <option value="read-only">Read only</option>
         </select>
       </label>

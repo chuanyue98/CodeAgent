@@ -30,24 +30,20 @@ function formatTimestamp(ts: number | null): string {
 }
 
 export default function CronPage() {
-  const { projects } = useProject();
+  const {
+    projects,
+    selectedWorkspace: workspace,
+    setSelectedWorkspace: setWorkspace,
+  } = useProject();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [taskName, setTaskName] = useState('');
   const [engine, setEngine] = useState('');
   const [cronExpr, setCronExpr] = useState('0 9 * * *');
-  const [workspace, setWorkspace] = useState('');
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (!workspace || !projects.some(project => project.path === workspace && project.available !== false)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setWorkspace(projects.find(project => project.available !== false)?.path || '');
-    }
-  }, [projects, workspace]);
 
   const loadSchedules = useCallback(() => {
     fetchSchedules()

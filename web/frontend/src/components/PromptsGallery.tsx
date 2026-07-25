@@ -7,6 +7,7 @@ import ErrorState from './shared/ErrorState';
 import LoadingState from './shared/LoadingState';
 import useResourceData from '../hooks/useResourceData';
 import useResourceToggle from '../hooks/useResourceToggle';
+import Toast from './shared/Toast';
 
 interface PromptFile {
   name: string;
@@ -24,7 +25,7 @@ interface PromptGroup {
 const PromptsGallery: React.FC = () => {
   const { currentGroup, groups } = useProject();
   const { data: rawData, loading, error, refetch } = useResourceData<PromptGroup[] | { prompts: PromptGroup[] }>('/api/prompts');
-  const { toggleResource, toggleError } = useResourceToggle();
+  const { toggleResource, toggleError, dismissToggleError } = useResourceToggle();
   const [selectedPrompt, setSelectedPrompt] = useState<PromptGroup | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -228,11 +229,7 @@ const PromptsGallery: React.FC = () => {
           </div>
         )}
       </div>
-      {toggleError && (
-        <div className="fixed bottom-4 right-4 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium shadow-lg">
-          {toggleError}
-        </div>
-      )}
+      {toggleError && <Toast message={toggleError} onDismiss={dismissToggleError} />}
     </div>
   );
 };

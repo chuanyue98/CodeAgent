@@ -219,6 +219,7 @@ const Analytics: React.FC = () => {
 
   const recentSessions = useMemo(() => sessions.slice(0, 5), [sessions]);
   const avgCostPerSession = totalSessions > 0 ? totalCost / totalSessions : 0;
+  const hasUsage = totalSessions > 0 || totalCost > 0 || totalInput + totalOutput + totalCache > 0;
 
   if (loading) {
     return (
@@ -273,6 +274,23 @@ const Analytics: React.FC = () => {
           Refresh
         </button>
       </div>
+
+      {/* Zeros across five stat cards and a blank half-page read as "broken",
+          not "nothing recorded yet". Say which it is, and where the data
+          comes from, before showing the empty numbers. */}
+      {!hasUsage && (
+        <div className="glass-card flex flex-col items-center gap-2 px-6 py-10 text-center">
+          <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+            <TrendingUp className="h-6 w-6" />
+          </div>
+          <p className="text-sm font-semibold text-slate-800">No usage recorded yet</p>
+          <p className="max-w-md text-xs leading-5 text-slate-500">
+            Token counts and cost estimates are read from the session logs each provider CLI
+            writes on this machine. Run an agent session or a task, then press Refresh — nothing
+            is sent anywhere to produce these numbers.
+          </p>
+        </div>
+      )}
 
       {/* ── Overview ─────────────────────────────────────────────────────── */}
       {tab === 'overview' && (
