@@ -11,7 +11,7 @@ import {
   Settings,
   Terminal,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { useProject } from '../context/ProjectContext';
 import { fetchAgentProviders } from '../api/agent';
 import request from '../utils/request';

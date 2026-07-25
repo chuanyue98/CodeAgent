@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Search, SquareStack } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { PAGE_LABELS } from '../navigation';

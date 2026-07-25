@@ -1,5 +1,5 @@
 import { Loader2, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import AgentActivityPanel from '../components/AgentActivityPanel';
 import AgentComposer from '../components/AgentComposer';
 import AgentMessage from '../components/AgentMessage';

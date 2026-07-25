@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
-import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router';
 import { Menu, X, AlertCircle } from 'lucide-react';
 import CommandPalette from './components/CommandPalette';
 import ProjectSwitcher from './components/ProjectSwitcher';
