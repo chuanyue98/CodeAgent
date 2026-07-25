@@ -57,7 +57,8 @@ const PromptsGallery: React.FC = () => {
   if (selectedPrompt) {
     return (
       <div className="flex h-full overflow-hidden p-6 gap-6">
-        <div className="flex-1 glass-card flex flex-col overflow-hidden">
+        {/* key on id so the entrance replays each time a different prompt is opened. */}
+        <div key={selectedPrompt.id} className="animate-fade-rise stagger-2 flex-1 glass-card flex flex-col overflow-hidden">
           <div className="p-6 border-b border-slate-200 flex items-center gap-4 bg-white">
             <button
               onClick={() => setSelectedPrompt(null)}
@@ -142,7 +143,7 @@ const PromptsGallery: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full overflow-hidden p-6 gap-6">
-      <div className="flex items-center justify-between glass-card p-6 bg-slate-50/30 backdrop-blur-sm">
+      <div className="animate-fade-rise stagger-1 flex items-center justify-between glass-card p-6 bg-slate-50/30 backdrop-blur-sm">
         <div className="relative max-w-md w-full">
           <label htmlFor="prompt-search" className="sr-only">Search prompt groups</label>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -161,15 +162,17 @@ const PromptsGallery: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto pr-2">
+      <div className="custom-scrollbar flex-1 overflow-y-auto pr-2">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredPrompts.map((promptGroup) => {
+          {filteredPrompts.map((promptGroup, i) => {
             const active = isPromptActive(promptGroup.id);
+            // Cap stagger at 6 — long galleries shouldn't cascade forever.
+            const stagger = `stagger-${Math.min(i + 2, 7)}`;
             return (
               <div
                 key={promptGroup.id}
                 onClick={() => setSelectedPrompt(promptGroup)}
-                className={`group glass-card p-6 hover:border-primary/20 hover:bg-slate-50/50 transition-all cursor-pointer relative overflow-hidden ${
+                className={`animate-fade-rise ${stagger} group glass-card p-6 hover:border-primary/20 hover:bg-slate-50/50 transition-all cursor-pointer relative overflow-hidden ${
                   !active ? 'bg-slate-50/60 border-slate-200' : ''
                 }`}
               >

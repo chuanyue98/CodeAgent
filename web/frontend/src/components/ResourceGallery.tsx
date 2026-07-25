@@ -128,22 +128,22 @@ function ResourceGallery({
   return (
     <div className="flex h-full overflow-hidden p-6 gap-6">
       {/* Sidebar Categories */}
-      <div className="w-64 shrink-0 glass-card flex flex-col overflow-hidden">
+      <div className="animate-slide-left stagger-1 w-64 shrink-0 glass-card flex flex-col overflow-hidden">
         <div className="p-6 border-b border-slate-100">
           <h2 className="text-sm font-semibold flex items-center gap-2 uppercase tracking-widest text-slate-400">
             <BookOpen className="w-4 h-4 text-primary" />
             {labels.sidebar}
           </h2>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-1">
-          {resourceData && Object.keys(resourceData).map(category => (
+        <div className="custom-scrollbar flex-1 overflow-y-auto p-4 space-y-1">
+          {resourceData && Object.keys(resourceData).map((category, i) => (
             <button
               key={category}
               onClick={() => {
                 setSelectedCategory(category);
                 setSelectedItem(null);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+              className={`animate-fade-rise stagger-${Math.min(i + 2, 7)} w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 selectedCategory === category
                   ? 'bg-primary/10 text-primary'
                   : 'hover:bg-slate-50 text-slate-500 hover:text-slate-900'
@@ -167,8 +167,8 @@ function ResourceGallery({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {selectedItem ? (
-          /* Detail View */
-          <div className="flex-1 glass-card flex flex-col overflow-hidden">
+          /* Detail View — re-mounts on selection so the entrance plays each time. */
+          <div key={selectedItem.id} className="animate-fade-rise stagger-2 flex-1 glass-card flex flex-col overflow-hidden">
             <div className="p-6 border-b border-slate-200 flex items-center gap-4 bg-white">
               <button
                 onClick={() => setSelectedItem(null)}
@@ -223,7 +223,7 @@ function ResourceGallery({
           <div className="flex-1 flex flex-col overflow-hidden gap-4">
             {/* A search box does not need a full card of its own -- that card
                 cost ~100px of vertical space above the fold on every visit. */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="animate-fade-rise stagger-2 flex flex-wrap items-center justify-between gap-3">
               <div className="relative w-full max-w-md">
                 <label htmlFor={labels.searchId} className="sr-only">{labels.searchLabel}</label>
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -240,13 +240,14 @@ function ResourceGallery({
                 Toggle a {labels.itemSingular} to mount it for the <span className="font-semibold text-slate-500">{currentGroup}</span> group
               </p>
             </div>
-            <div className="flex-1 overflow-y-auto pr-2">
+            <div className="custom-scrollbar flex-1 overflow-y-auto pr-2">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredItems.map(item => (
+                {filteredItems.map((item, i) => (
                   <div
                     key={item.id}
                     onClick={() => setSelectedItem(item)}
-                    className={`group glass-card p-6 hover:border-primary/20 hover:bg-slate-50/50 transition-all cursor-pointer relative overflow-hidden ${
+                    // Cap at 6 — long galleries shouldn't cascade forever.
+                    className={`animate-fade-rise stagger-${Math.min(i + 3, 7)} group glass-card p-6 hover:border-primary/20 hover:bg-slate-50/50 transition-all cursor-pointer relative overflow-hidden ${
                       !isItemActive(item.id) ? 'bg-slate-50/60 border-slate-200' : ''
                     }`}
                   >

@@ -47,7 +47,7 @@ const HooksGallery: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full overflow-hidden p-6 gap-6">
-      <div className="flex items-center justify-between glass-card p-6 bg-slate-50/30 backdrop-blur-sm">
+      <div className="animate-fade-rise stagger-1 flex items-center justify-between glass-card p-6 bg-slate-50/30 backdrop-blur-sm">
         <div className="relative max-w-md w-full">
           <label htmlFor="hook-search" className="sr-only">Search hooks</label>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -66,14 +66,16 @@ const HooksGallery: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto pr-2">
+      <div className="custom-scrollbar flex-1 overflow-y-auto pr-2">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredHooks.map(hook => {
+          {filteredHooks.map((hook, i) => {
             const active = isHookActive(hook.id);
+            // Cap stagger at 6 — long lists shouldn't cascade forever.
+            const stagger = `stagger-${Math.min(i + 2, 7)}`;
             return (
               <div
                 key={hook.id}
-                className={`group glass-card p-6 transition-all relative overflow-hidden flex flex-col ${
+                className={`animate-fade-rise ${stagger} group glass-card p-6 transition-all relative overflow-hidden flex flex-col ${
                   !active ? 'bg-slate-50/60 border-slate-200' : ''
                 }`}
               >
