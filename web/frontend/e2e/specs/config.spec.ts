@@ -24,14 +24,14 @@ test('adding a project then saving persists the row', async ({ page }) => {
   await gotoConfig(page);
   await page.getByRole('button', { name: 'Add Project' }).click();
   const registry = page.locator('section', { hasText: 'Project Registry' });
-  await registry.locator('input[placeholder="E:/your/project/path"]').last().fill('/tmp/e2e-project');
+  await registry.locator('input[placeholder="/absolute/path/to/your/project"]').last().fill('/tmp/e2e-project');
   await save(page);
   await page.reload();
   await waitForH2(page, 'Workspace');
   // The project path lives in an <input> value (not text content), so assert
   // the persisted value rather than visible text.
   await expect(
-    page.locator('input[placeholder="E:/your/project/path"]').last(),
+    page.locator('input[placeholder="/absolute/path/to/your/project"]').last(),
   ).toHaveValue('/tmp/e2e-project');
 });
 

@@ -19,8 +19,12 @@ const TaskDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showNewTask, setShowNewTask] = useState(false);
   const [showGenerateTask, setShowGenerateTask] = useState(false);
-  const { currentGroup, projects } = useProject();
-  const [workspace, setWorkspace] = useState('');
+  const {
+    currentGroup,
+    projects,
+    selectedWorkspace: workspace,
+    setSelectedWorkspace: setWorkspace,
+  } = useProject();
 
   // Read via a ref inside pollActiveRun instead of taking `selected` as a
   // useCallback dependency — otherwise pollActiveRun (and the interval
@@ -30,13 +34,6 @@ const TaskDashboard: React.FC = () => {
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
-
-  useEffect(() => {
-    if (!workspace || !projects.some(project => project.path === workspace && project.available !== false)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setWorkspace(projects.find(project => project.available !== false)?.path || '');
-    }
-  }, [projects, workspace]);
 
   const fetchTasks = useCallback(async () => {
     try {

@@ -1,11 +1,11 @@
 import { Loader2, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import AgentActivityPanel from '../components/AgentActivityPanel';
 import AgentComposer from '../components/AgentComposer';
+import AgentMessage from '../components/AgentMessage';
 import AgentSessionBanner from '../components/AgentSessionBanner';
 import AgentToolbar from '../components/AgentToolbar';
 import AgentWorkspaceSidebar from '../components/AgentWorkspaceSidebar';
-import MarkdownMessage from '../components/MarkdownMessage';
 import useAgentWorkspace from './useAgentWorkspace';
 
 export default function AgentWorkspace() {
@@ -66,7 +66,6 @@ export default function AgentWorkspace() {
           currentGroup={workspace.currentGroup}
           onWorkspaceChange={workspace.onWorkspaceChange}
           onProviderChange={workspace.onProviderChange}
-          onCurrentGroupChange={workspace.onSetCurrentGroup}
           onShowActivityChange={workspace.onShowActivityChange}
           onPermissionModeChange={workspace.onPermissionModeChange}
         />
@@ -149,10 +148,10 @@ export default function AgentWorkspace() {
             {workspace.state.messages.length === 0 && !workspace.state.activeTurnId && (
               <div className="flex h-full min-h-48 flex-col items-center justify-center text-center text-slate-400">
                 <p className="text-sm font-medium text-slate-600">
-                  {!workspace.workspace ? 'Choose a workspace to begin' : !workspace.selectedProvider ? 'Choose a provider to begin' : 'Start a new conversation'}
+                  {!workspace.workspaceIsUsable ? 'Choose a workspace to begin' : !workspace.selectedProvider ? 'Choose a provider to begin' : 'Start a new conversation'}
                 </p>
                 <p className="mt-1 max-w-md text-xs">
-                  {!workspace.workspace
+                  {!workspace.workspaceIsUsable
                     ? 'Select a registered workspace above. The agent will only operate inside that directory.'
                     : !workspace.selectedProvider
                       ? 'Select an available provider to start an interactive session.'
@@ -167,20 +166,7 @@ export default function AgentWorkspace() {
               </div>
             )}
             {workspace.state.messages.filter(message => message.role !== 'assistant' || message.text.trim()).map(message => (
-              <div
-                key={message.id}
-                className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm ${
-                  message.role === 'user'
-                    ? 'ml-auto bg-primary/10 text-slate-800'
-                    : message.role === 'error'
-                      ? 'border border-red-100 bg-red-50 text-red-700'
-                      : 'border border-slate-100 bg-slate-50 text-slate-700'
-                }`}
-              >
-                {message.role === 'assistant'
-                  ? <div className="prose prose-sm prose-slate max-w-none break-words"><MarkdownMessage text={message.text} /></div>
-                  : <span className="whitespace-pre-wrap">{message.text}</span>}
-              </div>
+              <AgentMessage key={message.id} role={message.role} text={message.text} />
             ))}
             {workspace.state.activeTurnId && !workspace.state.messages.some(message => message.pending) && (
               <div className="flex max-w-[85%] items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-400">

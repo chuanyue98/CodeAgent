@@ -69,24 +69,36 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 
 ### Prerequisites
 
-- Python 3.13+
-- [Optional] `opencode` installed via npm for the OpenCode engine
+- **Python 3.13+**
+- **At least one provider CLI, already installed and signed in.** CodeAgent drives the
+  official CLIs — it does not talk to any API itself, and does not store your keys.
+  Any one of `claude`, `gemini`, `codex`, or `opencode` is enough to start.
+- [Optional] `bun` or `npm`, only if you want the Web UI.
 
 ### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/chuanyue98/CodeAgent.git
 cd CodeAgent
 
-# Create a virtual environment (recommended) and install
-python -m venv .venv
-source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
+uv sync                     # or: pip install -e .
 
-# Install with uv (recommended) or pip
-uv sync
-# or: pip install -e .
+ca doctor                   # confirms which provider CLIs were found
 ```
+
+`ca doctor --fix` repairs most of what it reports.
+
+### First run (about two minutes)
+
+```bash
+cd /path/to/the/project/you/want/to/work/on
+ca claude                   # or gemini / codex / opencode
+```
+
+The first launch in a new directory asks which resource group to bind it to, then hands
+you the provider's own interface with your prompts and skills already injected. That is
+the whole loop — everything below is optional.
 
 ### Launch an Engine
 
@@ -117,11 +129,15 @@ ca ui           # Start Web UI dashboard
 
 ### Web UI Dashboard
 
+The Web UI ships as source, not as a build artifact, so build it once after cloning:
+
 ```bash
-python ca_launcher.py ui
+cd web/frontend && bun install && bun run build   # or: npm install && npm run build
+cd ../..
+ca ui
 ```
 
-Opens the analytics dashboard at `http://127.0.0.1:8524`. Features:
+Opens the dashboard at `http://127.0.0.1:8524`. Features:
 - Usage trends and token consumption across all engines
 - Cost estimation based on model-specific pricing
 - Session history browser

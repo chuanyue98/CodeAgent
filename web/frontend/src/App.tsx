@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
-import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router';
 import { Menu, X, AlertCircle } from 'lucide-react';
 import CommandPalette from './components/CommandPalette';
 import ProjectSwitcher from './components/ProjectSwitcher';
@@ -67,25 +67,25 @@ function App() {
       <div data-testid="app-shell" className="flex min-h-0 flex-1 gap-2 p-2 md:gap-4 md:p-4">
         <aside
           className={`${
-            isSidebarOpen ? 'w-20 xl:w-64' : 'w-20 xl:w-24'
+            isSidebarOpen ? 'w-20 lg:w-64' : 'w-20 lg:w-24'
           } glass-card flex shrink-0 flex-col overflow-hidden transition-[width] duration-300`}
         >
-          <div className="flex items-center justify-center border-b border-slate-100 p-4 xl:justify-between xl:p-8">
+          <div className="flex items-center justify-center border-b border-slate-100 p-4 lg:justify-between lg:p-8">
             {isSidebarOpen && (
-              <span className="hidden text-2xl font-black uppercase tracking-tighter text-primary xl:inline">CodeAgent</span>
+              <span className="hidden text-2xl font-black uppercase tracking-tighter text-primary lg:inline">CodeAgent</span>
             )}
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               aria-label={isSidebarOpen ? 'Collapse navigation' : 'Expand navigation'}
               title={isSidebarOpen ? 'Collapse navigation' : 'Expand navigation'}
-              className={`hidden rounded-xl border border-transparent p-2 text-slate-600 transition-colors hover:border-slate-100 hover:bg-slate-50 xl:block ${!isSidebarOpen && 'mx-auto'}`}
+              className={`hidden rounded-xl border border-transparent p-2 text-slate-600 transition-colors hover:border-slate-100 hover:bg-slate-50 lg:block ${!isSidebarOpen && 'mx-auto'}`}
             >
               {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
-            <span className="text-xl font-black text-primary xl:hidden" aria-label="CodeAgent">CA</span>
+            <span className="text-xl font-black text-primary lg:hidden" aria-label="CodeAgent">CA</span>
           </div>
 
-          <nav aria-label="Primary navigation" className="custom-scrollbar mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto p-2 xl:mt-4 xl:p-4">
+          <nav aria-label="Primary navigation" className="custom-scrollbar mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto p-2 lg:mt-4 lg:p-4">
             {primaryNav.map(item => {
               const active = pathname === item.matchPrefix
                 || pathname.startsWith(`${item.matchPrefix}/`);
@@ -96,7 +96,7 @@ function App() {
                   aria-label={item.label}
                   aria-current={active ? 'page' : undefined}
                   title={item.label}
-                  className={`flex w-full items-center justify-center gap-4 rounded-2xl p-3 transition-colors xl:justify-start xl:p-4 ${
+                  className={`flex w-full items-center justify-center gap-4 rounded-2xl p-3 transition-colors lg:justify-start lg:p-4 ${
                     active
                       ? 'bg-primary/10 font-semibold text-primary'
                       : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
@@ -104,16 +104,17 @@ function App() {
                 >
                   <item.icon size={22} className={`shrink-0 ${active ? 'opacity-100' : 'opacity-70'}`} />
                   {isSidebarOpen && (
-                    <span className="hidden text-sm font-medium tracking-wide xl:inline">{item.label}</span>
+                    <span className="hidden text-sm font-medium tracking-wide lg:inline">{item.label}</span>
                   )}
                 </NavLink>
               );
             })}
           </nav>
 
-          <div className="border-t border-slate-100 bg-slate-50/50 p-3 text-center text-[10px] font-medium uppercase tracking-widest text-slate-400 xl:p-6 xl:text-xs">
-            <span className="xl:hidden">v1.0</span>
-            <span className="hidden xl:inline">{isSidebarOpen ? '© 2026 CodeAgent SYSTEM v1.0' : 'v1.0'}</span>
+          {/* Kept to one short line: the old uppercase "© 2026 CODEAGENT
+              SYSTEM V1.0" wrapped onto two rows and read louder than the nav. */}
+          <div className="border-t border-slate-100 bg-slate-50/50 p-3 text-center text-[10px] font-medium tracking-wide text-slate-400 lg:p-4">
+            v1.0
           </div>
         </aside>
 

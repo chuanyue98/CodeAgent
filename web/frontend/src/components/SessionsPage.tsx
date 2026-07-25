@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Search, Filter, ChevronDown, ChevronUp, Clock, DollarSign, FileText, AlertCircle, ArrowUpRight } from 'lucide-react';
 import { fetchSessions, type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
 import { buildEventsLink } from '../utils/sessionLink';

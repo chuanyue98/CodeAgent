@@ -26,7 +26,7 @@ function parseEnvText(text: string): Record<string, string> {
 }
 
 export default function McpPage() {
-  const { currentGroup, projects } = useProject();
+  const { currentGroup, projects, selectedWorkspace } = useProject();
   const [engines, setEngines] = useState<Engine[]>([]);
   const [selectedEngine, setSelectedEngine] = useState('');
   const [projectPath, setProjectPath] = useState('');
@@ -55,11 +55,15 @@ export default function McpPage() {
   }, []);
 
   useEffect(() => {
-    if (!projectPath && groupProjects.length > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setProjectPath(groupProjects[0].path);
-    }
-  }, [groupProjects, projectPath]);
+    if (projectPath || groupProjects.length === 0) return;
+    // Open on the workspace the user is already working in, when this group
+    // contains it, rather than always snapping to the first path in the list.
+    const shared = groupProjects.some(project => project.path === selectedWorkspace)
+      ? selectedWorkspace
+      : groupProjects[0].path;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setProjectPath(shared);
+  }, [groupProjects, projectPath, selectedWorkspace]);
 
   const loadServers = useCallback(() => {
     if (!selectedEngine || !projectPath) {

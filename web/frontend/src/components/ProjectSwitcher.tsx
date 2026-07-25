@@ -100,10 +100,16 @@ export default function ProjectSwitcher() {
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Resource group: ${currentGroup}`}
-        className="flex max-w-52 items-center gap-2 px-3 md:px-4 py-2 bg-white/50 backdrop-blur-md border border-slate-100 rounded-xl hover:bg-white transition-colors shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        title={`Resource group: ${currentGroup}`}
+        className="flex max-w-64 items-center gap-2 px-3 md:px-4 py-2 bg-white/50 backdrop-blur-md border border-slate-100 rounded-xl hover:bg-white transition-colors shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       >
-        <Layers size={16} className="text-primary" />
-        <span className="truncate text-sm font-semibold"><span className="text-slate-400">Group · </span>{currentGroup}</span>
+        <Layers size={16} className="text-primary shrink-0" />
+        {/* The "Group · " prefix used to eat the budget and truncate the one
+            part that matters ("Group · codea…"). The name wins; the label
+            drops out first on narrow headers. */}
+        <span className="truncate text-sm font-semibold">
+          <span className="hidden text-slate-400 lg:inline">Group · </span>{currentGroup}
+        </span>
         <ChevronDown size={14} className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (

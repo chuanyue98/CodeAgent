@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { Search, Filter, ChevronDown, ChevronUp, Clock, Wrench, MessageSquare, AlertCircle, X, RefreshCw, TerminalSquare, Check } from 'lucide-react';
 import { fetchAuditEvents, convertAndLaunchSession, type AuditEvent, type AuditEventType } from '../api/audit';
 import request from '../utils/request';

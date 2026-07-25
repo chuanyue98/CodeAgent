@@ -1,5 +1,22 @@
-import { ArrowRight, Bot, Clock, History, Settings, Terminal } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import {
+  ArrowRight,
+  Bot,
+  CheckCircle2,
+  Circle,
+  Clock,
+  FolderGit2,
+  History,
+  Loader2,
+  Settings,
+  Terminal,
+} from 'lucide-react';
+import { Link } from 'react-router';
+import { useProject } from '../context/ProjectContext';
+import { fetchAgentProviders } from '../api/agent';
+import request from '../utils/request';
+import type { ProviderCapabilities } from '../types/agent';
+import { workspaceLabel } from '../utils/agentWorkspaceHelpers';
 
 const QUICK_ACTIONS = [
   {
@@ -34,17 +51,138 @@ const QUICK_ACTIONS = [
   },
 ] as const;
 
+interface SetupStep {
+  id: string;
+  done: boolean;
+  title: string;
+  doneDetail: string;
+  todoDetail: string;
+  ctaLabel: string;
+  ctaTo: string;
+}
+
+/**
+ * A single setup step. Rendered as a row rather than a card so the whole
+ * checklist reads top-to-bottom in one glance, and so an incomplete step is
+ * the only thing carrying colour on the page.
+ */
+function SetupRow({ step }: { step: SetupStep }) {
+  return (
+    <li className="flex items-start gap-3 px-4 py-3">
+      {step.done
+        ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" aria-hidden />
+        : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden />}
+      <div className="min-w-0 flex-1">
+        <p className={`text-sm font-semibold ${step.done ? 'text-slate-500' : 'text-slate-900'}`}>
+          {step.title}
+        </p>
+        <p className="mt-0.5 text-xs leading-5 text-slate-500">
+          {step.done ? step.doneDetail : step.todoDetail}
+        </p>
+      </div>
+      {!step.done && (
+        <Link
+          to={step.ctaTo}
+          className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+        >
+          {step.ctaLabel}
+        </Link>
+      )}
+    </li>
+  );
+}
+
 export default function HomePage() {
+  const { validProjects, projects, selectedWorkspace } = useProject();
+  const [providers, setProviders] = useState<ProviderCapabilities[] | null>(null);
+  const [taskCount, setTaskCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Best-effort: Home must still render its guidance if either probe fails,
+    // so a failure resolves to "none found" rather than an error screen.
+    void fetchAgentProviders().then(setProviders).catch(() => setProviders([]));
+    void request<unknown[]>('/api/tasks')
+      .then(list => setTaskCount(Array.isArray(list) ? list.length : 0))
+      .catch(() => setTaskCount(0));
+  }, []);
+
+  const availableProviders = providers?.filter(provider => provider.available) ?? [];
+  const probing = providers === null || taskCount === null;
+
+  const steps: SetupStep[] = [
+    {
+      id: 'workspace',
+      done: validProjects.length > 0,
+      title: 'Register a workspace',
+      doneDetail: `${validProjects.length} workspace${validProjects.length === 1 ? '' : 's'} registered${
+        selectedWorkspace ? ` · working in ${workspaceLabel(selectedWorkspace)}` : ''
+      }.`,
+      todoDetail: projects.length > 0
+        ? 'Registered paths could not be found on disk. Fix or remove them in Workspace settings.'
+        : 'CodeAgent only operates inside directories you register. Add the absolute path of a project you want it to work on.',
+      ctaLabel: 'Add workspace',
+      ctaTo: '/settings/workspace',
+    },
+    {
+      id: 'provider',
+      done: availableProviders.length > 0,
+      title: 'Connect a provider CLI',
+      doneDetail: `Available: ${availableProviders.map(provider => provider.displayName).join(', ')}.`,
+      todoDetail: 'No provider CLI was detected. Install and sign in to one (claude, gemini, codex, or opencode), then re-check under Settings › System.',
+      ctaLabel: 'Check system',
+      ctaTo: '/settings/system',
+    },
+    {
+      id: 'task',
+      done: (taskCount ?? 0) > 0,
+      title: 'Create your first task (optional)',
+      doneDetail: `${taskCount} reusable task${taskCount === 1 ? '' : 's'} available to run or schedule.`,
+      todoDetail: 'Tasks are reusable prompts you can run on any engine or put on a schedule. Describe one and let the AI write it.',
+      ctaLabel: 'Create task',
+      ctaTo: '/automations/tasks',
+    },
+  ];
+
+  const remaining = steps.filter(step => !step.done && step.id !== 'task').length;
+  const ready = !probing && remaining === 0;
+
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-2 sm:p-4 lg:p-8">
       <section className="glass-card overflow-hidden p-6 sm:p-8">
         <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-primary">CodeAgent Workspace</p>
         <h2 className="max-w-2xl text-2xl font-bold text-slate-900 sm:text-3xl">
-          Start with the work you want to do.
+          {ready ? 'Ready when you are.' : 'Two steps to your first agent run.'}
         </h2>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
-          Agent conversations, terminal sessions, automations, activity, and configuration are now grouped by workflow instead of exposed as separate top-level tools.
+          CodeAgent runs the AI CLI you already use — Claude, Gemini, Codex, or OpenCode —
+          against a directory you choose, with your own prompts and skills injected. Nothing
+          leaves this machine except the provider&apos;s own traffic.
         </p>
+        {ready && (
+          <Link
+            to="/agent/web"
+            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-primary/20 transition-opacity hover:opacity-90"
+          >
+            <Bot className="h-4 w-4" /> Start an agent session
+          </Link>
+        )}
+      </section>
+
+      <section aria-labelledby="setup-heading" className="glass-card overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+          <h2 id="setup-heading" className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <FolderGit2 className="h-4 w-4 text-primary" />
+            Setup
+          </h2>
+          <span className="flex items-center gap-1.5 text-xs text-slate-400">
+            {probing
+              ? <><Loader2 className="h-3 w-3 animate-spin" /> Checking…</>
+              : `${steps.filter(step => step.done).length} of ${steps.length} complete`}
+          </span>
+        </div>
+        <ul className="divide-y divide-slate-100">
+          {steps.map(step => <SetupRow key={step.id} step={step} />)}
+        </ul>
       </section>
 
       <section aria-labelledby="quick-actions-heading">

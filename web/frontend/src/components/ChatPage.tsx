@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Send, MessageSquare, Plus, AlertCircle, Loader2, RotateCcw, Square, FolderGit2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { useProject } from '../context/ProjectContext';
 import request from '../utils/request';
 import MarkdownMessage from './MarkdownMessage';
