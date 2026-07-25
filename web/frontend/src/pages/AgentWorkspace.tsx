@@ -52,7 +52,7 @@ export default function AgentWorkspace() {
         onShowUnavailableHistoryChange={workspace.onShowUnavailableHistoryChange}
       />
 
-      <section className="glass-card flex min-w-0 flex-1 flex-col p-4">
+      <section className="animate-fade-rise stagger-2 glass-card flex min-w-0 flex-1 flex-col p-4">
         <AgentToolbar
           validProjects={workspace.validProjects}
           providers={workspace.providers}
@@ -147,10 +147,10 @@ export default function AgentWorkspace() {
             )}
             {workspace.state.messages.length === 0 && !workspace.state.activeTurnId && (
               <div className="flex h-full min-h-48 flex-col items-center justify-center text-center text-slate-400">
-                <p className="text-sm font-medium text-slate-600">
+                <p className="animate-fade-rise stagger-1 text-sm font-medium text-slate-600">
                   {!workspace.workspaceIsUsable ? 'Choose a workspace to begin' : !workspace.selectedProvider ? 'Choose a provider to begin' : 'Start a new conversation'}
                 </p>
-                <p className="mt-1 max-w-md text-xs">
+                <p className="animate-fade-rise stagger-2 mt-1 max-w-md text-xs">
                   {!workspace.workspaceIsUsable
                     ? 'Select a registered workspace above. The agent will only operate inside that directory.'
                     : !workspace.selectedProvider
@@ -160,7 +160,7 @@ export default function AgentWorkspace() {
                 {workspace.canCompose && (
                   <button
                     onClick={workspace.focusComposer}
-                    className="mt-4 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary/90"
+                    className="animate-fade-rise stagger-3 mt-4 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-[0_12px_20px_-8px_hsl(192_82%_31%/0.4)]"
                   >Start with {workspace.selectedCapabilities?.displayName || workspace.selectedProvider}</button>
                 )}
               </div>
