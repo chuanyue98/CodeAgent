@@ -77,7 +77,15 @@ export default function AgentSessionBanner({
         <button
           aria-label="Remove current conversation"
           title="Remove local conversation"
-          onClick={onRemoveSession}
+          onClick={() => {
+            if (
+              window.confirm(
+                'Remove this conversation from the list? Provider-side history is kept.',
+              )
+            ) {
+              onRemoveSession();
+            }
+          }}
           disabled={Boolean(stateActiveTurnId)}
           className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-red-600 disabled:opacity-40"
         >

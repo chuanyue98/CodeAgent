@@ -4,16 +4,21 @@ import { BrowserRouter } from 'react-router'
 import './index.css'
 import App from './App.tsx'
 import { ProjectProvider } from './context/ProjectContext.tsx'
+import ErrorBoundary from './components/shared/ErrorBoundary.tsx'
 
-// Each route now owns its own ErrorBoundary + Suspense pair (see App.tsx),
-// so a render error in one lazy-loaded page no longer blanks the entire
-// app (nav/sidebar/other pages stay usable). No app-wide boundary here.
+// App-wide boundary: each route already owns its own ErrorBoundary +
+// Suspense pair (see App.tsx), which isolates lazy-loaded page errors.
+// This outer boundary is the last-resort guard for the shell itself
+// (nav, header, ProjectProvider) so a render error there shows a
+// recoverable error page instead of a blank white screen.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <ProjectProvider>
-        <App />
-      </ProjectProvider>
+      <ErrorBoundary>
+        <ProjectProvider>
+          <App />
+        </ProjectProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   </StrictMode>,
 )

@@ -125,6 +125,7 @@ export default function CronPage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm('Delete this schedule? This cannot be undone.')) return;
     try {
       await deleteSchedule(id);
       if (editingScheduleId === id) setEditingScheduleId(null);

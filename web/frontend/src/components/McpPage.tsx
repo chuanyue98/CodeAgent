@@ -108,6 +108,7 @@ export default function McpPage() {
   };
 
   const handleRemove = async (serverName: string) => {
+    if (!window.confirm('Remove this MCP server? This cannot be undone.')) return;
     try {
       await removeMcpServer(selectedEngine, serverName, projectPath);
       loadServers();
