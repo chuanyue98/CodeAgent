@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+import click
+
 from core.hook_scanner import get_hooks_to_inject
 from core.plugin_scanner import get_plugins_to_mount
 from core.services.config_service import ConfigService
@@ -22,6 +24,13 @@ OK = "[OK]"
 WARN = "[!] "
 FAIL = "[X] "
 INFO = "[i] "
+
+_STATUS_COLORS = {
+    OK: "green",
+    WARN: "yellow",
+    FAIL: "red",
+    INFO: "cyan",
+}
 
 # ── Result model ──────────────────────────────────────────────────────────────
 
@@ -419,34 +428,49 @@ class _LightweightResolver:
 
 
 def _render(sections: List[Section]) -> int:
-    """Print results and return number of failures."""
+    """Print results and return number of failures.
+
+    Uses ``click.style``/``click.echo`` so status markers are color-coded in
+    a real terminal, while automatically degrading to plain text when output
+    isn't a TTY (piped to a file, CI logs, etc.) -- click detects that for us.
+    """
     failures = 0
     warnings = 0
     for section in sections:
-        print(f"\n  {section.title}")
-        print("  " + "─" * len(section.title))
+        click.echo(f"\n  {section.title}")
+        click.echo("  " + "─" * len(section.title))
         for c in section.checks:
-            line = f"  {c.status}  {c.label}"
+            status = click.style(c.status, fg=_STATUS_COLORS.get(c.status), bold=True)
+            line = f"  {status}  {c.label}"
             if c.detail:
                 line += f"  —  {c.detail}"
-            print(line)
+            click.echo(line)
             if c.fix_hint and c.status in (WARN, FAIL):
-                print(f"         ↳ {c.fix_hint}")
+                click.echo(f"         ↳ {c.fix_hint}")
             if c.status == FAIL:
                 failures += 1
             elif c.status == WARN:
                 warnings += 1
 
-    print()
+    click.echo()
     if failures:
-        print(
-            f"  Result: {failures} failure(s), {warnings} warning(s) — run 'ca doctor --fix' for auto-repairs"
+        click.echo(
+            click.style(
+                f"  Result: {failures} failure(s), {warnings} warning(s) — run 'ca doctor --fix' for auto-repairs",
+                fg="red",
+                bold=True,
+            )
         )
     elif warnings:
-        print(f"  Result: {warnings} warning(s) — check the hints above")
+        click.echo(
+            click.style(
+                f"  Result: {warnings} warning(s) — check the hints above",
+                fg="yellow",
+            )
+        )
     else:
-        print("  Result: all checks passed")
-    print()
+        click.echo(click.style("  Result: all checks passed", fg="green", bold=True))
+    click.echo()
     return failures
 
 
@@ -497,11 +521,11 @@ def get_doctor_sections(fix: bool = False) -> list[Section]:
 
 def run_doctor(fix: bool = False) -> int:
     """Run all health checks. Returns exit code (0 = OK, 1 = failures)."""
-    print()
-    print("  CodeAgent Health Check")
-    print("  " + "=" * 22)
+    click.echo()
+    click.echo(click.style("  CodeAgent Health Check", bold=True))
+    click.echo("  " + "=" * 22)
     if fix:
-        print("  --fix mode: auto-repairable issues will be resolved")
+        click.echo("  --fix mode: auto-repairable issues will be resolved")
     sections = get_doctor_sections(fix=fix)
     failures = _render(sections)
     return 1 if failures else 0
