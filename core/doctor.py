@@ -440,9 +440,7 @@ def _render(sections: List[Section]) -> int:
         click.echo(f"\n  {section.title}")
         click.echo("  " + "─" * len(section.title))
         for c in section.checks:
-            status = click.style(
-                c.status, fg=_STATUS_COLORS.get(c.status), bold=True
-            )
+            status = click.style(c.status, fg=_STATUS_COLORS.get(c.status), bold=True)
             line = f"  {status}  {c.label}"
             if c.detail:
                 line += f"  —  {c.detail}"
