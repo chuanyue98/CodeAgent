@@ -119,7 +119,7 @@ function App() {
         </aside>
 
         <main className="relative flex min-w-0 flex-1 flex-col gap-3 overflow-hidden md:gap-4">
-          <header className="animate-fade-in stagger-2 flex min-w-0 items-center justify-between gap-3">
+          <header className="animate-fade-in stagger-2 relative z-50 flex min-w-0 items-center justify-between gap-3">
             <h1 className="min-w-0 truncate text-lg font-bold text-slate-800 md:text-xl">{pageLabel}</h1>
             <div className="flex shrink-0 items-center gap-2">
               <CommandPalette />
