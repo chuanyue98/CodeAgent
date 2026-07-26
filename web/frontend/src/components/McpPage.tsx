@@ -26,7 +26,7 @@ function parseEnvText(text: string): Record<string, string> {
 }
 
 export default function McpPage() {
-  const { currentGroup, projects } = useProject();
+  const { currentGroup, projects, selectedWorkspace } = useProject();
   const [engines, setEngines] = useState<Engine[]>([]);
   const [selectedEngine, setSelectedEngine] = useState('');
   const [projectPath, setProjectPath] = useState('');
@@ -55,11 +55,15 @@ export default function McpPage() {
   }, []);
 
   useEffect(() => {
-    if (!projectPath && groupProjects.length > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setProjectPath(groupProjects[0].path);
-    }
-  }, [groupProjects, projectPath]);
+    if (projectPath || groupProjects.length === 0) return;
+    // Open on the workspace the user is already working in, when this group
+    // contains it, rather than always snapping to the first path in the list.
+    const shared = groupProjects.some(project => project.path === selectedWorkspace)
+      ? selectedWorkspace
+      : groupProjects[0].path;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setProjectPath(shared);
+  }, [groupProjects, projectPath, selectedWorkspace]);
 
   const loadServers = useCallback(() => {
     if (!selectedEngine || !projectPath) {
@@ -104,6 +108,7 @@ export default function McpPage() {
   };
 
   const handleRemove = async (serverName: string) => {
+    if (!window.confirm('Remove this MCP server? This cannot be undone.')) return;
     try {
       await removeMcpServer(selectedEngine, serverName, projectPath);
       loadServers();
@@ -114,13 +119,13 @@ export default function McpPage() {
 
   return (
     <div className="flex flex-col xl:flex-row gap-4 min-h-full xl:h-full">
-      <aside className="w-full xl:w-56 shrink-0 glass-card p-4 space-y-1">
+      <aside className="animate-slide-left stagger-1 w-full xl:w-56 shrink-0 glass-card p-4 space-y-1">
         <label className="text-xs text-slate-400 font-medium block mb-2">Engine</label>
-        {engines.map(engine => (
+        {engines.map((engine, i) => (
           <button
             key={engine.id}
             onClick={() => setSelectedEngine(engine.id)}
-            className={`w-full text-left px-2 py-1.5 rounded-md text-xs transition-colors ${
+            className={`animate-fade-rise stagger-${Math.min(i + 2, 7)} w-full text-left px-2 py-1.5 rounded-md text-xs transition-colors ${
               selectedEngine === engine.id
                 ? 'bg-slate-100 text-slate-800 font-medium'
                 : 'text-slate-500 hover:bg-slate-50'
@@ -132,7 +137,7 @@ export default function McpPage() {
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col gap-4">
-        <div className="glass-card p-4 flex flex-wrap items-center gap-3">
+        <div className="animate-fade-rise stagger-2 glass-card p-4 flex flex-wrap items-center gap-3">
           <Server className="w-4 h-4 text-slate-400 shrink-0" />
           <label className="text-xs text-slate-400 font-medium shrink-0">Project</label>
           {groupProjects.length > 0 ? (
@@ -170,15 +175,15 @@ export default function McpPage() {
         )}
 
         <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
-          <div className="flex-1 glass-card p-4 overflow-y-auto space-y-2">
+          <div className="animate-fade-rise stagger-3 flex-1 glass-card p-4 overflow-y-auto space-y-2">
             <div className="text-sm font-semibold text-slate-700 mb-2">Configured Servers</div>
             {servers.length === 0 && (
               <p className="text-sm text-slate-400 text-center py-8">No MCP servers configured.</p>
             )}
-            {servers.map(server => (
+            {servers.map((server, i) => (
               <div
                 key={server.name}
-                className="glass-card p-3 border-slate-100 flex items-center gap-3"
+                className={`animate-fade-rise stagger-${Math.min(i + 4, 7)} glass-card p-3 border-slate-100 flex items-center gap-3`}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -207,7 +212,7 @@ export default function McpPage() {
             ))}
           </div>
 
-          <div className="w-full lg:w-80 shrink-0 glass-card p-4 space-y-3">
+          <div className="animate-fade-rise stagger-4 w-full lg:w-80 shrink-0 glass-card p-4 space-y-3">
             <div className="text-sm font-semibold text-slate-700">Add Server</div>
 
             <div>

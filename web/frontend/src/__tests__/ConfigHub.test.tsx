@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import ConfigHub from '../components/ConfigHub';
 import { ProjectProvider } from '../context/ProjectContext';
 import { expect, test, describe } from 'vitest';

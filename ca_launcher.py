@@ -295,9 +295,20 @@ def run_ui_command():
         print(f"🚀 Starting Web UI API at http://127.0.0.1:{port} ...")
     else:
         if not _frontend_dist_exists():
+            # This is the very first command most people run after cloning,
+            # so spell out the exact copy-pasteable fix instead of naming the
+            # tools and leaving the reader to assemble the commands.
+            frontend_root = _frontend_root()
             print(
-                "❌ Built Web UI not found at web/frontend/dist, and source mode is unavailable.\n"
-                "Run `bun install` in web/frontend or build the frontend first."
+                "❌ The Web UI has not been built yet "
+                f"(expected {frontend_root / 'dist' / 'index.html'}).\n"
+                "\n"
+                "Build it once with:\n"
+                f"  cd {frontend_root}\n"
+                "  bun install && bun run build      # or: npm install && npm run build\n"
+                "\n"
+                "Then run `ca ui` again. For live-reloading frontend work, "
+                "set CA_UI_DEV=1 instead to have `ca ui` manage a Vite dev server."
             )
             return 1
         port = find_available_port(UI_API_PORT)

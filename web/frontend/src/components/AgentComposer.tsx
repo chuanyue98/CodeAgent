@@ -53,8 +53,15 @@ export default function AgentComposer({
         <button
           onClick={onCancel}
           disabled={!sessionCapabilitySnapshot?.supportsCancel}
-          aria-label="Cancel turn"
-          className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-red-600 hover:bg-red-100 disabled:opacity-40"
+          aria-label="Stop the agent"
+          // A greyed-out stop button during a long run is the worst moment to
+          // leave someone guessing -- say whose limitation it is.
+          title={
+            sessionCapabilitySnapshot?.supportsCancel
+              ? 'Stop the agent'
+              : 'This provider cannot interrupt a turn once it has started. Wait for it to finish, or remove the conversation.'
+          }
+          className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-red-600 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Square className="h-4 w-4 fill-current" />
         </button>

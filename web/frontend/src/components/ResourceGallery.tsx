@@ -7,6 +7,7 @@ import ErrorState from './shared/ErrorState';
 import LoadingState from './shared/LoadingState';
 import useResourceData from '../hooks/useResourceData';
 import useResourceToggle from '../hooks/useResourceToggle';
+import Toast from './shared/Toast';
 
 /**
  * A single resource entry (skill, plugin, hook, prompt) shown in a gallery.
@@ -85,18 +86,24 @@ function ResourceGallery({
 }: ResourceGalleryProps) {
   const { currentGroup, groups } = useProject();
   const { data: resourceData, loading, error, refetch } = useResourceData<ResourceData>(apiEndpoint);
-  const { toggleResource, toggleError } = useResourceToggle();
+  const { toggleResource, toggleError, dismissToggleError } = useResourceToggle();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<ResourceItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    if (resourceData) {
-      const categories = Object.keys(resourceData);
-      if (categories.length > 0 && !selectedCategory) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setSelectedCategory(categories[0]);
-      }
+    if (!resourceData) return;
+    const categories = Object.keys(resourceData);
+    // Reset the selected category when the data changes and the previously
+    // selected one no longer exists (e.g. after a workspace switch, backend
+    // restart, or category rename). Without this, resourceData[selectedCategory]
+    // becomes undefined and .filter() throws, bubbling up to the ErrorBoundary
+    // and blanking the page.
+    const stillValid = selectedCategory && categories.includes(selectedCategory);
+    const next = categories.length === 0 ? null : stillValid ? selectedCategory : categories[0];
+    if (next !== selectedCategory) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedCategory(next);
     }
   }, [resourceData, selectedCategory]);
 
@@ -104,7 +111,7 @@ function ResourceGallery({
     groups[currentGroup]?.[resourceType]?.includes(itemId) ?? false;
 
   const filteredItems = selectedCategory && resourceData
-    ? resourceData[selectedCategory].filter(item =>
+    ? (resourceData[selectedCategory] ?? []).filter(item =>
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.description.toLowerCase().includes(searchTerm.toLowerCase())
       )
@@ -121,22 +128,22 @@ function ResourceGallery({
   return (
     <div className="flex h-full overflow-hidden p-6 gap-6">
       {/* Sidebar Categories */}
-      <div className="w-64 shrink-0 glass-card flex flex-col overflow-hidden">
+      <div className="animate-slide-left stagger-1 w-64 shrink-0 glass-card flex flex-col overflow-hidden">
         <div className="p-6 border-b border-slate-100">
           <h2 className="text-sm font-semibold flex items-center gap-2 uppercase tracking-widest text-slate-400">
             <BookOpen className="w-4 h-4 text-primary" />
             {labels.sidebar}
           </h2>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-1">
-          {resourceData && Object.keys(resourceData).map(category => (
+        <div className="custom-scrollbar flex-1 overflow-y-auto p-4 space-y-1">
+          {resourceData && Object.keys(resourceData).map((category, i) => (
             <button
               key={category}
               onClick={() => {
                 setSelectedCategory(category);
                 setSelectedItem(null);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+              className={`animate-fade-rise stagger-${Math.min(i + 2, 7)} w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                 selectedCategory === category
                   ? 'bg-primary/10 text-primary'
                   : 'hover:bg-slate-50 text-slate-500 hover:text-slate-900'
@@ -160,8 +167,8 @@ function ResourceGallery({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {selectedItem ? (
-          /* Detail View */
-          <div className="flex-1 glass-card flex flex-col overflow-hidden">
+          /* Detail View — re-mounts on selection so the entrance plays each time. */
+          <div key={selectedItem.id} className="animate-fade-rise stagger-2 flex-1 glass-card flex flex-col overflow-hidden">
             <div className="p-6 border-b border-slate-200 flex items-center gap-4 bg-white">
               <button
                 onClick={() => setSelectedItem(null)}
@@ -213,9 +220,11 @@ function ResourceGallery({
           </div>
         ) : (
           /* List View */
-          <div className="flex-1 flex flex-col overflow-hidden gap-6">
-            <div className="p-6 glass-card bg-slate-50/30 backdrop-blur-sm">
-              <div className="relative max-w-md">
+          <div className="flex-1 flex flex-col overflow-hidden gap-4">
+            {/* A search box does not need a full card of its own -- that card
+                cost ~100px of vertical space above the fold on every visit. */}
+            <div className="animate-fade-rise stagger-2 flex flex-wrap items-center justify-between gap-3">
+              <div className="relative w-full max-w-md">
                 <label htmlFor={labels.searchId} className="sr-only">{labels.searchLabel}</label>
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
@@ -224,17 +233,21 @@ function ResourceGallery({
                   placeholder={labels.searchPlaceholder}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary/30 transition-all text-sm placeholder:text-slate-400"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary/30 transition-all text-sm placeholder:text-slate-400"
                 />
               </div>
+              <p className="text-xs text-slate-400">
+                Toggle a {labels.itemSingular} to mount it for the <span className="font-semibold text-slate-500">{currentGroup}</span> group
+              </p>
             </div>
-            <div className="flex-1 overflow-y-auto pr-2">
+            <div className="custom-scrollbar flex-1 overflow-y-auto pr-2">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredItems.map(item => (
+                {filteredItems.map((item, i) => (
                   <div
                     key={item.id}
                     onClick={() => setSelectedItem(item)}
-                    className={`group glass-card p-6 hover:border-primary/20 hover:bg-slate-50/50 transition-all cursor-pointer relative overflow-hidden ${
+                    // Cap at 6 — long galleries shouldn't cascade forever.
+                    className={`animate-fade-rise stagger-${Math.min(i + 3, 7)} group glass-card p-6 hover:border-primary/20 hover:bg-slate-50/50 transition-all cursor-pointer relative overflow-hidden ${
                       !isItemActive(item.id) ? 'bg-slate-50/60 border-slate-200' : ''
                     }`}
                   >
@@ -275,11 +288,7 @@ function ResourceGallery({
           </div>
         )}
       </div>
-      {toggleError && (
-        <div className="fixed bottom-4 right-4 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium shadow-lg">
-          {toggleError}
-        </div>
-      )}
+      {toggleError && <Toast message={toggleError} onDismiss={dismissToggleError} />}
     </div>
   );
 }

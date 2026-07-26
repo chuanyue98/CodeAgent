@@ -62,6 +62,8 @@ export type UseAgentWorkspaceReturn = {
   workspaceConversations: { path: string; label: string; conversations: ConversationListItem[] }[];
   connectionLabel: string;
   canCompose: boolean;
+  /** True only when `workspace` names a currently registered, reachable project. */
+  workspaceIsUsable: boolean;
   composerPlaceholder: string;
   sessionResourceSnapshot: { skills?: string[]; prompts?: string[]; hooks?: string[]; plugins?: string[] } | undefined;
   sessionResourceGroup: string;
@@ -96,7 +98,13 @@ export type UseAgentWorkspaceReturn = {
 };
 
 export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
-  const { projects, currentGroup, setCurrentGroup } = useProject();
+  const {
+    projects,
+    currentGroup,
+    setCurrentGroup,
+    selectedWorkspace: workspace,
+    setSelectedWorkspace: setWorkspace,
+  } = useProject();
   const [providers, setProviders] = useState<ProviderCapabilities[]>([]);
   const [gatewayStatus, setGatewayStatus] = useState<AgentGatewayStatus>({
     enabled: true,
@@ -112,7 +120,6 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const [showUnavailableHistory, setShowUnavailableHistory] = useState(false);
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set());
   const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<Set<string>>(new Set());
-  const [workspace, setWorkspace] = useState('');
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('workspace-write');
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
@@ -208,14 +215,8 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     workspace,
   });
 
-  useEffect(() => {
-    if (!state.session && !validProjects.some(project => project.path === workspace)) {
-      const [project] = validProjects;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setWorkspace(project?.path || '');
-      if (project) setCurrentGroup(project.group);
-    }
-  }, [setCurrentGroup, state.session, validProjects, workspace]);
+  // ProjectContext owns picking/healing the shared workspace selection; this
+  // hook only needs to react to it.
 
   useEffect(() => () => {
     intentionalClose.current = true;
@@ -384,7 +385,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     } finally {
       if (selectionId === selectionRequestRef.current) setSelectingKey(null);
     }
-  }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, connect, loadInitialHistory]);
+  }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, setWorkspace, connect, loadInitialHistory]);
 
   const selectNativeSession = useCallback(async (native: NativeAgentSession) => {
     if (state.activeTurnId) return;
@@ -436,7 +437,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     } finally {
       if (selectionId === selectionRequestRef.current) setSelectingKey(null);
     }
-  }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, connect, loadInitialHistory, removeNativeSession]);
+  }, [state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects, setCurrentGroup, setWorkspace, connect, loadInitialHistory, removeNativeSession]);
 
   const newSession = useCallback(() => {
     selectionRequestRef.current += 1;
@@ -581,8 +582,13 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
       : state.session
         ? 'Disconnected'
         : 'Ready to start';
-  const canCompose = Boolean(workspace && selectedProvider && selectedCapabilities?.available && !noGatewayProvider);
-  const composerPlaceholder = !workspace
+  // The shared workspace is restored from localStorage, so it can name a
+  // path that is no longer registered (or not registered yet, before
+  // /api/projects resolves). Compose only against one that actually resolves,
+  // otherwise the composer looks ready and the send fails server-side.
+  const workspaceIsUsable = validProjects.some(project => project.path === workspace);
+  const canCompose = Boolean(workspaceIsUsable && selectedProvider && selectedCapabilities?.available && !noGatewayProvider);
+  const composerPlaceholder = !workspaceIsUsable
     ? 'Select a workspace to begin'
     : !selectedProvider
       ? 'Select a provider to begin'
@@ -638,6 +644,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     workspaceConversations,
     connectionLabel,
     canCompose,
+    workspaceIsUsable,
     composerPlaceholder,
     sessionResourceSnapshot,
     sessionResourceGroup,

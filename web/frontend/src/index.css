@@ -1,10 +1,18 @@
+/* Inter and JetBrains Mono are no longer fetched remotely -- they carry
+   solid system-font fallback stacks below (see `body` and `code, pre`),
+   which keeps CodeAgent usable offline/behind a firewall. Instrument Serif
+   has no reasonable system equivalent and is used sparingly for hero
+   display copy (see `.font-display`), so it's still worth the one
+   remaining network fetch. */
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* Apple-style Light Mode Dashboard */
+    /* Atmospheric Light Dashboard */
     --background: 210 40% 98%; /* #F8FAFC */
     --foreground: 215 25% 27%; /* #1E293B (Dark slate) */
 
@@ -34,6 +42,13 @@
     --ring: 192 81% 37%;
 
     --radius: 1.25rem; /* rounded-3xl */
+
+    /* Atmospheric tokens */
+    --grid-line: rgba(15, 23, 42, 0.028);
+    --noise-opacity: 0.045;
+    --mesh-1: rgba(8, 145, 178, 0.11);
+    --mesh-2: rgba(14, 116, 144, 0.07);
+    --mesh-3: rgba(99, 102, 241, 0.05);
   }
 }
 
@@ -60,10 +75,44 @@
       sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Layered mesh: dominant cyan anchor top-left, indigo echo top-right,
+       cyan wash bottom-right, deep teal pool bottom-left. Creates depth
+       instead of a flat sheet. */
     background-image:
-      radial-gradient(at 0% 0%, rgba(8, 145, 178, 0.03) 0, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(8, 145, 178, 0.02) 0, transparent 50%);
+      radial-gradient(at 12% 8%, var(--mesh-1) 0, transparent 45%),
+      radial-gradient(at 88% 14%, var(--mesh-3) 0, transparent 42%),
+      radial-gradient(at 78% 92%, var(--mesh-1) 0, transparent 50%),
+      radial-gradient(at 20% 95%, var(--mesh-2) 0, transparent 48%);
     background-attachment: fixed;
+    background-repeat: no-repeat;
+    position: relative;
+  }
+  /* Fine grain texture — fractalNoise SVG data URI. multiply blend keeps
+     it readable on light backgrounds while adding analog warmth. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: var(--noise-opacity);
+    mix-blend-mode: multiply;
+  }
+  /* Soft dot-grid, masked toward center so edges fade out — keeps the
+     grid from feeling like graph paper while preserving structure. */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 52px 52px;
+    -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 35%, transparent 80%);
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 35%, transparent 80%);
   }
   code, pre {
     font-family:
@@ -79,20 +128,106 @@
     color: #0F172A; /* Deep navy */
     @apply font-semibold tracking-tight;
   }
+  /* Display serif used sparingly for hero copy — pairs the quiet Inter
+     body with an editorial accent. */
+  .font-display {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
 }
 
 @layer utilities {
   .glass-card {
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: rgba(255, 255, 255, 0.86);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
     border: 1px solid #E2E8F0;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.6) inset,
+      0 20px 30px -12px rgba(15, 23, 42, 0.08),
+      0 6px 12px -6px rgba(15, 23, 42, 0.05);
     @apply rounded-[1.25rem];
+  }
+  /* Stronger elevation for hero/feature tiles. */
+  .glass-card-feature {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.7) inset,
+      0 32px 48px -16px rgba(15, 23, 42, 0.12),
+      0 10px 20px -8px rgba(15, 23, 42, 0.06);
+    @apply rounded-[1.5rem];
   }
 }
 
+/* ===== Motion system =====
+   Pure CSS. prefers-reduced-motion already short-circuits these in the
+   @media block below via animation-duration: 0.01ms. */
+
+@keyframes fade-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-22px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.965); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.08); }
+}
+@keyframes pulse-ring {
+  0%   { transform: scale(0.7); opacity: 0.7; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+@keyframes orbit-drift {
+  0%   { transform: rotate(0deg) translateX(0); }
+  50%  { transform: rotate(180deg) translateX(2px); }
+  100% { transform: rotate(360deg) translateX(0); }
+}
+@keyframes bar-rise {
+  from { transform: scaleY(0.15); }
+  to   { transform: scaleY(1); }
+}
+
+.animate-fade-rise  { animation: fade-rise 620ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-slide-left { animation: slide-in-left 620ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in    { animation: fade-in 700ms ease-out both; }
+.animate-scale-in   { animation: scale-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Staggered entrance — pair with .animate-fade-rise etc. */
+.stagger-1 { animation-delay: 0ms; }
+.stagger-2 { animation-delay: 90ms; }
+.stagger-3 { animation-delay: 180ms; }
+.stagger-4 { animation-delay: 270ms; }
+.stagger-5 { animation-delay: 360ms; }
+.stagger-6 { animation-delay: 450ms; }
+.stagger-7 { animation-delay: 540ms; }
+
+.animate-pulse-soft { animation: pulse-soft 2.4s ease-in-out infinite; }
+.animate-pulse-ring { animation: pulse-ring 2.4s ease-out infinite; }
+.animate-orbit      { animation: orbit-drift 24s linear infinite; }
+
+/* Equalizer bars for the hero "live activity" decoration. */
+.eq-bar {
+  transform-origin: bottom;
+  animation: bar-rise 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 #root {
+  position: relative;
+  z-index: 1;
   width: 100%;
   min-height: 100dvh;
 }

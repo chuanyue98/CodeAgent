@@ -78,20 +78,21 @@ function timeAgo(iso: string) {
 
 // ── Stat card ────────────────────────────────────────────────────────────────
 function StatCard({
-  label, value, sub, Icon, iconColor, iconBg,
+  label, value, sub, Icon, iconColor, iconBg, stagger = 'stagger-1',
 }: {
   label: string; value: string; sub?: string;
   Icon: React.ElementType; iconColor: string; iconBg: string;
+  stagger?: string;
 }) {
   return (
-    <div className="glass-card p-4 hover:shadow-md transition-shadow">
+    <div className={`animate-fade-rise ${stagger} glass-card group p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_24px_36px_-16px_rgba(15,23,42,0.12)]`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
           <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest truncate">{label}</p>
           <p className="text-xl font-bold text-slate-800 truncate">{value}</p>
           {sub && <p className="text-[10px] text-slate-500 truncate">{sub}</p>}
         </div>
-        <div className={`p-2 rounded-lg shrink-0 ${iconBg}`}>
+        <div className={`p-2 rounded-lg shrink-0 ${iconBg} transition-transform duration-300 group-hover:scale-110`}>
           <Icon className={`w-4 h-4 ${iconColor}`} />
         </div>
       </div>
@@ -219,12 +220,13 @@ const Analytics: React.FC = () => {
 
   const recentSessions = useMemo(() => sessions.slice(0, 5), [sessions]);
   const avgCostPerSession = totalSessions > 0 ? totalCost / totalSessions : 0;
+  const hasUsage = totalSessions > 0 || totalCost > 0 || totalInput + totalOutput + totalCache > 0;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center gap-3 text-slate-400 animate-pulse">
-          <TrendingUp className="w-7 h-7" />
+        <div className="animate-fade-in flex flex-col items-center gap-3 text-slate-400">
+          <TrendingUp className="w-7 h-7 animate-pulse-soft" />
           <span className="text-sm font-medium">Loading analytics…</span>
         </div>
       </div>
@@ -246,7 +248,7 @@ const Analytics: React.FC = () => {
     <div className="flex flex-col gap-5 pb-6">
 
       {/* ── Toolbar ────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
+      <div className="animate-fade-rise stagger-1 flex items-center justify-between">
         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
           {TABS.map((t) => (
             <button
@@ -274,6 +276,23 @@ const Analytics: React.FC = () => {
         </button>
       </div>
 
+      {/* Zeros across five stat cards and a blank half-page read as "broken",
+          not "nothing recorded yet". Say which it is, and where the data
+          comes from, before showing the empty numbers. */}
+      {!hasUsage && (
+        <div className="glass-card flex flex-col items-center gap-2 px-6 py-10 text-center">
+          <div className="rounded-2xl bg-primary/10 p-3 text-primary">
+            <TrendingUp className="h-6 w-6" />
+          </div>
+          <p className="text-sm font-semibold text-slate-800">No usage recorded yet</p>
+          <p className="max-w-md text-xs leading-5 text-slate-500">
+            Token counts and cost estimates are read from the session logs each provider CLI
+            writes on this machine. Run an agent session or a task, then press Refresh — nothing
+            is sent anywhere to produce these numbers.
+          </p>
+        </div>
+      )}
+
       {/* ── Overview ─────────────────────────────────────────────────────── */}
       {tab === 'overview' && (
         <>
@@ -282,29 +301,29 @@ const Analytics: React.FC = () => {
             <StatCard
               label="Total Tokens" value={fmtTokens(totalInput + totalOutput + totalCache)}
               sub={`${fmtTokens(totalInput)} in / ${fmtTokens(totalOutput)} out`}
-              Icon={FileText} iconColor="text-blue-600" iconBg="bg-blue-100"
+              Icon={FileText} iconColor="text-blue-600" iconBg="bg-blue-100" stagger="stagger-2"
             />
             <StatCard
               label="Total Cost" value={fmtCost(totalCost)}
               sub={`~${fmtCost(avgCostPerSession)} / session`}
-              Icon={DollarSign} iconColor="text-green-600" iconBg="bg-green-100"
+              Icon={DollarSign} iconColor="text-green-600" iconBg="bg-green-100" stagger="stagger-3"
             />
             <StatCard
               label="Cache Tokens" value={fmtTokens(totalCache)}
               sub={`${engines.length} engines`}
-              Icon={Database} iconColor="text-cyan-600" iconBg="bg-cyan-100"
+              Icon={Database} iconColor="text-cyan-600" iconBg="bg-cyan-100" stagger="stagger-4"
             />
             <StatCard
               label="Input Cost"
               value={fmtCost(modelStats.reduce((s, m) => s + m.inputCost, 0))}
               sub={fmtTokens(totalInput) + ' tokens'}
-              Icon={ArrowDownRight} iconColor="text-purple-600" iconBg="bg-purple-100"
+              Icon={ArrowDownRight} iconColor="text-purple-600" iconBg="bg-purple-100" stagger="stagger-5"
             />
             <StatCard
               label="Output Cost"
               value={fmtCost(modelStats.reduce((s, m) => s + m.outputCost, 0))}
               sub={fmtTokens(totalOutput) + ' tokens'}
-              Icon={ArrowUpRight} iconColor="text-orange-600" iconBg="bg-orange-100"
+              Icon={ArrowUpRight} iconColor="text-orange-600" iconBg="bg-orange-100" stagger="stagger-6"
             />
           </div>
 
@@ -312,8 +331,11 @@ const Analytics: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Engine breakdown cards */}
             <div className="lg:col-span-2 grid grid-cols-2 gap-3">
-              {engines.map((eng) => (
-                <div key={eng.target} className="glass-card p-4 hover:shadow-md transition-shadow">
+              {engines.map((eng, i) => (
+                <div
+                  key={eng.target}
+                  className={`animate-fade-rise stagger-${Math.min(i + 2, 7)} glass-card group p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_24px_36px_-16px_rgba(15,23,42,0.12)]`}
+                >
                   <div className="flex items-center justify-between mb-3">
                     <span
                       className={`text-[11px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${eb(eng.target)}`}
@@ -348,7 +370,7 @@ const Analytics: React.FC = () => {
             </div>
 
             {/* Right column: pie + session stats */}
-            <div className="flex flex-col gap-3">
+            <div className="animate-fade-rise stagger-5 flex flex-col gap-3">
               {/* Donut pie */}
               {pieData.length > 0 && (
                 <div className="glass-card p-4">
@@ -447,7 +469,7 @@ const Analytics: React.FC = () => {
 
           {/* ── Model Breakdown ─────────────────────────────────────────── */}
           {modelStats.length > 0 && (
-            <div className="glass-card p-5">
+            <div className="animate-fade-rise stagger-6 glass-card p-5">
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-4">
                 Model Breakdown
               </p>
@@ -571,7 +593,7 @@ const Analytics: React.FC = () => {
       {tab === 'daily' && (
         <div className="flex flex-col gap-4">
           {/* Cost chart with gradient fills */}
-          <div className="glass-card p-5">
+          <div className="animate-fade-rise stagger-2 glass-card p-5">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-4">
               Daily Cost by Engine
             </p>
@@ -617,7 +639,7 @@ const Analytics: React.FC = () => {
           </div>
 
           {/* Token chart */}
-          <div className="glass-card p-5">
+          <div className="animate-fade-rise stagger-3 glass-card p-5">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-4">
               Daily Tokens by Engine
             </p>
@@ -654,7 +676,7 @@ const Analytics: React.FC = () => {
           </div>
 
           {/* Detail table */}
-          <div className="glass-card p-5">
+          <div className="animate-fade-rise stagger-4 glass-card p-5">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-3">
               Detail (last 30 days)
             </p>
@@ -691,7 +713,7 @@ const Analytics: React.FC = () => {
       {/* ── Monthly ──────────────────────────────────────────────────────── */}
       {tab === 'monthly' && (
         <div className="flex flex-col gap-4">
-          <div className="glass-card p-5">
+          <div className="animate-fade-rise stagger-2 glass-card p-5">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-4">
               Monthly Cost by Engine
             </p>
@@ -720,7 +742,7 @@ const Analytics: React.FC = () => {
             </ResponsiveContainer>
           </div>
 
-          <div className="glass-card p-5">
+          <div className="animate-fade-rise stagger-3 glass-card p-5">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400">
@@ -753,7 +775,7 @@ const Analytics: React.FC = () => {
 
       {/* ── Sessions ─────────────────────────────────────────────────────── */}
       {tab === 'sessions' && (
-        <div className="glass-card p-5">
+        <div className="animate-fade-rise stagger-2 glass-card p-5">
           <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-4">
             Sessions ({sessions.length} shown)
           </p>
