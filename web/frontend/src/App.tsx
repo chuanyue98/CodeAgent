@@ -66,7 +66,7 @@ function App() {
     <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-transparent font-sans text-foreground">
       <div data-testid="app-shell" className="flex min-h-0 flex-1 gap-2 p-2 md:gap-4 md:p-4">
         <aside
-          className={`animate-slide-left stagger-1 ${
+          className={`animate-fade-in stagger-1 ${
             isSidebarOpen ? 'w-20 xl:w-64' : 'w-20 xl:w-24'
           } glass-card flex shrink-0 flex-col overflow-hidden transition-[width] duration-300`}
         >
@@ -119,7 +119,7 @@ function App() {
         </aside>
 
         <main className="relative flex min-w-0 flex-1 flex-col gap-3 overflow-hidden md:gap-4">
-          <header className="animate-fade-rise stagger-2 flex min-w-0 items-center justify-between gap-3">
+          <header className="animate-fade-in stagger-2 flex min-w-0 items-center justify-between gap-3">
             <h1 className="min-w-0 truncate text-lg font-bold text-slate-800 md:text-xl">{pageLabel}</h1>
             <div className="flex shrink-0 items-center gap-2">
               <CommandPalette />
@@ -133,7 +133,7 @@ function App() {
               <span>Configuration error: {ctxError}</span>
             </div>
           )}
-          <div className="animate-fade-rise stagger-3 custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1 md:pr-2">
+          <div className="animate-fade-in stagger-3 custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1 md:pr-2">
             <Routes>
               <Route path="/" element={<Navigate to="/home" replace />} />
               <Route path="/home" element={page(<HomePage />)} />
