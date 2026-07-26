@@ -326,8 +326,10 @@ def run_ui_command():
 
 EPILOG = """\
 Engines: gemini, claude, opencode, codex (default: gemini)
+
 YOLO mode is enabled by default.
 
+\b
 Examples:
   ca                       Start the default engine (gemini)
   ca claude do something   Start claude with extra args
@@ -347,16 +349,27 @@ def _reserved_command_can_handle(cmd, parent_ctx, cmd_name, rest):
     Only commit to the subcommand if the remaining tokens actually parse as
     valid arguments (and, for a subgroup like ``history``, name a real
     sub-subcommand) -- otherwise the whole line is an engine launch prompt.
+
+    Returns ``(True, None)`` if ``cmd`` should handle the args, or
+    ``(False, error)`` otherwise. ``error`` is ``None`` when the tokens should
+    silently fall through to a natural-language engine prompt, or a
+    ``click.UsageError`` to raise when a leading ``-``/``--`` token makes it
+    clear this was a mistyped option for the reserved command rather than
+    prompt text -- e.g. ``ca ui --port 8524`` must report "no such option",
+    not silently launch the default engine with "ui --port 8524" as the
+    prompt.
     """
     try:
         sub_ctx = cmd.make_context(cmd_name, list(rest), parent=parent_ctx)
-    except click.UsageError:
-        return False
+    except click.UsageError as exc:
+        if rest and rest[0].startswith("-"):
+            return False, exc
+        return False, None
     if isinstance(cmd, click.Group) and rest:
         first = rest[0]
         if not first.startswith("-") and cmd.get_command(sub_ctx, first) is None:
-            return False
-    return True
+            return False, None
+    return True, None
 
 
 class CodeAgentGroup(click.Group):
@@ -372,10 +385,14 @@ class CodeAgentGroup(click.Group):
         if args:
             cmd_name = args[0]
             cmd = self.get_command(ctx, cmd_name)
-            if cmd is not None and _reserved_command_can_handle(
-                cmd, ctx, cmd_name, args[1:]
-            ):
-                return cmd_name, cmd, args[1:]
+            if cmd is not None:
+                handled, error = _reserved_command_can_handle(
+                    cmd, ctx, cmd_name, args[1:]
+                )
+                if handled:
+                    return cmd_name, cmd, args[1:]
+                if error is not None:
+                    raise error
         # Unknown leading token (or a reserved name that doesn't actually
         # parse as that command): forward *all* original args to engine launch.
         launch = self.get_command(ctx, "_launch")
@@ -506,6 +523,12 @@ def _launch_engine(ctx, args):
     # 显式向底层引擎脚本透传 -y
     if "-y" not in extra_params:
         extra_params.append("-y")
+
+    if obj.get("yolo", True):
+        print(
+            "⚠️  YOLO mode is ON: the engine may edit files and run commands "
+            "without asking for approval."
+        )
 
     target_script = engine_script_map[engine_name]
     cmd = [sys.executable, target_script] + extra_params
@@ -726,8 +749,9 @@ def show(ctx, engine_name, session_id):
 @click.argument("source_engine")
 @click.argument("session_id")
 @click.argument("target_engine")
+@click.option("--yes", "-y", is_flag=True, help="Skip the confirmation prompt")
 @click.pass_context
-def convert(ctx, source_engine, session_id, target_engine):
+def convert(ctx, source_engine, session_id, target_engine, yes):
     """Convert session to another engine format."""
     _ensure_project_on_path(ctx.obj["root"])
     from core.session_history.session_finder import find_session_by_id
@@ -738,6 +762,23 @@ def convert(ctx, source_engine, session_id, target_engine):
     if not session:
         print(f"❌ Session not found: {source_engine}/{session_id}")
         return
+
+    title = session.title or session.first_user_message[:60] or "(no title)"
+    print("About to convert a session (the source session is left untouched):")
+    print(f"  Source: {source_engine}/{session_id}  ({session.message_count} msgs)")
+    print(f"  Title:  {title}")
+    print(f"  Target: {target_engine}")
+
+    if not yes:
+        if not (sys.stdin.isatty() and sys.stdout.isatty()):
+            print(
+                "❌ Refusing to convert without confirmation in a non-interactive "
+                "session. Re-run with --yes to skip this prompt."
+            )
+            return
+        if not click.confirm("Proceed with conversion?", default=False):
+            print("Cancelled.")
+            return
 
     try:
         new_id = write_session(session, target_engine)
