@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
+from core.utils.atomic_write import atomic_write
+
 if TYPE_CHECKING:
     from core.session_history.models import UnifiedSession
 
@@ -108,7 +110,9 @@ def write_claude_session(session: UnifiedSession) -> str:
                 content_blocks.append({"type": "text", "text": msg.content})
             for tc in msg.tool_calls:
                 try:
-                    input_obj = json.loads(tc.args_preview) if tc.args_preview else {}
+                    input_obj: Any = (
+                        json.loads(tc.args_preview) if tc.args_preview else {}
+                    )
                 except (json.JSONDecodeError, TypeError):
                     input_obj = {}
                 content_blocks.append(
@@ -152,6 +156,6 @@ def write_claude_session(session: UnifiedSession) -> str:
             lines.append(json.dumps(row, ensure_ascii=False))
             prev_uuid = msg_uuid
 
-    # Write the file
-    file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # Write the file atomically to prevent corruption on crash
+    atomic_write(file_path, "\n".join(lines) + "\n")
     return new_session_id

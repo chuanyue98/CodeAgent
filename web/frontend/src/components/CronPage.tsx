@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Clock, Plus, Trash2, Play, AlertCircle, PauseCircle, PlayCircle, Pencil, X } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import usePolling from '../hooks/usePolling';
+import request from '../utils/request';
 import {
   fetchSchedules,
   createSchedule,
@@ -28,24 +30,20 @@ function formatTimestamp(ts: number | null): string {
 }
 
 export default function CronPage() {
-  const { projects } = useProject();
+  const {
+    projects,
+    selectedWorkspace: workspace,
+    setSelectedWorkspace: setWorkspace,
+  } = useProject();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [taskName, setTaskName] = useState('');
   const [engine, setEngine] = useState('');
   const [cronExpr, setCronExpr] = useState('0 9 * * *');
-  const [workspace, setWorkspace] = useState('');
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (!workspace || !projects.some(project => project.path === workspace && project.available !== false)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setWorkspace(projects.find(project => project.available !== false)?.path || '');
-    }
-  }, [projects, workspace]);
 
   const loadSchedules = useCallback(() => {
     fetchSchedules()
@@ -54,29 +52,22 @@ export default function CronPage() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/tasks')
-      .then(res => res.json())
-      .then((list: Task[]) => {
+    request<Task[]>('/api/tasks')
+      .then((list) => {
         setTasks(list);
         if (list.length > 0) setTaskName(prev => prev || list[0].name);
       })
       .catch(() => setError('Failed to load tasks'));
 
-    fetch('/api/engines')
-      .then(res => res.json())
-      .then((list: Engine[]) => {
+    request<Engine[]>('/api/engines')
+      .then((list) => {
         setEngines(list);
         if (list.length > 0) setEngine(prev => prev || list[0].id);
       })
       .catch(() => setError('Failed to load engines'));
+  }, []);
 
-    loadSchedules();
-  }, [loadSchedules]);
-
-  useEffect(() => {
-    const id = setInterval(loadSchedules, POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [loadSchedules]);
+  usePolling(loadSchedules, POLL_INTERVAL_MS);
 
   const handleSave = async () => {
     if (!taskName || !engine || !workspace || !cronExpr.trim()) return;
@@ -134,6 +125,7 @@ export default function CronPage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm('Delete this schedule? This cannot be undone.')) return;
     try {
       await deleteSchedule(id);
       if (editingScheduleId === id) setEditingScheduleId(null);

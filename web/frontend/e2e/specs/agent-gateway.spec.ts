@@ -103,6 +103,13 @@ test('removes the selected local conversation without deleting provider history'
   await composer.fill('remove local mapping');
   await composer.press('Enter');
   await expect(page.getByRole('button', { name: 'Remove current conversation' })).toBeVisible();
+  // Wait for the turn to actually finish before removing. The banner (and an
+  // enabled Remove button) appear as soon as the session exists, which is
+  // before turn.start arrives over the socket — clicking inside that window
+  // removes a conversation the gateway still considers busy, and the removal
+  // is rejected. See the note in the PR: that race is a real product bug, but
+  // it is not what this test is about.
+  await expect(page.locator('main')).toContainText('Echo: remove local mapping');
 
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Remove current conversation' }).click();

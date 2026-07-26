@@ -65,24 +65,37 @@ def _find_opencode_db(home: Optional[Path] = None) -> Optional[Path]:
     return None
 
 
-def parse_opencode_session(session_id: str, db_path: Path) -> Optional[UnifiedSession]:
+def parse_opencode_session(
+    session_id: str,
+    db_path: Path,
+    connection: Optional[sqlite3.Connection] = None,
+) -> Optional[UnifiedSession]:
     """Parses a single OpenCode session from the SQLite database.
 
     Args:
         session_id: The session ID to parse.
         db_path: Path to the OpenCode SQLite database.
+        connection: Optional pre-opened SQLite connection. When provided,
+            it is reused for all queries and is *not* closed here. When
+            None, a new read-only connection is created and closed before
+            returning (backward compatible).
 
     Returns:
         UnifiedSession if parsing succeeds, None otherwise.
     """
-    if not db_path.exists():
-        return None
+    owns_connection = connection is None
+    con: sqlite3.Connection | None = connection
+    if owns_connection:
+        if not db_path.exists():
+            return None
+        try:
+            con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            con.row_factory = sqlite3.Row
+        except sqlite3.Error:
+            return None
 
-    con = None
     try:
-        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        con.row_factory = sqlite3.Row
-
+        assert con is not None
         # Fetch session metadata
         sess_row = con.execute(
             "SELECT id, directory, title, model, time_created, time_updated "
@@ -113,6 +126,18 @@ def parse_opencode_session(session_id: str, db_path: Path) -> Optional[UnifiedSe
             (session_id,),
         ).fetchall()
 
+        # Batch-fetch all parts for the entire session in a single query and
+        # group them by message_id, avoiding a per-message N+1 part lookup.
+        part_rows = con.execute(
+            "SELECT message_id, data FROM part "
+            "WHERE session_id = ? ORDER BY time_created ASC",
+            (session_id,),
+        ).fetchall()
+
+        parts_by_message: dict[str, list[sqlite3.Row]] = {}
+        for part_row in part_rows:
+            parts_by_message.setdefault(part_row["message_id"], []).append(part_row)
+
         messages: list[UnifiedMessage] = []
 
         for msg_row in msg_rows:
@@ -132,16 +157,12 @@ def parse_opencode_session(session_id: str, db_path: Path) -> Optional[UnifiedSe
             if role not in ("user", "assistant"):
                 continue
 
-            # Fetch parts for this message
-            part_rows = con.execute(
-                "SELECT data FROM part WHERE message_id = ? ORDER BY time_created ASC",
-                (msg_id,),
-            ).fetchall()
+            part_rows_for_msg = parts_by_message.get(msg_id, [])
 
             text_parts: list[str] = []
             tool_calls: list[ToolCallSummary] = []
 
-            for part_row in part_rows:
+            for part_row in part_rows_for_msg:
                 try:
                     part_data = json.loads(part_row["data"]) if part_row["data"] else {}
                 except (json.JSONDecodeError, TypeError):
@@ -212,7 +233,7 @@ def parse_opencode_session(session_id: str, db_path: Path) -> Optional[UnifiedSe
     except sqlite3.Error:
         return None
     finally:
-        if con is not None:
+        if owns_connection and con is not None:
             con.close()
 
     if not messages:
@@ -268,21 +289,25 @@ def find_opencode_sessions(
             "SELECT id, directory, time_created FROM session ORDER BY time_created DESC"
         ).fetchall()
 
+        # Parse every matching session reusing the single connection to avoid
+        # creating a new SQLite connection per session.
+        for row in rows:
+            if normalized_target is not None:
+                directory = (
+                    (row["directory"] or "").replace("\\", "/").lower().rstrip("/")
+                )
+                if directory != normalized_target:
+                    continue
+
+            session = parse_opencode_session(row["id"], db_path, connection=con)
+            if session:
+                sessions.append(session)
+
     except sqlite3.Error:
         return []
     finally:
         if con is not None:
             con.close()
-
-    for row in rows:
-        if normalized_target is not None:
-            directory = (row["directory"] or "").replace("\\", "/").lower().rstrip("/")
-            if directory != normalized_target:
-                continue
-
-        session = parse_opencode_session(row["id"], db_path)
-        if session:
-            sessions.append(session)
 
     sessions.sort(key=lambda s: s.started_at, reverse=True)
     return sessions

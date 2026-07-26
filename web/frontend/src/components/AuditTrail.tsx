@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router';
 import { Search, Filter, ChevronDown, ChevronUp, Clock, Wrench, MessageSquare, AlertCircle, X, RefreshCw, TerminalSquare, Check } from 'lucide-react';
 import { fetchAuditEvents, convertAndLaunchSession, type AuditEvent, type AuditEventType } from '../api/audit';
+import request from '../utils/request';
 
 const ENGINE_LABELS: Record<string, string> = {
   claude: 'Claude',
@@ -34,9 +36,7 @@ interface SessionDetail {
 }
 
 async function fetchSessionDetail(engine: string, sessionId: string, project: string): Promise<SessionDetail> {
-  const res = await fetch(`/api/history/${engine}/${sessionId}?project=${encodeURIComponent(project)}`);
-  if (!res.ok) throw new Error('Failed to fetch session detail');
-  return res.json();
+  return request<SessionDetail>(`/api/history/${engine}/${sessionId}?project=${encodeURIComponent(project)}`);
 }
 
 export default function AuditTrail() {
@@ -53,6 +53,20 @@ export default function AuditTrail() {
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [convertState, setConvertState] = useState<ConvertState>({ status: 'idle' });
+  const [searchParams] = useSearchParams();
+
+  // Deep link support: /activity/events?session=&engine=&project= auto-opens
+  // the matching session's detail drawer, so other pages (History, Workspaces)
+  // can link straight to a session instead of making the user re-search for it.
+  useEffect(() => {
+    const session = searchParams.get('session');
+    const engine = searchParams.get('engine');
+    const project = searchParams.get('project');
+    if (session && engine && project) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDrawerSession({ engine, sessionId: session, project });
+    }
+  }, [searchParams]);
 
   const load = () => {
     setLoading(true);
@@ -387,7 +401,7 @@ export default function AuditTrail() {
             {!sessionLoading && sessionDetail && (
               <div className="space-y-3">
                 {sessionDetail.messages.map((msg, i) => (
-                  <div key={i} className="border border-slate-100 rounded-lg p-3">
+                  <div key={`${msg.timestamp}-${msg.role}-${i}`} className="border border-slate-100 rounded-lg p-3">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-semibold text-slate-600 uppercase">{msg.role}</span>
                       <span className="text-[10px] text-slate-400">{msg.timestamp ? new Date(msg.timestamp).toLocaleString() : ''}</span>
@@ -396,7 +410,7 @@ export default function AuditTrail() {
                     {msg.tool_calls?.length > 0 && (
                       <div className="mt-2 space-y-1">
                         {msg.tool_calls.map((tc, j) => (
-                          <div key={j} className="text-[11px] bg-slate-50 rounded p-1.5">
+                          <div key={`${tc.name}-${j}`} className="text-[11px] bg-slate-50 rounded p-1.5">
                             <span className="font-mono font-semibold">{tc.name}</span>
                             {tc.args_preview && <span className="text-slate-500"> — {tc.args_preview}</span>}
                           </div>

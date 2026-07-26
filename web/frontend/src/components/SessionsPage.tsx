@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, ChevronDown, ChevronUp, Clock, DollarSign, FileText, AlertCircle } from 'lucide-react';
+import { Link } from 'react-router';
+import { Search, Filter, ChevronDown, ChevronUp, Clock, DollarSign, FileText, AlertCircle, ArrowUpRight } from 'lucide-react';
 import { fetchSessions, type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
+import { buildEventsLink } from '../utils/sessionLink';
 
 type SortKey = 'lastActivity' | 'cost' | 'tokens';
 type SortDir = 'asc' | 'desc';
@@ -81,7 +83,7 @@ export default function SessionsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <span className="text-sm text-slate-400">Loading sessions...</span>
+        <span className="animate-fade-in text-sm text-slate-400">Loading sessions...</span>
       </div>
     );
   }
@@ -99,7 +101,7 @@ export default function SessionsPage() {
 
   return (
     <div className="flex flex-col xl:flex-row gap-4 min-h-full xl:h-full">
-      <aside data-testid="session-filters" className="w-full xl:w-56 shrink-0 glass-card p-4 space-y-4">
+      <aside data-testid="session-filters" className="animate-slide-left stagger-1 w-full xl:w-56 shrink-0 glass-card p-4 space-y-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
           <Filter className="w-4 h-4" /> Filters
         </div>
@@ -158,7 +160,7 @@ export default function SessionsPage() {
         </div>
       </aside>
 
-      <div data-testid="session-list" className="flex-1 min-w-0 glass-card p-5">
+      <div data-testid="session-list" className="animate-fade-rise stagger-2 flex-1 min-w-0 glass-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <p className="text-xs text-slate-400 font-medium">
             {filtered.length} session{filtered.length !== 1 ? 's' : ''}
@@ -182,13 +184,16 @@ export default function SessionsPage() {
         </div>
 
         <div className="space-y-2">
-          {filtered.map(session => {
+          {filtered.map((session, i) => {
             const isExpanded = expandedId === session.sessionId;
             const totalTokens = session.inputTokens + session.outputTokens;
+            // Cap stagger at 6 so long lists don't cascade forever — items
+            // past the sixth just fade in without a delay.
+            const stagger = i < 6 ? `animate-fade-rise stagger-${i + 3}` : 'animate-fade-in';
             return (
               <div
                 key={session.sessionId}
-                className="border border-slate-100 rounded-xl p-4 hover:bg-slate-50/60 transition-colors"
+                className={`${stagger} border border-slate-100 rounded-xl p-4 hover:bg-slate-50/60 transition-colors`}
               >
                 <div
                   role="button"
@@ -250,10 +255,17 @@ export default function SessionsPage() {
                     ) : (
                       <p className="text-xs text-slate-400">No model breakdown available</p>
                     )}
-                    <div className="mt-2 pt-2 border-t border-slate-50 flex flex-wrap gap-4 text-xs text-slate-500">
+                    <div className="mt-2 pt-2 border-t border-slate-50 flex flex-wrap items-center gap-4 text-xs text-slate-500">
                       <span>Cache write: {fmtTokens(session.cacheCreationTokens)}</span>
                       <span>Cache read: {fmtTokens(session.cacheReadTokens)}</span>
                       <span className="font-mono text-slate-400 truncate">{session.sessionId}</span>
+                      <Link
+                        to={buildEventsLink(session.target, session.sessionId, session.projectPath)}
+                        onClick={event => event.stopPropagation()}
+                        className="ml-auto flex items-center gap-1 font-medium text-primary hover:underline"
+                      >
+                        View in Events <ArrowUpRight className="h-3 w-3" />
+                      </Link>
                     </div>
                   </div>
                 )}

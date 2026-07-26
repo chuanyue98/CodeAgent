@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.services.runner_service import TaskRunner
+from tests._helpers import write_fake_chat_cli
 
 
 class _FakeChatEngine:
@@ -29,26 +30,6 @@ class _FakeChatEngine:
         return cmd
 
 
-def _write_fake_cli(tmp_path: Path) -> Path:
-    """A fake CLI that emits JSONL matching each real engine's session-id field.
-
-    argv: [session_field, message, resumed_session_id?]
-    Emits one JSON line with the given field set to either the resumed id
-    (if provided) or a freshly synthesized one, plus the message echoed
-    back so tests can assert the command was built correctly.
-    """
-    script = tmp_path / "fake_cli.py"
-    script.write_text(
-        "import json, os, sys\n"
-        "field, message = sys.argv[1], sys.argv[2]\n"
-        "resumed = sys.argv[3] if len(sys.argv) > 3 else None\n"
-        "session_id = resumed or 'new-session-123'\n"
-        "print(json.dumps({field: session_id, 'echo': message, 'cwd': os.getcwd()}))\n",
-        encoding="utf-8",
-    )
-    return script
-
-
 def _wait_for_completion(runner: TaskRunner, task_id: str, timeout: float = 5.0):
     deadline = time.time() + timeout
     status = None
@@ -61,7 +42,7 @@ def _wait_for_completion(runner: TaskRunner, task_id: str, timeout: float = 5.0)
 
 
 def test_run_chat_turn_writes_jsonl_log_and_extracts_session_id(tmp_path, monkeypatch):
-    script = _write_fake_cli(tmp_path)
+    script = write_fake_chat_cli(tmp_path)
     fake_engine = _FakeChatEngine(script, "session_id")
     runner = TaskRunner(tmp_path)
     monkeypatch.setattr(runner, "_build_engine", lambda engine: fake_engine)
@@ -79,7 +60,7 @@ def test_run_chat_turn_writes_jsonl_log_and_extracts_session_id(tmp_path, monkey
 
 
 def test_run_chat_turn_resume_passes_session_id_through(tmp_path, monkeypatch):
-    script = _write_fake_cli(tmp_path)
+    script = write_fake_chat_cli(tmp_path)
     fake_engine = _FakeChatEngine(script, "thread_id")
     runner = TaskRunner(tmp_path)
     monkeypatch.setattr(runner, "_build_engine", lambda engine: fake_engine)
@@ -117,7 +98,7 @@ def test_run_chat_turn_requires_project_path(tmp_path):
 
 
 def test_run_chat_turn_uses_resumed_session_project(tmp_path, monkeypatch):
-    script = _write_fake_cli(tmp_path)
+    script = write_fake_chat_cli(tmp_path)
     fake_engine = _FakeChatEngine(script, "session_id")
     runner = TaskRunner(tmp_path)
     monkeypatch.setattr(runner, "_build_engine", lambda engine: fake_engine)
@@ -134,7 +115,7 @@ def test_run_chat_turn_uses_resumed_session_project(tmp_path, monkeypatch):
 
 
 def test_run_chat_turn_rejects_missing_project(tmp_path, monkeypatch):
-    script = _write_fake_cli(tmp_path)
+    script = write_fake_chat_cli(tmp_path)
     fake_engine = _FakeChatEngine(script, "session_id")
     runner = TaskRunner(tmp_path)
     monkeypatch.setattr(runner, "_build_engine", lambda engine: fake_engine)

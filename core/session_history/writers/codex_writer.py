@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from core.utils.atomic_write import atomic_write
+
 if TYPE_CHECKING:
     from core.session_history.models import UnifiedSession
 
@@ -158,8 +160,8 @@ def write_codex_session(session: UnifiedSession) -> str:
                     }
                     lines.append(json.dumps(func_output, ensure_ascii=False))
 
-    # Write the file
-    file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # Write the file atomically to prevent corruption on crash
+    atomic_write(file_path, "\n".join(lines) + "\n")
 
     # Also update the session index
     _update_session_index(new_session_id, session)
@@ -175,6 +177,7 @@ def _update_session_index(session_id: str, session: UnifiedSession) -> None:
         session: The source session (for title).
     """
     index_path = Path.home() / ".codex" / "session_index.jsonl"
+    index_path.parent.mkdir(parents=True, exist_ok=True)
     title = session.title or session.first_user_message[:80] or "Converted session"
 
     entry = {

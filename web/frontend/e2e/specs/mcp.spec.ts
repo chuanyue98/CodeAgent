@@ -25,6 +25,7 @@ test('adding a server makes it appear, and removing clears it', async ({ page })
   await page.getByPlaceholder('npx my-mcp-server --flag').fill('npx -y e2e-mcp');
   await page.getByRole('button', { name: 'Add Server' }).click();
   await expect(page.getByText('e2e-local')).toBeAttached();
+  page.once('dialog', dialog => dialog.accept());
   await page.getByTitle('Remove').click();
   await expect(page.getByText('No MCP servers configured.')).toBeVisible();
 });

@@ -1,10 +1,11 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
+import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router';
 import { Menu, X, AlertCircle } from 'lucide-react';
 import CommandPalette from './components/CommandPalette';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import SectionLayout from './components/SectionLayout';
 import SystemPanel from './components/SystemPanel';
+import ErrorBoundary from './components/shared/ErrorBoundary';
 import { useProject } from './context/ProjectContext';
 import {
   ACTIVITY_TABS,
@@ -34,6 +35,23 @@ const ChatPage = lazy(() => import('./components/ChatPage'));
 const CronPage = lazy(() => import('./components/CronPage'));
 const McpPage = lazy(() => import('./components/McpPage'));
 
+const routeFallback = (
+  <div className="flex h-96 items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
+);
+
+/**
+ * Gives each lazy-loaded page its own error + suspense boundary, so a
+ * render error (or a slow chunk load) in one page can't blank the whole
+ * app shell (nav/sidebar/other pages stay interactive).
+ */
+function page(element: ReactNode) {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={routeFallback}>{element}</Suspense>
+    </ErrorBoundary>
+  );
+}
+
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { pathname } = useLocation();
@@ -48,26 +66,26 @@ function App() {
     <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-transparent font-sans text-foreground">
       <div data-testid="app-shell" className="flex min-h-0 flex-1 gap-2 p-2 md:gap-4 md:p-4">
         <aside
-          className={`${
+          className={`animate-fade-in stagger-1 ${
             isSidebarOpen ? 'w-20 xl:w-64' : 'w-20 xl:w-24'
           } glass-card flex shrink-0 flex-col overflow-hidden transition-[width] duration-300`}
         >
-          <div className="flex items-center justify-center border-b border-slate-100 p-4 xl:justify-between xl:p-8">
+          <div className="flex items-center justify-center border-b border-slate-100 p-4 lg:justify-between lg:p-8">
             {isSidebarOpen && (
-              <span className="hidden text-2xl font-black uppercase tracking-tighter text-primary xl:inline">CodeAgent</span>
+              <span className="hidden text-2xl font-black uppercase tracking-tighter text-primary lg:inline">CodeAgent</span>
             )}
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               aria-label={isSidebarOpen ? 'Collapse navigation' : 'Expand navigation'}
               title={isSidebarOpen ? 'Collapse navigation' : 'Expand navigation'}
-              className={`hidden rounded-xl border border-transparent p-2 text-slate-600 transition-colors hover:border-slate-100 hover:bg-slate-50 xl:block ${!isSidebarOpen && 'mx-auto'}`}
+              className={`hidden rounded-xl border border-transparent p-2 text-slate-600 transition-colors hover:border-slate-100 hover:bg-slate-50 lg:block ${!isSidebarOpen && 'mx-auto'}`}
             >
               {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
-            <span className="text-xl font-black text-primary xl:hidden" aria-label="CodeAgent">CA</span>
+            <span className="text-xl font-black text-primary lg:hidden" aria-label="CodeAgent">CA</span>
           </div>
 
-          <nav aria-label="Primary navigation" className="custom-scrollbar mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto p-2 xl:mt-4 xl:p-4">
+          <nav aria-label="Primary navigation" className="custom-scrollbar mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto p-2 lg:mt-4 lg:p-4">
             {primaryNav.map(item => {
               const active = pathname === item.matchPrefix
                 || pathname.startsWith(`${item.matchPrefix}/`);
@@ -78,7 +96,7 @@ function App() {
                   aria-label={item.label}
                   aria-current={active ? 'page' : undefined}
                   title={item.label}
-                  className={`flex w-full items-center justify-center gap-4 rounded-2xl p-3 transition-colors xl:justify-start xl:p-4 ${
+                  className={`flex w-full items-center justify-center gap-4 rounded-2xl p-3 transition-colors lg:justify-start lg:p-4 ${
                     active
                       ? 'bg-primary/10 font-semibold text-primary'
                       : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
@@ -86,21 +104,22 @@ function App() {
                 >
                   <item.icon size={22} className={`shrink-0 ${active ? 'opacity-100' : 'opacity-70'}`} />
                   {isSidebarOpen && (
-                    <span className="hidden text-sm font-medium tracking-wide xl:inline">{item.label}</span>
+                    <span className="hidden text-sm font-medium tracking-wide lg:inline">{item.label}</span>
                   )}
                 </NavLink>
               );
             })}
           </nav>
 
-          <div className="border-t border-slate-100 bg-slate-50/50 p-3 text-center text-[10px] font-medium uppercase tracking-widest text-slate-400 xl:p-6 xl:text-xs">
-            <span className="xl:hidden">v1.0</span>
-            <span className="hidden xl:inline">{isSidebarOpen ? '© 2026 CodeAgent SYSTEM v1.0' : 'v1.0'}</span>
+          {/* Kept to one short line: the old uppercase "© 2026 CODEAGENT
+              SYSTEM V1.0" wrapped onto two rows and read louder than the nav. */}
+          <div className="border-t border-slate-100 bg-slate-50/50 p-3 text-center text-[10px] font-medium tracking-wide text-slate-400 lg:p-4">
+            v1.0
           </div>
         </aside>
 
         <main className="relative flex min-w-0 flex-1 flex-col gap-3 overflow-hidden md:gap-4">
-          <header className="flex min-w-0 items-center justify-between gap-3">
+          <header className="animate-fade-in stagger-2 relative z-50 flex min-w-0 items-center justify-between gap-3">
             <h1 className="min-w-0 truncate text-lg font-bold text-slate-800 md:text-xl">{pageLabel}</h1>
             <div className="flex shrink-0 items-center gap-2">
               <CommandPalette />
@@ -114,80 +133,78 @@ function App() {
               <span>Configuration error: {ctxError}</span>
             </div>
           )}
-          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1 md:pr-2">
-            <Suspense fallback={<div className="flex h-96 items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>}>
-              <Routes>
-                <Route path="/" element={<Navigate to="/home" replace />} />
-                <Route path="/home" element={<HomePage />} />
+          <div className="animate-fade-in stagger-3 custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1 md:pr-2">
+            <Routes>
+              <Route path="/" element={<Navigate to="/home" replace />} />
+              <Route path="/home" element={page(<HomePage />)} />
 
+              <Route
+                path="/agent"
+                element={<SectionLayout label="Agent" description="Conversations and local provider terminals in one workspace." tabs={AGENT_TABS} />}
+              >
+                <Route index element={<Navigate to="web" replace />} />
+                <Route path="web" element={page(<AgentWorkspace />)} />
+                <Route path="legacy" element={page(<ChatPage />)} />
+                <Route path="terminal" element={page(<LaunchPad />)} />
+              </Route>
+
+              <Route
+                path="/automations"
+                element={<SectionLayout label="Automations" description="Run repeatable work and manage schedules." tabs={AUTOMATION_TABS} />}
+              >
+                <Route index element={<Navigate to="tasks" replace />} />
+                <Route path="tasks" element={page(<TaskDashboard />)} />
+                <Route path="schedules" element={page(<CronPage />)} />
+              </Route>
+
+              <Route
+                path="/activity"
+                element={<SectionLayout label="Activity" description="Conversation history, agent events, usage, and logs." tabs={ACTIVITY_TABS} />}
+              >
+                <Route index element={<Navigate to="history" replace />} />
+                <Route path="history" element={page(<SessionsPage />)} />
+                <Route path="events" element={page(<AuditTrail />)} />
+                <Route path="analytics" element={page(<Analytics />)} />
+                <Route path="logs" element={page(<LogViewer />)} />
+              </Route>
+
+              <Route
+                path="/settings"
+                element={<SectionLayout label="Settings" description="Workspace configuration, capabilities, and system health." tabs={SETTINGS_TABS} />}
+              >
+                <Route index element={<Navigate to="workspace" replace />} />
+                <Route path="workspace" element={page(<ConfigHub />)} />
                 <Route
-                  path="/agent"
-                  element={<SectionLayout label="Agent" description="Conversations and local provider terminals in one workspace." tabs={AGENT_TABS} />}
+                  path="capabilities"
+                  element={<SectionLayout label="Capabilities" description="Resources configured for the selected project group." tabs={CAPABILITY_TABS} />}
                 >
-                  <Route index element={<Navigate to="web" replace />} />
-                  <Route path="web" element={<AgentWorkspace />} />
-                  <Route path="legacy" element={<ChatPage />} />
-                  <Route path="terminal" element={<LaunchPad />} />
+                  <Route index element={<Navigate to="skills" replace />} />
+                  <Route path="skills" element={page(<SkillGallery />)} />
+                  <Route path="prompts" element={page(<PromptsGallery />)} />
+                  <Route path="hooks" element={page(<HooksGallery />)} />
+                  <Route path="plugins" element={page(<PluginGallery />)} />
+                  <Route path="mcp" element={page(<McpPage />)} />
                 </Route>
+                <Route path="system" element={page(<SystemPage />)} />
+              </Route>
 
-                <Route
-                  path="/automations"
-                  element={<SectionLayout label="Automations" description="Run repeatable work and manage schedules." tabs={AUTOMATION_TABS} />}
-                >
-                  <Route index element={<Navigate to="tasks" replace />} />
-                  <Route path="tasks" element={<TaskDashboard />} />
-                  <Route path="schedules" element={<CronPage />} />
-                </Route>
-
-                <Route
-                  path="/activity"
-                  element={<SectionLayout label="Activity" description="Conversation history, agent events, usage, and logs." tabs={ACTIVITY_TABS} />}
-                >
-                  <Route index element={<Navigate to="history" replace />} />
-                  <Route path="history" element={<SessionsPage />} />
-                  <Route path="events" element={<AuditTrail />} />
-                  <Route path="analytics" element={<Analytics />} />
-                  <Route path="logs" element={<LogViewer />} />
-                </Route>
-
-                <Route
-                  path="/settings"
-                  element={<SectionLayout label="Settings" description="Workspace configuration, capabilities, and system health." tabs={SETTINGS_TABS} />}
-                >
-                  <Route index element={<Navigate to="workspace" replace />} />
-                  <Route path="workspace" element={<ConfigHub />} />
-                  <Route
-                    path="capabilities"
-                    element={<SectionLayout label="Capabilities" description="Resources configured for the selected project group." tabs={CAPABILITY_TABS} />}
-                  >
-                    <Route index element={<Navigate to="skills" replace />} />
-                    <Route path="skills" element={<SkillGallery />} />
-                    <Route path="prompts" element={<PromptsGallery />} />
-                    <Route path="hooks" element={<HooksGallery />} />
-                    <Route path="plugins" element={<PluginGallery />} />
-                    <Route path="mcp" element={<McpPage />} />
-                  </Route>
-                  <Route path="system" element={<SystemPage />} />
-                </Route>
-
-                <Route path="/launch" element={<Navigate to="/agent/terminal" replace />} />
-                <Route path="/chat" element={<Navigate to="/agent/web" replace />} />
-                <Route path="/dashboard" element={<Navigate to="/automations/tasks" replace />} />
-                <Route path="/cron" element={<Navigate to="/automations/schedules" replace />} />
-                <Route path="/logs" element={<Navigate to="/activity/logs" replace />} />
-                <Route path="/analytics" element={<Navigate to="/activity/analytics" replace />} />
-                <Route path="/sessions" element={<Navigate to="/activity/history" replace />} />
-                <Route path="/audit" element={<Navigate to="/activity/events" replace />} />
-                <Route path="/skills" element={<Navigate to="/settings/capabilities/skills" replace />} />
-                <Route path="/prompts" element={<Navigate to="/settings/capabilities/prompts" replace />} />
-                <Route path="/hooks" element={<Navigate to="/settings/capabilities/hooks" replace />} />
-                <Route path="/plugins" element={<Navigate to="/settings/capabilities/plugins" replace />} />
-                <Route path="/mcp" element={<Navigate to="/settings/capabilities/mcp" replace />} />
-                <Route path="/config" element={<Navigate to="/settings/workspace" replace />} />
-                <Route path="/system" element={<Navigate to="/settings/system" replace />} />
-                <Route path="*" element={<Navigate to="/home" replace />} />
-              </Routes>
-            </Suspense>
+              <Route path="/launch" element={<Navigate to="/agent/terminal" replace />} />
+              <Route path="/chat" element={<Navigate to="/agent/web" replace />} />
+              <Route path="/dashboard" element={<Navigate to="/automations/tasks" replace />} />
+              <Route path="/cron" element={<Navigate to="/automations/schedules" replace />} />
+              <Route path="/logs" element={<Navigate to="/activity/logs" replace />} />
+              <Route path="/analytics" element={<Navigate to="/activity/analytics" replace />} />
+              <Route path="/sessions" element={<Navigate to="/activity/history" replace />} />
+              <Route path="/audit" element={<Navigate to="/activity/events" replace />} />
+              <Route path="/skills" element={<Navigate to="/settings/capabilities/skills" replace />} />
+              <Route path="/prompts" element={<Navigate to="/settings/capabilities/prompts" replace />} />
+              <Route path="/hooks" element={<Navigate to="/settings/capabilities/hooks" replace />} />
+              <Route path="/plugins" element={<Navigate to="/settings/capabilities/plugins" replace />} />
+              <Route path="/mcp" element={<Navigate to="/settings/capabilities/mcp" replace />} />
+              <Route path="/config" element={<Navigate to="/settings/workspace" replace />} />
+              <Route path="/system" element={<Navigate to="/settings/system" replace />} />
+              <Route path="*" element={<Navigate to="/home" replace />} />
+            </Routes>
           </div>
         </main>
 

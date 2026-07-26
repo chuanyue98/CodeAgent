@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import shutil
 from collections.abc import AsyncIterator
 from typing import Any
 from uuid import uuid4
 
+from core.services.agent_adapters._event_queue import (
+    iter_events,
+    put_event_dropping_oldest,
+)
+from core.services.agent_adapters._jsonrpc_transport import JsonRpcStdioTransport
+from core.services.agent_adapters._process_lifecycle import graceful_terminate
 from core.services.agent_protocol import (
     AdapterEvent,
     ApprovalDecision,
@@ -35,15 +40,20 @@ class GeminiAdapter:
         self.executable = executable
         self._events: asyncio.Queue[AdapterEvent | None] = asyncio.Queue(queue_size)
         self._process: asyncio.subprocess.Process | None = None
-        self._reader_task: asyncio.Task | None = None
-        self._stderr_task: asyncio.Task | None = None
-        self._pending: dict[str, asyncio.Future] = {}
+        self._transport = JsonRpcStdioTransport(
+            protocol_error=GeminiProtocolError,
+            crash_label="Gemini ACP",
+            on_server_request=self._handle_server_request,
+            on_notification=self._handle_notification,
+            on_crash=self._emit_crash_event,
+            use_jsonrpc_envelope=True,
+            is_stopping=lambda: self._stopping,
+        )
         self._pending_approvals: dict[str, tuple[Any, list[dict[str, Any]], str]] = {}
+        self._approval_timeouts: dict[str, asyncio.Task] = {}
         self._turn_tasks: dict[str, asyncio.Task] = {}
         self._active_turns: dict[str, str] = {}
         self._message_text: dict[tuple[str, str], str] = {}
-        self._next_request_id = 1
-        self._write_lock = asyncio.Lock()
         self._unavailable_reason: str | None = None
         self._stopping = False
 
@@ -65,11 +75,10 @@ class GeminiAdapter:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            self._reader_task = asyncio.create_task(
-                self._read_loop(), name="gemini-acp-stdout"
-            )
-            self._stderr_task = asyncio.create_task(
-                self._drain_stderr(), name="gemini-acp-stderr"
+            self._transport.attach(
+                self._process,
+                reader_name="gemini-acp-stdout",
+                stderr_name="gemini-acp-stderr",
             )
             await self._request(
                 "initialize",
@@ -101,32 +110,11 @@ class GeminiAdapter:
         self._turn_tasks.clear()
         process = self._process
         self._process = None
-        if process and process.returncode is None:
-            process.terminate()
-            try:
-                await asyncio.wait_for(process.wait(), timeout=3)
-            except TimeoutError:
-                process.kill()
-                try:
-                    await asyncio.wait_for(process.wait(), timeout=5)
-                except TimeoutError:
-                    logger.warning(
-                        "Gemini ACP process (pid=%s) did not exit after SIGKILL; "
-                        "abandoning it to avoid blocking shutdown",
-                        process.pid,
-                    )
-        for subprocess_task in (self._reader_task, self._stderr_task):
-            if subprocess_task:
-                subprocess_task.cancel()
-        await asyncio.gather(
-            *(task for task in (self._reader_task, self._stderr_task) if task),
-            return_exceptions=True,
-        )
-        self._reader_task = self._stderr_task = None
-        for future in self._pending.values():
-            if not future.done():
-                future.set_exception(GeminiProtocolError("Gemini ACP stopped"))
-        self._pending.clear()
+        await graceful_terminate(process, logger=logger, label="Gemini ACP")
+        await self._transport.detach()
+        for task in self._approval_timeouts.values():
+            task.cancel()
+        self._approval_timeouts.clear()
         self._pending_approvals.clear()
         self._active_turns.clear()
         self._message_text.clear()
@@ -213,7 +201,7 @@ class GeminiAdapter:
         turn_id = f"gemini-turn-{uuid4().hex}"
         self._active_turns[provider_session_id] = turn_id
         self._message_text[(provider_session_id, turn_id)] = ""
-        await self._events.put(
+        self._put_event(
             AdapterEvent(
                 type="turn.started",
                 provider_session_id=provider_session_id,
@@ -241,7 +229,7 @@ class GeminiAdapter:
                 },
             )
             text = self._message_text.get((provider_session_id, turn_id), "")
-            await self._events.put(
+            self._put_event(
                 AdapterEvent(
                     type="message.completed",
                     provider_session_id=provider_session_id,
@@ -251,7 +239,7 @@ class GeminiAdapter:
             )
             usage = result.get("usage")
             if isinstance(usage, dict):
-                await self._events.put(
+                self._put_event(
                     AdapterEvent(
                         type="usage.updated",
                         provider_session_id=provider_session_id,
@@ -259,7 +247,7 @@ class GeminiAdapter:
                         data={"usage": usage},
                     )
                 )
-            await self._events.put(
+            self._put_event(
                 AdapterEvent(
                     type="turn.completed",
                     provider_session_id=provider_session_id,
@@ -270,7 +258,7 @@ class GeminiAdapter:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            await self._events.put(
+            self._put_event(
                 AdapterEvent(
                     type="error",
                     provider_session_id=provider_session_id,
@@ -278,7 +266,7 @@ class GeminiAdapter:
                     data={"code": "provider_error", "message": str(exc)},
                 )
             )
-            await self._events.put(
+            self._put_event(
                 AdapterEvent(
                     type="turn.completed",
                     provider_session_id=provider_session_id,
@@ -303,127 +291,135 @@ class GeminiAdapter:
     async def respond_to_approval(
         self, approval_id: str, decision: ApprovalDecision
     ) -> None:
-        pending = self._pending_approvals.pop(approval_id, None)
+        pending = self._pending_approvals.get(approval_id)
         if pending is None:
             raise GeminiProtocolError("Approval request is no longer pending")
         request_id, options, _session_id = pending
-        if decision == ApprovalDecision.CANCEL:
-            outcome = {"outcome": "cancelled"}
-        else:
-            desired_kind = {
-                ApprovalDecision.ACCEPT: "allow_once",
-                ApprovalDecision.ACCEPT_FOR_SESSION: "allow_always",
-                ApprovalDecision.DECLINE: "reject_once",
-            }[decision]
-            selected = next(
-                (option for option in options if option.get("kind") == desired_kind),
-                None,
-            )
-            if selected is None and decision == ApprovalDecision.ACCEPT_FOR_SESSION:
+        try:
+            if decision == ApprovalDecision.CANCEL:
+                outcome = {"outcome": "cancelled"}
+            else:
+                desired_kind = {
+                    ApprovalDecision.ACCEPT: "allow_once",
+                    ApprovalDecision.ACCEPT_FOR_SESSION: "allow_always",
+                    ApprovalDecision.DECLINE: "reject_once",
+                }[decision]
                 selected = next(
                     (
                         option
                         for option in options
-                        if option.get("kind") == "allow_once"
+                        if option.get("kind") == desired_kind
                     ),
                     None,
                 )
-            if selected is None:
-                raise GeminiProtocolError(
-                    f"Gemini did not offer a {desired_kind} permission option"
+                if selected is None and decision == ApprovalDecision.ACCEPT_FOR_SESSION:
+                    selected = next(
+                        (
+                            option
+                            for option in options
+                            if option.get("kind") == "allow_once"
+                        ),
+                        None,
+                    )
+                if selected is None:
+                    raise GeminiProtocolError(
+                        f"Gemini did not offer a {desired_kind} permission option"
+                    )
+                outcome = {"outcome": "selected", "optionId": selected["optionId"]}
+            await self._write(
+                {"jsonrpc": "2.0", "id": request_id, "result": {"outcome": outcome}}
+            )
+        except Exception:
+            # Validation failed or the write raised. The entry is still
+            # pending at this point, so make sure the server receives *some*
+            # response (a JSON-RPC error) instead of hanging forever, then
+            # remove the pending entry and surface the error to the caller.
+            try:
+                await self._write(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "error": {
+                            "code": -32603,
+                            "message": "Failed to resolve approval",
+                        },
+                    }
                 )
-            outcome = {"outcome": "selected", "optionId": selected["optionId"]}
-        await self._write(
-            {"jsonrpc": "2.0", "id": request_id, "result": {"outcome": outcome}}
-        )
+            except Exception:
+                pass
+            self._pending_approvals.pop(approval_id, None)
+            self._cancel_approval_timeout(approval_id)
+            raise
+        self._pending_approvals.pop(approval_id, None)
+        self._cancel_approval_timeout(approval_id)
 
-    async def events(self) -> AsyncIterator[AdapterEvent]:
-        while True:
-            event = await self._events.get()
-            if event is None:
-                return
-            yield event
+    def events(self) -> AsyncIterator[AdapterEvent]:
+        return iter_events(self._events)
+
+    def _put_event(self, event: AdapterEvent) -> None:
+        put_event_dropping_oldest(self._events, event, label="Gemini")
+
+    async def _emit_crash_event(self, error: Exception) -> None:
+        self._put_event(
+            AdapterEvent(
+                type="error",
+                provider_session_id="",
+                data={
+                    "code": "provider_crashed",
+                    "message": str(error),
+                    "retryable": True,
+                },
+            )
+        )
 
     async def _request(
         self, method: str, params: dict[str, Any], timeout: float = 120
     ) -> dict[str, Any]:
-        request_id = self._next_request_id
-        self._next_request_id += 1
-        future = asyncio.get_running_loop().create_future()
-        self._pending[str(request_id)] = future
-        await self._write(
-            {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
-        )
-        try:
-            result = await asyncio.wait_for(future, timeout=timeout)
-        finally:
-            self._pending.pop(str(request_id), None)
-        if not isinstance(result, dict):
-            raise GeminiProtocolError(f"{method} returned a non-object result")
-        return result
+        return await self._transport.request(method, params, timeout=timeout)
 
     async def _notify(self, method: str, params: dict[str, Any]) -> None:
-        await self._write({"jsonrpc": "2.0", "method": method, "params": params})
+        await self._transport.notify(method, params)
 
     async def _write(self, message: dict[str, Any]) -> None:
-        process = self._process
-        if not process or process.returncode is not None or not process.stdin:
-            raise GeminiProtocolError("Gemini ACP is not running")
-        encoded = (json.dumps(message, ensure_ascii=False) + "\n").encode()
-        async with self._write_lock:
-            process.stdin.write(encoded)
-            await process.stdin.drain()
+        await self._transport.write(message)
 
-    async def _read_loop(self) -> None:
-        assert self._process and self._process.stdout
-        try:
-            while line := await self._process.stdout.readline():
-                try:
-                    message = json.loads(line)
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    continue
-                request_id = message.get("id")
-                method = message.get("method")
-                if request_id is not None and method is None:
-                    future = self._pending.get(str(request_id))
-                    if future and not future.done():
-                        if "error" in message:
-                            future.set_exception(
-                                GeminiProtocolError(str(message["error"]))
-                            )
-                        else:
-                            future.set_result(message.get("result", {}))
-                elif request_id is not None and isinstance(method, str):
-                    await self._handle_server_request(message)
-                elif isinstance(method, str):
-                    await self._handle_notification(method, message.get("params") or {})
-        except asyncio.CancelledError:
-            raise
-        finally:
-            if not self._stopping and self._process is not None:
-                error = GeminiProtocolError("Gemini ACP exited unexpectedly")
-                for future in self._pending.values():
-                    if not future.done():
-                        future.set_exception(error)
-                await self._events.put(
-                    AdapterEvent(
-                        type="error",
-                        provider_session_id="",
-                        data={
-                            "code": "provider_crashed",
-                            "message": str(error),
-                            "retryable": True,
-                        },
-                    )
-                )
+    def _cancel_approval_timeout(self, approval_id: str) -> None:
+        """Cancels a pending approval timeout watcher, if any."""
+        task = self._approval_timeouts.pop(approval_id, None)
+        if task is not None:
+            task.cancel()
 
-    async def _drain_stderr(self) -> None:
-        assert self._process and self._process.stderr
+    async def _timeout_approval(self, approval_id: str) -> None:
+        """Auto-responds to an approval after 5 minutes so the server is never left waiting indefinitely.
+
+        Runs as a background task scheduled when the approval request arrives.
+        If the user responds in time the task is cancelled via
+        :meth:`_cancel_approval_timeout`; otherwise it sends a ``cancelled``
+        outcome to the server and clears the pending entry.
+        """
         try:
-            while await self._process.stderr.readline():
-                pass
+            await asyncio.sleep(300)
         except asyncio.CancelledError:
-            raise
+            return
+        pending = self._pending_approvals.pop(approval_id, None)
+        self._approval_timeouts.pop(approval_id, None)
+        if pending is None:
+            return
+        request_id = pending[0]
+        logger.warning(
+            "Gemini approval %s timed out after 300s; sending cancelled response",
+            approval_id,
+        )
+        try:
+            await self._write(
+                {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {"outcome": "cancelled"},
+                }
+            )
+        except Exception:
+            logger.debug("Failed to send timeout response for %s", approval_id)
 
     async def _handle_server_request(self, message: dict[str, Any]) -> None:
         method = message["method"]
@@ -434,10 +430,13 @@ class GeminiAdapter:
             options = params.get("options") or []
             session_id = params.get("sessionId", "")
             self._pending_approvals[approval_id] = (request_id, options, session_id)
+            self._approval_timeouts[approval_id] = asyncio.create_task(
+                self._timeout_approval(approval_id)
+            )
             tool_call = params.get("toolCall") or {}
             raw_input = tool_call.get("rawInput")
             command = raw_input.get("command") if isinstance(raw_input, dict) else None
-            await self._events.put(
+            self._put_event(
                 AdapterEvent(
                     type="approval.request",
                     provider_session_id=session_id,
@@ -497,7 +496,7 @@ class GeminiAdapter:
                 if isinstance(value, dict) and value.get("type") == "diff"
             ]
             if diffs:
-                await self._events.put(
+                self._put_event(
                     AdapterEvent(
                         type="file.diff",
                         provider_session_id=session_id,
@@ -511,7 +510,7 @@ class GeminiAdapter:
             data = {"usage": update}
 
         if event_type and session_id:
-            await self._events.put(
+            self._put_event(
                 AdapterEvent(
                     type=event_type,
                     provider_session_id=session_id,

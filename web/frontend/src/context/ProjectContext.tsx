@@ -3,11 +3,35 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
 import request from '../utils/request';
+
+// The workspace the user last worked in. Persisted so Agent, Tasks,
+// Schedules and Local Terminal all open on the same project instead of each
+// page independently defaulting to "the first registered path", and so a
+// reload doesn't throw the choice away.
+const WORKSPACE_STORAGE_KEY = 'codeagent.selectedWorkspace';
+
+function readStoredWorkspace(): string {
+  try {
+    return window.localStorage.getItem(WORKSPACE_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function writeStoredWorkspace(path: string): void {
+  try {
+    if (path) window.localStorage.setItem(WORKSPACE_STORAGE_KEY, path);
+    else window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+  } catch {
+    // Private-mode / blocked storage: selection still works for this session.
+  }
+}
 
 interface ProxyConfig {
   host: string;
@@ -42,6 +66,12 @@ interface ProjectContextType {
   setCurrentGroup: (group: string) => void;
   config: Config | null;
   projects: Project[];
+  /** Registered projects that have a path and are reachable on disk. */
+  validProjects: Project[];
+  /** Workspace shared by Agent / Tasks / Schedules / Terminal. */
+  selectedWorkspace: string;
+  /** Selects the workspace and follows it with the project's resource group. */
+  setSelectedWorkspace: (path: string) => void;
   groups: Record<string, GroupDefinition>;
   refreshConfig: () => Promise<void>;
   updateConfig: (newConfig: Config) => Promise<void>;
@@ -58,6 +88,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [groups, setGroups] = useState<Record<string, GroupDefinition>>({});
   const [availableGroups, setAvailableGroups] = useState<string[]>(['codeagent', 'common', 'work', 'web']);
   const [error, setError] = useState<string | null>(null);
+  const [selectedWorkspace, setSelectedWorkspaceState] = useState<string>(readStoredWorkspace);
   const currentGroupRef = useRef(currentGroup);
   useEffect(() => {
     currentGroupRef.current = currentGroup;
@@ -125,12 +156,46 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     void refreshConfig();
   }, [refreshConfig]);
 
+  const validProjects = useMemo(
+    () => projects.filter(project => project.path.trim() && project.available !== false),
+    [projects],
+  );
+
+  // Read through a ref so the setter keeps a stable identity -- consumers
+  // pass it straight to onChange handlers and effect deps.
+  const projectsRef = useRef<Project[]>(projects);
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
+
+  const setSelectedWorkspace = useCallback((path: string) => {
+    setSelectedWorkspaceState(path);
+    writeStoredWorkspace(path);
+    // The resource group is a property of the workspace, so following it
+    // here means no page has to remember to keep the two in sync (and the
+    // Group chip in the header never disagrees with the open project).
+    const project = projectsRef.current.find(item => item.path === path);
+    if (project?.group) setCurrentGroup(project.group);
+  }, []);
+
+  // Heal a selection that no longer resolves (project removed, path gone
+  // missing, or nothing chosen yet) by falling back to the first usable one.
+  useEffect(() => {
+    if (validProjects.length === 0) return;
+    if (validProjects.some(project => project.path === selectedWorkspace)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedWorkspace(validProjects[0].path);
+  }, [selectedWorkspace, setSelectedWorkspace, validProjects]);
+
   return (
     <ProjectContext.Provider value={{
       currentGroup,
       setCurrentGroup,
       config,
       projects,
+      validProjects,
+      selectedWorkspace,
+      setSelectedWorkspace,
       groups,
       refreshConfig,
       updateConfig,

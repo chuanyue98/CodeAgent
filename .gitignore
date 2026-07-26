@@ -35,8 +35,6 @@ repos_fix_by_pr/
 # Build artifacts
 codeagent.egg-info/
 dist/
-!web/frontend/dist/
-!web/frontend/dist/**
 *.egg
 .opencode/
 .claude/

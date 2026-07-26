@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Save, Loader2, Plus, Trash2, Folder, Layers, Globe, Zap, Check, X } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Save, Loader2, Plus, Trash2, Folder, Layers, Globe, Zap, Check, X, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useProject, type Config, type GroupDefinition, type Project } from '../context/ProjectContext';
 import request from '../utils/request';
 
@@ -38,11 +38,51 @@ const ConfigHub: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const [addingGroup, setAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const newGroupInputRef = useRef<HTMLInputElement>(null);
 
+  // Tracks whether the user has unsaved local edits. While dirty, the sync
+  // effect below must NOT overwrite local state from context (which would
+  // discard those edits). It is cleared after a successful save so the next
+  // context refresh can repopulate local state with the persisted values.
+  //
+  // Deliberately a plain flag rather than the derived `dirty` below: the sync
+  // effect *writes* the state `dirty` is computed from (and mints fresh uiIds
+  // each pass), so guarding it on a derived value would re-trigger it forever.
+  const [isDirty, setIsDirty] = useState(false);
+
+  // Serialized snapshot of what the server last confirmed. Drives the save
+  // bar only, so it can say "nothing to save" instead of always looking
+  // actionable -- and unlike the flag, it clears itself when an edit is
+  // manually undone back to the saved values.
+  const savedSnapshot = useMemo(
+    () => JSON.stringify({
+      resourceRoot: config?.paths?.resource_root || '',
+      projects: projects.map(({ path, group }) => ({ path, group })),
+      proxies: (config?.proxy || []).map(({ host, port }) => ({ host, port })),
+      groups,
+    }),
+    [config, projects, groups],
+  );
+  const draftSnapshot = useMemo(
+    () => JSON.stringify({
+      resourceRoot: localConfig?.paths?.resource_root || '',
+      projects: localProjects.map(({ path, group }) => ({ path, group })),
+      proxies: localProxies.map(({ host, port }) => ({ host, port })),
+      groups: localGroups,
+    }),
+    [localConfig, localProjects, localProxies, localGroups],
+  );
+  const dirty = !loading && savedSnapshot !== draftSnapshot;
+
   useEffect(() => {
+    // Context data may change (e.g. a resource toggle in another view calls
+    // refreshConfig). If the user has unsaved edits here, keep them and skip
+    // the reset; we only re-sync from context when there are no local edits.
+    if (isDirty) return;
+
     if (config) {
       const cloned = deepClone(config);
       if (!cloned.proxy) cloned.proxy = [];
@@ -66,9 +106,10 @@ const ConfigHub: React.FC = () => {
       setLocalGroups(deepClone(groups));
       setLoading(false);
     }
-  }, [config, projects, groups]);
+  }, [config, projects, groups, isDirty]);
 
   const handleSave = async () => {
+    setSaved(false);
     const normalizedProjects = localProjects.map(({ path, group }) => ({
       path: path.trim(),
       group: group.trim(),
@@ -99,6 +140,11 @@ const ConfigHub: React.FC = () => {
 
       await refreshConfig();
       setError(null);
+      // Local edits are now persisted. Clear the dirty flag so the sync effect
+      // (re-triggered by refreshConfig) is allowed to repopulate local state
+      // from the freshly-fetched context.
+      setIsDirty(false);
+      setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -106,13 +152,23 @@ const ConfigHub: React.FC = () => {
     }
   };
 
+  // Clear the success confirmation once it has been read, so it never lingers
+  // next to edits it does not describe.
+  useEffect(() => {
+    if (!saved) return;
+    const timer = window.setTimeout(() => setSaved(false), 4000);
+    return () => window.clearTimeout(timer);
+  }, [saved]);
+
   const updateProxy = (uiId: string, field: keyof ProxyConfig, value: string | number) => {
+    setIsDirty(true);
     setLocalProxies(current => current.map(proxy => (
       proxy.uiId === uiId ? { ...proxy, [field]: value } : proxy
     )));
   };
 
   const addProxy = () => {
+    setIsDirty(true);
     setLocalProxies(current => [
       ...current,
       { uiId: createEditableRowId('proxy'), host: '127.0.0.1', port: 7890 },
@@ -120,11 +176,13 @@ const ConfigHub: React.FC = () => {
   };
 
   const removeProxy = (uiId: string) => {
+    setIsDirty(true);
     setLocalProxies(current => current.filter(proxy => proxy.uiId !== uiId));
   };
 
   // Project Registry Handlers
   const addProject = () => {
+    setIsDirty(true);
     setLocalProjects(current => [
       ...current,
       { uiId: createEditableRowId('project'), path: '', group: 'common' },
@@ -132,12 +190,14 @@ const ConfigHub: React.FC = () => {
   };
 
   const updateProject = (uiId: string, field: keyof Project, value: string) => {
+    setIsDirty(true);
     setLocalProjects(current => current.map(project => (
       project.uiId === uiId ? { ...project, [field]: value } : project
     )));
   };
 
   const removeProject = (uiId: string) => {
+    setIsDirty(true);
     setLocalProjects(current => current.filter(project => project.uiId !== uiId));
   };
 
@@ -151,6 +211,7 @@ const ConfigHub: React.FC = () => {
   const confirmAddGroup = () => {
     const name = newGroupName.trim().toLowerCase().replace(/\s+/g, '-');
     if (name && !localGroups[name]) {
+      setIsDirty(true);
       setLocalGroups({
         ...localGroups,
         [name]: { skills: [], prompts: [], hooks: [], plugins: [] }
@@ -165,12 +226,35 @@ const ConfigHub: React.FC = () => {
     setNewGroupName('');
   };
 
+  // Every edit on this page is a draft -- nothing reaches config.json until
+  // "Save All Changes". So removals need no modal confirm; the save bar makes
+  // the pending change visible and "Discard changes" undoes it.
   const removeGroup = (name: string) => {
-    if (window.confirm(`Delete group "${name}"?`)) {
-      const newGroups = { ...localGroups };
-      delete newGroups[name];
-      setLocalGroups(newGroups);
-    }
+    setIsDirty(true);
+    const newGroups = { ...localGroups };
+    delete newGroups[name];
+    setLocalGroups(newGroups);
+  };
+
+  const discardChanges = () => {
+    if (!config) return;
+    const cloned = deepClone(config);
+    if (!cloned.proxy) cloned.proxy = [];
+    else if (!Array.isArray(cloned.proxy)) cloned.proxy = [cloned.proxy];
+    if (!cloned.paths) cloned.paths = {};
+    setLocalConfig(cloned);
+    setLocalProjects(
+      deepClone(projects).map(project => ({ ...project, uiId: createEditableRowId('project') })),
+    );
+    setLocalProxies(
+      (cloned.proxy || []).map(proxy => ({ ...proxy, uiId: createEditableRowId('proxy') })),
+    );
+    setLocalGroups(deepClone(groups));
+    setError(null);
+    setSaved(false);
+    // Hand control back to the sync effect now that local state matches
+    // context again.
+    setIsDirty(false);
   };
 
   if (loading || !localConfig) {
@@ -182,23 +266,16 @@ const ConfigHub: React.FC = () => {
   }
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 lg:space-y-8 min-h-full pb-20">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 pb-4">
-        <div>
-          <p className="text-sm text-slate-500">Manage projects, groups, and system settings in one place</p>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl hover:opacity-90 disabled:opacity-50 transition-all font-semibold shadow-lg shadow-primary/20 active:scale-95 text-sm"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          Save All Changes
-        </button>
+    <div className="p-3 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 lg:space-y-8 min-h-full pb-28">
+      <div className="pb-4">
+        <p className="text-sm text-slate-500">Manage projects, groups, and system settings in one place</p>
+        <p className="mt-1 text-xs text-slate-400">
+          Edits here are a draft — nothing is written to <code className="bg-slate-100 px-1 rounded text-slate-600">config.json</code> until you save.
+        </p>
       </div>
 
       {error && (
-        <div className="p-4 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl text-sm font-medium">
+        <div role="alert" className="p-4 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl text-sm font-medium">
           Error: {error}
         </div>
       )}
@@ -230,6 +307,7 @@ const ConfigHub: React.FC = () => {
               type="text"
               value={localConfig.paths?.resource_root || ''}
               onChange={(e) => {
+                setIsDirty(true);
                 const newPaths = { ...(localConfig.paths || {}), resource_root: e.target.value };
                 setLocalConfig({ ...localConfig, paths: newPaths });
               }}
@@ -261,17 +339,33 @@ const ConfigHub: React.FC = () => {
         </div>
 
         <div className="space-y-3">
-          {localProjects.map((p, i) => (
+          {localProjects.map((p, i) => {
+            // `available` comes from the server's last scan, so it only
+            // describes rows that were already saved -- a freshly typed path
+            // is "unknown", not "broken", until the next save + refresh.
+            const savedProject = projects.find(project => project.path === p.path.trim());
+            const missing = Boolean(p.path.trim()) && savedProject?.available === false;
+            return (
             <div key={p.uiId} className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center bg-slate-50/30 p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
-              <input
-                id={`project-path-${p.uiId}`}
-                type="text"
-                aria-label={`Project path ${i + 1}`}
-                value={p.path}
-                onChange={(e) => updateProject(p.uiId, 'path', e.target.value)}
-                placeholder="E:/your/project/path"
-                className="flex-1 p-2 bg-transparent border-b border-slate-200 focus:border-primary outline-none text-sm font-mono"
-              />
+              <div className="flex-1 min-w-0">
+                <input
+                  id={`project-path-${p.uiId}`}
+                  type="text"
+                  aria-label={`Project path ${i + 1}`}
+                  value={p.path}
+                  onChange={(e) => updateProject(p.uiId, 'path', e.target.value)}
+                  placeholder="/absolute/path/to/your/project"
+                  className={`w-full p-2 bg-transparent border-b outline-none text-sm font-mono ${
+                    missing ? 'border-amber-400 text-amber-800' : 'border-slate-200 focus:border-primary'
+                  }`}
+                />
+                {missing && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-700">
+                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                    This path was not found on disk, so it is hidden from every workspace picker.
+                  </p>
+                )}
+              </div>
               <select
                 id={`project-group-${p.uiId}`}
                 aria-label={`Resource group for project ${i + 1}`}
@@ -281,12 +375,25 @@ const ConfigHub: React.FC = () => {
               >
                 {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
-              <button aria-label={`Remove project ${p.path || i + 1}`} onClick={() => removeProject(p.uiId)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
+              <button aria-label={`Remove project ${p.path || i + 1}`} title="Unregister this project" onClick={() => removeProject(p.uiId)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
                 <Trash2 size={18} />
               </button>
             </div>
-          ))}
-          {localProjects.length === 0 && <p className="text-center py-8 text-slate-500 text-sm italic">No projects registered. Add one to get started.</p>}
+            );
+          })}
+          {localProjects.length === 0 && (
+            <div className="text-center py-8 space-y-2">
+              <p className="text-slate-500 text-sm">No projects registered yet.</p>
+              <p className="text-xs text-slate-400">
+                Add the absolute path of a directory you want CodeAgent to work in — for example
+                {' '}<code className="bg-slate-100 px-1 rounded text-slate-600 font-mono">/home/you/code/my-app</code>.
+                The agent never operates outside a registered path.
+              </p>
+              <button onClick={addProject} className="mt-1 inline-flex items-center gap-2 text-xs font-semibold text-primary bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-all">
+                <Plus className="w-4 h-4" /> Add your first project
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -392,6 +499,44 @@ const ConfigHub: React.FC = () => {
           ))}
         </div>
       </section>
+
+      {/* Sticky save bar: the Save button used to sit at the very top, so on
+          a long form you had to scroll back up to commit an edit made at the
+          bottom -- and nothing ever confirmed that the save landed. */}
+      <div className="sticky bottom-0 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 pb-3 pt-2">
+        <div className="glass-card flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <p aria-live="polite" className="text-xs font-medium">
+            {saved ? (
+              <span className="flex items-center gap-1.5 text-emerald-600">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Saved to config.json
+              </span>
+            ) : dirty ? (
+              <span className="text-amber-700">Unsaved changes</span>
+            ) : (
+              <span className="text-slate-400">All changes saved</span>
+            )}
+          </p>
+          <div className="flex items-center gap-2">
+            {dirty && (
+              <button
+                onClick={discardChanges}
+                disabled={saving}
+                className="px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors font-medium text-sm"
+              >
+                Discard changes
+              </button>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={saving || !dirty}
+              className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold shadow-lg shadow-primary/20 active:scale-95 text-sm"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save All Changes
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

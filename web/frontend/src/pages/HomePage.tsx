@@ -1,5 +1,5 @@
-import { ArrowRight, Bot, Clock, History, Settings, Terminal } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ArrowRight, ArrowUpRight, Bot, Clock, History, Settings, Terminal } from 'lucide-react';
+import { Link } from 'react-router';
 
 const QUICK_ACTIONS = [
   {
@@ -34,38 +34,193 @@ const QUICK_ACTIONS = [
   },
 ] as const;
 
-export default function HomePage() {
-  return (
-    <div className="mx-auto max-w-5xl space-y-6 p-2 sm:p-4 lg:p-8">
-      <section className="glass-card overflow-hidden p-6 sm:p-8">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-primary">CodeAgent Workspace</p>
-        <h2 className="max-w-2xl text-2xl font-bold text-slate-900 sm:text-3xl">
-          Start with the work you want to do.
-        </h2>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
-          Agent conversations, terminal sessions, automations, activity, and configuration are now grouped by workflow instead of exposed as separate top-level tools.
-        </p>
-      </section>
+// Faux recent-event feed shown in the hero. Static copy — meant to convey
+// "the workspace is alive" rather than reflect real telemetry.
+const RECENT_EVENTS = [
+  { kind: 'agent.session.started',  ago: '2s',   tone: 'live'  },
+  { kind: 'task.completed',         ago: '14s',  tone: 'ok'    },
+  { kind: 'schedule.fired',         ago: '1m',   tone: 'idle'  },
+  { kind: 'hook.executed',          ago: '3m',   tone: 'idle'  },
+] as const;
 
-      <section aria-labelledby="quick-actions-heading">
-        <h2 id="quick-actions-heading" className="mb-3 text-sm font-semibold text-slate-700">Quick actions</h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {QUICK_ACTIONS.map(({ to, title, description, icon: Icon }) => (
-            <Link key={to} to={to} className="group glass-card flex min-h-36 flex-col justify-between p-5 hover:border-primary/30 hover:bg-white">
-              <div>
-                <div className="mb-3 inline-flex rounded-xl bg-primary/10 p-2 text-primary">
-                  <Icon className="h-5 w-5" />
-                </div>
-                <h3 className="text-base font-semibold text-slate-800">{title}</h3>
-                <p className="mt-1.5 text-xs leading-5 text-slate-500">{description}</p>
-              </div>
-              <span className="mt-4 flex items-center gap-1 text-xs font-semibold text-primary">
-                Open <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+const EQ_BARS = [0.4, 0.7, 1, 0.55, 0.85, 0.35, 0.65, 0.5, 0.9, 0.3, 0.75, 0.45];
+
+export default function HomePage() {
+  // The first two actions get the wide/tall bento slots; the rest fill in.
+  const [webAgent, localTerminal, automations, activity, capabilities] = QUICK_ACTIONS;
+
+  return (
+    <div className="mx-auto w-full max-w-7xl space-y-3 p-2 sm:space-y-4 sm:p-4 lg:p-6">
+      {/* Bento grid: asymmetric — hero spans 2x2, web-agent spans 2-wide,
+          terminal is tall, capabilities is a full-width closing strip. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+
+        {/* ===== HERO ===== */}
+        <section
+          className="animate-fade-rise stagger-1 glass-card-feature group relative flex min-h-[20rem] flex-col justify-between overflow-hidden p-6 sm:p-8 lg:col-span-2 lg:row-span-2 lg:min-h-[26rem]"
+          aria-labelledby="hero-heading"
+        >
+          {/* Decorative orbit halo behind the copy */}
+          <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 opacity-60">
+            <div className="animate-orbit absolute inset-0 rounded-full border border-primary/20" />
+            <div className="animate-orbit absolute inset-6 rounded-full border border-primary/10" style={{ animationDuration: '32s' }} />
+            <div className="animate-orbit absolute inset-12 rounded-full border border-primary/5" style={{ animationDuration: '40s' }} />
+            <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/40 blur-[1px]" />
+          </div>
+
+          {/* Spotlight gradient that follows the card surface */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent" />
+
+          <div className="relative">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.06] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-pulse-ring absolute inline-flex h-full w-full rounded-full bg-primary" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
               </span>
-            </Link>
+              CodeAgent Workspace
+            </div>
+            <h2 id="hero-heading" className="max-w-xl text-3xl font-bold leading-[1.05] text-slate-900 sm:text-4xl lg:text-5xl">
+              Start with the <span className="font-display italic text-primary">work</span> you want to do.
+            </h2>
+            <p className="mt-4 max-w-md text-sm leading-6 text-slate-500">
+              Agent conversations, terminal sessions, automations, activity, and configuration — grouped by workflow instead of scattered as separate top-level tools.
+            </p>
+          </div>
+
+          {/* Live activity strip — gives the hero information density. */}
+          <div className="relative mt-8 space-y-3">
+            {/* Equalizer decoration */}
+            <div aria-hidden className="flex h-10 items-end gap-[3px]">
+              {EQ_BARS.map((h, i) => (
+                <span
+                  key={i}
+                  className="eq-bar w-1.5 rounded-full bg-gradient-to-t from-primary/30 to-primary"
+                  style={{ height: `${h * 100}%`, animationDelay: `${i * 70}ms` }}
+                />
+              ))}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/70 bg-white/60 p-3 backdrop-blur-sm">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">recent activity</span>
+                <Link
+                  to="/activity/history"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary transition-colors hover:text-primary/80"
+                >
+                  View all <ArrowUpRight className="h-3 w-3" />
+                </Link>
+              </div>
+              <ul className="space-y-1.5">
+                {RECENT_EVENTS.map(({ kind, ago, tone }) => (
+                  <li key={kind} className="flex items-center justify-between gap-2 font-mono text-xs">
+                    <span className="flex min-w-0 items-center gap-2 text-slate-600">
+                      <span
+                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                          tone === 'live' ? 'animate-pulse-soft bg-emerald-500'
+                          : tone === 'ok'   ? 'bg-primary'
+                          : 'bg-slate-300'
+                        }`}
+                      />
+                      <span className="truncate">{kind}</span>
+                    </span>
+                    <span className="shrink-0 text-slate-400">{ago}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        {/* ===== WEB AGENT (wide) ===== */}
+        <TileLink action={webAgent} className="animate-fade-rise stagger-2 lg:col-span-2" featured />
+
+        {/* ===== LOCAL TERMINAL (tall) ===== */}
+        <TileLink action={localTerminal} className="animate-fade-rise stagger-3 lg:row-span-2" mono />
+
+        {/* ===== AUTOMATIONS ===== */}
+        <TileLink action={automations} className="animate-fade-rise stagger-4" />
+
+        {/* ===== ACTIVITY (wide) ===== */}
+        <TileLink action={activity} className="animate-fade-rise stagger-5 lg:col-span-2" chart />
+
+        {/* ===== CAPABILITIES (full-width strip) ===== */}
+        <TileLink action={capabilities} className="animate-fade-rise stagger-6 lg:col-span-4" strip />
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Tile sub-component ---------- */
+
+interface TileLinkProps {
+  action: typeof QUICK_ACTIONS[number];
+  className?: string;
+  featured?: boolean;
+  mono?: boolean;
+  chart?: boolean;
+  strip?: boolean;
+}
+
+function TileLink({ action, className = '', featured, mono, chart, strip }: TileLinkProps) {
+  const { to, title, description, icon: Icon } = action;
+
+  return (
+    <Link
+      to={to}
+      aria-label={title}
+      className={`glass-card group relative flex min-h-36 flex-col justify-between overflow-hidden p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-white hover:shadow-[0_28px_40px_-16px_rgba(15,23,42,0.12)] ${className}`}
+    >
+      {/* Hover spotlight sweep */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-primary/[0.04] to-transparent transition-transform duration-700 group-hover:translate-x-full"
+      />
+
+      <div className="relative flex items-start justify-between gap-3">
+        <div className={`inline-flex rounded-xl p-2.5 text-primary transition-colors ${
+          featured ? 'bg-primary/15' : 'bg-primary/10 group-hover:bg-primary/15'
+        }`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <ArrowRight className="h-4 w-4 text-slate-300 transition-all duration-300 group-hover:translate-x-0.5 group-hover:text-primary" />
+      </div>
+
+      <div className="relative mt-4">
+        <h3 className={`text-base font-semibold text-slate-800 ${mono ? 'font-mono' : ''}`}>
+          {title}
+        </h3>
+        <p className="mt-1.5 text-xs leading-5 text-slate-500">{description}</p>
+      </div>
+
+      {/* Per-tile flourish — gives each card a distinct silhouette. */}
+      {chart && (
+        <div aria-hidden className="relative mt-4 flex h-8 items-end gap-1">
+          {[0.35, 0.55, 0.4, 0.75, 0.5, 0.9, 0.6, 0.45, 0.7].map((h, i) => (
+            <span
+              key={i}
+              className="flex-1 rounded-sm bg-gradient-to-t from-primary/20 to-primary/60 opacity-70 transition-opacity group-hover:opacity-100"
+              style={{ height: `${h * 100}%` }}
+            />
           ))}
         </div>
-      </section>
-    </div>
+      )}
+
+      {strip && (
+        <div aria-hidden className="relative mt-4 flex flex-wrap gap-1.5">
+          {['Skills', 'Prompts', 'Hooks', 'Plugins', 'MCP'].map(tag => (
+            <span key={tag} className="rounded-full border border-slate-200 bg-white/60 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {mono && (
+        <div aria-hidden className="relative mt-4 font-mono text-[11px] leading-relaxed text-slate-400">
+          <div><span className="text-emerald-500">$</span> ca --provider claude</div>
+          <div className="text-slate-400">▍ ready</div>
+        </div>
+      )}
+    </Link>
   );
 }

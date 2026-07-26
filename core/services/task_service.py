@@ -8,6 +8,10 @@ from pathlib import Path
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
 
 
+def is_valid_task_name(name: str) -> bool:
+    return bool(_SAFE_NAME_RE.match(name))
+
+
 class TaskService:
     """Service for listing and reading tasks from the tasks directory."""
 
@@ -22,6 +26,45 @@ class TaskService:
         for md_file in sorted(self.tasks_root.glob("*.md")):
             tasks.append(self._parse_task(md_file, full_content=False))
         return tasks
+
+    def create_task(
+        self,
+        name: str,
+        title: str,
+        objective: str = "",
+        context: str = "",
+        instructions: str = "",
+        verification: str = "",
+    ) -> dict:
+        """Writes a new task blueprint as a plain ``.md`` file in the tasks root.
+
+        Follows the four-section structure (Objective/Context/Instructions/
+        Verification) documented in ``skills/base/task-authoring/SKILL.md``.
+        """
+        if not is_valid_task_name(name):
+            raise ValueError("Task name must match [\\w.-]+")
+
+        self.tasks_root.mkdir(parents=True, exist_ok=True)
+        path = self.tasks_root / f"{name}.md"
+        if not path.resolve().is_relative_to(self.tasks_root.resolve()):
+            raise ValueError("Invalid task name")
+
+        content = (
+            f"# {title or name}\n\n"
+            f"## Objective (目标)\n{objective}\n\n"
+            f"## Context (背景)\n{context}\n\n"
+            f"## Instructions (指令)\n{instructions}\n\n"
+            f"## Verification (验证)\n{verification}\n"
+        )
+        try:
+            # Exclusive-create ("x") makes the existence check and the write
+            # atomic, closing the TOCTOU window a separate exists()-then-write
+            # would leave between two concurrent requests for the same name.
+            with path.open("x", encoding="utf-8") as f:
+                f.write(content)
+        except FileExistsError as exc:
+            raise FileExistsError(f"Task '{name}' already exists") from exc
+        return self._parse_task(path, full_content=True)
 
     def get_task(self, name: str, log_path: str | None = None) -> dict | None:
         if not _SAFE_NAME_RE.match(name):

@@ -23,6 +23,10 @@ from claude_agent_sdk import (
     ToolUseBlock,
 )
 
+from core.services.agent_adapters._event_queue import (
+    iter_events,
+    put_event_dropping_oldest,
+)
 from core.services.agent_protocol import (
     AdapterEvent,
     ApprovalDecision,
@@ -240,12 +244,8 @@ class ClaudeAdapter:
             )
         future.set_result(result)
 
-    async def events(self) -> AsyncIterator[AdapterEvent]:
-        while True:
-            event = await self._events.get()
-            if event is None:
-                return
-            yield event
+    def events(self) -> AsyncIterator[AdapterEvent]:
+        return iter_events(self._events)
 
     def _require_started(self) -> None:
         if not self._started:
@@ -301,7 +301,12 @@ class ClaudeAdapter:
                 )
             )
             try:
-                return await future
+                return await asyncio.wait_for(future, timeout=300)
+            except asyncio.TimeoutError:
+                return PermissionResultDeny(
+                    message="Approval timed out after 300 seconds of inactivity",
+                    interrupt=True,
+                )
             finally:
                 self._pending_approvals.pop(approval_id, None)
 
@@ -363,6 +368,20 @@ class ClaudeAdapter:
         finally:
             self._active_turns.pop(session_id, None)
             self._current_message_ids.pop(session_id, None)
+            self._cleanup_session_tools(session_id)
+
+    def _cleanup_session_tools(self, session_id: str) -> None:
+        """Removes all ``_started_tools`` entries for a session.
+
+        ``_started_tools`` is normally drained as each ``ToolResultBlock``
+        arrives, but when a turn is interrupted (stream error, cancellation,
+        or a tool that never returns a result) those entries would leak
+        forever. This is invoked from the turn lifecycle cleanup path
+        (completed / failed / cancelled) so the set cannot grow unbounded.
+        """
+        self._started_tools = {
+            (sid, tool_id) for sid, tool_id in self._started_tools if sid != session_id
+        }
 
     def _translate_message(
         self, session_id: str, turn_id: str, message: Any
@@ -502,21 +521,4 @@ class ClaudeAdapter:
         return []
 
     def _put_event(self, event: AdapterEvent) -> None:
-        try:
-            self._events.put_nowait(event)
-        except asyncio.QueueFull:
-            try:
-                self._events.get_nowait()
-            except asyncio.QueueEmpty:
-                pass
-            self._events.put_nowait(
-                AdapterEvent(
-                    type="error",
-                    provider_session_id="",
-                    data={
-                        "code": "provider_backpressure",
-                        "message": "Claude event queue overflowed",
-                        "retryable": True,
-                    },
-                )
-            )
+        put_event_dropping_oldest(self._events, event, label="Claude")

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Send, MessageSquare, Plus, AlertCircle, Loader2, RotateCcw, Square, FolderGit2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Send, MessageSquare, Plus, AlertCircle, Loader2, RotateCcw, Square, FolderGit2, ArrowDown } from 'lucide-react';
+import { Link } from 'react-router';
 import { useProject } from '../context/ProjectContext';
+import request from '../utils/request';
 import MarkdownMessage from './MarkdownMessage';
 import SessionCapabilities from './SessionCapabilities';
 import {
@@ -15,6 +16,7 @@ import {
 } from '../api/chat';
 
 interface ChatMessage {
+  id: string;
   role: 'user' | 'assistant' | 'error';
   text: string;
 }
@@ -92,6 +94,9 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  // Pauses auto-scroll while the user is reading history, so streaming
+  // output no longer yanks them back to the bottom on every token.
+  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
 
   const { events, done, error: streamError } = useChatTurnStream(turnId);
 
@@ -175,24 +180,15 @@ export default function ChatPage() {
     }
     setError(null);
     try {
-      const res = await fetch(
+      const detail = await request<{ messages: SessionDetailMessage[] }>(
         `/api/history/${session.engine}/${session.session_id}?project=${encodeURIComponent(session.project_path)}`,
       );
-      if (res.ok) {
-        const detail = await res.json();
-        const priorMessages: SessionDetailMessage[] = detail.messages || [];
-        setMessages(
-          priorMessages
-            .filter(m => m.role === 'user' || m.role === 'assistant')
-            .map(m => ({ role: m.role as 'user' | 'assistant', text: m.content || '' })),
-        );
-      } else {
-        setError('Failed to load session history');
-        setActiveSessionId(null);
-        setActiveProjectPath(null);
-        setUnregisteredSessionPath(null);
-        setMessages([]);
-      }
+      const priorMessages: SessionDetailMessage[] = detail?.messages || [];
+      setMessages(
+        priorMessages
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => ({ id: crypto.randomUUID(), role: m.role as 'user' | 'assistant', text: m.content || '' })),
+      );
     } catch {
       setError('Failed to load session history');
       setActiveSessionId(null);
@@ -207,10 +203,10 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages(prev => {
       if (done.status !== 'completed') {
-        return [...prev, { role: 'error', text: `Turn ${done.status}` }];
+        return [...prev, { id: crypto.randomUUID(), role: 'error' as const, text: `Turn ${done.status}` }];
       }
       if (pendingText) {
-        return [...prev, { role: 'assistant', text: pendingText }];
+        return [...prev, { id: crypto.randomUUID(), role: 'assistant' as const, text: pendingText }];
       }
       return prev;
     });
@@ -233,8 +229,21 @@ export default function ChatPage() {
   }, [streamError]);
 
   useEffect(() => {
+    if (isUserScrolledUp) return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, pendingText]);
+  }, [messages, pendingText, isUserScrolledUp]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setIsUserScrolledUp(distanceFromBottom > 120);
+  };
+
+  const scrollToBottom = () => {
+    setIsUserScrolledUp(false);
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  };
 
   const send = async () => {
     const text = input.trim();
@@ -244,7 +253,7 @@ export default function ChatPage() {
       return;
     }
 
-    setMessages(prev => [...prev, { role: 'user', text }]);
+    setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'user' as const, text }]);
     setInput('');
     requestAnimationFrame(() => {
       if (composerRef.current) composerRef.current.style.height = 'auto';
@@ -429,7 +438,8 @@ export default function ChatPage() {
           />
         )}
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 pr-1">
+        <div className="relative flex min-h-0 flex-1">
+          <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto space-y-3 pr-1">
           {messages.length === 0 && !sending && (
             <p className="text-sm text-slate-400 text-center py-8">
               {activeProjectPath
@@ -437,9 +447,9 @@ export default function ChatPage() {
                 : 'Select a registered workspace to start.'}
             </p>
           )}
-          {messages.map((msg, i) => (
+          {messages.map((msg) => (
             <div
-              key={i}
+              key={msg.id}
               className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap break-words prose prose-slate ${
                 msg.role === 'user'
                   ? 'ml-auto bg-primary/10 text-slate-800'
@@ -465,6 +475,17 @@ export default function ChatPage() {
                 </span>
               )}
             </div>
+          )}
+          </div>
+          {isUserScrolledUp && (
+            <button
+              type="button"
+              onClick={scrollToBottom}
+              aria-label="Jump to latest message"
+              className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-full bg-slate-800 px-3 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-slate-700"
+            >
+              <ArrowDown className="h-3.5 w-3.5" /> Jump to latest
+            </button>
           )}
         </div>
 

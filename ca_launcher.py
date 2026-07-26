@@ -12,6 +12,7 @@ import click
 
 from core.console import configure_console_encoding
 from core.resource_locator import get_bundled_resource_root, get_default_config_path
+from core.services.config_service import ConfigService
 
 UI_API_PORT = 8524
 UI_DEV_SERVER_HOST = "127.0.0.1"
@@ -294,9 +295,20 @@ def run_ui_command():
         print(f"🚀 Starting Web UI API at http://127.0.0.1:{port} ...")
     else:
         if not _frontend_dist_exists():
+            # This is the very first command most people run after cloning,
+            # so spell out the exact copy-pasteable fix instead of naming the
+            # tools and leaving the reader to assemble the commands.
+            frontend_root = _frontend_root()
             print(
-                "❌ Built Web UI not found at web/frontend/dist, and source mode is unavailable.\n"
-                "Run `bun install` in web/frontend or build the frontend first."
+                "❌ The Web UI has not been built yet "
+                f"(expected {frontend_root / 'dist' / 'index.html'}).\n"
+                "\n"
+                "Build it once with:\n"
+                f"  cd {frontend_root}\n"
+                "  bun install && bun run build      # or: npm install && npm run build\n"
+                "\n"
+                "Then run `ca ui` again. For live-reloading frontend work, "
+                "set CA_UI_DEV=1 instead to have `ca ui` manage a Vite dev server."
             )
             return 1
         port = find_available_port(UI_API_PORT)
@@ -386,6 +398,92 @@ def _ensure_project_on_path(root):
         sys.path.insert(0, str(root))
 
 
+def _is_path_registered(cwd: Path, root: Path, registry: list) -> bool:
+    if cwd == root or root in cwd.parents:
+        return True
+    for item in registry:
+        raw_path = item.get("path")
+        if not raw_path:
+            continue
+        try:
+            mapping_path = Path(raw_path).resolve()
+        except Exception:
+            continue
+        if cwd == mapping_path or mapping_path in cwd.parents:
+            return True
+    return False
+
+
+def _ensure_project_registered(root: Path, config: dict) -> None:
+    """Prompt to register the current directory under a resource group if
+    it isn't covered by ``project_registry`` yet, then persist the choice.
+
+    No-op outside a real terminal (scripted/CI invocations must not block
+    on ``input()``), and can be disabled via ``CA_SKIP_AUTO_REGISTER``.
+    """
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return
+    if os.environ.get("CA_SKIP_AUTO_REGISTER"):
+        return
+
+    cwd = Path.cwd().resolve()
+    registry = config.get("project_registry", [])
+    if _is_path_registered(cwd, root, registry):
+        return
+
+    groups = list(config.get("groups", {}).keys()) or ["common"]
+    print(f"\n📌 当前目录尚未注册到任何资源组: {cwd}")
+    print("请选择要绑定的资源组 (以后从这个目录启动会自动加载对应技能集):")
+    for i, g in enumerate(groups, 1):
+        print(f"  {i}. {g}")
+    print("  n. 新建资源组")
+    print("  直接回车. 跳过 (本次使用默认组, 不写入配置)")
+
+    choice = input("> ").strip().lower()
+    if not choice:
+        return
+
+    is_new_group = False
+    if choice == "n":
+        new_name = input("新组名称: ").strip().lower().replace(" ", "-")
+        if not new_name:
+            print("⚠️ 未输入组名, 跳过注册。")
+            return
+        chosen_group = new_name
+        is_new_group = new_name not in config.get("groups", {})
+    else:
+        try:
+            idx = int(choice) - 1
+            if idx < 0:
+                raise IndexError
+            chosen_group = groups[idx]
+        except (ValueError, IndexError):
+            print("⚠️ 无效输入, 跳过注册。")
+            return
+
+    config_path = get_default_config_path(root)
+    service = ConfigService(config_path)
+
+    def _modifier(cfg):
+        if is_new_group:
+            cfg.setdefault("groups", {})[chosen_group] = {
+                "skills": [],
+                "prompts": [],
+                "hooks": [],
+                "plugins": [],
+            }
+        reg = cfg.get("project_registry", [])
+        reg.append({"path": str(cwd), "group": chosen_group})
+        cfg["project_registry"] = reg
+        return cfg
+
+    service.modify_config(_modifier)
+    persisted, _ = service.get_config()
+    config["project_registry"] = persisted.get("project_registry", [])
+    config["groups"] = persisted.get("groups", {})
+    print(f"✅ 已将当前目录注册到组 [{chosen_group}]\n")
+
+
 def _launch_engine(ctx, args):
     """Build and run the engine subprocess.
 
@@ -401,6 +499,7 @@ def _launch_engine(ctx, args):
     obj = ctx.ensure_object(dict)
     child_env = obj.get("child_env")
     engine_script_map = obj["engine_script_map"]
+    _ensure_project_registered(obj["root"], obj["config"])
 
     engine_name = "gemini"
     extra_params = []

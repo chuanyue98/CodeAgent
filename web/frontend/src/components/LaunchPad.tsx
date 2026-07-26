@@ -11,20 +11,24 @@ interface Engine {
   color: string;
 }
 
+// Descriptions stay in the UI's language (English) -- these were the only
+// Chinese strings left in the interface, which read as an unfinished page.
 const ENGINES: Engine[] = [
-  { id: 'claude',    name: 'Claude',    description: 'Anthropic · 高推理能力',         color: 'bg-orange-50 border-orange-200 text-orange-700' },
-  { id: 'gemini',    name: 'Gemini',    description: 'Google · 多模态支持',             color: 'bg-blue-50 border-blue-200 text-blue-700' },
-  { id: 'opencode',  name: 'OpenCode',  description: 'Local npm · TUI 交互体验',        color: 'bg-violet-50 border-violet-200 text-violet-700' },
-  { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',              color: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+  { id: 'claude',    name: 'Claude',    description: 'Anthropic · Claude Code CLI',      color: 'bg-orange-50 border-orange-200 text-orange-700' },
+  { id: 'gemini',    name: 'Gemini',    description: 'Google · Gemini CLI',              color: 'bg-blue-50 border-blue-200 text-blue-700' },
+  { id: 'opencode',  name: 'OpenCode',  description: 'Local npm CLI with a full TUI',    color: 'bg-violet-50 border-violet-200 text-violet-700' },
+  { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',               color: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
 ];
 
 export default function LaunchPad() {
-  const { projects } = useProject();
-  const validProjects = projects.filter(project => project.path.trim() && project.available !== false);
+  const {
+    validProjects,
+    selectedWorkspace,
+    setSelectedWorkspace,
+  } = useProject();
 
   const [available, setAvailable] = useState<boolean | null>(null);
   const [reason, setReason] = useState<string | null>(null);
-  const [selectedProject, setSelectedProject] = useState('');
   const [activeSession, setActiveSession] = useState<{ engine: string; cwd: string } | null>(null);
 
   useEffect(() => {
@@ -39,8 +43,8 @@ export default function LaunchPad() {
       });
   }, []);
 
-  const effectiveProject = validProjects.some(project => project.path === selectedProject)
-    ? selectedProject
+  const effectiveProject = validProjects.some(project => project.path === selectedWorkspace)
+    ? selectedWorkspace
     : (validProjects[0]?.path ?? '');
 
   if (activeSession) {
@@ -72,6 +76,11 @@ export default function LaunchPad() {
         <p className="text-sm text-slate-600">
           Opens the provider CLI in an in-browser terminal, running on the machine hosting CodeAgent.
         </p>
+        <p className="text-xs text-slate-400">
+          The CLI must already be installed and signed in on this machine. Unlike Web Agent,
+          the terminal shows the provider&apos;s own interface — CodeAgent only sets the working
+          directory and injects your configured resources.
+        </p>
       </div>
 
       {available === false && (
@@ -94,7 +103,7 @@ export default function LaunchPad() {
           <select
             id="launchpad-project"
             value={effectiveProject}
-            onChange={event => setSelectedProject(event.target.value)}
+            onChange={event => setSelectedWorkspace(event.target.value)}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
           >
             {validProjects.map(project => (
