@@ -90,3 +90,16 @@ export async function convertAndLaunchSession(
     body: convertBody(params),
   });
 }
+
+/** Permanently deletes one session's native history file. There is no undo. */
+export async function deleteHistorySession(
+  engine: string,
+  sessionId: string,
+  projectPath: string,
+): Promise<{ status: string; session_id: string }> {
+  const query = new URLSearchParams({ project: projectPath });
+  return request(
+    `/api/history/${encodeURIComponent(engine)}/${encodeURIComponent(sessionId)}?${query}`,
+    { method: 'DELETE' },
+  );
+}

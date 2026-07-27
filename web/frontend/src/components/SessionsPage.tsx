@@ -1,11 +1,17 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { Search, Filter, ChevronDown, ChevronUp, Clock, DollarSign, FileText, AlertCircle, ArrowUpRight } from 'lucide-react';
+import { Search, Filter, ChevronDown, ChevronUp, Clock, DollarSign, FileText, AlertCircle, ArrowUpRight, Trash2 } from 'lucide-react';
 import { fetchSessions, type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
+import { deleteHistorySession } from '../api/audit';
 import { buildEventsLink } from '../utils/sessionLink';
+import ConfirmDialog from './shared/ConfirmDialog';
 
 type SortKey = 'lastActivity' | 'cost' | 'tokens';
 type SortDir = 'asc' | 'desc';
+
+function sessionKey(session: SessionUsage): string {
+  return `${session.target}::${session.sessionId}`;
+}
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<SessionUsage[]>([]);
@@ -18,6 +24,10 @@ export default function SessionsPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -90,6 +100,62 @@ export default function SessionsPage() {
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortKey(key); setSortDir('desc'); }
+  };
+
+  const toggleSelected = (key: string) => {
+    setSelectedKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every(s => selectedKeys.has(sessionKey(s)));
+
+  const toggleSelectAllFiltered = () => {
+    setSelectedKeys(prev => {
+      if (allFilteredSelected) {
+        const next = new Set(prev);
+        filtered.forEach(s => next.delete(sessionKey(s)));
+        return next;
+      }
+      const next = new Set(prev);
+      filtered.forEach(s => next.add(sessionKey(s)));
+      return next;
+    });
+  };
+
+  const selectedSessions = useMemo(
+    () => sessions.filter(s => selectedKeys.has(sessionKey(s))),
+    [sessions, selectedKeys],
+  );
+
+  const handleBulkDelete = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    const results = await Promise.allSettled(
+      selectedSessions.map(s => deleteHistorySession(s.target, s.sessionId, s.projectPath)),
+    );
+    const failedCount = results.filter(r => r.status === 'rejected').length;
+    const deletedKeys = new Set(
+      selectedSessions
+        .filter((_s, i) => results[i].status === 'fulfilled')
+        .map(sessionKey),
+    );
+    setSessions(prev => prev.filter(s => !deletedKeys.has(sessionKey(s))));
+    setSelectedKeys(prev => {
+      const next = new Set(prev);
+      deletedKeys.forEach(key => next.delete(key));
+      return next;
+    });
+    setDeleting(false);
+    setConfirmingDelete(false);
+    if (failedCount > 0) {
+      setDeleteError(
+        `${failedCount} of ${selectedSessions.length} session${selectedSessions.length === 1 ? '' : 's'} could not be deleted.`,
+      );
+    }
   };
 
   if (loading) {
@@ -204,9 +270,36 @@ export default function SessionsPage() {
 
       <div data-testid="session-list" className="animate-fade-rise stagger-2 flex-1 min-w-0 glass-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-          <p className="text-xs text-slate-400 font-medium">
-            {filtered.length} session{filtered.length !== 1 ? 's' : ''}
-          </p>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs text-slate-400 font-medium cursor-pointer select-none">
+              <input
+                type="checkbox"
+                aria-label="Select all sessions matching the current filters"
+                checked={allFilteredSelected}
+                onChange={toggleSelectAllFiltered}
+                disabled={filtered.length === 0}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+              />
+              {filtered.length} session{filtered.length !== 1 ? 's' : ''}
+            </label>
+            {selectedKeys.size > 0 && (
+              <span className="flex items-center gap-2 text-xs">
+                <span className="text-slate-500">{selectedKeys.size} selected</span>
+                <button
+                  onClick={() => setConfirmingDelete(true)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50 transition-colors font-medium"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete selected
+                </button>
+                <button
+                  onClick={() => setSelectedKeys(new Set())}
+                  className="px-2 py-1 rounded-md text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  Clear
+                </button>
+              </span>
+            )}
+          </div>
           <div className="flex flex-wrap gap-2">
             {(['lastActivity', 'cost', 'tokens'] as SortKey[]).map(key => (
               <button
@@ -224,6 +317,13 @@ export default function SessionsPage() {
             ))}
           </div>
         </div>
+
+        {deleteError && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-red-100 bg-red-50/60 px-3 py-2 text-xs text-red-600">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            {deleteError}
+          </div>
+        )}
 
         <div className="space-y-2">
           {filtered.map((session, i) => {
@@ -251,6 +351,14 @@ export default function SessionsPage() {
                   }}
                 >
                   <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select session ${session.sessionId}`}
+                      checked={selectedKeys.has(sessionKey(session))}
+                      onClick={event => event.stopPropagation()}
+                      onChange={() => toggleSelected(sessionKey(session))}
+                      className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-primary focus:ring-primary"
+                    />
                     <div className="flex flex-col min-w-0">
                       <span className="text-sm font-medium text-slate-700 truncate">
                         {session.projectPath.split(/[\\/]/).pop() || session.projectPath || '—'}
@@ -319,6 +427,16 @@ export default function SessionsPage() {
           )}
         </div>
       </div>
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          title={`Delete ${selectedSessions.length} session${selectedSessions.length === 1 ? '' : 's'}?`}
+          description="This permanently removes the underlying history file(s) for the selected sessions. This cannot be undone."
+          confirmLabel={deleting ? 'Deleting…' : 'Delete'}
+          onConfirm={() => { if (!deleting) void handleBulkDelete(); }}
+          onCancel={() => { if (!deleting) setConfirmingDelete(false); }}
+        />
+      )}
     </div>
   );
 }

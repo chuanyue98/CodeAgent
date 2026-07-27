@@ -164,6 +164,75 @@ async def test_tick_rejects_workspace_removed_from_registry(
 
 
 @pytest.mark.asyncio
+async def test_tick_notifies_webhook_on_schedule_failure(schedule_service, tasks_root):
+    config, _ = schedule_service.config_service.get_config()
+    config["notifications"] = {"webhooks": ["https://example.com/hook"]}
+    schedule_service.config_service.update_config(config)
+
+    record = schedule_service.create_schedule(
+        "does-not-exist", "claude", "common", "* * * * *", workspace=str(tasks_root)
+    )
+    config, _ = schedule_service.config_service.get_config()
+    config["schedules"][0]["next_run_at"] = time.time() - 1
+    schedule_service.config_service.update_config(config)
+
+    notify_calls = []
+    import core.services.scheduler_loop as scheduler_loop_module
+
+    original_notify = scheduler_loop_module.notify
+    scheduler_loop_module.notify = lambda cfg, event, payload: notify_calls.append(
+        (event, payload)
+    )
+    try:
+        runner = _FakeTaskRunner()
+        await tick_once(schedule_service, runner, lambda: tasks_root)
+    finally:
+        scheduler_loop_module.notify = original_notify
+
+    assert notify_calls == [
+        (
+            "schedule.failed",
+            {
+                "schedule_id": record["id"],
+                "task_name": "does-not-exist",
+                "engine": "claude",
+                "workspace": str(tasks_root),
+                "status": "task_not_found",
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_tick_does_not_notify_on_overlap_skip(schedule_service, tasks_root):
+    config, _ = schedule_service.config_service.get_config()
+    config["notifications"] = {"webhooks": ["https://example.com/hook"]}
+    schedule_service.config_service.update_config(config)
+
+    schedule_service.create_schedule(
+        "nightly-review", "claude", "common", "* * * * *", workspace=str(tasks_root)
+    )
+    config, _ = schedule_service.config_service.get_config()
+    config["schedules"][0]["next_run_at"] = time.time() - 1
+    schedule_service.config_service.update_config(config)
+
+    import core.services.scheduler_loop as scheduler_loop_module
+
+    notify_calls = []
+    original_notify = scheduler_loop_module.notify
+    scheduler_loop_module.notify = lambda cfg, event, payload: notify_calls.append(
+        (event, payload)
+    )
+    try:
+        runner = _FakeTaskRunner(already_running=True)
+        await tick_once(schedule_service, runner, lambda: tasks_root)
+    finally:
+        scheduler_loop_module.notify = original_notify
+
+    assert notify_calls == []
+
+
+@pytest.mark.asyncio
 async def test_tick_records_atomic_overlap_skip(schedule_service, tasks_root):
     record = schedule_service.create_schedule(
         "nightly-review", "claude", "common", "* * * * *", workspace=str(tasks_root)
