@@ -93,7 +93,19 @@ class TaskRunner:
                 raise ValueError("Log path escapes log directory")
 
             launcher = self.root_dir / "ca_launcher.py"
-            cmd = [sys.executable, str(launcher), engine, "-t", task_name, "-y"]
+            # --non-interactive is required: background runs have no TTY/stdin,
+            # so every engine adapter must be forced past its interactive-TUI
+            # default (see build_command()) or it hangs on stdin / emits raw
+            # ANSI. Long form is used because codex only registers that spelling.
+            cmd = [
+                sys.executable,
+                str(launcher),
+                engine,
+                "-t",
+                task_name,
+                "-y",
+                "--non-interactive",
+            ]
             env = os.environ.copy()
             env["CA_PROJECT_GROUP"] = group
             if tasks_root is not None:
