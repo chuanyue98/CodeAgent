@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router'
 import './index.css'
 import App from './App.tsx'
 import { ProjectProvider } from './context/ProjectContext.tsx'
+import { SystemMetricsProvider } from './context/SystemMetricsContext.tsx'
 import ErrorBoundary from './components/shared/ErrorBoundary.tsx'
 
 // App-wide boundary: each route already owns its own ErrorBoundary +
@@ -16,7 +17,9 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <ErrorBoundary>
         <ProjectProvider>
-          <App />
+          <SystemMetricsProvider>
+            <App />
+          </SystemMetricsProvider>
         </ProjectProvider>
       </ErrorBoundary>
     </BrowserRouter>

@@ -2,13 +2,16 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import App from '../App';
 import { ProjectProvider } from '../context/ProjectContext';
+import { SystemMetricsProvider } from '../context/SystemMetricsContext';
 import { expect, test, describe } from 'vitest';
 
 function renderWithRouter(initialPath = '/skills') {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <ProjectProvider>
-        <App />
+        <SystemMetricsProvider>
+          <App />
+        </SystemMetricsProvider>
       </ProjectProvider>
     </MemoryRouter>
   );

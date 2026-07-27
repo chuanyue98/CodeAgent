@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { Search, SquareStack, MessageSquare, ListChecks, FolderGit2 } from 'lucide-react';
+import { Search, SquareStack, MessageSquare, ListChecks, FolderGit2, Pin, PinOff } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { PAGE_LABELS } from '../navigation';
 import { fetchSessions, type SessionUsage } from '../api/analytics';
@@ -18,9 +18,28 @@ interface PaletteItem {
   id: string;
   label: string;
   hint: string;
-  section: 'Navigate' | 'Project' | 'Session' | 'Task' | 'Workspace';
+  section: 'Pinned' | 'Navigate' | 'Project' | 'Session' | 'Task' | 'Workspace';
   icon: typeof SquareStack;
   run: () => void;
+  /**
+   * Stable key used for the pinned-ids set. Present only on pinnable items
+   * (Workspace/Task and their "Pinned" section clone) -- the clone gets its
+   * own `id` (for React's list key) but keeps the *same* pinKey so toggling
+   * pin state from either copy stays in sync.
+   */
+  pinKey?: string;
+}
+
+const PINNED_STORAGE_KEY = 'codeagent.pinnedPaletteItems';
+
+function loadPinnedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(PINNED_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
 }
 
 export default function CommandPalette() {
@@ -30,6 +49,7 @@ export default function CommandPalette() {
   const [sessions, setSessions] = useState<SessionUsage[]>([]);
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => loadPinnedIds());
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { availableGroups, currentGroup, setCurrentGroup, projects, setSelectedWorkspace } = useProject();
@@ -70,6 +90,7 @@ export default function CommandPalette() {
       .filter(project => project.path.trim())
       .map(project => ({
         id: `workspace:${project.path}`,
+        pinKey: `workspace:${project.path}`,
         label: project.path.split(/[\\/]/).filter(Boolean).pop() || project.path,
         hint: project.path,
         section: 'Workspace',
@@ -89,14 +110,33 @@ export default function CommandPalette() {
     }));
     const taskItems: PaletteItem[] = tasks.map(task => ({
       id: `task:${task.name}`,
+      pinKey: `task:${task.name}`,
       label: task.title || task.name,
       hint: task.description || `task · ${task.name}`,
       section: 'Task',
       icon: ListChecks,
       run: () => navigate(`/automations/tasks?task=${encodeURIComponent(task.name)}`),
     }));
-    return [...navItems, ...workspaceItems, ...sessionItems, ...taskItems, ...groupItems];
-  }, [navigate, availableGroups, currentGroup, setCurrentGroup, projects, setSelectedWorkspace, sessions, tasks]);
+    // Re-derived from the live workspace/task items (not stored separately)
+    // so a pinned entry's label/hint never goes stale after a rename. The
+    // clone gets its own `id` for React's list key but keeps the same
+    // `pinKey` so unpinning from either copy stays in sync.
+    const pinnedItems: PaletteItem[] = [...workspaceItems, ...taskItems]
+      .filter(item => item.pinKey && pinnedIds.has(item.pinKey))
+      .map(item => ({ ...item, id: `pinned:${item.id}`, section: 'Pinned' as const }));
+    return [...pinnedItems, ...navItems, ...workspaceItems, ...sessionItems, ...taskItems, ...groupItems];
+  }, [navigate, availableGroups, currentGroup, setCurrentGroup, projects, setSelectedWorkspace, sessions, tasks, pinnedIds]);
+
+  const togglePinned = (pinKey: string, event: ReactMouseEvent) => {
+    event.stopPropagation();
+    setPinnedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(pinKey)) next.delete(pinKey);
+      else next.add(pinKey);
+      localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify(Array.from(next)));
+      return next;
+    });
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -196,25 +236,46 @@ export default function CommandPalette() {
             {filtered.length === 0 && (
               <li className="px-4 py-6 text-center text-sm text-slate-400">No matches</li>
             )}
-            {filtered.map((item, index) => (
-              <li key={item.id} role="option" aria-selected={index === activeIndex}>
-                <button
-                  type="button"
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => runItem(item)}
-                  className={`flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm transition-colors ${
-                    index === activeIndex ? 'bg-primary/10 text-primary' : 'text-slate-600 hover:bg-slate-50'
-                  }`}
+            {filtered.map((item, index) => {
+              const pinned = !!item.pinKey && pinnedIds.has(item.pinKey);
+              return (
+                <li
+                  key={item.id}
+                  role="option"
+                  aria-selected={index === activeIndex}
+                  className={`flex items-center gap-1 ${index === activeIndex ? 'bg-primary/10' : ''}`}
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <item.icon size={14} className="shrink-0 opacity-60" />
-                    <span className="truncate font-medium">{item.label}</span>
-                    <span className="shrink-0 text-[10px] uppercase tracking-wide text-slate-400">{item.section}</span>
-                  </span>
-                  <span className="shrink-0 truncate text-xs text-slate-400 max-w-[45%]">{item.hint}</span>
-                </button>
-              </li>
-            ))}
+                  <button
+                    type="button"
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => runItem(item)}
+                    className={`flex flex-1 min-w-0 items-center justify-between gap-3 px-4 py-2 text-left text-sm transition-colors ${
+                      index === activeIndex ? 'text-primary' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <item.icon size={14} className="shrink-0 opacity-60" />
+                      <span className="truncate font-medium">{item.label}</span>
+                      <span className="shrink-0 text-[10px] uppercase tracking-wide text-slate-400">{item.section}</span>
+                    </span>
+                    <span className="shrink-0 truncate text-xs text-slate-400 max-w-[45%]">{item.hint}</span>
+                  </button>
+                  {item.pinKey && (
+                    <button
+                      type="button"
+                      onClick={event => togglePinned(item.pinKey!, event)}
+                      aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
+                      title={pinned ? 'Unpin' : 'Pin'}
+                      className={`shrink-0 p-2 mr-1 rounded-lg transition-colors ${
+                        pinned ? 'text-primary hover:bg-primary/10' : 'text-slate-300 hover:text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      {pinned ? <Pin size={14} className="fill-current" /> : <PinOff size={14} />}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </Modal>
       )}

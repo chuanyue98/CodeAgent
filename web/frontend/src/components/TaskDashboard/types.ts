@@ -43,7 +43,26 @@ export interface RunPollResponse {
   progress: Partial<Task>;
 }
 
-export const STATUS_DONE = ['已完成', 'DONE', '无需修改'];
-export const STATUS_WIP = ['进行中', 'IN_PROGRESS', '等待 CI 中', 'PR 审核中', 'IN PROGRESS'];
+export type StageState = 'done' | 'wip' | 'todo';
+
+// Task files only carry a free-text status string (e.g. "**状态**: [进行中]"
+// from the architect-planning/interview-model skills' plan template, or an
+// author's own wording). Matching by keyword/substring instead of an exact
+// whitelist means a stage still shows correctly when it's written as "已完成
+// ✅", "Done", "Blocked — waiting on review", etc. rather than only the
+// handful of exact phrases a previous run happened to produce.
+const NOT_STARTED_PATTERN = /(未开始|not\s*started|^todo$)/i;
+const DONE_PATTERN = /(已完成|完成|done|complete|无需修改|closed|merged)/i;
+const WIP_PATTERN = /(进行中|in[\s_-]?progress|等待|pending|blocked|阻塞|review|审核)/i;
+
+export function classifyStageStatus(status: string): StageState {
+  const trimmed = status.trim();
+  if (!trimmed || NOT_STARTED_PATTERN.test(trimmed)) return 'todo';
+  if (DONE_PATTERN.test(trimmed)) return 'done';
+  if (WIP_PATTERN.test(trimmed)) return 'wip';
+  // Any other non-empty, unrecognized status: treat as in-progress rather
+  // than invisible -- a stage with *some* status has at least started.
+  return 'wip';
+}
 
 export const NAME_PATTERN = /^[\w.-]+$/;

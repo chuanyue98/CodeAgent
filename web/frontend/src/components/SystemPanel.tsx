@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Activity, Cpu, HardDrive, Clock, FileText } from 'lucide-react';
-import { fetchSystemMetrics, type SystemMetrics } from '../api/system';
-import usePolling from '../hooks/usePolling';
+import type { SystemMetrics } from '../api/system';
+import { useSystemMetrics } from '../context/SystemMetricsContext';
 
 function colorFor(value: number, thresholds: [number, number]): string {
   if (value > thresholds[1]) return 'text-red-600 bg-red-50';
@@ -19,36 +19,10 @@ function statusDotFor(metrics: SystemMetrics | undefined, error: string | null):
 }
 
 export default function SystemPanel() {
-  const [metrics, setMetrics] = useState<SystemMetrics>();
-  const [error, setError] = useState<string | null>(null);
+  const { metrics, error, refresh } = useSystemMetrics();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
-  const loadMetrics = useCallback(async () => {
-    try {
-      const nextMetrics = await fetchSystemMetrics();
-      setMetrics(nextMetrics);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load metrics');
-    }
-  }, []);
-
-  // Fetch once on mount so metrics are ready before the popover is first
-  // opened. The recurring poll below is gated on visibility, so without this
-  // initial fetch the popover would show "Loading…" the first time it opens.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadMetrics();
-  }, [loadMetrics]);
-
-  // Only poll while the popover is visible. When the panel is closed the
-  // interval is torn down so we don't hit the metrics endpoint every 5s for
-  // a hidden panel. `immediate` is disabled because the mount effect above
-  // already seeds data, and re-fetching on every open would also wipe a
-  // transient error before the user has a chance to see/retry it.
-  usePolling(loadMetrics, 5000, open, { immediate: false });
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -61,7 +35,7 @@ export default function SystemPanel() {
   }, []);
 
   const handleRetry = () => {
-    void loadMetrics();
+    void refresh();
   };
 
   return (

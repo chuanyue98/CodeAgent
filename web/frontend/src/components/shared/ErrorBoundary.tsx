@@ -8,6 +8,18 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  /**
+   * Bumped on every "Try Again" click and used as the children wrapper's
+   * `key`. Swapping the fallback UI back out for `children` *usually*
+   * already forces a fresh mount (React reconciles by type, and the
+   * fallback's element type differs from whatever `children` renders) --
+   * but that's an implementation-detail coincidence, not a guarantee. The
+   * key makes "Try Again" *always* remount the subtree (re-running effects,
+   * re-fetching data) regardless of what the fallback or children happen to
+   * render, so a transient failure (stale data, a dropped request) gets a
+   * genuine second attempt instead of silently re-showing the same crash.
+   */
+  retryCount: number;
 }
 
 /**
@@ -17,10 +29,10 @@ interface State {
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, retryCount: 0 };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error };
   }
 
@@ -29,7 +41,11 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReload = (): void => {
-    this.setState({ hasError: false, error: null });
+    this.setState(prev => ({
+      hasError: false,
+      error: null,
+      retryCount: prev.retryCount + 1,
+    }));
   };
 
   render(): ReactNode {
@@ -62,7 +78,7 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return this.props.children;
+    return <React.Fragment key={this.state.retryCount}>{this.props.children}</React.Fragment>;
   }
 }
 

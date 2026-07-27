@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Clock, Plus, Trash2, Play, AlertCircle, PauseCircle, PlayCircle, Pencil, X } from 'lucide-react';
+import { Clock, Plus, Trash2, Play, AlertCircle, PauseCircle, PlayCircle, Pencil, X, Search } from 'lucide-react';
 import cronstrue from 'cronstrue';
 import { useProject } from '../context/ProjectContext';
 import usePolling from '../hooks/usePolling';
@@ -50,6 +50,7 @@ export default function CronPage() {
     valid: true,
     nextRuns: [],
   });
+  const [scheduleSearch, setScheduleSearch] = useState('');
 
   // Debounced live preview: translates the raw cron syntax into plain
   // English and the next few actual fire times, so the user isn't expected
@@ -177,6 +178,17 @@ export default function CronPage() {
 
   const pendingDeleteSchedule = schedules.find(s => s.id === pendingDeleteId) || null;
 
+  const filteredSchedules = useMemo(() => {
+    const q = scheduleSearch.trim().toLowerCase();
+    if (!q) return schedules;
+    return schedules.filter(schedule =>
+      schedule.task_name.toLowerCase().includes(q) ||
+      schedule.engine.toLowerCase().includes(q) ||
+      schedule.cron_expr.toLowerCase().includes(q) ||
+      (schedule.workspace || '').toLowerCase().includes(q),
+    );
+  }, [schedules, scheduleSearch]);
+
   const handleRunNow = async (id: string) => {
     try {
       await runScheduleNow(id);
@@ -291,8 +303,27 @@ export default function CronPage() {
       </section>
 
       <div className="flex-1 min-w-0 glass-card p-5 flex flex-col">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-3">
-          <Clock className="w-4 h-4" /> Schedules
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <Clock className="w-4 h-4" /> Schedules
+            <span className="text-xs font-normal text-slate-400">
+              ({filteredSchedules.length}{scheduleSearch ? ` of ${schedules.length}` : ''})
+            </span>
+          </div>
+          {schedules.length > 0 && (
+            <div className="relative w-full max-w-56">
+              <label htmlFor="schedule-search" className="sr-only">Search schedules</label>
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
+                id="schedule-search"
+                type="text"
+                value={scheduleSearch}
+                onChange={e => setScheduleSearch(e.target.value)}
+                placeholder="Search schedules..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
+              />
+            </div>
+          )}
         </div>
 
         {error && (
@@ -307,7 +338,10 @@ export default function CronPage() {
               No schedules yet. Create one to run a task automatically.
             </p>
           )}
-          {schedules.map(schedule => (
+          {schedules.length > 0 && filteredSchedules.length === 0 && (
+            <p className="text-sm text-slate-400 text-center py-8">No schedules match your search.</p>
+          )}
+          {filteredSchedules.map(schedule => (
             <div
               key={schedule.id}
               className={`glass-card p-4 border-slate-100 flex flex-wrap items-center gap-3 ${

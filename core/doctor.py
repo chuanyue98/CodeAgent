@@ -317,6 +317,8 @@ def check_stale_injections(section: Section) -> List[Path]:
     candidates = [
         cwd / ".claude" / "settings.json",
         cwd / ".gemini" / "settings.json",
+        cwd / ".opencode" / "settings.json",
+        cwd / ".codex" / "settings.json",
     ]
     for path in candidates:
         if not path.exists():

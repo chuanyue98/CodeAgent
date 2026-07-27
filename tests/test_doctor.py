@@ -61,6 +61,22 @@ def test_check_stale_injections_found(tmp_path, monkeypatch):
     assert section.checks[0].status == doctor.WARN
 
 
+def test_check_stale_injections_detects_opencode_and_codex(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    opencode_settings = tmp_path / ".opencode" / "settings.json"
+    opencode_settings.parent.mkdir(parents=True)
+    opencode_settings.write_text('{"_ca_injected": true}')
+    codex_settings = tmp_path / ".codex" / "settings.json"
+    codex_settings.parent.mkdir(parents=True)
+    codex_settings.write_text('{"_ca_injected": true}')
+
+    section = doctor.Section("Stale")
+    stale = doctor.check_stale_injections(section)
+
+    assert set(stale) == {opencode_settings, codex_settings}
+    assert section.checks[0].status == doctor.WARN
+
+
 def test_get_doctor_sections_returns_sections():
     sections = doctor.get_doctor_sections(fix=False)
     assert len(sections) > 0

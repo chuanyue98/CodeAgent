@@ -1,8 +1,9 @@
-import { Activity, ChevronRight, FileText, Layers, Plus, Sparkles } from 'lucide-react';
-import { STATUS_DONE, type RunStatus, type Stage, type Task } from './types';
+import { useMemo, useState } from 'react';
+import { Activity, ChevronRight, FileText, Layers, Plus, Search, Sparkles } from 'lucide-react';
+import { classifyStageStatus, type RunStatus, type Stage, type Task } from './types';
 
 function StageProgress({ stages }: { stages: Stage[] }) {
-  const done = stages.filter(s => STATUS_DONE.includes(s.status)).length;
+  const done = stages.filter(s => classifyStageStatus(s.status) === 'done').length;
   const pct = stages.length > 0 ? Math.round((done / stages.length) * 100) : 0;
   return (
     <div className="flex items-center gap-2 mt-1">
@@ -27,6 +28,18 @@ export default function TaskList({
   onGenerateClick: () => void;
   onManualCreateClick: () => void;
 }) {
+  const [search, setSearch] = useState('');
+
+  const filteredTasks = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return tasks;
+    return tasks.filter(task =>
+      task.name.toLowerCase().includes(q) ||
+      task.title.toLowerCase().includes(q) ||
+      task.description.toLowerCase().includes(q),
+    );
+  }, [tasks, search]);
+
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5 pb-20">
       {/* The app shell already renders "Tasks" as the page's <h1>, so a second
@@ -53,6 +66,21 @@ export default function TaskList({
           </button>
         </div>
       </div>
+
+      {tasks.length > 5 && (
+        <div className="relative max-w-sm">
+          <label htmlFor="task-search" className="sr-only">Search tasks</label>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <input
+            id="task-search"
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search tasks..."
+            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-primary"
+          />
+        </div>
+      )}
 
       {tasks.length === 0 && (
         <div className="glass-card flex flex-col items-center gap-3 px-6 py-12 text-center">
@@ -84,8 +112,14 @@ export default function TaskList({
         </div>
       )}
 
+      {tasks.length > 0 && filteredTasks.length === 0 && (
+        <div className="glass-card text-center py-12 text-sm text-slate-400">
+          No tasks match your search.
+        </div>
+      )}
+
       <div className="grid gap-4">
-        {tasks.map(task => {
+        {filteredTasks.map(task => {
           const activeRun = runs.find(r => r.task_id.startsWith(task.name) && r.status === 'running');
 
           return (
