@@ -384,6 +384,35 @@ How to verify the task has been successfully completed.
         sys.exit(1)
 
 
+def _prompt_for_task_choice(tasks: List[str]) -> str:
+    """Reads the user's raw task selection.
+
+    In a real terminal this offers arrow-key browsing and incremental
+    substring filtering over task names via questionary, while still
+    accepting any free-form text (index, exact name, range, combination)
+    the caller's parsing logic expects -- questionary's autocomplete only
+    *suggests* matches, it never restricts what gets submitted. Falls back
+    to a plain input() when stdin/stdout aren't TTYs (scripts, piped input,
+    tests) or questionary isn't importable.
+    """
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        try:
+            import questionary
+
+            answer = questionary.autocomplete(
+                "Select task (index or name, type to filter):",
+                choices=tasks,
+                match_middle=True,
+            ).ask()
+            if answer is None:
+                print("\n\n👋 Cancelled")
+                sys.exit(0)
+            return answer.strip()
+        except ImportError:
+            pass
+    return input("Select task (index or name): ").strip()
+
+
 def select_task_interactively(
     directory: str = TASKS_DIR,
     file_suffix: str = TASK_FILE_SUFFIX,
@@ -428,7 +457,7 @@ def select_task_interactively(
 
     while True:
         try:
-            choice = input("Select task (index or name): ").strip()
+            choice = _prompt_for_task_choice(tasks)
 
             if not choice:
                 print("❌ Input cannot be empty")

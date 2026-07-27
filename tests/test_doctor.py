@@ -67,6 +67,36 @@ def test_get_doctor_sections_returns_sections():
     assert all(isinstance(s, doctor.Section) for s in sections)
 
 
+def test_preview_stale_injections_leaves_files_untouched(tmp_path, capsys):
+    settings = tmp_path / "settings.json"
+    settings.write_text('{"_ca_injected": true}')
+    doctor.preview_stale_injections([settings])
+    assert settings.exists()
+    assert '{"_ca_injected": true}' == settings.read_text()
+    assert "Would remove" in capsys.readouterr().out
+
+
+def test_preview_stale_injections_reports_restore_when_backup_exists(tmp_path, capsys):
+    settings = tmp_path / "settings.json"
+    settings.write_text('{"_ca_injected": true}')
+    backup = tmp_path / "settings.json.bak"
+    backup.write_text('{"original": true}')
+    doctor.preview_stale_injections([settings])
+    assert settings.read_text() == '{"_ca_injected": true}'
+    assert backup.exists()
+    assert "Would restore" in capsys.readouterr().out
+
+
+def test_dry_run_does_not_modify_stale_injections(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    claude_settings = tmp_path / ".claude" / "settings.json"
+    claude_settings.parent.mkdir(parents=True)
+    claude_settings.write_text('{"_ca_injected": true}')
+    doctor.get_doctor_sections(fix=False, dry_run=True)
+    assert claude_settings.exists()
+    assert claude_settings.read_text() == '{"_ca_injected": true}'
+
+
 def test_lightweight_resolver_uses_config_manager(tmp_path, monkeypatch):
     for directory in ("skills", "prompt", "hooks", "plugins"):
         (tmp_path / directory).mkdir()
