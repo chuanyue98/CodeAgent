@@ -35,15 +35,15 @@ def _app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     return app
 
 
-def test_pty_status_reports_available_on_posix():
+def test_pty_status_reports_available():
     app = FastAPI()
     app.include_router(pty_router.router)
     with TestClient(app) as client:
         response = client.get("/api/pty/status")
     assert response.status_code == 200
     body = response.json()
-    if sys.platform == "win32":
-        assert body["available"] is False
+    if sys.platform == "win32" and pty_router.winpty is None:
+        assert body == {"available": False, "reason": "pywinpty is not installed"}
     else:
         assert body == {"available": True, "reason": None}
 
@@ -297,3 +297,134 @@ def test_pty_websocket_rejects_unregistered_workspace(tmp_path, monkeypatch):
             ) as ws:
                 ws.receive_json()
     assert exc_info.value.code == 4400
+
+
+# ── Windows (ConPTY via pywinpty) ──────────────────────────────────────────
+#
+# Mirrors the POSIX suite above against the same fake_pty_engine.py fixture.
+# CI runs Ubuntu-only, so these only ever execute on a real Windows dev
+# machine -- still real coverage for the one platform that can't run in CI.
+
+
+def test_pty_status_reports_unavailable_without_pywinpty(monkeypatch):
+    monkeypatch.setattr(pty_router, "winpty", None)
+    monkeypatch.setattr(pty_router.sys, "platform", "win32")
+    app = FastAPI()
+    app.include_router(pty_router.router)
+    with TestClient(app) as client:
+        response = client.get("/api/pty/status")
+    assert response.json() == {
+        "available": False,
+        "reason": "pywinpty is not installed",
+    }
+
+
+# These exercise _spawn_windows/_WindowsSession directly with a real asyncio
+# event loop, instead of going through the full FastAPI websocket route via
+# TestClient like the POSIX suite above does. TestClient bridges sync test
+# code to the ASGI app through its own threaded portal loop, and that
+# combined with _WindowsSession's background reader thread reliably
+# deadlocks -- confirmed independently against a real uvicorn server with a
+# plain `websockets` client that the router itself works fine (full
+# spawn/READY/echo/resize/exit round trip completes normally), so the
+# deadlock is a TestClient/threading incompatibility, not a router bug. This
+# still covers the actual new/risky code (ConPTY spawn, the reader thread,
+# write/resize/wait/terminate), just one layer down from the websocket route.
+
+
+@pytest.mark.asyncio
+async def test_windows_session_streams_output_and_accepts_input(monkeypatch):
+    if sys.platform != "win32":
+        pytest.skip("ConPTY is Windows-only")
+    monkeypatch.setattr(pty_router, "_CA_LAUNCHER", FAKE_ENGINE)
+    output_queue: asyncio.Queue = asyncio.Queue()
+    session = await pty_router._spawn_windows("claude", Path.cwd(), output_queue)
+    try:
+        collected = ""
+        while "READY" not in collected:
+            chunk = await asyncio.wait_for(output_queue.get(), timeout=15)
+            assert chunk is not None
+            collected += chunk
+
+        session.write("hello world\r\n")
+        collected = ""
+        while "ECHO:hello world" not in collected:
+            chunk = await asyncio.wait_for(output_queue.get(), timeout=15)
+            assert chunk is not None
+            collected += chunk
+
+        session.resize(120, 40)
+        session.write("exit\r\n")
+        code = await asyncio.wait_for(session.wait(), timeout=15)
+        assert code == 0
+    finally:
+        await session.terminate()
+        await session.close()
+
+
+@pytest.mark.asyncio
+async def test_windows_session_terminate_kills_the_child_process(monkeypatch):
+    if sys.platform != "win32":
+        pytest.skip("ConPTY is Windows-only")
+    monkeypatch.setattr(pty_router, "_CA_LAUNCHER", FAKE_ENGINE)
+    output_queue: asyncio.Queue = asyncio.Queue()
+    session = await pty_router._spawn_windows("claude", Path.cwd(), output_queue)
+    collected = ""
+    while "READY" not in collected:
+        chunk = await asyncio.wait_for(output_queue.get(), timeout=15)
+        collected += chunk
+
+    # sys.executable on this setup is a thin relauncher that re-execs a
+    # child process to run the real interpreter -- capture that child's PID
+    # now, before killing anything, so the assertion below can confirm the
+    # *real* engine process died too, not just the directly-spawned stub.
+    tree_query = (
+        f"(Get-CimInstance Win32_Process | "
+        f"Where-Object {{ $_.ParentProcessId -eq {session._pty.pid} }}).ProcessId"
+    )
+    child_result = subprocess.run(
+        ["powershell", "-Command", tree_query], capture_output=True, text=True
+    )
+    child_pid = child_result.stdout.strip()
+    pids_to_check = [str(session._pty.pid)] + ([child_pid] if child_pid else [])
+
+    await session.terminate()
+    await session.close()
+
+    # Check exact PIDs via Get-Process rather than a CommandLine text-match
+    # query -- a pattern-matching query's own command-line text contains
+    # "fake_pty_engine.py", so it would spuriously match its own shell
+    # invocation. taskkill /F returns as soon as it has issued the kill, and
+    # WMI's process table can lag a beat behind that, so poll briefly
+    # instead of asserting on a single immediate snapshot.
+    id_filter = ",".join(pids_to_check)
+    query = f"Get-Process -Id {id_filter} -ErrorAction SilentlyContinue"
+    remaining = "unknown"
+    for _ in range(10):
+        result = subprocess.run(
+            ["powershell", "-Command", query], capture_output=True, text=True
+        )
+        remaining = result.stdout.strip()
+        if not remaining:
+            break
+        await asyncio.sleep(0.5)
+    assert remaining == ""
+
+
+@pytest.mark.asyncio
+async def test_windows_spawn_raises_spawn_error_when_pty_process_spawn_fails(
+    monkeypatch,
+):
+    if sys.platform != "win32":
+        pytest.skip("ConPTY is Windows-only")
+
+    monkeypatch.setattr(pty_router, "_CA_LAUNCHER", FAKE_ENGINE)
+
+    def _boom(*args, **kwargs):
+        raise pty_router.winpty.WinptyError("spawn failed")
+
+    monkeypatch.setattr(pty_router.winpty.PtyProcess, "spawn", _boom)
+
+    output_queue: asyncio.Queue = asyncio.Queue()
+    with pytest.raises(pty_router.SpawnError):
+        await pty_router._spawn_windows("claude", Path.cwd(), output_queue)
