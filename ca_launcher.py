@@ -841,8 +841,8 @@ def resources_list(ctx, kind, group):
     if kind == "skills":
         from core.services.skill_service import SkillService
 
-        service = SkillService(resolve_resource_path("skills", "CA_SKILLS_ROOT"))
-        for items in service.get_detailed_skills().values():
+        skill_service = SkillService(resolve_resource_path("skills", "CA_SKILLS_ROOT"))
+        for items in skill_service.get_detailed_skills().values():
             for item in items:
                 rows.append(
                     (item["id"], item["description"], item["id"] in enabled_ids)
@@ -850,8 +850,10 @@ def resources_list(ctx, kind, group):
     elif kind == "plugins":
         from core.services.plugin_service import PluginService
 
-        service = PluginService(resolve_resource_path("plugins", "CA_PLUGINS_ROOT"))
-        for items in service.get_detailed_plugins().values():
+        plugin_service = PluginService(
+            resolve_resource_path("plugins", "CA_PLUGINS_ROOT")
+        )
+        for items in plugin_service.get_detailed_plugins().values():
             for item in items:
                 rows.append(
                     (item["id"], item["description"], item["id"] in enabled_ids)
@@ -859,21 +861,21 @@ def resources_list(ctx, kind, group):
     elif kind == "hooks":
         from core.services.hook_service import HookService
 
-        service = HookService(
+        hook_service = HookService(
             resolve_resource_path("hooks", "CA_HOOKS_ROOT"),
             get_default_config_path(ctx.obj["root"]),
         )
-        for item in service.get_detailed_hooks():
+        for item in hook_service.get_detailed_hooks():
             rows.append(
                 (item["id"], item["description"] or item["event"], item["isActive"])
             )
     else:  # prompts
         from core.services.prompt_service import PromptService
 
-        service = PromptService(
+        prompt_service = PromptService(
             resolve_resource_path("prompt", "CA_PROMPTS_ROOT"), ROOT_DIR
         )
-        for item in service.get_prompt_groups():
+        for item in prompt_service.get_prompt_groups():
             rows.append((item["id"], item["description"], item["id"] in enabled_ids))
 
     if not rows:
