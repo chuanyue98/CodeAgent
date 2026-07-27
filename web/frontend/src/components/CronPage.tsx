@@ -3,6 +3,7 @@ import { Clock, Plus, Trash2, Play, AlertCircle, PauseCircle, PlayCircle, Pencil
 import { useProject } from '../context/ProjectContext';
 import usePolling from '../hooks/usePolling';
 import request from '../utils/request';
+import ConfirmDialog from './shared/ConfirmDialog';
 import {
   fetchSchedules,
   createSchedule,
@@ -124,8 +125,12 @@ export default function CronPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this schedule? This cannot be undone.')) return;
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const confirmDelete = async () => {
+    const id = pendingDeleteId;
+    if (!id) return;
+    setPendingDeleteId(null);
     try {
       await deleteSchedule(id);
       if (editingScheduleId === id) setEditingScheduleId(null);
@@ -134,6 +139,8 @@ export default function CronPage() {
       setError(e instanceof Error ? e.message : 'Failed to delete schedule');
     }
   };
+
+  const pendingDeleteSchedule = schedules.find(s => s.id === pendingDeleteId) || null;
 
   const handleRunNow = async (id: string) => {
     try {
@@ -308,7 +315,7 @@ export default function CronPage() {
                 <Play className="w-4 h-4" />
               </button>
               <button
-                onClick={() => void handleDelete(schedule.id)}
+                onClick={() => setPendingDeleteId(schedule.id)}
                 title="Delete"
                 className="shrink-0 p-1.5 text-slate-400 hover:text-red-500 transition-colors"
               >
@@ -318,6 +325,16 @@ export default function CronPage() {
           ))}
         </div>
       </div>
+
+      {pendingDeleteSchedule && (
+        <ConfirmDialog
+          title="Delete this schedule?"
+          description={`"${pendingDeleteSchedule.task_name}" (${pendingDeleteSchedule.cron_expr}) will stop running. This cannot be undone.`}
+          confirmLabel="Delete"
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => setPendingDeleteId(null)}
+        />
+      )}
     </div>
   );
 }

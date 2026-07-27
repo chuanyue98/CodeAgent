@@ -6,6 +6,7 @@ import AgentMessage from '../components/AgentMessage';
 import AgentSessionBanner from '../components/AgentSessionBanner';
 import AgentToolbar from '../components/AgentToolbar';
 import AgentWorkspaceSidebar from '../components/AgentWorkspaceSidebar';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
 import useAgentWorkspace from './useAgentWorkspace';
 
 export default function AgentWorkspace() {
@@ -219,6 +220,16 @@ export default function AgentWorkspace() {
         activity={workspace.state.activity}
         onClose={workspace.onShowActivityChange.bind(null, false)}
       />
+
+      {workspace.pendingRemoveSession && (
+        <ConfirmDialog
+          title="Remove this conversation?"
+          description={`"${workspace.pendingRemoveSession.title || 'Untitled conversation'}" will be removed locally. Its provider history will remain available.`}
+          confirmLabel="Remove"
+          onConfirm={workspace.onConfirmRemoveSession}
+          onCancel={workspace.onCancelRemoveSession}
+        />
+      )}
     </div>
   );
   /* eslint-enable react-hooks/refs */

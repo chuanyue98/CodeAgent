@@ -1,15 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { Search, SquareStack } from 'lucide-react';
+import { Search, SquareStack, MessageSquare, ListChecks, FolderGit2 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { PAGE_LABELS } from '../navigation';
+import { fetchSessions, type SessionUsage } from '../api/analytics';
+import request from '../utils/request';
+
+interface TaskSummary {
+  name: string;
+  title: string;
+  description: string;
+}
 
 interface PaletteItem {
   id: string;
   label: string;
   hint: string;
-  section: 'Navigate' | 'Project';
+  section: 'Navigate' | 'Project' | 'Session' | 'Task' | 'Workspace';
+  icon: typeof SquareStack;
   run: () => void;
 }
 
@@ -22,9 +31,27 @@ export default function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [sessions, setSessions] = useState<SessionUsage[]>([]);
+  const [tasks, setTasks] = useState<TaskSummary[]>([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const { availableGroups, currentGroup, setCurrentGroup } = useProject();
+  const { availableGroups, currentGroup, setCurrentGroup, projects, setSelectedWorkspace } = useProject();
+
+  // Sessions/tasks are only fetched once the palette is actually opened, and
+  // only the first time -- there's no reason to hit these endpoints on every
+  // page load just so ⌘K happens to be fast the first time it's used.
+  useEffect(() => {
+    if (!open || dataLoaded) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDataLoaded(true);
+    fetchSessions(200)
+      .then(setSessions)
+      .catch(() => setSessions([]));
+    request<TaskSummary[]>('/api/tasks')
+      .then(setTasks)
+      .catch(() => setTasks([]));
+  }, [open, dataLoaded]);
 
   const items = useMemo<PaletteItem[]>(() => {
     const navItems: PaletteItem[] = Object.entries(PAGE_LABELS).map(([path, label]) => ({
@@ -32,6 +59,7 @@ export default function CommandPalette() {
       label,
       hint: path,
       section: 'Navigate',
+      icon: SquareStack,
       run: () => navigate(path),
     }));
     const groupItems: PaletteItem[] = availableGroups.map(group => ({
@@ -39,10 +67,40 @@ export default function CommandPalette() {
       label: `Switch to ${group}`,
       hint: group === currentGroup ? 'current resource group' : 'resource group',
       section: 'Project',
+      icon: SquareStack,
       run: () => setCurrentGroup(group),
     }));
-    return [...navItems, ...groupItems];
-  }, [navigate, availableGroups, currentGroup, setCurrentGroup]);
+    const workspaceItems: PaletteItem[] = projects
+      .filter(project => project.path.trim())
+      .map(project => ({
+        id: `workspace:${project.path}`,
+        label: project.path.split(/[\\/]/).filter(Boolean).pop() || project.path,
+        hint: project.path,
+        section: 'Workspace',
+        icon: FolderGit2,
+        run: () => {
+          setSelectedWorkspace(project.path);
+          navigate('/agent/web');
+        },
+      }));
+    const sessionItems: PaletteItem[] = sessions.map(session => ({
+      id: `session:${session.target}:${session.sessionId}`,
+      label: session.projectPath.split(/[\\/]/).filter(Boolean).pop() || session.sessionId,
+      hint: `${session.target} session · ${session.projectPath}`,
+      section: 'Session',
+      icon: MessageSquare,
+      run: () => navigate(`/activity/history?session=${encodeURIComponent(session.sessionId)}`),
+    }));
+    const taskItems: PaletteItem[] = tasks.map(task => ({
+      id: `task:${task.name}`,
+      label: task.title || task.name,
+      hint: task.description || `task · ${task.name}`,
+      section: 'Task',
+      icon: ListChecks,
+      run: () => navigate(`/automations/tasks?task=${encodeURIComponent(task.name)}`),
+    }));
+    return [...navItems, ...workspaceItems, ...sessionItems, ...taskItems, ...groupItems];
+  }, [navigate, availableGroups, currentGroup, setCurrentGroup, projects, setSelectedWorkspace, sessions, tasks]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -139,7 +197,7 @@ export default function CommandPalette() {
                 value={query}
                 onChange={event => setQuery(event.target.value)}
                 onKeyDown={handleInputKeyDown}
-                placeholder="Go to a page, resource group…"
+                placeholder="Go to a page, session, task, workspace…"
                 aria-label="Command palette search"
                 className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
               />
@@ -162,10 +220,11 @@ export default function CommandPalette() {
                     }`}
                   >
                     <span className="flex min-w-0 items-center gap-2">
-                      <SquareStack size={14} className="shrink-0 opacity-60" />
+                      <item.icon size={14} className="shrink-0 opacity-60" />
                       <span className="truncate font-medium">{item.label}</span>
+                      <span className="shrink-0 text-[10px] uppercase tracking-wide text-slate-400">{item.section}</span>
                     </span>
-                    <span className="shrink-0 truncate text-xs text-slate-400">{item.hint}</span>
+                    <span className="shrink-0 truncate text-xs text-slate-400 max-w-[45%]">{item.hint}</span>
                   </button>
                 </li>
               ))}

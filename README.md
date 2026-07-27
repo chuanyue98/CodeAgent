@@ -174,6 +174,19 @@ python ca_launcher.py doctor        # Check environment
 python ca_launcher.py doctor --fix  # Auto-repair issues
 ```
 
+### Discover Resources
+
+```bash
+# List what's available without opening the Web UI
+ca resources list skills
+ca resources list plugins
+ca resources list hooks
+ca resources list prompts
+
+# Check enabled state against a specific resource group
+ca resources list skills --group work
+```
+
 ## Configuration
 
 CodeAgent uses a `config.json` for project-specific settings:
