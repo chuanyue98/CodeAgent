@@ -348,6 +348,10 @@ Examples:
   ca doctor --fix          Run health check and auto-repair
   ca ui                    Start the Web UI
   ca new my-task           Create a new task draft
+  ca ps                    List running background task runs
+  ca stop <task_id>        Stop a background task run
+  ca batch-run code_review --engine claude --group work
+                           Run one task across every registered project in a group
   ca history list          List sessions (use --engine <name> to filter)
   ca history show <engine> <session_id>
   ca history convert <source_engine> <session_id> <target_engine>
@@ -810,6 +814,164 @@ def convert(ctx, source_engine, session_id, target_engine, yes):
             print("   Resume with: opencode (select from history)")
     except Exception as e:
         print(f"❌ Conversion failed: {e}")
+
+
+def _get_task_runner(root: Path):
+    from core.services.runner_service import TaskRunner
+
+    return TaskRunner(root)
+
+
+@cli.command()
+@click.option(
+    "--all",
+    "show_all",
+    is_flag=True,
+    help="Include completed/failed/stopped runs, not just running ones",
+)
+@click.pass_context
+def ps(ctx, show_all):
+    """List background task runs (started via the CLI, Web UI, or scheduler)."""
+    _ensure_project_on_path(ctx.obj["root"])
+    runner = _get_task_runner(ctx.obj["root"])
+    runs = runner.list_runs()
+    if not show_all:
+        runs = [r for r in runs if r.status == "running"]
+    if not runs:
+        print("No running tasks." if not show_all else "No tracked task runs.")
+        return
+
+    runs.sort(key=lambda r: r.start_time, reverse=True)
+    print(f"{'TASK ID':38s} {'ENGINE':9s} {'STATUS':10s} {'PID':8s} WORKSPACE")
+    for r in runs:
+        pid_str = str(r.pid) if r.pid else "-"
+        workspace = r.workspace or "-"
+        print(f"{r.task_id:38s} {r.engine:9s} {r.status:10s} {pid_str:8s} {workspace}")
+    if not show_all:
+        print(
+            "\nUse `ca stop <task id>` to terminate one, or `ca ps --all` to see recent history."
+        )
+
+
+@cli.command()
+@click.argument("task_id")
+@click.pass_context
+def stop(ctx, task_id):
+    """Stop a background task run by its task id (see `ca ps`)."""
+    _ensure_project_on_path(ctx.obj["root"])
+    runner = _get_task_runner(ctx.obj["root"])
+    status = runner.get_status(task_id)
+    if status is None:
+        print(f"❌ No such task run: {task_id}")
+        print("   Use `ca ps --all` to see known task ids.")
+        sys.exit(1)
+    if status.status != "running":
+        print(f"⚠️  Task {task_id} is not running (status: {status.status}).")
+        return
+    if runner.stop_task(task_id):
+        print(f"🛑 Stopped {task_id}")
+    else:
+        print(f"❌ Failed to stop {task_id}")
+        sys.exit(1)
+
+
+@cli.command(name="batch-run")
+@click.argument("task_name")
+@click.option(
+    "--engine",
+    required=True,
+    type=click.Choice(["claude", "gemini", "opencode", "codex"]),
+    help="Engine to run the task with in every target project.",
+)
+@click.option(
+    "--group",
+    default=None,
+    help="Only target projects registered under this resource group (default: all registered projects).",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="List the projects that would run, without starting anything.",
+)
+@click.pass_context
+def batch_run(ctx, task_name, engine, group, dry_run):
+    """Run TASK_NAME across every registered project (optionally filtered by --group).
+
+    Each project runs in its own background process via the same task runner
+    the Web UI and scheduler use, so `ca ps` / `ca stop <task_id>` work on
+    the runs this starts. A project already running the same task is skipped
+    rather than double-started.
+    """
+    _ensure_project_on_path(ctx.obj["root"])
+    from core.services.runner_service import TaskAlreadyRunningError
+    from core.services.task_service import TaskService
+    from core.web.resource_paths import resolve_resource_path
+
+    config = ctx.obj["config"]
+    registry = [
+        item
+        for item in config.get("project_registry", [])
+        if isinstance(item, dict) and item.get("path")
+    ]
+    targets = [item for item in registry if group is None or item.get("group") == group]
+    if not targets:
+        scope = f" in group '{group}'" if group else ""
+        print(f"❌ No registered projects{scope} found in project_registry.")
+        sys.exit(1)
+
+    tasks_root = resolve_resource_path("tasks", "CA_TASKS_ROOT")
+    if TaskService(tasks_root).get_task(task_name) is None:
+        print(f"❌ No such task: {task_name} (looked in {tasks_root})")
+        sys.exit(1)
+
+    print(f"📋 {len(targets)} project(s) will run '{task_name}' with {engine}:")
+    for t in targets:
+        print(f"  - {t['path']}  (group: {t.get('group', '?')})")
+
+    if dry_run:
+        print("\n(dry run — nothing started)")
+        return
+
+    runner = _get_task_runner(ctx.obj["root"])
+    started: list[tuple[str, str]] = []
+    skipped: list[str] = []
+    failed: list[tuple[str, str]] = []
+
+    for t in targets:
+        workspace = t["path"]
+        proj_group = t.get("group") or "common"
+        try:
+            status = runner.run_task(
+                task_name,
+                engine,
+                proj_group,
+                tasks_root=tasks_root,
+                workspace=workspace,
+                prevent_overlap=True,
+            )
+        except TaskAlreadyRunningError:
+            skipped.append(workspace)
+            continue
+        except ValueError as e:
+            failed.append((workspace, str(e)))
+            continue
+        if status.status == "running":
+            started.append((workspace, status.task_id))
+        else:
+            failed.append((workspace, status.status))
+
+    print()
+    for workspace, task_id in started:
+        print(f"  ✅ started {task_id}  ({workspace})")
+    for workspace in skipped:
+        print(f"  ⏭️  skipped, already running  ({workspace})")
+    for workspace, reason in failed:
+        print(f"  ❌ failed: {reason}  ({workspace})")
+    print(f"\n{len(started)} started, {len(skipped)} skipped, {len(failed)} failed.")
+    if started:
+        print("Use `ca ps` to track progress, `ca stop <task_id>` to cancel one.")
+    if failed:
+        sys.exit(1)
 
 
 _RESOURCE_KINDS = ("skills", "plugins", "hooks", "prompts")

@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { ArrowRight, ArrowUpRight, Bot, Clock, History, Settings, Terminal } from 'lucide-react';
 import { Link } from 'react-router';
+import { fetchAuditEvents, type AuditEvent } from '../api/audit';
 
 const QUICK_ACTIONS = [
   {
@@ -34,20 +36,53 @@ const QUICK_ACTIONS = [
   },
 ] as const;
 
-// Faux recent-event feed shown in the hero. Static copy — meant to convey
-// "the workspace is alive" rather than reflect real telemetry.
-const RECENT_EVENTS = [
-  { kind: 'agent.session.started',  ago: '2s',   tone: 'live'  },
-  { kind: 'task.completed',         ago: '14s',  tone: 'ok'    },
-  { kind: 'schedule.fired',         ago: '1m',   tone: 'idle'  },
-  { kind: 'hook.executed',          ago: '3m',   tone: 'idle'  },
-] as const;
-
 const EQ_BARS = [0.4, 0.7, 1, 0.55, 0.85, 0.35, 0.65, 0.5, 0.9, 0.3, 0.75, 0.45];
+
+const RECENT_ACTIVITY_LIMIT = 6;
+
+/** Compact "2s"/"14m"/"3h"/"2d" — matches the hero's tight, terminal-ish style. */
+function formatCompactAgo(timestamp: string): string {
+  const then = new Date(timestamp).getTime();
+  if (Number.isNaN(then)) return '';
+  const diffSec = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (diffSec < 60) return `${diffSec}s`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h`;
+  return `${Math.floor(diffHr / 24)}d`;
+}
+
+function describeAuditEvent(event: AuditEvent): string {
+  if (event.event_type === 'tool_call') {
+    return event.tool_name ? `${event.engine}.tool.${event.tool_name}` : `${event.engine}.tool_call`;
+  }
+  return event.role === 'user' ? `${event.engine}.message.user` : `${event.engine}.message.assistant`;
+}
+
+function toneForEvent(event: AuditEvent): 'live' | 'ok' | 'idle' {
+  if (event.event_type === 'tool_call') return 'ok';
+  return event.role === 'user' ? 'live' : 'idle';
+}
+
+function useRecentActivity(limit: number): AuditEvent[] | null {
+  const [events, setEvents] = useState<AuditEvent[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAuditEvents({ limit })
+      .then(res => { if (!cancelled) setEvents(res.events); })
+      .catch(() => { if (!cancelled) setEvents([]); });
+    return () => { cancelled = true; };
+  }, [limit]);
+
+  return events;
+}
 
 export default function HomePage() {
   // The first two actions get the wide/tall bento slots; the rest fill in.
   const [webAgent, localTerminal, automations, activity, capabilities] = QUICK_ACTIONS;
+  const recentEvents = useRecentActivity(RECENT_ACTIVITY_LIMIT);
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-3 p-2 sm:space-y-4 sm:p-4 lg:p-6">
@@ -111,21 +146,30 @@ export default function HomePage() {
                 </Link>
               </div>
               <ul className="space-y-1.5">
-                {RECENT_EVENTS.map(({ kind, ago, tone }) => (
-                  <li key={kind} className="flex items-center justify-between gap-2 font-mono text-xs">
-                    <span className="flex min-w-0 items-center gap-2 text-slate-600">
-                      <span
-                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                          tone === 'live' ? 'animate-pulse-soft bg-emerald-500'
-                          : tone === 'ok'   ? 'bg-primary'
-                          : 'bg-slate-300'
-                        }`}
-                      />
-                      <span className="truncate">{kind}</span>
-                    </span>
-                    <span className="shrink-0 text-slate-400">{ago}</span>
-                  </li>
-                ))}
+                {recentEvents === null ? (
+                  <li className="font-mono text-xs text-slate-400">Loading…</li>
+                ) : recentEvents.length === 0 ? (
+                  <li className="font-mono text-xs text-slate-400">No activity yet — start a session to see it here.</li>
+                ) : (
+                  recentEvents.map(event => {
+                    const tone = toneForEvent(event);
+                    return (
+                      <li key={event.event_id} className="flex items-center justify-between gap-2 font-mono text-xs">
+                        <span className="flex min-w-0 items-center gap-2 text-slate-600">
+                          <span
+                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                              tone === 'live' ? 'animate-pulse-soft bg-emerald-500'
+                              : tone === 'ok'   ? 'bg-primary'
+                              : 'bg-slate-300'
+                            }`}
+                          />
+                          <span className="truncate">{describeAuditEvent(event)}</span>
+                        </span>
+                        <span className="shrink-0 text-slate-400">{formatCompactAgo(event.timestamp)}</span>
+                      </li>
+                    );
+                  })
+                )}
               </ul>
             </div>
           </div>

@@ -27,6 +27,7 @@ CodeAgent uses `config.json` at the project root for all configuration. The file
 | `proxy` | array | `[]` | Proxy server configurations |
 | `paths` | object | `{}` | Custom resource paths |
 | `schedules` | array | `[]` | Cron-style scheduled tasks |
+| `notifications` | object | `{}` | Webhook URLs to notify on schedule failure |
 
 ## Groups
 
@@ -138,6 +139,34 @@ Cron-style scheduled task definitions:
 | `task` | Task name from `tasks/` |
 | `engine` | Engine to use |
 | `group` | Configuration group |
+
+## Notifications
+
+Webhook URLs to POST a JSON event to whenever a scheduled task fails to start
+or finishes unsuccessfully. Delivery is best-effort: a broken or unreachable
+URL is logged and skipped, never surfaced to the scheduler or the caller.
+
+```json
+{
+  "notifications": {
+    "webhooks": ["https://hooks.slack.com/services/…"]
+  }
+}
+```
+
+A single URL string is also accepted in place of the array. Each event posts
+a JSON body shaped like:
+
+```json
+{
+  "event": "schedule.failed",
+  "schedule_id": "…",
+  "task_name": "nightly-review",
+  "engine": "claude",
+  "workspace": "/path/to/project",
+  "status": "failed: ..."
+}
+```
 
 ## Environment Variables
 

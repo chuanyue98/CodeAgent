@@ -336,3 +336,164 @@ def test_new_command_falls_back_to_absolute_path_on_relpath_failure(monkeypatch)
             ca_launcher.main()
             args, _kwargs = mock_run.call_args
             assert "my-task.md" in args[0][2]
+
+
+class _FakeRunStatus:
+    def __init__(self, status, task_id):
+        self.status = status
+        self.task_id = task_id
+
+
+def _write_fake_task(tasks_dir, name="code_review"):
+    tasks_dir.mkdir(exist_ok=True)
+    (tasks_dir / f"{name}.md").write_text(f"# {name}\n", encoding="utf-8")
+
+
+def test_batch_run_dry_run_lists_targets_without_starting_anything(
+    tmp_path, monkeypatch, capsys
+):
+    tasks_dir = tmp_path / "tasks"
+    _write_fake_task(tasks_dir)
+    monkeypatch.setenv("CA_TASKS_ROOT", str(tasks_dir))
+
+    config = {
+        "project_registry": [
+            {"path": "/proj/a", "group": "work"},
+            {"path": "/proj/b", "group": "common"},
+        ]
+    }
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "ca_launcher.py",
+            "batch-run",
+            "code_review",
+            "--engine",
+            "claude",
+            "--dry-run",
+        ],
+    )
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("ca_launcher.load_config", return_value=config),
+        patch("ca_launcher._get_task_runner") as mock_get_runner,
+    ):
+        ca_launcher.main()
+        mock_get_runner.assert_not_called()
+
+    out = capsys.readouterr().out
+    assert "/proj/a" in out
+    assert "/proj/b" in out
+    assert "dry run" in out
+
+
+def test_batch_run_starts_per_project_and_skips_already_running(
+    tmp_path, monkeypatch, capsys
+):
+    tasks_dir = tmp_path / "tasks"
+    _write_fake_task(tasks_dir)
+    monkeypatch.setenv("CA_TASKS_ROOT", str(tasks_dir))
+
+    config = {
+        "project_registry": [
+            {"path": "/proj/a", "group": "work"},
+            {"path": "/proj/b", "group": "work"},
+            {"path": "/proj/c", "group": "other"},
+        ]
+    }
+
+    class FakeRunner:
+        def __init__(self):
+            self.calls = []
+
+        def run_task(
+            self,
+            task_name,
+            engine,
+            group,
+            tasks_root=None,
+            workspace=None,
+            prevent_overlap=False,
+        ):
+            self.calls.append((task_name, engine, group, workspace))
+            if workspace == "/proj/b":
+                from core.services.runner_service import TaskAlreadyRunningError
+
+                raise TaskAlreadyRunningError("already running")
+            return _FakeRunStatus("running", "code_review_123")
+
+    fake_runner = FakeRunner()
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "ca_launcher.py",
+            "batch-run",
+            "code_review",
+            "--engine",
+            "claude",
+            "--group",
+            "work",
+        ],
+    )
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("ca_launcher.load_config", return_value=config),
+        patch("ca_launcher._get_task_runner", return_value=fake_runner),
+    ):
+        ca_launcher.main()
+
+    # --group work must exclude the "other" project entirely.
+    assert fake_runner.calls == [
+        ("code_review", "claude", "work", "/proj/a"),
+        ("code_review", "claude", "work", "/proj/b"),
+    ]
+    out = capsys.readouterr().out
+    assert "started code_review_123" in out
+    assert "skipped, already running" in out
+    assert "1 started, 1 skipped, 0 failed." in out
+
+
+def test_batch_run_rejects_unknown_task_name(tmp_path, monkeypatch):
+    tasks_dir = tmp_path / "tasks"
+    _write_fake_task(tasks_dir)
+    monkeypatch.setenv("CA_TASKS_ROOT", str(tasks_dir))
+    config = {"project_registry": [{"path": "/proj/a", "group": "work"}]}
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["ca_launcher.py", "batch-run", "does-not-exist", "--engine", "claude"],
+    )
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("ca_launcher.load_config", return_value=config),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        ca_launcher.main()
+    assert exc_info.value.code == 1
+
+
+def test_batch_run_rejects_empty_group(tmp_path, monkeypatch):
+    tasks_dir = tmp_path / "tasks"
+    _write_fake_task(tasks_dir)
+    monkeypatch.setenv("CA_TASKS_ROOT", str(tasks_dir))
+    config = {"project_registry": [{"path": "/proj/a", "group": "work"}]}
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "ca_launcher.py",
+            "batch-run",
+            "code_review",
+            "--engine",
+            "claude",
+            "--group",
+            "nope",
+        ],
+    )
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("ca_launcher.load_config", return_value=config),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        ca_launcher.main()
+    assert exc_info.value.code == 1

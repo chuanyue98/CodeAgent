@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from core.services.notifier import notify
 from core.services.runner_service import TaskAlreadyRunningError, TaskRunner
 from core.services.schedule_service import ScheduleService
 from core.services.task_service import TaskService
@@ -18,6 +19,51 @@ from core.services.workspace_service import (
 
 TICK_INTERVAL_SECONDS = 30.0
 logger = logging.getLogger(__name__)
+
+# Statuses that mean the schedule did NOT fail (either it started fine, or
+# it was deliberately skipped because an overlapping run was still active).
+_NON_FAILURE_STATUSES = {"started", "completed", "success"}
+
+
+def _is_failure_status(status: str) -> bool:
+    return status not in _NON_FAILURE_STATUSES and not status.startswith("skipped")
+
+
+async def _record_and_notify(
+    schedule_service: ScheduleService,
+    record: dict,
+    status: str,
+    advance_schedule: bool = True,
+) -> None:
+    """Persists a schedule run outcome, then fires a webhook on failure.
+
+    A misconfigured or unreachable webhook must never break scheduling, so
+    ``notify`` is best-effort (see core/services/notifier.py) and run off
+    the event loop thread since it does blocking network I/O.
+    """
+    await asyncio.to_thread(
+        schedule_service.record_run, record["id"], status, advance_schedule
+    )
+    if not _is_failure_status(status):
+        return
+    try:
+        config, _warnings = await asyncio.to_thread(
+            schedule_service.config_service.get_config
+        )
+    except Exception:
+        return
+    await asyncio.to_thread(
+        notify,
+        config,
+        "schedule.failed",
+        {
+            "schedule_id": record.get("id"),
+            "task_name": record.get("task_name"),
+            "engine": record.get("engine"),
+            "workspace": record.get("workspace"),
+            "status": status,
+        },
+    )
 
 
 async def scheduler_tick_loop(
@@ -66,11 +112,7 @@ async def tick_once(
 
             workspace = record.get("workspace")
             if not isinstance(workspace, str) or not workspace:
-                await asyncio.to_thread(
-                    schedule_service.record_run,
-                    record["id"],
-                    "workspace_required",
-                )
+                await _record_and_notify(schedule_service, record, "workspace_required")
                 continue
 
             try:
@@ -80,24 +122,18 @@ async def tick_once(
                     workspace,
                 )
             except WorkspaceNotRegisteredError:
-                await asyncio.to_thread(
-                    schedule_service.record_run,
-                    record["id"],
-                    "workspace_unregistered",
+                await _record_and_notify(
+                    schedule_service, record, "workspace_unregistered"
                 )
                 continue
             except WorkspaceResolutionError as exc:
-                await asyncio.to_thread(
-                    schedule_service.record_run,
-                    record["id"],
-                    f"workspace_invalid: {exc}",
+                await _record_and_notify(
+                    schedule_service, record, f"workspace_invalid: {exc}"
                 )
                 continue
             except WorkspaceConfigError as exc:
-                await asyncio.to_thread(
-                    schedule_service.record_run,
-                    record["id"],
-                    f"workspace_config_error: {exc}",
+                await _record_and_notify(
+                    schedule_service, record, f"workspace_config_error: {exc}"
                 )
                 continue
 
@@ -108,9 +144,7 @@ async def tick_once(
                 )
             )
             if not task_exists:
-                await asyncio.to_thread(
-                    schedule_service.record_run, record["id"], "task_not_found"
-                )
+                await _record_and_notify(schedule_service, record, "task_not_found")
                 continue
 
             try:
@@ -124,10 +158,8 @@ async def tick_once(
                     prevent_overlap=True,
                 )
             except TaskAlreadyRunningError:
-                await asyncio.to_thread(
-                    schedule_service.record_run,
-                    record["id"],
-                    "skipped: already_running",
+                await _record_and_notify(
+                    schedule_service, record, "skipped: already_running"
                 )
                 continue
             result_status = getattr(status, "status", "running")
@@ -139,22 +171,12 @@ async def tick_once(
                 recorded_status = str(result_status)
             else:
                 recorded_status = f"failed: {result_status}"
-            await asyncio.to_thread(
-                schedule_service.record_run,
-                record["id"],
-                recorded_status,
-            )
+            await _record_and_notify(schedule_service, record, recorded_status)
         except ValueError as exc:
-            await asyncio.to_thread(
-                schedule_service.record_run, record["id"], f"failed: {exc}"
-            )
+            await _record_and_notify(schedule_service, record, f"failed: {exc}")
         except Exception as exc:
             logger.exception("Schedule %s failed", record.get("id"))
             try:
-                await asyncio.to_thread(
-                    schedule_service.record_run,
-                    record["id"],
-                    f"failed: {exc}",
-                )
+                await _record_and_notify(schedule_service, record, f"failed: {exc}")
             except Exception:
                 logger.exception("Could not persist schedule failure")
