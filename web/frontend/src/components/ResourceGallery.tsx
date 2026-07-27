@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { Search, BookOpen, Layers, Terminal, Globe, Cpu, ChevronRight, type LucideIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useProject, type GroupDefinition } from '../context/ProjectContext';
@@ -12,20 +12,25 @@ import BatchActionBar from './shared/BatchActionBar';
 
 /**
  * A single resource entry (skill, plugin, hook, prompt) shown in a gallery.
- * All resource kinds share this exact shape, so the gallery can be generic.
+ * All resource kinds share this shape, plus an optional `meta` bag for
+ * whatever extra fields a given kind wants surfaced via `renderMeta` (a
+ * hook's event/path/status, a prompt group's file list, ...) — that's what
+ * lets Prompts and Hooks reuse this exact component instead of hand-rolling
+ * their own gallery.
  */
-export interface ResourceItem {
+export interface ResourceItem<M = unknown> {
   name: string;
   id: string;
   description: string;
   readme: string;
+  meta?: M;
 }
 
 /**
  * Categorized resource data returned by the resource list endpoints
  * (`/api/skills`, `/api/plugins`, ...): a map of category name -> items.
  */
-export type ResourceData = Record<string, ResourceItem[]>;
+export type ResourceData<M = unknown> = Record<string, ResourceItem<M>[]>;
 
 /**
  * Labels that differ between resource kinds. Keeping them in a single object
@@ -52,15 +57,35 @@ export interface ResourceGalleryLabels {
   itemSingular: string;
 }
 
-export interface ResourceGalleryProps {
+export interface ResourceGalleryProps<M = unknown> {
   /** Which resource list this gallery manages within a group */
   resourceType: keyof GroupDefinition;
-  /** API endpoint returning the categorized resource data */
+  /** API endpoint backing the gallery */
   apiEndpoint: string;
+  /**
+   * The API endpoints for skills/plugins already return categorized data
+   * (category -> items) that matches {@link ResourceData} directly. Hooks
+   * and prompts return a flat list instead, so their wrappers pass this to
+   * reshape the raw response before it reaches the rest of the component —
+   * everything past this point stays kind-agnostic either way.
+   */
+  transformData?: (raw: unknown) => ResourceData<M>;
   /** Icon rendered on each resource card */
   itemIcon: LucideIcon;
   /** UI labels that differ between resource kinds */
   labels: ResourceGalleryLabels;
+  /**
+   * Optional kind-specific metadata, rendered both under the card
+   * description and under the detail-view header (e.g. a hook's
+   * event/path/status, a prompt group's file-count and tags).
+   */
+  renderMeta?: (item: ResourceItem<M>) => ReactNode;
+  /**
+   * Optional secondary panel alongside the detail view's markdown body
+   * (e.g. a prompt group's "Files in Group" list). When omitted the detail
+   * view is a single column.
+   */
+  renderDetailAside?: (item: ResourceItem<M>) => ReactNode;
 }
 
 const getCategoryIcon = (category: string) => {
@@ -73,23 +98,38 @@ const getCategoryIcon = (category: string) => {
 };
 
 /**
- * Generic gallery for browsing categorized resources (skills, plugins, ...)
- * and toggling their activation in the current resource group.
+ * Generic gallery for browsing categorized resources (skills, plugins,
+ * hooks, prompts) and toggling their activation in the current resource
+ * group. Every resource kind gets the exact same interaction chrome —
+ * sidebar categories, search, multi-select + batch activate/deactivate,
+ * and a click-through detail view — so switching between the Capabilities
+ * sub-tabs doesn't mean relearning a different layout each time.
  *
- * SkillGallery and PluginGallery are thin wrappers that only supply the
- * differing config via props; all rendering logic lives here.
+ * The thin per-kind wrappers (SkillGallery, PluginGallery, HooksGallery,
+ * PromptsGallery) only supply differing config via props — labels, icon,
+ * and, for kinds whose API returns a flat list instead of category ->
+ * items, a `transformData` reshape plus an optional `renderMeta`/
+ * `renderDetailAside` for whatever extra fields that kind needs surfaced.
+ * All rendering logic lives here.
  */
-function ResourceGallery({
+function ResourceGallery<M = unknown>({
   resourceType,
   apiEndpoint,
+  transformData,
   itemIcon: ItemIcon,
   labels,
-}: ResourceGalleryProps) {
+  renderMeta,
+  renderDetailAside,
+}: ResourceGalleryProps<M>) {
   const { currentGroup, groups } = useProject();
-  const { data: resourceData, loading, error, refetch } = useResourceData<ResourceData>(apiEndpoint);
+  const { data: rawData, loading, error, refetch } = useResourceData<unknown>(apiEndpoint);
+  const resourceData = useMemo(
+    () => (rawData ? (transformData ? transformData(rawData) : (rawData as ResourceData<M>)) : null),
+    [rawData, transformData]
+  );
   const { toggleResource, toggleResources, toggleError, dismissToggleError } = useResourceToggle();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedItem, setSelectedItem] = useState<ResourceItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<ResourceItem<M> | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -227,32 +267,44 @@ function ResourceGallery({
                 />
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-8 bg-white prose prose-slate max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-li:text-slate-700 prose-strong:text-slate-900">
-              <ReactMarkdown
-                components={{
-                  code({className, children, ...props}) {
-                    const isCodeBlock = className && className.startsWith('language-');
-                    return isCodeBlock ? (
-                      <code className={`${className} font-mono`} {...props}>
-                        {children}
-                      </code>
-                    ) : (
-                      <code className="font-mono bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-cyan-700 text-[0.875em]" {...props}>
-                        {children}
-                      </code>
-                    );
-                  },
-                  pre({children, ...props}) {
-                    return (
-                      <pre className="!bg-slate-900 !text-slate-100 p-5 rounded-xl shadow-inner border border-slate-700 overflow-x-auto" {...props}>
-                        {children}
-                      </pre>
-                    )
-                  }
-                }}
-              >
-                {selectedItem.readme}
-              </ReactMarkdown>
+            {renderMeta && (
+              <div className="px-8 py-4 border-b border-slate-100 bg-slate-50/50">
+                {renderMeta(selectedItem)}
+              </div>
+            )}
+            <div className={`flex-1 min-h-0 overflow-hidden ${renderDetailAside ? 'grid grid-cols-1 lg:grid-cols-[280px_1fr]' : 'flex flex-col'}`}>
+              {renderDetailAside && (
+                <div className="border-r border-slate-200 bg-slate-50 p-6 overflow-y-auto">
+                  {renderDetailAside(selectedItem)}
+                </div>
+              )}
+              <div className="flex-1 overflow-y-auto p-8 bg-white prose prose-slate max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-li:text-slate-700 prose-strong:text-slate-900">
+                <ReactMarkdown
+                  components={{
+                    code({className, children, ...props}) {
+                      const isCodeBlock = className && className.startsWith('language-');
+                      return isCodeBlock ? (
+                        <code className={`${className} font-mono`} {...props}>
+                          {children}
+                        </code>
+                      ) : (
+                        <code className="font-mono bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-cyan-700 text-[0.875em]" {...props}>
+                          {children}
+                        </code>
+                      );
+                    },
+                    pre({children, ...props}) {
+                      return (
+                        <pre className="!bg-slate-900 !text-slate-100 p-5 rounded-xl shadow-inner border border-slate-700 overflow-x-auto" {...props}>
+                          {children}
+                        </pre>
+                      )
+                    }
+                  }}
+                >
+                  {selectedItem.readme}
+                </ReactMarkdown>
+              </div>
             </div>
           </div>
         ) : (
@@ -326,6 +378,7 @@ function ResourceGallery({
                     <p className="text-sm text-slate-500 line-clamp-3 font-medium leading-relaxed">
                       {item.description}
                     </p>
+                    {renderMeta && <div className="mt-4">{renderMeta(item)}</div>}
                     <div className="mt-6 flex items-center text-[11px] font-semibold uppercase tracking-wider text-primary/60 group-hover:text-primary transition-all group-hover:translate-x-1">
                       View details <ChevronRight className="w-3 h-3 ml-1" />
                     </div>

@@ -1,15 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { Search, Anchor, Terminal, Info } from 'lucide-react';
+import { Anchor, Terminal } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
-import Toggle from './shared/Toggle';
-import ErrorState from './shared/ErrorState';
-import LoadingState from './shared/LoadingState';
-import useResourceData from '../hooks/useResourceData';
-import useResourceToggle from '../hooks/useResourceToggle';
-import Toast from './shared/Toast';
-import BatchActionBar from './shared/BatchActionBar';
+import ResourceGallery, { type ResourceData, type ResourceGalleryLabels, type ResourceItem } from './ResourceGallery';
 
-interface Hook {
+interface HookRaw {
   id: string;
   name: string;
   event: string;
@@ -17,182 +10,88 @@ interface Hook {
   path: string;
 }
 
-const HooksGallery: React.FC = () => {
+interface HookMeta {
+  event: string;
+  path: string;
+}
+
+const labels: ResourceGalleryLabels = {
+  sidebar: 'Library',
+  detailHeading: 'Hook Detail',
+  backLabel: 'Back to hook list',
+  searchLabel: 'Search hooks',
+  searchPlaceholder: 'Search hooks...',
+  searchId: 'hook-search',
+  emptyCategory: 'No hooks found in this category.',
+  emptySidebar: 'No hooks found.',
+  itemSingular: 'hook',
+};
+
+/**
+ * /api/hooks returns a flat list, but each id is "{category}/{hook_name}"
+ * (see HookService.get_detailed_hooks), so the real category -- "base",
+ * and whatever else gets added alongside it later -- can be recovered
+ * without a backend change, giving Hooks the same sidebar grouping as
+ * Skills/Plugins instead of a single flat bucket.
+ */
+function transformHooks(raw: unknown): ResourceData<HookMeta> {
+  const list: HookRaw[] = Array.isArray(raw) ? raw : (raw as { hooks?: HookRaw[] })?.hooks ?? [];
+
+  const grouped: ResourceData<HookMeta> = {};
+  for (const hook of list) {
+    const category = hook.id.includes('/') ? hook.id.split('/')[0] : 'base';
+    (grouped[category] ??= []).push({
+      id: hook.id,
+      name: hook.name,
+      description: hook.description,
+      readme: hook.description || '_No description provided._',
+      meta: { event: hook.event, path: hook.path },
+    });
+  }
+  return grouped;
+}
+
+/**
+ * Thin wrapper around the shared {@link ResourceGallery} for hooks. Hooks
+ * have no long-form doc of their own (unlike skills' SKILL.md), so the
+ * meta badges below carry the trigger event, script path, and active
+ * status that used to be the whole point of this gallery's bespoke layout.
+ */
+function HooksGallery() {
   const { currentGroup, groups } = useProject();
-  const { data: rawData, loading, error, refetch } = useResourceData<Hook[] | { hooks: Hook[] }>('/api/hooks');
-  const { toggleResource, toggleResources, toggleError, dismissToggleError } = useResourceToggle();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const isHookActive = (hookId: string) => groups[currentGroup]?.hooks?.includes(hookId) ?? false;
 
-  const hooks = useMemo(() => {
-    if (!rawData) return [];
-    return Array.isArray(rawData) ? rawData : (rawData.hooks || []);
-  }, [rawData]);
-
-  const isHookActive = (hookId: string) => {
-    return groups[currentGroup]?.hooks?.includes(hookId) || false;
+  const renderMeta = (item: ResourceItem<HookMeta>) => {
+    const active = isHookActive(item.id);
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+            active
+              ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+              : 'border-slate-100 bg-slate-50 text-slate-600'
+          }`}
+        >
+          {item.meta?.event}
+        </span>
+        <span className="flex items-center gap-1.5 truncate rounded-lg bg-slate-50/50 p-1.5 font-mono text-[11px] text-slate-400">
+          <Terminal className="h-3 w-3 flex-shrink-0" />
+          <span className="truncate">{item.meta?.path}</span>
+        </span>
+      </div>
+    );
   };
-
-  const filteredHooks = hooks.filter(hook =>
-    hook.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    hook.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    hook.event.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // A search-changed selection would let a batch action silently apply to
-  // hooks the user can no longer see.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelectedIds(new Set());
-  }, [searchTerm]);
-
-  const toggleHookSelected = (hookId: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(hookId)) next.delete(hookId);
-      else next.add(hookId);
-      return next;
-    });
-  };
-
-  const allFilteredSelected = filteredHooks.length > 0 && filteredHooks.every(hook => selectedIds.has(hook.id));
-
-  const toggleSelectAllFiltered = () => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (allFilteredSelected) filteredHooks.forEach(hook => next.delete(hook.id));
-      else filteredHooks.forEach(hook => next.add(hook.id));
-      return next;
-    });
-  };
-
-  const handleActivateSelected = () => {
-    void toggleResources('hooks', Array.from(selectedIds), true).then(() => setSelectedIds(new Set()));
-  };
-
-  const handleDeactivateSelected = () => {
-    void toggleResources('hooks', Array.from(selectedIds), false).then(() => setSelectedIds(new Set()));
-  };
-
-  if (loading) {
-    return <LoadingState />;
-  }
-
-  if (error) {
-    return <ErrorState message={error} onRetry={refetch} />;
-  }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden p-6 gap-6">
-      <div className="animate-fade-rise stagger-1 flex items-center justify-between glass-card p-6 bg-slate-50/30 backdrop-blur-sm">
-        <div className="relative max-w-md w-full">
-          <label htmlFor="hook-search" className="sr-only">Search hooks</label>
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            id="hook-search"
-            type="text"
-            placeholder="Search hooks..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 bg-white border border-slate-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary/30 transition-all text-sm placeholder:text-slate-400"
-          />
-        </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-primary/15 text-cyan-800 rounded-xl text-sm font-semibold">
-          <Anchor className="w-4 h-4" />
-          <span>{hooks.length} Total Hooks</span>
-        </div>
-      </div>
-
-      <BatchActionBar
-        totalCount={filteredHooks.length}
-        selectedCount={selectedIds.size}
-        allSelected={allFilteredSelected}
-        onToggleSelectAll={toggleSelectAllFiltered}
-        onActivateSelected={handleActivateSelected}
-        onDeactivateSelected={handleDeactivateSelected}
-        onClearSelection={() => setSelectedIds(new Set())}
-        itemLabelPlural={`hook${filteredHooks.length === 1 ? '' : 's'}`}
-      />
-
-      <div className="custom-scrollbar flex-1 overflow-y-auto pr-2">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredHooks.map((hook, i) => {
-            const active = isHookActive(hook.id);
-            // Cap stagger at 6 — long lists shouldn't cascade forever.
-            const stagger = `stagger-${Math.min(i + 2, 7)}`;
-            return (
-              <div
-                key={hook.id}
-                className={`animate-fade-rise ${stagger} group glass-card p-6 transition-all relative overflow-hidden flex flex-col ${
-                  !active ? 'bg-slate-50/60 border-slate-200' : ''
-                }`}
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      aria-label={`Select ${hook.name}`}
-                      checked={selectedIds.has(hook.id)}
-                      onChange={() => toggleHookSelected(hook.id)}
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
-                    />
-                    <div className={`p-2 rounded-lg ${active ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-400'}`}>
-                      <Anchor className="w-5 h-5" />
-                    </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wider ${
-                      active
-                        ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
-                        : 'border-slate-100 bg-slate-50 text-slate-600'
-                    }`}>
-                      {hook.event}
-                    </span>
-                  </div>
-
-                  <Toggle
-                    checked={active}
-                    onChange={() => toggleResource('hooks', hook.id)}
-                    aria-label={`Toggle ${hook.name} active status`}
-                    size="md"
-                  />
-                </div>
-
-                <h2 className="text-lg font-semibold tracking-tight mb-2 group-hover:text-primary transition-colors">
-                  {hook.name}
-                </h2>
-
-                <p className="text-sm text-slate-500 line-clamp-2 font-medium leading-relaxed mb-4 flex-1">
-                  {hook.description}
-                </p>
-
-                <div className="mt-auto pt-4 border-t border-slate-50 space-y-3">
-                  <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono bg-slate-50/50 p-2 rounded-lg overflow-hidden whitespace-nowrap text-ellipsis">
-                    <Terminal className="w-3 h-3 flex-shrink-0" />
-                    <span className="truncate">{hook.path}</span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-                    <Info className="w-3 h-3" />
-                    <span>Status: {active ? 'Active' : 'Inactive'}</span>
-                  </div>
-                </div>
-
-                <div className={`absolute top-0 right-0 w-1 h-full transition-all ${
-                  active ? 'bg-primary' : 'bg-slate-200'
-                }`} />
-              </div>
-            );
-          })}
-        </div>
-
-        {filteredHooks.length === 0 && (
-          <div className="text-center py-20 text-slate-500 glass-card">
-            No hooks found matching your search.
-          </div>
-        )}
-      </div>
-      {toggleError && <Toast message={toggleError} onDismiss={dismissToggleError} />}
-    </div>
+    <ResourceGallery<HookMeta>
+      resourceType="hooks"
+      apiEndpoint="/api/hooks"
+      transformData={transformHooks}
+      itemIcon={Anchor}
+      labels={labels}
+      renderMeta={renderMeta}
+    />
   );
-};
+}
 
 export default HooksGallery;
