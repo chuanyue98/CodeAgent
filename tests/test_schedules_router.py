@@ -92,6 +92,32 @@ async def test_create_and_list_schedule():
 
 
 @pytest.mark.asyncio
+async def test_preview_schedule_valid_cron_returns_next_runs():
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get(
+            "/api/schedules/preview", params={"cron_expr": "0 9 * * *"}
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["valid"] is True
+        assert len(body["next_runs"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_preview_schedule_invalid_cron_returns_valid_false():
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get(
+            "/api/schedules/preview", params={"cron_expr": "not a cron"}
+        )
+        assert response.status_code == 200
+        assert response.json() == {"valid": False, "next_runs": []}
+
+
+@pytest.mark.asyncio
 async def test_create_schedule_invalid_cron_returns_400():
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"

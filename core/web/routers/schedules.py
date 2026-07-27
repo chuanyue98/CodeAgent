@@ -2,6 +2,8 @@
 
 Endpoints:
   GET    /api/schedules              List all schedules.
+  GET    /api/schedules/preview      Validate a cron expression and preview
+                                      its next few fire times (no persistence).
   POST   /api/schedules              Create a schedule.
   PATCH  /api/schedules/{id}         Update a schedule (cron_expr, enabled, ...).
   DELETE /api/schedules/{id}         Delete a schedule.
@@ -57,6 +59,22 @@ class UpdateScheduleRequest(BaseModel):
 def list_schedules() -> list[dict]:
     """Lists all cron schedules."""
     return _service().list_schedules()
+
+
+@router.get("/schedules/preview")
+def preview_schedule(cron_expr: str) -> dict:
+    """Validates a cron expression and returns its next few fire times.
+
+    Used by the schedule form for a live "next run" preview before the
+    user saves anything -- an invalid expression is a normal, expected
+    input while typing, not an error, so this returns `{"valid": False}`
+    rather than a 4xx.
+    """
+    try:
+        next_runs = _service().preview_next_runs(cron_expr)
+        return {"valid": True, "next_runs": next_runs}
+    except ValueError:
+        return {"valid": False, "next_runs": []}
 
 
 @router.post("/schedules")

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Clock, Plus, Trash2, Play, AlertCircle, PauseCircle, PlayCircle, Pencil, X } from 'lucide-react';
+import cronstrue from 'cronstrue';
 import { useProject } from '../context/ProjectContext';
 import usePolling from '../hooks/usePolling';
 import request from '../utils/request';
@@ -45,6 +46,40 @@ export default function CronPage() {
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [cronPreview, setCronPreview] = useState<{ valid: boolean; nextRuns: number[] }>({
+    valid: true,
+    nextRuns: [],
+  });
+
+  // Debounced live preview: translates the raw cron syntax into plain
+  // English and the next few actual fire times, so the user isn't expected
+  // to already know cron syntax to tell whether what they typed is right.
+  // The validity/next-run computation is authoritative from the backend
+  // (same croniter call the schedule itself will use) -- cronstrue only
+  // supplies the English description, so the two can never contradict on
+  // whether the expression is valid.
+  useEffect(() => {
+    const trimmed = cronExpr.trim();
+    if (!trimmed) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCronPreview({ valid: true, nextRuns: [] });
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      request<{ valid: boolean; next_runs: number[] }>(
+        `/api/schedules/preview?cron_expr=${encodeURIComponent(trimmed)}`,
+      )
+        .then(result => setCronPreview({ valid: result.valid, nextRuns: result.next_runs }))
+        .catch(() => setCronPreview({ valid: false, nextRuns: [] }));
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [cronExpr]);
+
+  const cronDescription = useMemo(() => {
+    const trimmed = cronExpr.trim();
+    if (!trimmed || !cronPreview.valid) return '';
+    return cronstrue.toString(trimmed, { throwExceptionOnParseError: false });
+  }, [cronExpr, cronPreview.valid]);
 
   const loadSchedules = useCallback(() => {
     fetchSchedules()
@@ -219,6 +254,22 @@ export default function CronPage() {
           <p className="text-[10px] text-slate-400 mt-1">
             Standard 5-field cron syntax (minute hour day-of-month month day-of-week).
           </p>
+          {cronExpr.trim() && (
+            <div className="mt-1.5 rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2 text-xs">
+              {cronPreview.valid ? (
+                <>
+                  <p className="font-medium text-slate-600">{cronDescription}</p>
+                  {cronPreview.nextRuns.length > 0 && (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Next: {formatTimestamp(cronPreview.nextRuns[0])}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-red-500">Invalid cron expression — check the syntax above.</p>
+              )}
+            </div>
+          )}
         </div>
 
         <button
