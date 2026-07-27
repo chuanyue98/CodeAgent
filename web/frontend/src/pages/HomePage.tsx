@@ -86,8 +86,12 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-3 p-2 sm:space-y-4 sm:p-4 lg:p-6">
-      {/* Bento grid: asymmetric — hero spans 2x2, web-agent spans 2-wide,
-          terminal is tall, capabilities is a full-width closing strip. */}
+      {/* Bento grid: asymmetric — hero spans 2x2 (rows 1-2), web-agent
+          spans 2-wide (row 1), local terminal + automations fill row 2
+          beside hero, then activity and capabilities close it out as two
+          full-width strips. Every row fills all 4 columns exactly — no
+          auto-placement gaps — so span changes here need re-checking against
+          that. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
 
         {/* ===== HERO ===== */}
@@ -178,15 +182,17 @@ export default function HomePage() {
         {/* ===== WEB AGENT (wide) ===== */}
         <TileLink action={webAgent} className="animate-fade-rise stagger-2 lg:col-span-2" featured />
 
-        {/* ===== LOCAL TERMINAL (tall) ===== */}
-        <TileLink action={localTerminal} className="animate-fade-rise stagger-3 lg:row-span-2" mono />
+        {/* ===== LOCAL TERMINAL ===== */}
+        <TileLink action={localTerminal} className="animate-fade-rise stagger-3" mono />
 
-        {/* ===== AUTOMATIONS (tall — matches Local Terminal's row-span so
-            row 3's last column doesn't sit empty) ===== */}
-        <TileLink action={automations} className="animate-fade-rise stagger-4 lg:row-span-2" />
+        {/* ===== AUTOMATIONS ===== */}
+        <TileLink action={automations} className="animate-fade-rise stagger-4" />
 
-        {/* ===== ACTIVITY (wide) ===== */}
-        <TileLink action={activity} className="animate-fade-rise stagger-5 lg:col-span-2" chart />
+        {/* ===== ACTIVITY (full-width strip — row 2 (Hero + Local Terminal +
+            Automations) already fills all 4 columns on its own, so Activity
+            closes it out at full width instead of leaving a lg:col-span-2
+            partner slot empty) ===== */}
+        <TileLink action={activity} className="animate-fade-rise stagger-5 lg:col-span-4" chart />
 
         {/* ===== CAPABILITIES (full-width strip) ===== */}
         <TileLink action={capabilities} className="animate-fade-rise stagger-6 lg:col-span-4" strip />
