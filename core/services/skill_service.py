@@ -31,11 +31,15 @@ class SkillService:
                 skill_md_path = skill_dir / "SKILL.md"
 
                 content = ""
+                body = ""
                 description = ""
                 if skill_md_path.exists():
                     content = skill_md_path.read_text(encoding="utf-8")
+                    body = content
 
-                    # Extract description from YAML frontmatter
+                    # Extract description from YAML frontmatter, and strip it
+                    # from the body so the detail view doesn't render the raw
+                    # "name: ... description: ..." block above the real docs.
                     if content.startswith("---"):
                         try:
                             parts = content.split("---", 2)
@@ -43,6 +47,7 @@ class SkillService:
                                 frontmatter = yaml.safe_load(parts[1])
                                 if isinstance(frontmatter, dict):
                                     description = frontmatter.get("description", "")
+                                body = parts[2].lstrip("\n")
                         except Exception:
                             pass
 
@@ -78,7 +83,7 @@ class SkillService:
                         "name": skill_name,
                         "id": f"{category}/{skill_name}",
                         "description": description,
-                        "readme": content,
+                        "readme": body,
                         "scripts": sorted(scripts),
                     }
                 )
