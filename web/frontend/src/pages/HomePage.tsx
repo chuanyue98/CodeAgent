@@ -181,8 +181,9 @@ export default function HomePage() {
         {/* ===== LOCAL TERMINAL (tall) ===== */}
         <TileLink action={localTerminal} className="animate-fade-rise stagger-3 lg:row-span-2" mono />
 
-        {/* ===== AUTOMATIONS ===== */}
-        <TileLink action={automations} className="animate-fade-rise stagger-4" />
+        {/* ===== AUTOMATIONS (tall — matches Local Terminal's row-span so
+            row 3's last column doesn't sit empty) ===== */}
+        <TileLink action={automations} className="animate-fade-rise stagger-4 lg:row-span-2" />
 
         {/* ===== ACTIVITY (wide) ===== */}
         <TileLink action={activity} className="animate-fade-rise stagger-5 lg:col-span-2" chart />
