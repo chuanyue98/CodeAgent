@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Server, Plus, Trash2, AlertCircle, Info } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import request from '../utils/request';
+import ConfirmDialog from './shared/ConfirmDialog';
 import { fetchMcpServers, addMcpServer, removeMcpServer, type McpServer } from '../api/mcp';
 
 interface Engine {
@@ -107,8 +108,12 @@ export default function McpPage() {
     }
   };
 
-  const handleRemove = async (serverName: string) => {
-    if (!window.confirm('Remove this MCP server? This cannot be undone.')) return;
+  const [pendingRemoveServer, setPendingRemoveServer] = useState<string | null>(null);
+
+  const confirmRemove = async () => {
+    const serverName = pendingRemoveServer;
+    if (!serverName) return;
+    setPendingRemoveServer(null);
     try {
       await removeMcpServer(selectedEngine, serverName, projectPath);
       loadServers();
@@ -202,7 +207,7 @@ export default function McpPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => void handleRemove(server.name)}
+                  onClick={() => setPendingRemoveServer(server.name)}
                   title="Remove"
                   className="shrink-0 p-1.5 text-slate-400 hover:text-red-500 transition-colors"
                 >
@@ -297,6 +302,16 @@ export default function McpPage() {
           </div>
         </div>
       </div>
+
+      {pendingRemoveServer && (
+        <ConfirmDialog
+          title="Remove this MCP server?"
+          description={`"${pendingRemoveServer}" will be removed from ${selectedEngine}'s configuration. This cannot be undone.`}
+          confirmLabel="Remove"
+          onConfirm={() => void confirmRemove()}
+          onCancel={() => setPendingRemoveServer(null)}
+        />
+      )}
     </div>
   );
 }

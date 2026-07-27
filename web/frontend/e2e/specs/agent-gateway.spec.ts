@@ -111,8 +111,8 @@ test('removes the selected local conversation without deleting provider history'
   // it is not what this test is about.
   await expect(page.locator('main')).toContainText('Echo: remove local mapping');
 
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Remove current conversation' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Remove' }).click();
 
   await expect(page.getByRole('button', { name: 'Remove current conversation' })).not.toBeVisible();
   await expect(page.locator('main')).not.toContainText('Echo: remove local mapping');

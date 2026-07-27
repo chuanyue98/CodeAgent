@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { Search, Filter, ChevronDown, ChevronUp, Clock, DollarSign, FileText, AlertCircle, ArrowUpRight } from 'lucide-react';
 import { fetchSessions, type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
 import { buildEventsLink } from '../utils/sessionLink';
@@ -17,6 +17,7 @@ export default function SessionsPage() {
   const [sortKey, setSortKey] = useState<SortKey>('lastActivity');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
 
   const [error, setError] = useState<string | null>(null);
 
@@ -31,6 +32,17 @@ export default function SessionsPage() {
         setError('Failed to load sessions');
       });
   }, []);
+
+  // Deep link from the command palette: `?session=<id>` expands that
+  // session in place once the list has loaded, instead of forcing the
+  // user to re-search for it in the filter box.
+  useEffect(() => {
+    const sessionId = searchParams.get('session');
+    if (sessionId && sessions.some(s => s.sessionId === sessionId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setExpandedId(sessionId);
+    }
+  }, [sessions, searchParams]);
 
   const engines = useMemo(() => {
     const set = new Set(sessions.map(s => s.target));

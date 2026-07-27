@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { Activity, AlertCircle } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
 import request from '../../utils/request';
@@ -19,6 +20,7 @@ const TaskDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showNewTask, setShowNewTask] = useState(false);
   const [showGenerateTask, setShowGenerateTask] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     currentGroup,
     projects,
@@ -77,6 +79,24 @@ const TaskDashboard: React.FC = () => {
       setError(e instanceof Error ? e.message : 'Error');
     }
   }, [currentGroup, runs]);
+
+  // Deep link from the command palette: `?task=<name>` opens that task's
+  // detail once the task list has loaded, then clears the param so it
+  // doesn't reopen if the user picks a different task afterward.
+  useEffect(() => {
+    const taskName = searchParams.get('task');
+    if (taskName && tasks.some(t => t.name === taskName)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void openTask(taskName);
+      setSearchParams(
+        params => {
+          params.delete('task');
+          return params;
+        },
+        { replace: true },
+      );
+    }
+  }, [tasks, searchParams, openTask, setSearchParams]);
 
   const runTask = async (engine: string) => {
     if (!selected || !workspace) {

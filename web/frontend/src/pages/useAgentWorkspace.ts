@@ -72,6 +72,9 @@ export type UseAgentWorkspaceReturn = {
   onSelectSession: (session: AgentSession) => void;
   onSelectNativeSession: (native: NativeAgentSession) => void;
   onRemoveSession: (session: AgentSession) => void;
+  pendingRemoveSession: AgentSession | null;
+  onConfirmRemoveSession: () => void;
+  onCancelRemoveSession: () => void;
   onSend: () => void;
   onCancel: () => void;
   onRespondApproval: (approvalId: string, decision: ApprovalDecision) => void;
@@ -459,9 +462,19 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     focusComposer();
   }, [focusComposer]);
 
-  const removeSession = useCallback(async (session: AgentSession) => {
+  const [pendingRemoveSession, setPendingRemoveSession] = useState<AgentSession | null>(null);
+
+  const requestRemoveSession = useCallback((session: AgentSession) => {
     if (state.activeTurnId) return;
-    if (!window.confirm('Remove this local conversation? Its provider history will remain available.')) return;
+    setPendingRemoveSession(session);
+  }, [state.activeTurnId]);
+
+  const cancelRemoveSession = useCallback(() => setPendingRemoveSession(null), []);
+
+  const confirmRemoveSession = useCallback(async () => {
+    const session = pendingRemoveSession;
+    if (!session) return;
+    setPendingRemoveSession(null);
     try {
       await deleteAgentSession(session.id);
       setSessions(previous => previous.filter(item => item.id !== session.id));
@@ -469,7 +482,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to remove conversation');
     }
-  }, [state.activeTurnId, state.session, newSession]);
+  }, [pendingRemoveSession, state.session, newSession]);
 
   const send = useCallback(async () => {
     const text = input.trim();
@@ -652,7 +665,10 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     onNewSession: newSession,
     onSelectSession: selectSession,
     onSelectNativeSession: selectNativeSession,
-    onRemoveSession: removeSession,
+    onRemoveSession: requestRemoveSession,
+    pendingRemoveSession,
+    onConfirmRemoveSession: () => void confirmRemoveSession(),
+    onCancelRemoveSession: cancelRemoveSession,
     onSend: send,
     onCancel: cancel,
     onRespondApproval: respondApproval,
