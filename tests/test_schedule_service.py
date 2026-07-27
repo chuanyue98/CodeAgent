@@ -101,3 +101,22 @@ def test_record_run_updates_status_and_advances_next_run(service):
     assert updated["last_run_at"] is not None
     assert updated["next_run_at"] != original_next_run
     assert updated["next_run_at"] > original_next_run
+
+
+def test_preview_next_runs_returns_requested_count(service):
+    from datetime import datetime, timezone
+
+    with freeze_time("2026-01-01 00:00:00"):
+        runs = service.preview_next_runs("0 9 * * *", count=3)
+
+    assert len(runs) == 3
+    assert [datetime.fromtimestamp(r, tz=timezone.utc).isoformat() for r in runs] == [
+        "2026-01-01T09:00:00+00:00",
+        "2026-01-02T09:00:00+00:00",
+        "2026-01-03T09:00:00+00:00",
+    ]
+
+
+def test_preview_next_runs_rejects_invalid_cron_expr(service):
+    with pytest.raises(ValueError, match="Invalid cron expression"):
+        service.preview_next_runs("not a cron")

@@ -357,6 +357,16 @@ def fix_stale_injections(stale: List[Path]) -> None:
             print(f"  Removed injected {settings_path}")
 
 
+def preview_stale_injections(stale: List[Path]) -> None:
+    """Describe what fix_stale_injections() would do, without touching anything."""
+    for settings_path in stale:
+        backup = settings_path.with_suffix(".json.bak")
+        if backup.exists():
+            print(f"  Would restore {settings_path} from backup")
+        else:
+            print(f"  Would remove injected {settings_path}")
+
+
 # ── Lightweight resolver (avoids running a real engine) ───────────────────────
 
 
@@ -477,7 +487,7 @@ def _render(sections: List[Section]) -> int:
 # ── Public entry point ────────────────────────────────────────────────────────
 
 
-def get_doctor_sections(fix: bool = False) -> list[Section]:
+def get_doctor_sections(fix: bool = False, dry_run: bool = False) -> list[Section]:
     """Run all health checks and return structured Section results.
 
     Does NOT print anything. The caller is responsible for rendering or
@@ -510,7 +520,11 @@ def get_doctor_sections(fix: bool = False) -> list[Section]:
 
     s5 = Section("Session Integrity")
     stale = check_stale_injections(s5)
-    if fix and stale:
+    if dry_run and stale:
+        print("  --dry-run: no changes will be made. Preview of 'ca doctor --fix':")
+        preview_stale_injections(stale)
+        print()
+    elif fix and stale:
         print("  Applying fixes...")
         fix_stale_injections(stale)
         print("  Done. Re-run 'ca doctor' to verify.")
@@ -519,14 +533,18 @@ def get_doctor_sections(fix: bool = False) -> list[Section]:
     return [s1, s2, s3, s4, s5]
 
 
-def run_doctor(fix: bool = False) -> int:
+def run_doctor(fix: bool = False, dry_run: bool = False) -> int:
     """Run all health checks. Returns exit code (0 = OK, 1 = failures)."""
     click.echo()
     click.echo(click.style("  CodeAgent Health Check", bold=True))
     click.echo("  " + "=" * 22)
-    if fix:
+    if dry_run:
+        click.echo(
+            "  --dry-run mode: previewing what --fix would change; nothing is applied"
+        )
+    elif fix:
         click.echo("  --fix mode: auto-repairable issues will be resolved")
-    sections = get_doctor_sections(fix=fix)
+    sections = get_doctor_sections(fix=fix, dry_run=dry_run)
     failures = _render(sections)
     return 1 if failures else 0
 

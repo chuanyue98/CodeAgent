@@ -1,6 +1,7 @@
 import {
   ChevronDown,
   ChevronRight,
+  EyeOff,
   FolderGit2,
   History,
   Loader2,
@@ -8,6 +9,7 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  UserPlus,
 } from 'lucide-react';
 import { Link } from 'react-router';
 import type { AgentSession, NativeAgentSession, ProviderCapabilities } from '../types/agent';
@@ -21,6 +23,7 @@ import {
   workspaceLabel,
 } from '../utils/agentWorkspaceHelpers';
 import type { ConversationListItem } from '../utils/agentWorkspaceHelpers';
+import type { UnavailableWorkspaceGroup } from '../pages/useAgentWorkspaceSessions';
 import { buildEventsLink } from '../utils/sessionLink';
 
 const PAGE_SIZE = SESSION_PAGE_SIZE;
@@ -37,9 +40,17 @@ type Props = {
   nativeSessionLimit: number;
   unavailableSessionLimit: number;
   resumableNativeSessions: NativeAgentSession[];
-  unavailableNativeSessions: NativeAgentSession[];
   visibleNativeSessions: NativeAgentSession[];
-  visibleUnavailableSessions: NativeAgentSession[];
+  unavailableSessionCount: number;
+  unavailableWorkspaceGroups: UnavailableWorkspaceGroup[];
+  visibleUnavailableWorkspaceGroups: UnavailableWorkspaceGroup[];
+  hiddenWorkspaceCount: number;
+  showHiddenWorkspaces: boolean;
+  onHideWorkspace: (path: string) => void;
+  onUnhideWorkspace: (path: string) => void;
+  onToggleShowHiddenWorkspaces: () => void;
+  onRegisterWorkspace: (path: string) => Promise<void>;
+  registeringWorkspace: string | null;
   workspaceConversations: {
     path: string;
     label: string;
@@ -79,9 +90,17 @@ export default function AgentWorkspaceSidebar({
   nativeSessionLimit,
   unavailableSessionLimit,
   resumableNativeSessions,
-  unavailableNativeSessions,
   visibleNativeSessions,
-  visibleUnavailableSessions,
+  unavailableSessionCount,
+  unavailableWorkspaceGroups,
+  visibleUnavailableWorkspaceGroups,
+  hiddenWorkspaceCount,
+  showHiddenWorkspaces,
+  onHideWorkspace,
+  onUnhideWorkspace,
+  onToggleShowHiddenWorkspaces,
+  onRegisterWorkspace,
+  registeringWorkspace,
   workspaceConversations,
   showUnavailableHistory,
   expandedWorkspaces,
@@ -314,7 +333,7 @@ export default function AgentWorkspaceSidebar({
               {resumableNativeSessions.length - visibleNativeSessions.length})
             </button>
           )}
-        {!nativeSessionsLoading && unavailableNativeSessions.length > 0 && (
+        {!nativeSessionsLoading && unavailableSessionCount > 0 && (
           <>
             <button
               onClick={() =>
@@ -324,7 +343,7 @@ export default function AgentWorkspaceSidebar({
               className="mt-2 flex w-full items-center justify-between border-t border-slate-100 px-2 pb-1 pt-3 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-700"
             >
               <span>
-                Unavailable workspaces ({unavailableNativeSessions.length})
+                Unavailable workspaces ({unavailableWorkspaceGroups.length})
               </span>
               <ChevronDown
                 className={`h-3.5 w-3.5 transition-transform ${
@@ -333,41 +352,64 @@ export default function AgentWorkspaceSidebar({
               />
             </button>
             {unavailableHistoryExpanded &&
-              visibleUnavailableSessions.map(session => (
-                <div
-                  key={`${session.engine}:${session.session_id}`}
-                  title={session.project_path}
-                  className="rounded-lg px-2 py-2 text-xs text-slate-500"
-                >
-                  <span className="block truncate">
-                    {session.title || 'Untitled conversation'}
-                  </span>
-                  <span className="mt-0.5 block truncate text-[10px] opacity-70">
-                    {session.engine} · {workspaceLabel(session.project_path)} ·{' '}
-                    {session.message_count} msgs ·{' '}
-                    {relativeTime(
-                      session.ended_at || session.started_at,
-                    )}
-                  </span>
-                  <span className="mt-1 flex items-center gap-2">
-                    <Link
-                      to="/settings/workspace"
-                      className="inline-block text-[10px] font-semibold text-primary hover:underline"
-                    >
-                      Register workspace
-                    </Link>
-                    <Link
-                      to={buildEventsLink(session.engine, session.session_id, session.project_path)}
-                      className="inline-block text-[10px] font-semibold text-primary hover:underline"
-                    >
-                      View in Events
-                    </Link>
-                  </span>
-                </div>
-              ))}
+              visibleUnavailableWorkspaceGroups.map(group => {
+                const { latestSession, isHidden } = group;
+                return (
+                  <div
+                    key={group.path}
+                    title={group.path}
+                    className="rounded-lg px-2 py-2 text-xs text-slate-500"
+                  >
+                    <span className="block truncate font-medium text-slate-600">
+                      {workspaceLabel(group.path)}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[10px] opacity-70">
+                      {group.sessions.length} session{group.sessions.length === 1 ? '' : 's'} ·{' '}
+                      {latestSession.engine} · last {relativeTime(
+                        latestSession.ended_at || latestSession.started_at,
+                      )}
+                    </span>
+                    <span className="mt-1 flex items-center gap-2">
+                      <button
+                        onClick={() => void onRegisterWorkspace(group.path)}
+                        disabled={registeringWorkspace === group.path}
+                        className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline disabled:opacity-50"
+                      >
+                        {registeringWorkspace === group.path ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <UserPlus className="h-3 w-3" />
+                        )}
+                        Register
+                      </button>
+                      {isHidden ? (
+                        <button
+                          onClick={() => onUnhideWorkspace(group.path)}
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline"
+                        >
+                          <EyeOff className="h-3 w-3" /> Unhide
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => onHideWorkspace(group.path)}
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400 hover:text-slate-700 hover:underline"
+                        >
+                          <EyeOff className="h-3 w-3" /> Hide
+                        </button>
+                      )}
+                      <Link
+                        to={buildEventsLink(latestSession.engine, latestSession.session_id, latestSession.project_path)}
+                        className="inline-block text-[10px] font-semibold text-primary hover:underline"
+                      >
+                        View in Events
+                      </Link>
+                    </span>
+                  </div>
+                );
+              })}
             {unavailableHistoryExpanded &&
-              visibleUnavailableSessions.length <
-                unavailableNativeSessions.length && (
+              visibleUnavailableWorkspaceGroups.length <
+                unavailableWorkspaceGroups.length && (
                 <button
                   onClick={() =>
                     onUnavailableLimitChange(unavailableSessionLimit + PAGE_SIZE)
@@ -375,10 +417,20 @@ export default function AgentWorkspaceSidebar({
                   className="w-full rounded-lg px-2 py-1.5 text-center text-[11px] font-medium text-primary hover:bg-primary/5"
                 >
                   Load more unavailable (
-                  {unavailableNativeSessions.length -
-                    visibleUnavailableSessions.length})
+                  {unavailableWorkspaceGroups.length -
+                    visibleUnavailableWorkspaceGroups.length})
                 </button>
               )}
+            {unavailableHistoryExpanded && hiddenWorkspaceCount > 0 && (
+              <button
+                onClick={onToggleShowHiddenWorkspaces}
+                className="w-full rounded-lg px-2 py-1.5 text-center text-[11px] font-medium text-slate-400 hover:bg-slate-50 hover:text-slate-700"
+              >
+                {showHiddenWorkspaces
+                  ? 'Hide dismissed workspaces again'
+                  : `Show ${hiddenWorkspaceCount} hidden workspace${hiddenWorkspaceCount === 1 ? '' : 's'}`}
+              </button>
+            )}
           </>
         )}
       </div>

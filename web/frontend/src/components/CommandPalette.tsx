@@ -6,6 +6,7 @@ import { useProject } from '../context/ProjectContext';
 import { PAGE_LABELS } from '../navigation';
 import { fetchSessions, type SessionUsage } from '../api/analytics';
 import request from '../utils/request';
+import Modal from './shared/Modal';
 
 interface TaskSummary {
   name: string;
@@ -20,11 +21,6 @@ interface PaletteItem {
   section: 'Navigate' | 'Project' | 'Session' | 'Task' | 'Workspace';
   icon: typeof SquareStack;
   run: () => void;
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 }
 
 export default function CommandPalette() {
@@ -174,63 +170,53 @@ export default function CommandPalette() {
       </button>
 
       {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 pt-[15vh]"
-          role="presentation"
-          onClick={() => setOpen(false)}
-          onKeyDown={event => {
-            if (event.key === 'Escape' && !isEditableTarget(event.target)) setOpen(false);
-          }}
+        <Modal
+          onClose={() => setOpen(false)}
+          ariaLabel="Command palette"
+          testId="command-palette"
+          overlayClassName="pt-[15vh]"
+          panelClassName="max-w-lg overflow-hidden"
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Command palette"
-            data-testid="command-palette"
-            className="glass-card w-full max-w-lg overflow-hidden"
-            onClick={event => event.stopPropagation()}
-          >
-            <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
-              <Search size={16} className="shrink-0 text-slate-400" />
-              <input
-                ref={inputRef}
-                value={query}
-                onChange={event => setQuery(event.target.value)}
-                onKeyDown={handleInputKeyDown}
-                placeholder="Go to a page, session, task, workspace…"
-                aria-label="Command palette search"
-                className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
-              />
-              <kbd className="hidden shrink-0 rounded border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-400 sm:inline">
-                Esc
-              </kbd>
-            </div>
-            <ul className="max-h-80 overflow-y-auto py-2" role="listbox" aria-label="Command palette results">
-              {filtered.length === 0 && (
-                <li className="px-4 py-6 text-center text-sm text-slate-400">No matches</li>
-              )}
-              {filtered.map((item, index) => (
-                <li key={item.id} role="option" aria-selected={index === activeIndex}>
-                  <button
-                    type="button"
-                    onMouseEnter={() => setActiveIndex(index)}
-                    onClick={() => runItem(item)}
-                    className={`flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm transition-colors ${
-                      index === activeIndex ? 'bg-primary/10 text-primary' : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <item.icon size={14} className="shrink-0 opacity-60" />
-                      <span className="truncate font-medium">{item.label}</span>
-                      <span className="shrink-0 text-[10px] uppercase tracking-wide text-slate-400">{item.section}</span>
-                    </span>
-                    <span className="shrink-0 truncate text-xs text-slate-400 max-w-[45%]">{item.hint}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+          <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
+            <Search size={16} className="shrink-0 text-slate-400" />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              onKeyDown={handleInputKeyDown}
+              placeholder="Go to a page, session, task, workspace…"
+              aria-label="Command palette search"
+              className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+            />
+            <kbd className="hidden shrink-0 rounded border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-400 sm:inline">
+              Esc
+            </kbd>
           </div>
-        </div>
+          <ul className="max-h-80 overflow-y-auto py-2" role="listbox" aria-label="Command palette results">
+            {filtered.length === 0 && (
+              <li className="px-4 py-6 text-center text-sm text-slate-400">No matches</li>
+            )}
+            {filtered.map((item, index) => (
+              <li key={item.id} role="option" aria-selected={index === activeIndex}>
+                <button
+                  type="button"
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => runItem(item)}
+                  className={`flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm transition-colors ${
+                    index === activeIndex ? 'bg-primary/10 text-primary' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <item.icon size={14} className="shrink-0 opacity-60" />
+                    <span className="truncate font-medium">{item.label}</span>
+                    <span className="shrink-0 text-[10px] uppercase tracking-wide text-slate-400">{item.section}</span>
+                  </span>
+                  <span className="shrink-0 truncate text-xs text-slate-400 max-w-[45%]">{item.hint}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Modal>
       )}
     </>
   );

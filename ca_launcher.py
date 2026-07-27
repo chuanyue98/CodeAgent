@@ -617,13 +617,18 @@ def _launch(ctx, args):
 
 @cli.command()
 @click.option("--fix", is_flag=True, help="Auto-repair issues")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what --fix would change, without making any changes",
+)
 @click.pass_context
-def doctor(ctx, fix):
+def doctor(ctx, fix, dry_run):
     """Run health self-check."""
     _ensure_project_on_path(ctx.obj["root"])
     from core.doctor import run_doctor
 
-    return run_doctor(fix=fix)
+    return run_doctor(fix=fix, dry_run=dry_run)
 
 
 @cli.command()

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useReducer } from 'react';
 import { useProject } from '../context/ProjectContext';
+import request from '../utils/request';
 import {
   createAgentSession,
   deleteAgentSession,
@@ -19,6 +20,7 @@ import type { AgentEvent, AgentGatewayStatus, AgentSession, NativeAgentSession, 
 import { initialAgentSessionState } from '../state/agentSessionReducer';
 import useNativeAgentSessions from './useNativeAgentSessions';
 import useAgentWorkspaceSessions from './useAgentWorkspaceSessions';
+import type { UnavailableWorkspaceGroup } from './useAgentWorkspaceSessions';
 
 export type UseAgentWorkspaceReturn = {
   currentGroup: string;
@@ -56,9 +58,17 @@ export type UseAgentWorkspaceReturn = {
   filteredGatewaySessions: AgentSession[];
   recentSessions: AgentSession[];
   resumableNativeSessions: NativeAgentSession[];
-  unavailableNativeSessions: NativeAgentSession[];
   visibleNativeSessions: NativeAgentSession[];
-  visibleUnavailableSessions: NativeAgentSession[];
+  unavailableSessionCount: number;
+  unavailableWorkspaceGroups: UnavailableWorkspaceGroup[];
+  visibleUnavailableWorkspaceGroups: UnavailableWorkspaceGroup[];
+  hiddenWorkspaceCount: number;
+  showHiddenWorkspaces: boolean;
+  onHideWorkspace: (path: string) => void;
+  onUnhideWorkspace: (path: string) => void;
+  onToggleShowHiddenWorkspaces: () => void;
+  onRegisterWorkspace: (path: string) => Promise<void>;
+  registeringWorkspace: string | null;
   workspaceConversations: { path: string; label: string; conversations: ConversationListItem[] }[];
   connectionLabel: string;
   canCompose: boolean;
@@ -107,6 +117,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     setCurrentGroup,
     selectedWorkspace: workspace,
     setSelectedWorkspace: setWorkspace,
+    refreshConfig,
   } = useProject();
   const [providers, setProviders] = useState<ProviderCapabilities[]>([]);
   const [gatewayStatus, setGatewayStatus] = useState<AgentGatewayStatus>({
@@ -197,15 +208,38 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     void refresh();
   }, [refresh]);
 
+  const [registeringWorkspace, setRegisteringWorkspace] = useState<string | null>(null);
+
+  const registerWorkspace = useCallback(async (path: string) => {
+    setRegisteringWorkspace(path);
+    try {
+      await request('/api/projects', {
+        method: 'POST',
+        body: JSON.stringify({ path, group: 'common' }),
+      });
+      await refreshConfig();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to register workspace');
+    } finally {
+      setRegisteringWorkspace(null);
+    }
+  }, [refreshConfig]);
+
   const {
     validProjects,
     normalizedSessionSearch,
     filteredGatewaySessions,
     recentSessions,
     resumableNativeSessions,
-    unavailableNativeSessions,
+    unavailableSessionCount,
     visibleNativeSessions,
-    visibleUnavailableSessions,
+    unavailableWorkspaceGroups,
+    visibleUnavailableWorkspaceGroups,
+    hiddenWorkspaceCount,
+    showHiddenWorkspaces,
+    onHideWorkspace,
+    onUnhideWorkspace,
+    onToggleShowHiddenWorkspaces,
     workspaceConversations,
   } = useAgentWorkspaceSessions({
     projects,
@@ -651,9 +685,17 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     filteredGatewaySessions,
     recentSessions,
     resumableNativeSessions,
-    unavailableNativeSessions,
     visibleNativeSessions,
-    visibleUnavailableSessions,
+    unavailableSessionCount,
+    unavailableWorkspaceGroups,
+    visibleUnavailableWorkspaceGroups,
+    hiddenWorkspaceCount,
+    showHiddenWorkspaces,
+    onHideWorkspace,
+    onUnhideWorkspace,
+    onToggleShowHiddenWorkspaces,
+    onRegisterWorkspace: registerWorkspace,
+    registeringWorkspace,
     workspaceConversations,
     connectionLabel,
     canCompose,

@@ -125,6 +125,18 @@ class ScheduleService:
             raise KeyError(f"Schedule not found: {schedule_id}")
         return found
 
+    def preview_next_runs(self, cron_expr: str, count: int = 3) -> list[float]:
+        """Returns the next `count` fire times for `cron_expr`.
+
+        Used by the schedule form to show a human-readable preview before
+        the user saves anything -- shares the exact validation/computation
+        `create_schedule` uses, so the preview can never drift from reality.
+        """
+        if not croniter.is_valid(cron_expr):
+            raise ValueError(f"Invalid cron expression: {cron_expr!r}")
+        it = croniter(cron_expr, time.time())
+        return [it.get_next(float) for _ in range(count)]
+
     def delete_schedule(self, schedule_id: str) -> None:
         removed = False
 
