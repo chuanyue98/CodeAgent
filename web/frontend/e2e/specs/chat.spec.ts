@@ -86,9 +86,9 @@ test('sessions from unregistered workspaces are listed but cannot be opened', as
   await selectProvider(page, 'fake');
 
   await page.getByRole('button', { name: /Unavailable workspaces/ }).click();
-  const entry = page.getByText('Legacy session');
+  const entry = page.getByText('unregistered-project');
   await expect(entry).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Register workspace' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Register' })).toBeVisible();
 
   // The entry is inert (not a button) — clicking it must not open a session.
   await entry.click();
