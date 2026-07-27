@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, Code, Play, StopCircle, Terminal } from 'lucide-react';
 import LogViewer from '../LogViewer';
-import { STATUS_DONE, STATUS_WIP, type Engine, type RunStatus, type Task } from './types';
+import { classifyStageStatus, type Engine, type RunStatus, type Task } from './types';
 
 function stageIcon(status: string) {
-  if (STATUS_DONE.includes(status))
+  const state = classifyStageStatus(status);
+  if (state === 'done')
     return <div className="p-2 bg-primary/10 rounded-xl"><CheckCircle2 className="w-4 h-4 text-primary" /></div>;
-  if (STATUS_WIP.includes(status))
+  if (state === 'wip')
     return <div className="p-2 bg-amber-50 rounded-xl"><Clock className="w-4 h-4 text-amber-500 animate-spin-slow" /></div>;
   return <div className="p-2 bg-slate-100 rounded-xl"><Circle className="w-4 h-4 text-slate-300" /></div>;
 }
 
 function stageBadge(status: string) {
-  if (STATUS_DONE.includes(status))
+  const state = classifyStageStatus(status);
+  if (state === 'done')
     return 'border-primary/20 text-primary bg-primary/10';
-  if (STATUS_WIP.includes(status))
+  if (state === 'wip')
     return 'border-amber-200 text-amber-600 bg-amber-50 animate-pulse';
   return 'border-slate-100 text-slate-400 bg-slate-50';
 }
@@ -42,7 +44,7 @@ export default function TaskDetail({
 }) {
   const [selectedEngine, setSelectedEngine] = useState(engines[0]?.id || 'gemini');
 
-  const done = task.stages.filter(s => STATUS_DONE.includes(s.status)).length;
+  const done = task.stages.filter(s => classifyStageStatus(s.status) === 'done').length;
   const pct = task.stages.length > 0 ? Math.round((done / task.stages.length) * 100) : 0;
 
   return (
@@ -131,7 +133,7 @@ export default function TaskDetail({
                   <div
                     key={i}
                     className={`glass-card p-5 flex items-start gap-4 border transition-all ${
-                      STATUS_WIP.includes(stage.status)
+                      classifyStageStatus(stage.status) === 'wip'
                         ? 'border-amber-200/60 bg-amber-50/30'
                         : 'border-slate-100'
                     }`}

@@ -104,6 +104,40 @@ ca new my-task-name
 
 Launches OpenCode with the task-authoring skill to guide you through creating a task blueprint. The resulting file is saved to `tasks/<name>.md`.
 
+### `project`
+
+Manage the project registry (`config.json`'s `project_registry`) without opening the Web UI or answering the interactive first-run prompt.
+
+```bash
+ca project add . --group work     # Register the current directory under "work"
+ca project add /path/to/repo --group web
+ca project list                   # List every registered project
+ca project remove /path/to/repo   # Unregister a project
+```
+
+`ca project add` works in scripts and CI — no TTY required, unlike the interactive prompt that normally appears on first launch from an unregistered directory. If that prompt would otherwise be skipped (non-interactive session, or `CA_SKIP_AUTO_REGISTER` unset), a one-line hint pointing at `ca project add` is printed to stderr instead of failing silently.
+
+### `ps` / `stop`
+
+Manage background task runs (started via the CLI, Web UI, or scheduler) from the command line:
+
+```bash
+ca ps              # List running task runs
+ca ps --all        # Include completed/failed/stopped runs
+ca stop <task_id>  # Terminate a running task by id
+```
+
+### `batch-run`
+
+Run one task across every registered project at once (optionally scoped to a resource group):
+
+```bash
+ca batch-run code_review --engine claude --group work
+ca batch-run code_review --engine claude --dry-run   # Preview targets without starting anything
+```
+
+A project already running the same task is skipped rather than double-started.
+
 ## Proxy
 
 Enable proxy support for engine sessions:

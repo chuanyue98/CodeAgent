@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Search, Anchor, Terminal, Info } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import Toggle from './shared/Toggle';
@@ -7,6 +7,7 @@ import LoadingState from './shared/LoadingState';
 import useResourceData from '../hooks/useResourceData';
 import useResourceToggle from '../hooks/useResourceToggle';
 import Toast from './shared/Toast';
+import BatchActionBar from './shared/BatchActionBar';
 
 interface Hook {
   id: string;
@@ -19,8 +20,9 @@ interface Hook {
 const HooksGallery: React.FC = () => {
   const { currentGroup, groups } = useProject();
   const { data: rawData, loading, error, refetch } = useResourceData<Hook[] | { hooks: Hook[] }>('/api/hooks');
-  const { toggleResource, toggleError, dismissToggleError } = useResourceToggle();
+  const { toggleResource, toggleResources, toggleError, dismissToggleError } = useResourceToggle();
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const hooks = useMemo(() => {
     if (!rawData) return [];
@@ -36,6 +38,41 @@ const HooksGallery: React.FC = () => {
     hook.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
     hook.event.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // A search-changed selection would let a batch action silently apply to
+  // hooks the user can no longer see.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedIds(new Set());
+  }, [searchTerm]);
+
+  const toggleHookSelected = (hookId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(hookId)) next.delete(hookId);
+      else next.add(hookId);
+      return next;
+    });
+  };
+
+  const allFilteredSelected = filteredHooks.length > 0 && filteredHooks.every(hook => selectedIds.has(hook.id));
+
+  const toggleSelectAllFiltered = () => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allFilteredSelected) filteredHooks.forEach(hook => next.delete(hook.id));
+      else filteredHooks.forEach(hook => next.add(hook.id));
+      return next;
+    });
+  };
+
+  const handleActivateSelected = () => {
+    void toggleResources('hooks', Array.from(selectedIds), true).then(() => setSelectedIds(new Set()));
+  };
+
+  const handleDeactivateSelected = () => {
+    void toggleResources('hooks', Array.from(selectedIds), false).then(() => setSelectedIds(new Set()));
+  };
 
   if (loading) {
     return <LoadingState />;
@@ -66,6 +103,17 @@ const HooksGallery: React.FC = () => {
         </div>
       </div>
 
+      <BatchActionBar
+        totalCount={filteredHooks.length}
+        selectedCount={selectedIds.size}
+        allSelected={allFilteredSelected}
+        onToggleSelectAll={toggleSelectAllFiltered}
+        onActivateSelected={handleActivateSelected}
+        onDeactivateSelected={handleDeactivateSelected}
+        onClearSelection={() => setSelectedIds(new Set())}
+        itemLabelPlural={`hook${filteredHooks.length === 1 ? '' : 's'}`}
+      />
+
       <div className="custom-scrollbar flex-1 overflow-y-auto pr-2">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredHooks.map((hook, i) => {
@@ -81,6 +129,13 @@ const HooksGallery: React.FC = () => {
               >
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${hook.name}`}
+                      checked={selectedIds.has(hook.id)}
+                      onChange={() => toggleHookSelected(hook.id)}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                    />
                     <div className={`p-2 rounded-lg ${active ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-400'}`}>
                       <Anchor className="w-5 h-5" />
                     </div>

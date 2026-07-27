@@ -10,6 +10,17 @@ interface ToggleResult {
     resourceId: string,
     e?: React.MouseEvent | React.KeyboardEvent
   ) => Promise<void>;
+  /**
+   * Activates or deactivates many resources in one request instead of one
+   * round-trip per item -- toggleResource already sends the *entire* updated
+   * list on every call, so batching is just computing that list once for N
+   * ids rather than doing it N times.
+   */
+  toggleResources: (
+    resourceType: keyof GroupDefinition,
+    resourceIds: string[],
+    activate: boolean
+  ) => Promise<void>;
 }
 
 /**
@@ -60,9 +71,44 @@ function useResourceToggle(): ToggleResult {
     [currentGroup, groups, refreshConfig]
   );
 
+  const toggleResources = useCallback(
+    async (
+      resourceType: keyof GroupDefinition,
+      resourceIds: string[],
+      activate: boolean
+    ) => {
+      if (!currentGroup || resourceIds.length === 0) return;
+
+      try {
+        setToggleError(null);
+        const currentGroupDef = groups[currentGroup] || {
+          skills: [],
+          prompts: [],
+          hooks: [],
+          plugins: [],
+        };
+        const currentList = currentGroupDef[resourceType] as string[];
+        const nextList = activate
+          ? Array.from(new Set([...currentList, ...resourceIds]))
+          : currentList.filter(id => !resourceIds.includes(id));
+
+        await request(`/api/groups/${currentGroup}`, {
+          method: 'POST',
+          body: JSON.stringify({ ...currentGroupDef, [resourceType]: nextList }),
+        });
+
+        await refreshConfig();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to update resources';
+        setToggleError(msg);
+      }
+    },
+    [currentGroup, groups, refreshConfig]
+  );
+
   const dismissToggleError = useCallback(() => setToggleError(null), []);
 
-  return { toggleError, dismissToggleError, toggleResource };
+  return { toggleError, dismissToggleError, toggleResource, toggleResources };
 }
 
 export default useResourceToggle;

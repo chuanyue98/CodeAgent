@@ -8,6 +8,7 @@ import LoadingState from './shared/LoadingState';
 import useResourceData from '../hooks/useResourceData';
 import useResourceToggle from '../hooks/useResourceToggle';
 import Toast from './shared/Toast';
+import BatchActionBar from './shared/BatchActionBar';
 
 /**
  * A single resource entry (skill, plugin, hook, prompt) shown in a gallery.
@@ -86,10 +87,11 @@ function ResourceGallery({
 }: ResourceGalleryProps) {
   const { currentGroup, groups } = useProject();
   const { data: resourceData, loading, error, refetch } = useResourceData<ResourceData>(apiEndpoint);
-  const { toggleResource, toggleError, dismissToggleError } = useResourceToggle();
+  const { toggleResource, toggleResources, toggleError, dismissToggleError } = useResourceToggle();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<ResourceItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!resourceData) return;
@@ -107,6 +109,13 @@ function ResourceGallery({
     }
   }, [resourceData, selectedCategory]);
 
+  // Switching categories with a stale selection would let a batch action
+  // silently apply to items the user can no longer see.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedIds(new Set());
+  }, [selectedCategory]);
+
   const isItemActive = (itemId: string) =>
     groups[currentGroup]?.[resourceType]?.includes(itemId) ?? false;
 
@@ -116,6 +125,34 @@ function ResourceGallery({
         item.description.toLowerCase().includes(searchTerm.toLowerCase())
       )
     : [];
+
+  const toggleItemSelected = (itemId: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
+
+  const allFilteredSelected = filteredItems.length > 0 && filteredItems.every(item => selectedIds.has(item.id));
+
+  const toggleSelectAllFiltered = () => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allFilteredSelected) filteredItems.forEach(item => next.delete(item.id));
+      else filteredItems.forEach(item => next.add(item.id));
+      return next;
+    });
+  };
+
+  const handleActivateSelected = () => {
+    void toggleResources(resourceType, Array.from(selectedIds), true).then(() => setSelectedIds(new Set()));
+  };
+
+  const handleDeactivateSelected = () => {
+    void toggleResources(resourceType, Array.from(selectedIds), false).then(() => setSelectedIds(new Set()));
+  };
 
   if (loading) {
     return <LoadingState />;
@@ -240,6 +277,16 @@ function ResourceGallery({
                 Toggle a {labels.itemSingular} to mount it for the <span className="font-semibold text-slate-500">{currentGroup}</span> group
               </p>
             </div>
+            <BatchActionBar
+              totalCount={filteredItems.length}
+              selectedCount={selectedIds.size}
+              allSelected={allFilteredSelected}
+              onToggleSelectAll={toggleSelectAllFiltered}
+              onActivateSelected={handleActivateSelected}
+              onDeactivateSelected={handleDeactivateSelected}
+              onClearSelection={() => setSelectedIds(new Set())}
+              itemLabelPlural={`${labels.itemSingular}${filteredItems.length === 1 ? '' : 's'}`}
+            />
             <div className="custom-scrollbar flex-1 overflow-y-auto pr-2">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredItems.map((item, i) => (
@@ -252,8 +299,18 @@ function ResourceGallery({
                     }`}
                   >
                     <div className="flex justify-between items-start mb-4">
-                      <div className={`p-2 rounded-lg ${isItemActive(item.id) ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-400'}`}>
-                        <ItemIcon className="w-5 h-5" />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${item.name}`}
+                          checked={selectedIds.has(item.id)}
+                          onClick={e => e.stopPropagation()}
+                          onChange={() => toggleItemSelected(item.id)}
+                          className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                        />
+                        <div className={`p-2 rounded-lg ${isItemActive(item.id) ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-400'}`}>
+                          <ItemIcon className="w-5 h-5" />
+                        </div>
                       </div>
 
                       <Toggle

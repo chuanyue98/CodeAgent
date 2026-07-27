@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
-import { fetchSystemHealth, fetchSystemMetrics, type SystemHealth, type SystemMetrics } from '../api/system';
+import { fetchSystemHealth, type SystemHealth } from '../api/system';
+import { useSystemMetrics } from '../context/SystemMetricsContext';
 import LogViewer from '../components/LogViewer';
 
 function StatusIcon({ status }: { status: string }) {
@@ -26,16 +27,19 @@ function MetricBar({ label, value, max, unit, color }: { label: string; value: n
 }
 
 export default function SystemPage() {
+  // Metrics come from the same shared poller SystemPanel (the header
+  // popover) reads from, so the two views never show different numbers for
+  // the same instant. Health checks are this page's own concern -- they're
+  // heavier and only meaningful on-demand, not worth polling continuously.
+  const { metrics, error: metricsError, refresh: refreshMetrics } = useSystemMetrics();
   const [health, setHealth] = useState<SystemHealth | null>(null);
-  const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
     try {
-      const [h, m] = await Promise.all([fetchSystemHealth(), fetchSystemMetrics()]);
+      const h = await fetchSystemHealth();
       setHealth(h);
-      setMetrics(m);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
@@ -46,6 +50,11 @@ export default function SystemPage() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, []);
+
+  const handleRefresh = () => {
+    void load();
+    void refreshMetrics();
+  };
 
   if (loading) {
     return <div className="flex items-center justify-center h-64 text-sm text-slate-400">Loading system info...</div>;
@@ -60,12 +69,17 @@ export default function SystemPage() {
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-slate-800">System Health</h2>
-        <button onClick={load} className="flex items-center gap-2 px-3 py-1.5 text-sm border border-slate-200 rounded-xl hover:border-primary/30">
+        <button onClick={handleRefresh} className="flex items-center gap-2 px-3 py-1.5 text-sm border border-slate-200 rounded-xl hover:border-primary/30">
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
       </div>
 
       {/* Metrics */}
+      {metricsError && !metrics && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-red-50/60 border border-red-100 rounded-lg text-xs text-red-600">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {metricsError}
+        </div>
+      )}
       {metrics && (
         <div className="glass-card p-5 space-y-4">
           <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">Metrics</p>

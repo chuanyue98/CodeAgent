@@ -497,3 +497,199 @@ def test_batch_run_rejects_empty_group(tmp_path, monkeypatch):
     ):
         ca_launcher.main()
     assert exc_info.value.code == 1
+
+
+def test_project_add_registers_non_interactively(tmp_path, monkeypatch, capsys):
+    project_dir = tmp_path / "myproj"
+    project_dir.mkdir()
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({"groups": {"work": {}}, "project_registry": []}))
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["ca_launcher.py", "project", "add", str(project_dir), "--group", "work"],
+    )
+    with patch("ca_launcher._project_root", return_value=tmp_path):
+        ca_launcher.main()
+
+    assert "Registered" in capsys.readouterr().out
+    saved = json.loads(config_path.read_text())
+    assert saved["project_registry"] == [
+        {"path": str(project_dir.resolve()), "group": "work"}
+    ]
+
+
+def test_project_add_warns_on_unknown_group_but_still_registers(
+    tmp_path, monkeypatch, capsys
+):
+    project_dir = tmp_path / "myproj"
+    project_dir.mkdir()
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({"groups": {}, "project_registry": []}))
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["ca_launcher.py", "project", "add", str(project_dir), "--group", "ghost"],
+    )
+    with patch("ca_launcher._project_root", return_value=tmp_path):
+        ca_launcher.main()
+
+    out = capsys.readouterr().out
+    assert "doesn't exist yet" in out
+    assert "Registered" in out
+
+
+def test_project_add_rejects_missing_directory(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({"groups": {}, "project_registry": []}))
+    missing = tmp_path / "does-not-exist"
+
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "project", "add", str(missing)])
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        ca_launcher.main()
+    assert exc_info.value.code == 1
+
+
+def test_project_remove(tmp_path, monkeypatch, capsys):
+    project_dir = tmp_path / "myproj"
+    project_dir.mkdir()
+    resolved = str(project_dir.resolve())
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {"groups": {}, "project_registry": [{"path": resolved, "group": "work"}]}
+        )
+    )
+
+    monkeypatch.setattr(
+        "sys.argv", ["ca_launcher.py", "project", "remove", str(project_dir)]
+    )
+    with patch("ca_launcher._project_root", return_value=tmp_path):
+        ca_launcher.main()
+
+    assert "Removed" in capsys.readouterr().out
+    saved = json.loads(config_path.read_text())
+    assert saved["project_registry"] == []
+
+
+def test_project_remove_unknown_path_exits_nonzero(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({"groups": {}, "project_registry": []}))
+    project_dir = tmp_path / "myproj"
+    project_dir.mkdir()
+
+    monkeypatch.setattr(
+        "sys.argv", ["ca_launcher.py", "project", "remove", str(project_dir)]
+    )
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        ca_launcher.main()
+    assert exc_info.value.code == 1
+
+
+def test_project_list(tmp_path, monkeypatch, capsys):
+    config = {
+        "groups": {},
+        "project_registry": [{"path": str(tmp_path), "group": "work"}],
+    }
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "project", "list"])
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("ca_launcher.load_config", return_value=config),
+    ):
+        ca_launcher.main()
+
+    out = capsys.readouterr().out
+    assert str(tmp_path) in out
+    assert "work" in out
+
+
+def test_project_list_empty(tmp_path, monkeypatch, capsys):
+    config = {"groups": {}, "project_registry": []}
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "project", "list"])
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("ca_launcher.load_config", return_value=config),
+    ):
+        ca_launcher.main()
+
+    assert "No projects registered" in capsys.readouterr().out
+
+
+def test_ensure_project_registered_hints_when_noninteractive(
+    tmp_path, monkeypatch, capsys
+):
+    # root and the "external" cwd must be unrelated directories -- otherwise
+    # _is_path_registered's own-install-root special case (cwd == root, or
+    # root among cwd's parents) would make this look already-registered.
+    root = tmp_path / "codeagent_root"
+    root.mkdir()
+    external = tmp_path / "external_project"
+    external.mkdir()
+
+    monkeypatch.delenv("CA_SKIP_AUTO_REGISTER", raising=False)
+    monkeypatch.chdir(external)
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "claude", "hi"])
+    config = {"project_registry": [], "groups": {}}
+    with (
+        patch("ca_launcher._project_root", return_value=root),
+        patch("ca_launcher.load_config", return_value=config),
+        patch("subprocess.run"),
+    ):
+        ca_launcher.main()
+
+    err = capsys.readouterr().err
+    assert "ca project add" in err
+    assert str(external.resolve()) in err
+
+
+def test_ensure_project_registered_silent_when_skip_env_set(
+    tmp_path, monkeypatch, capsys
+):
+    root = tmp_path / "codeagent_root"
+    root.mkdir()
+    external = tmp_path / "external_project"
+    external.mkdir()
+
+    monkeypatch.setenv("CA_SKIP_AUTO_REGISTER", "1")
+    monkeypatch.chdir(external)
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "claude", "hi"])
+    config = {"project_registry": [], "groups": {}}
+    with (
+        patch("ca_launcher._project_root", return_value=root),
+        patch("ca_launcher.load_config", return_value=config),
+        patch("subprocess.run"),
+    ):
+        ca_launcher.main()
+
+    assert capsys.readouterr().err == ""
+
+
+def test_ensure_project_registered_silent_when_already_registered(
+    tmp_path, monkeypatch, capsys
+):
+    root = tmp_path / "codeagent_root"
+    root.mkdir()
+    external = tmp_path / "external_project"
+    external.mkdir()
+
+    monkeypatch.delenv("CA_SKIP_AUTO_REGISTER", raising=False)
+    monkeypatch.chdir(external)
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "claude", "hi"])
+    config = {
+        "project_registry": [{"path": str(external.resolve()), "group": "work"}],
+        "groups": {},
+    }
+    with (
+        patch("ca_launcher._project_root", return_value=root),
+        patch("ca_launcher.load_config", return_value=config),
+        patch("subprocess.run"),
+    ):
+        ca_launcher.main()
+
+    assert capsys.readouterr().err == ""

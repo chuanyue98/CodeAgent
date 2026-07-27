@@ -352,6 +352,9 @@ Examples:
   ca stop <task_id>        Stop a background task run
   ca batch-run code_review --engine claude --group work
                            Run one task across every registered project in a group
+  ca project add . --group work
+                           Register the current directory, non-interactively
+  ca project list         List every registered project
   ca history list          List sessions (use --engine <name> to filter)
   ca history show <engine> <session_id>
   ca history convert <source_engine> <session_id> <target_engine>
@@ -439,17 +442,26 @@ def _ensure_project_registered(root: Path, config: dict) -> None:
     """Prompt to register the current directory under a resource group if
     it isn't covered by ``project_registry`` yet, then persist the choice.
 
-    No-op outside a real terminal (scripted/CI invocations must not block
-    on ``input()``), and can be disabled via ``CA_SKIP_AUTO_REGISTER``.
+    Skips the interactive prompt outside a real terminal (scripted/CI
+    invocations must not block on ``input()``) or when
+    ``CA_SKIP_AUTO_REGISTER`` is set -- but in the non-interactive case still
+    prints a one-line, non-blocking hint pointing at ``ca project add``, so
+    running unregistered never fails *silently*.
     """
-    if not sys.stdin.isatty() or not sys.stdout.isatty():
-        return
-    if os.environ.get("CA_SKIP_AUTO_REGISTER"):
-        return
-
     cwd = Path.cwd().resolve()
     registry = config.get("project_registry", [])
     if _is_path_registered(cwd, root, registry):
+        return
+
+    if os.environ.get("CA_SKIP_AUTO_REGISTER"):
+        return
+
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        print(
+            f"ℹ️  {cwd} 尚未注册到任何资源组，本次将使用默认设置运行。\n"
+            f"   如需注册: ca project add {cwd} --group <group-name>",
+            file=sys.stderr,
+        )
         return
 
     groups = list(config.get("groups", {}).keys()) or ["common"]
@@ -972,6 +984,83 @@ def batch_run(ctx, task_name, engine, group, dry_run):
         print("Use `ca ps` to track progress, `ca stop <task_id>` to cancel one.")
     if failed:
         sys.exit(1)
+
+
+@cli.group(name="project", invoke_without_command=True)
+@click.pass_context
+def project(ctx):
+    """Manage the project registry (config.json's project_registry)."""
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+
+
+@project.command(name="add")
+@click.argument("path", required=False, default=".")
+@click.option(
+    "--group",
+    default="common",
+    show_default=True,
+    help="Resource group to bind this project to.",
+)
+@click.pass_context
+def project_add(ctx, path, group):
+    """Register PATH (default: current directory) under GROUP, non-interactively.
+
+    Unlike the interactive first-run prompt, this works in scripts and CI --
+    no TTY required.
+    """
+    root = ctx.obj["root"]
+    resolved = Path(path).expanduser().resolve()
+    if not resolved.is_dir():
+        print(f"❌ Not a directory: {resolved}")
+        sys.exit(1)
+
+    config = ctx.obj["config"]
+    if group not in config.get("groups", {}):
+        print(
+            f"⚠️  Group '{group}' doesn't exist yet in config.json's groups — "
+            "the project will register, but won't have any skills/prompts/hooks "
+            "mounted until the group is created (e.g. via the Web UI's Config Hub)."
+        )
+
+    service = ConfigService(get_default_config_path(root))
+    registry = service.add_project(str(resolved), group)
+    print(f"✅ Registered {resolved} → group '{group}'")
+    print(
+        f"   project_registry now has {len(registry)} entr{'y' if len(registry) == 1 else 'ies'}."
+    )
+
+
+@project.command(name="remove")
+@click.argument("path")
+@click.pass_context
+def project_remove(ctx, path):
+    """Remove PATH from the project registry."""
+    root = ctx.obj["root"]
+    resolved = Path(path).expanduser().resolve()
+    service = ConfigService(get_default_config_path(root))
+    before = service.get_config()[0].get("project_registry", [])
+    registry = service.delete_project(str(resolved))
+    if len(registry) == len(before):
+        print(f"⚠️  {resolved} was not found in project_registry.")
+        sys.exit(1)
+    print(f"🗑️  Removed {resolved} from project_registry.")
+
+
+@project.command(name="list")
+@click.pass_context
+def project_list(ctx):
+    """List every registered project."""
+    config = ctx.obj["config"]
+    registry = config.get("project_registry", [])
+    if not registry:
+        print("No projects registered.")
+        return
+    for item in registry:
+        path = item.get("path", "?")
+        available = path != "?" and Path(path).expanduser().is_dir()
+        mark = "✓" if available else "✗ (missing)"
+        print(f"  {mark}  {path}  (group: {item.get('group', '?')})")
 
 
 _RESOURCE_KINDS = ("skills", "plugins", "hooks", "prompts")
