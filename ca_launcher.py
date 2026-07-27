@@ -848,7 +848,9 @@ def ps(ctx, show_all):
         workspace = r.workspace or "-"
         print(f"{r.task_id:38s} {r.engine:9s} {r.status:10s} {pid_str:8s} {workspace}")
     if not show_all:
-        print("\nUse `ca stop <task id>` to terminate one, or `ca ps --all` to see recent history.")
+        print(
+            "\nUse `ca stop <task id>` to terminate one, or `ca ps --all` to see recent history."
+        )
 
 
 @cli.command()
@@ -911,9 +913,7 @@ def batch_run(ctx, task_name, engine, group, dry_run):
         for item in config.get("project_registry", [])
         if isinstance(item, dict) and item.get("path")
     ]
-    targets = [
-        item for item in registry if group is None or item.get("group") == group
-    ]
+    targets = [item for item in registry if group is None or item.get("group") == group]
     if not targets:
         scope = f" in group '{group}'" if group else ""
         print(f"❌ No registered projects{scope} found in project_registry.")

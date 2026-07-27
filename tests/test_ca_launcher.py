@@ -364,7 +364,14 @@ def test_batch_run_dry_run_lists_targets_without_starting_anything(
     }
     monkeypatch.setattr(
         "sys.argv",
-        ["ca_launcher.py", "batch-run", "code_review", "--engine", "claude", "--dry-run"],
+        [
+            "ca_launcher.py",
+            "batch-run",
+            "code_review",
+            "--engine",
+            "claude",
+            "--dry-run",
+        ],
     )
     with (
         patch("ca_launcher._project_root", return_value=tmp_path),
@@ -400,7 +407,12 @@ def test_batch_run_starts_per_project_and_skips_already_running(
             self.calls = []
 
         def run_task(
-            self, task_name, engine, group, tasks_root=None, workspace=None,
+            self,
+            task_name,
+            engine,
+            group,
+            tasks_root=None,
+            workspace=None,
             prevent_overlap=False,
         ):
             self.calls.append((task_name, engine, group, workspace))
@@ -413,7 +425,15 @@ def test_batch_run_starts_per_project_and_skips_already_running(
     fake_runner = FakeRunner()
     monkeypatch.setattr(
         "sys.argv",
-        ["ca_launcher.py", "batch-run", "code_review", "--engine", "claude", "--group", "work"],
+        [
+            "ca_launcher.py",
+            "batch-run",
+            "code_review",
+            "--engine",
+            "claude",
+            "--group",
+            "work",
+        ],
     )
     with (
         patch("ca_launcher._project_root", return_value=tmp_path),
@@ -460,7 +480,15 @@ def test_batch_run_rejects_empty_group(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "sys.argv",
-        ["ca_launcher.py", "batch-run", "code_review", "--engine", "claude", "--group", "nope"],
+        [
+            "ca_launcher.py",
+            "batch-run",
+            "code_review",
+            "--engine",
+            "claude",
+            "--group",
+            "nope",
+        ],
     )
     with (
         patch("ca_launcher._project_root", return_value=tmp_path),

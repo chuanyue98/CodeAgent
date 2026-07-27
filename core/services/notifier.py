@@ -49,6 +49,8 @@ def notify(config: dict, event: str, payload: dict[str, Any]) -> None:
             urllib.request.urlopen(request, timeout=5)  # noqa: S310
         except (urllib.error.URLError, OSError, ValueError):
             logger.warning(
-                "Failed to deliver %s webhook notification to %s", event, url,
+                "Failed to deliver %s webhook notification to %s",
+                event,
+                url,
                 exc_info=True,
             )
