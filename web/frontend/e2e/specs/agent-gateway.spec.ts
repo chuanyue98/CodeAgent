@@ -170,11 +170,11 @@ test('keeps unavailable workspace history collapsed until requested', async ({ p
   await gotoAgent(page);
   const unavailable = page.getByRole('button', { name: 'Unavailable workspaces (1)' });
   await expect(unavailable).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByText('Unavailable provider conversation', { exact: true })).not.toBeVisible();
+  await expect(page.getByText('not-registered', { exact: true })).not.toBeVisible();
 
   await unavailable.click();
-  await expect(page.getByText('Unavailable provider conversation', { exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Register workspace' })).toBeVisible();
+  await expect(page.getByText('not-registered', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Register' })).toBeVisible();
 });
 
 test('shows a retry action when provider history fails', async ({ page }) => {

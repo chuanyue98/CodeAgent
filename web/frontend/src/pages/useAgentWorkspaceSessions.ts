@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { AgentSession, NativeAgentSession } from '../types/agent';
 import type { ConversationListItem } from '../utils/agentWorkspaceHelpers';
 import {
@@ -7,6 +7,40 @@ import {
 } from '../utils/agentWorkspaceHelpers';
 
 type Project = { path: string; group: string; available?: boolean };
+
+export interface UnavailableWorkspaceGroup {
+  path: string;
+  sessions: NativeAgentSession[];
+  latestSession: NativeAgentSession;
+  isHidden: boolean;
+}
+
+// Dismissing an unavailable workspace is a personal decluttering choice, not
+// server state -- it's stored client-side so "129 unavailable workspaces"
+// can shrink to just the ones a user still cares about, without needing a
+// backend concept of "archived" history.
+const HIDDEN_WORKSPACES_KEY = 'codeagent.hiddenUnavailableWorkspaces';
+
+function readHiddenWorkspaces(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(HIDDEN_WORKSPACES_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeHiddenWorkspaces(paths: Set<string>): void {
+  try {
+    window.localStorage.setItem(HIDDEN_WORKSPACES_KEY, JSON.stringify(Array.from(paths)));
+  } catch {
+    // Private-mode / blocked storage: hiding still works for this session.
+  }
+}
+
+function latestTimestamp(session: NativeAgentSession): string {
+  return session.ended_at || session.started_at || '';
+}
 
 export default function useAgentWorkspaceSessions({
   projects,
@@ -90,11 +124,71 @@ export default function useAgentWorkspaceSessions({
       : resumableNativeSessions.slice(0, nativeSessionLimit),
     [resumableNativeSessions, nativeSessionLimit, normalizedSessionSearch],
   );
-  const visibleUnavailableSessions = useMemo(
+
+  const [hiddenWorkspaces, setHiddenWorkspaces] = useState<Set<string>>(readHiddenWorkspaces);
+  const [showHiddenWorkspaces, setShowHiddenWorkspaces] = useState(false);
+
+  const hideWorkspace = useCallback((path: string) => {
+    setHiddenWorkspaces(prev => {
+      const next = new Set(prev);
+      next.add(path);
+      writeHiddenWorkspaces(next);
+      return next;
+    });
+  }, []);
+
+  const unhideWorkspace = useCallback((path: string) => {
+    setHiddenWorkspaces(prev => {
+      const next = new Set(prev);
+      next.delete(path);
+      writeHiddenWorkspaces(next);
+      return next;
+    });
+  }, []);
+
+  const toggleShowHiddenWorkspaces = useCallback(() => {
+    setShowHiddenWorkspaces(prev => !prev);
+  }, []);
+
+  // 129 individual session rows is noise -- what a user can actually act on
+  // is the workspace they belong to (register it, or stop seeing it), so
+  // group by project_path before deciding what to paginate/hide.
+  const allUnavailableWorkspaceGroups = useMemo<UnavailableWorkspaceGroup[]>(() => {
+    const byPath = new Map<string, NativeAgentSession[]>();
+    for (const session of unavailableNativeSessions) {
+      const list = byPath.get(session.project_path);
+      if (list) list.push(session);
+      else byPath.set(session.project_path, [session]);
+    }
+    const groups = Array.from(byPath.entries()).map(([path, groupSessions]) => {
+      const sorted = [...groupSessions].sort(
+        (a, b) => latestTimestamp(b).localeCompare(latestTimestamp(a)),
+      );
+      return { path, sessions: sorted, latestSession: sorted[0], isHidden: hiddenWorkspaces.has(path) };
+    });
+    groups.sort(
+      (a, b) => latestTimestamp(b.latestSession).localeCompare(latestTimestamp(a.latestSession)),
+    );
+    return groups;
+  }, [unavailableNativeSessions, hiddenWorkspaces]);
+
+  const hiddenWorkspaceCount = useMemo(
+    () => allUnavailableWorkspaceGroups.filter(group => hiddenWorkspaces.has(group.path)).length,
+    [allUnavailableWorkspaceGroups, hiddenWorkspaces],
+  );
+
+  const unavailableWorkspaceGroups = useMemo(
+    () => showHiddenWorkspaces
+      ? allUnavailableWorkspaceGroups
+      : allUnavailableWorkspaceGroups.filter(group => !hiddenWorkspaces.has(group.path)),
+    [allUnavailableWorkspaceGroups, hiddenWorkspaces, showHiddenWorkspaces],
+  );
+
+  const visibleUnavailableWorkspaceGroups = useMemo(
     () => normalizedSessionSearch
-      ? unavailableNativeSessions
-      : unavailableNativeSessions.slice(0, unavailableSessionLimit),
-    [unavailableNativeSessions, unavailableSessionLimit, normalizedSessionSearch],
+      ? unavailableWorkspaceGroups
+      : unavailableWorkspaceGroups.slice(0, unavailableSessionLimit),
+    [unavailableWorkspaceGroups, unavailableSessionLimit, normalizedSessionSearch],
   );
   const workspaceConversations = useMemo(() => {
     const byWorkspace = new Map<string, ConversationListItem[]>(
@@ -143,9 +237,15 @@ export default function useAgentWorkspaceSessions({
     mappedProviderSessions,
     filteredNativeSessions,
     resumableNativeSessions,
-    unavailableNativeSessions,
+    unavailableSessionCount: unavailableNativeSessions.length,
     visibleNativeSessions,
-    visibleUnavailableSessions,
+    unavailableWorkspaceGroups,
+    visibleUnavailableWorkspaceGroups,
+    hiddenWorkspaceCount,
+    showHiddenWorkspaces,
+    onHideWorkspace: hideWorkspace,
+    onUnhideWorkspace: unhideWorkspace,
+    onToggleShowHiddenWorkspaces: toggleShowHiddenWorkspaces,
     workspaceConversations,
   };
 }
