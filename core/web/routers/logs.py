@@ -8,9 +8,11 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
+from core.web.resource_paths import ROOT_DIR
+
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
-CA_TASK_LOGS_DIR = Path(__file__).resolve().parent.parent.parent / ".ca_task_logs"
+CA_TASK_LOGS_DIR = ROOT_DIR / ".ca_task_logs"
 
 
 def _resolve_log_path(task_id: str) -> Path | None:
