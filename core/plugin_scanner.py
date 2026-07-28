@@ -6,6 +6,8 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+from core.resource_locator import CODE_ROOT
+
 
 class PluginScanner:
     """Scanner class to automatically discover plugin categories and metadata."""
@@ -108,7 +110,7 @@ def get_plugins_to_mount(
 
     # 2. Automatically load local plugins/ subdirectory if it exists in CWD
     cwd = Path.cwd()
-    if cwd.resolve() != Path(__file__).resolve().parent.parent.resolve():
+    if cwd.resolve() != CODE_ROOT:
         local_plugins = cwd / "plugins"
         if local_plugins.exists():
             # Scan local plugins

@@ -11,6 +11,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.constants import ENGINES
 from core.services.run_store import RunStore, TaskRunRecord
 
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
@@ -88,7 +89,7 @@ class TaskRunner:
             raise ValueError(f"Invalid task name: {task_name!r}")
         if not _SAFE_NAME_RE.match(group):
             raise ValueError(f"Invalid group name: {group!r}")
-        if engine not in {"claude", "gemini", "opencode", "codex"}:
+        if engine not in ENGINES:
             raise ValueError(f"Invalid engine: {engine!r}")
 
         working_dir = (
@@ -187,7 +188,7 @@ class TaskRunner:
         """
         import time
 
-        if engine not in {"claude", "gemini", "opencode", "codex"}:
+        if engine not in ENGINES:
             raise ValueError(f"Invalid engine: {engine!r}")
         if not message or not message.strip():
             raise ValueError("message must not be empty")

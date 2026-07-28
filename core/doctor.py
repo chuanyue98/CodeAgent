@@ -15,6 +15,7 @@ import click
 
 from core.hook_scanner import get_hooks_to_inject
 from core.plugin_scanner import get_plugins_to_mount
+from core.resource_locator import CODE_ROOT
 from core.services.config_service import ConfigService
 
 # ── Status symbols ────────────────────────────────────────────────────────────
@@ -494,7 +495,7 @@ def get_doctor_sections(fix: bool = False, dry_run: bool = False) -> list[Sectio
     Does NOT print anything. The caller is responsible for rendering or
     serializing the sections.
     """
-    root = Path(__file__).resolve().parent.parent
+    root = CODE_ROOT
 
     s1 = Section("Runtime")
     check_python(s1)

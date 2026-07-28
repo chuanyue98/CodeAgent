@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Body, HTTPException, Query
 
+from core.constants import ENGINES
 from core.services.config_service import ConfigService
 from core.services.runner_service import TaskAlreadyRunningError, TaskRunner
 from core.services.skill_service import SkillService
@@ -92,7 +93,7 @@ async def generate_task(
     but reuses the already-hardened one-shot ChatPage pipeline
     (``build_chat_command``) rather than the interactive-oriented CLI path.
     """
-    if engine not in {"claude", "gemini", "opencode", "codex"}:
+    if engine not in ENGINES:
         raise HTTPException(status_code=400, detail=f"Invalid engine: {engine!r}")
     if not is_valid_task_name(name):
         raise HTTPException(status_code=400, detail="Task name must match [\\w.-]+")

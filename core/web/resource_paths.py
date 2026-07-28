@@ -2,9 +2,13 @@ import json
 import os
 from pathlib import Path
 
-from core.resource_locator import get_bundled_resource_root, get_default_config_path
+from core.resource_locator import (
+    CODE_ROOT,
+    get_bundled_resource_root,
+    get_default_config_path,
+)
 
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+ROOT_DIR = CODE_ROOT
 
 
 def _config_resource_root() -> Path:

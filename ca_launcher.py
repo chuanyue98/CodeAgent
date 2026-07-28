@@ -12,7 +12,11 @@ from pathlib import Path
 import click
 
 from core.console import configure_console_encoding
-from core.resource_locator import get_bundled_resource_root, get_default_config_path
+from core.resource_locator import (
+    CODE_ROOT,
+    get_bundled_resource_root,
+    get_default_config_path,
+)
 from core.services.config_service import ConfigService
 
 UI_API_PORT = 8524
@@ -25,7 +29,7 @@ configure_console_encoding()
 
 
 def _installed_root():
-    return Path(__file__).resolve().parent
+    return CODE_ROOT
 
 
 def _looks_like_project_root(path: Path):

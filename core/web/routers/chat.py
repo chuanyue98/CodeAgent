@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from core.constants import ENGINES
 from core.services.config_service import ConfigService
 from core.services.runner_service import TaskRunner
 from core.web.resource_paths import ROOT_DIR
@@ -118,7 +119,7 @@ async def get_chat_capabilities(
     provider-native capabilities remain unknown because their discovery is
     internal to each CLI and is not exposed by the one-shot protocol.
     """
-    if engine not in {"claude", "gemini", "opencode", "codex"}:
+    if engine not in ENGINES:
         raise HTTPException(status_code=400, detail=f"Invalid engine: {engine!r}")
 
     service = ConfigService(get_config_path())

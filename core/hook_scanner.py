@@ -6,6 +6,8 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+from core.resource_locator import CODE_ROOT
+
 
 class HookScanner:
     """Scanner class to automatically discover hook categories and metadata."""
@@ -112,7 +114,7 @@ def get_hooks_to_inject(
             add_hook(hn)
 
     # 4. Automatic loading: include hooks from non-standard roots (e.g., project-local hooks)
-    ca_root = Path(__file__).resolve().parent.parent
+    ca_root = CODE_ROOT
     ca_hooks_root = (ca_root / "hooks").resolve()
 
     for root in scanner.hooks_roots:

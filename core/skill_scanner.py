@@ -4,6 +4,8 @@ import os
 import traceback
 from pathlib import Path
 
+from core.resource_locator import CODE_ROOT
+
 
 class SkillScanner:
     """Scanner class to automatically discover skill categories and individual skills."""
@@ -99,7 +101,7 @@ def get_skills_to_mount(
 
     # 4. Automatically load skills from the local 'skills/' subdirectory
     cwd = Path.cwd()
-    if cwd != Path(__file__).resolve().parent.parent:
+    if cwd != CODE_ROOT:
         local_skills = cwd / "skills"
         if local_skills.exists():
             for item in local_skills.iterdir():

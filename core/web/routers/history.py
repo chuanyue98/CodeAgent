@@ -28,6 +28,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, field_validator
 
+from core.constants import ENGINES
 from core.session_history.audit import build_audit_events
 from core.session_history.session_finder import (
     find_all_sessions,
@@ -35,8 +36,6 @@ from core.session_history.session_finder import (
 )
 
 router = APIRouter(prefix="/api")
-
-VALID_ENGINES = {"claude", "codex", "gemini", "opencode"}
 
 
 def _validate_source_file_path(source_file: str, engine: str) -> Path:
@@ -108,9 +107,9 @@ class ConvertRequest(BaseModel):
     @field_validator("source_engine", "target_engine")
     @classmethod
     def validate_engine(cls, v: str) -> str:
-        if v not in VALID_ENGINES:
+        if v not in ENGINES:
             raise ValueError(
-                f"Invalid engine '{v}'. Must be one of: {', '.join(sorted(VALID_ENGINES))}"
+                f"Invalid engine '{v}'. Must be one of: {', '.join(sorted(ENGINES))}"
             )
         return v
 
@@ -289,9 +288,8 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
     # Launch the engine in a visible terminal (same mechanism as /api/launch).
     import sys
 
-    from core.web.routers.launch import launch_in_terminal
+    from core.web.routers.launch import _CA_LAUNCHER, launch_in_terminal
 
-    _CA_LAUNCHER = Path(__file__).resolve().parents[3] / "ca_launcher.py"
     cmd = [sys.executable, str(_CA_LAUNCHER), req.target_engine]
 
     try:
