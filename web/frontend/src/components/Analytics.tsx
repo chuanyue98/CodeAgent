@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import type { TooltipPayloadEntry } from 'recharts';
 import {
   AlertCircle,
   ArrowDownRight,
@@ -59,6 +60,15 @@ const ENGINE_BADGE: Record<string, string> = {
 function ec(t: string) { return ENGINE_COLORS[t] ?? '#94a3b8'; }
 function eb(t: string) { return ENGINE_BADGE[t] ?? 'bg-slate-100 text-slate-600'; }
 
+// A row in the daily/monthly recharts datasets: one string category key
+// (`_date`/`_month`, used as the axis `dataKey`) plus one numeric cost/token
+// total per engine, added dynamically as engines are discovered. The engine
+// index signature is widened to `number | string` only so the literal
+// `_date`/`_month` property is legal on the same type; every access on a
+// dynamic (non `_*`) key is guaranteed numeric by construction.
+type ChartRow = { _date: string; [engine: string]: number | string };
+type MonthlyChartRow = { _month: string; [engine: string]: number | string };
+
 // ── Tiny helpers ─────────────────────────────────────────────────────────────
 function formatDate(s: string) {
   try { return format(new Date(s), 'MMM dd'); } catch { return s.slice(5); }
@@ -101,23 +111,30 @@ function StatCard({
 }
 
 // ── Custom tooltip ────────────────────────────────────────────────────────────
+// `TooltipPayloadEntry` is recharts' own entry shape (all fields optional / a
+// union `ValueType = number | string | ReadonlyArray<number | string>`), so we
+// normalize the bits we actually render instead of trusting them blindly.
 function ChartTooltip({ active, payload, label, isCost }: {
-  active?: boolean; payload?: Array<{ name: string; value: number; color: string }>;
+  active?: boolean; payload?: ReadonlyArray<TooltipPayloadEntry>;
   label?: string; isCost?: boolean;
 }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-lg text-xs">
       <p className="font-semibold mb-1.5 text-slate-700">{label}</p>
-      {payload.map((entry, i) => (
-        <p key={i} className="flex gap-2 items-center" style={{ color: entry.color }}>
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: entry.color }} />
-          <span className="text-slate-600">{entry.name}:</span>
-          <span className="font-semibold">
-            {isCost ? fmtCost(entry.value) : fmtTokens(entry.value)}
-          </span>
-        </p>
-      ))}
+      {payload.map((entry, i) => {
+        const color = entry.color ?? '#94a3b8';
+        const value = typeof entry.value === 'number' ? entry.value : Number(entry.value ?? 0);
+        return (
+          <p key={i} className="flex gap-2 items-center" style={{ color }}>
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+            <span className="text-slate-600">{String(entry.name ?? '')}:</span>
+            <span className="font-semibold">
+              {isCost ? fmtCost(value) : fmtTokens(value)}
+            </span>
+          </p>
+        );
+      })}
     </div>
   );
 }
@@ -145,17 +162,31 @@ const Analytics: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Guards setState calls in the async fetch below from firing after the
+  // component has unmounted (e.g. a fast page switch while the request is
+  // still in flight).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const loadAll = useCallback(async () => {
     try {
       const [summary, eng, day, mon, sess, mods] = await Promise.all([
         fetchSummary(), fetchEngines(), fetchDaily(), fetchMonthly(), fetchSessions(200), fetchModels(),
       ]);
+      if (!mountedRef.current) return;
       setEngines(eng); setDaily(day); setMonthly(mon); setSessions(sess); setModelStats(mods);
       setTotalSessions(summary.session_count);
       setError(null);
     } catch (e) {
+      if (!mountedRef.current) return;
       setError(e instanceof Error ? e.message : 'Failed to load analytics');
-    } finally { setLoading(false); }
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
   }, []);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -176,41 +207,35 @@ const Analytics: React.FC = () => {
 
   // ── Daily chart: one series per engine, cost ─────────────────────────────
   const dailyChartData = useMemo(() => {
-    const byDate: Record<string, Record<string, number>> = {};
+    const byDate: Record<string, ChartRow> = {};
     for (const d of daily) {
-      if (!byDate[d.date]) byDate[d.date] = { _date: d.date as unknown as number };
-      byDate[d.date][d.target] = (byDate[d.date][d.target] ?? 0) + d.cost;
+      if (!byDate[d.date]) byDate[d.date] = { _date: d.date };
+      byDate[d.date][d.target] = Number(byDate[d.date][d.target] ?? 0) + d.cost;
     }
-    return Object.values(byDate).sort((a, b) =>
-      String(a._date).localeCompare(String(b._date))
-    );
+    return Object.values(byDate).sort((a, b) => a._date.localeCompare(b._date));
   }, [daily]);
 
   // ── Daily token chart ────────────────────────────────────────────────────
   const dailyTokenData = useMemo(() => {
-    const byDate: Record<string, Record<string, number>> = {};
+    const byDate: Record<string, ChartRow> = {};
     for (const d of daily) {
-      if (!byDate[d.date]) byDate[d.date] = { _date: d.date as unknown as number };
+      if (!byDate[d.date]) byDate[d.date] = { _date: d.date };
       byDate[d.date][d.target] =
-        (byDate[d.date][d.target] ?? 0) + d.inputTokens + d.outputTokens;
+        Number(byDate[d.date][d.target] ?? 0) + d.inputTokens + d.outputTokens;
     }
-    return Object.values(byDate).sort((a, b) =>
-      String(a._date).localeCompare(String(b._date))
-    );
+    return Object.values(byDate).sort((a, b) => a._date.localeCompare(b._date));
   }, [daily]);
 
   const enginesInDaily = useMemo(() => [...new Set(daily.map((d) => d.target))], [daily]);
   const enginesInMonthly = useMemo(() => [...new Set(monthly.map((m) => m.target))], [monthly]);
 
   const monthlyChartData = useMemo(() => {
-    const byMonth: Record<string, Record<string, number>> = {};
+    const byMonth: Record<string, MonthlyChartRow> = {};
     for (const m of monthly) {
-      if (!byMonth[m.month]) byMonth[m.month] = { _month: m.month as unknown as number };
-      byMonth[m.month][m.target] = (byMonth[m.month][m.target] ?? 0) + m.cost;
+      if (!byMonth[m.month]) byMonth[m.month] = { _month: m.month };
+      byMonth[m.month][m.target] = Number(byMonth[m.month][m.target] ?? 0) + m.cost;
     }
-    return Object.values(byMonth).sort((a, b) =>
-      String(a._month).localeCompare(String(b._month))
-    );
+    return Object.values(byMonth).sort((a, b) => a._month.localeCompare(b._month));
   }, [monthly]);
 
   const pieData = useMemo(
@@ -621,7 +646,7 @@ const Analytics: React.FC = () => {
                   content={(props) => (
                     <ChartTooltip
                       active={props.active}
-                      payload={props.payload as unknown as Array<{ name: string; value: number; color: string }>}
+                      payload={props.payload}
                       label={props.label != null ? formatDate(String(props.label)) : undefined}
                       isCost
                     />
@@ -662,7 +687,7 @@ const Analytics: React.FC = () => {
                   content={(props) => (
                     <ChartTooltip
                       active={props.active}
-                      payload={props.payload as unknown as Array<{ name: string; value: number; color: string }>}
+                      payload={props.payload}
                       label={props.label != null ? formatDate(String(props.label)) : undefined}
                     />
                   )}
@@ -728,7 +753,7 @@ const Analytics: React.FC = () => {
                   content={(props) => (
                     <ChartTooltip
                       active={props.active}
-                      payload={props.payload as unknown as Array<{ name: string; value: number; color: string }>}
+                      payload={props.payload}
                       label={props.label != null ? formatMonth(String(props.label)) : undefined}
                       isCost
                     />

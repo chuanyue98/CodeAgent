@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router';
 import { Search, Filter, ChevronDown, ChevronUp, Clock, Wrench, MessageSquare, AlertCircle, X, RefreshCw, TerminalSquare, Check } from 'lucide-react';
-import { fetchAuditEvents, convertAndLaunchSession, type AuditEvent, type AuditEventType } from '../api/audit';
+import { fetchAuditEvents, convertAndLaunchSession, type AuditEvent, type AuditEventType, type FetchAuditEventsParams } from '../api/audit';
 import request from '../utils/request';
 
 const ENGINE_LABELS: Record<string, string> = {
@@ -12,6 +12,11 @@ const ENGINE_LABELS: Record<string, string> = {
 };
 
 const ALL_ENGINES = Object.keys(ENGINE_LABELS);
+
+// Server caps /api/history/audit at this many events per request. When the
+// response count hits this ceiling there may be more matching events beyond
+// what we fetched, so the UI must say so instead of silently truncating.
+const EVENT_LIMIT = 1000;
 
 type ConvertState =
   | { status: 'idle' }
@@ -54,6 +59,8 @@ export default function AuditTrail() {
   const [sessionLoading, setSessionLoading] = useState(false);
   const [convertState, setConvertState] = useState<ConvertState>({ status: 'idle' });
   const [searchParams] = useSearchParams();
+  const [truncated, setTruncated] = useState(false);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   // Deep link support: /activity/events?session=&engine=&project= auto-opens
   // the matching session's detail drawer, so other pages (History, Workspaces)
@@ -68,22 +75,48 @@ export default function AuditTrail() {
     }
   }, [searchParams]);
 
-  const load = () => {
+  // Only one engine can be sent to the server at a time (single `engine`
+  // query param). When the user multi-selects engines we fetch unfiltered
+  // and fall back to client-side filtering for that dimension below.
+  const engineParam = useMemo(
+    () => (selectedEngines.length === 1 ? selectedEngines[0] : undefined),
+    [selectedEngines],
+  );
+
+  const load = () => setReloadNonce(n => n + 1);
+
+  // Refetches from the server whenever the server-supported filters (date
+  // range, single-engine selection) or an explicit refresh change. Using
+  // server-side since/until/engine params avoids the old bug where date
+  // filtering only ever searched the fixed first 1000 client-cached events.
+  useEffect(() => {
+    let mounted = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
-    fetchAuditEvents({ limit: 1000 })
+
+    const params: FetchAuditEventsParams = { limit: EVENT_LIMIT };
+    if (engineParam) params.engine = engineParam;
+    if (dateStart) params.since = dateStart;
+    if (dateEnd) params.until = `${dateEnd}T23:59:59.999Z`;
+
+    fetchAuditEvents(params)
       .then(data => {
+        if (!mounted) return;
         setEvents(data.events);
+        setTruncated(data.count >= EVENT_LIMIT);
         setLoading(false);
       })
       .catch(() => {
+        if (!mounted) return;
         setLoading(false);
         setError('Failed to load audit events');
       });
-  };
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(load, []);
+    return () => {
+      mounted = false;
+    };
+  }, [engineParam, dateStart, dateEnd, reloadNonce]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -96,19 +129,33 @@ export default function AuditTrail() {
       setSessionDetail(null);
       return;
     }
+    let mounted = true;
     setSessionLoading(true);
     fetchSessionDetail(drawerSession.engine, drawerSession.sessionId, drawerSession.project)
       .then(data => {
+        if (!mounted) return;
         setSessionDetail(data);
         setSessionLoading(false);
       })
-      .catch(() => setSessionLoading(false));
+      .catch(() => {
+        if (!mounted) return;
+        setSessionLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
   }, [drawerSession]);
 
-  const engines = useMemo(() => {
-    const set = new Set(events.map(e => e.engine));
-    return Array.from(set).sort();
-  }, [events]);
+  // Escape-key support for the session detail drawer (previously only
+  // closable by clicking the backdrop or the X button).
+  useEffect(() => {
+    if (!drawerSession) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerSession(null);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [drawerSession]);
 
   const filtered = useMemo(() => {
     let result = events;
@@ -122,19 +169,16 @@ export default function AuditTrail() {
       );
     }
     if (selectedEngines.length > 0) {
+      // Server already narrowed to this engine when exactly one was
+      // selected (see engineParam); this also covers the multi-select case
+      // where filtering has to happen client-side.
       result = result.filter(e => selectedEngines.includes(e.engine));
     }
     if (selectedTypes.length > 0) {
       result = result.filter(e => selectedTypes.includes(e.event_type));
     }
-    if (dateStart) {
-      result = result.filter(e => e.timestamp >= dateStart);
-    }
-    if (dateEnd) {
-      result = result.filter(e => e.timestamp <= dateEnd + 'T23:59:59.999Z');
-    }
     return result;
-  }, [events, search, selectedEngines, selectedTypes, dateStart, dateEnd]);
+  }, [events, search, selectedEngines, selectedTypes]);
 
   const toggleEngine = (engine: string) => {
     setSelectedEngines(prev => prev.includes(engine) ? prev.filter(e => e !== engine) : [...prev, engine]);
@@ -250,7 +294,7 @@ export default function AuditTrail() {
         <div>
           <label className="text-xs text-slate-400 font-medium block mb-1">Engine</label>
           <div className="space-y-1">
-            {engines.map(eng => (
+            {ALL_ENGINES.map(eng => (
               <button
                 key={eng}
                 onClick={() => toggleEngine(eng)}
@@ -282,6 +326,13 @@ export default function AuditTrail() {
         <p className="text-[11px] text-slate-400 mb-4">
           Message and tool-call history across all engines — not an approval or permission log.
         </p>
+
+        {truncated && (
+          <div className="flex items-center gap-2 mb-4 px-3 py-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            仅显示最近 {EVENT_LIMIT} 条事件，可能还有更多匹配结果——请缩小时间范围或按引擎筛选。
+          </div>
+        )}
 
         <div className="space-y-2 overflow-y-auto">
           {filtered.map(event => {

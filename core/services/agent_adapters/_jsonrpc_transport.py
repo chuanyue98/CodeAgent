@@ -18,8 +18,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class JsonRpcStdioTransport:
@@ -126,6 +129,11 @@ class JsonRpcStdioTransport:
                 try:
                     message = json.loads(line)
                 except (json.JSONDecodeError, UnicodeDecodeError):
+                    logger.debug(
+                        "%s: dropping unparseable line from stdout: %r",
+                        self._crash_label,
+                        line,
+                    )
                     continue
                 request_id = message.get("id")
                 method = message.get("method")

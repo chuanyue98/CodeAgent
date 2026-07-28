@@ -344,7 +344,15 @@ function ResourceGallery<M = unknown>({
                 {filteredItems.map((item, i) => (
                   <div
                     key={item.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setSelectedItem(item)}
+                    onKeyDown={keyboardEvent => {
+                      if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                        keyboardEvent.preventDefault();
+                        setSelectedItem(item);
+                      }
+                    }}
                     // Cap at 6 — long galleries shouldn't cascade forever.
                     className={`animate-fade-rise stagger-${Math.min(i + 3, 7)} group glass-card p-6 hover:border-primary/20 hover:bg-slate-50/50 transition-all cursor-pointer relative overflow-hidden ${
                       !isItemActive(item.id) ? 'bg-slate-50/60 border-slate-200' : ''

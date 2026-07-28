@@ -43,7 +43,7 @@ def test_task_runner_passes_task_mode_group_and_tasks_root(tmp_path):
     assert status is not None
     assert status.status == "completed"
     payload = json.loads(Path(status.log_path).read_text(encoding="utf-8"))
-    assert payload["argv"] == ["codex", "-t", "review", "-y"]
+    assert payload["argv"] == ["codex", "-t", "review", "-y", "--non-interactive"]
     assert payload["group"] == "work"
     assert payload["tasks_root"] == str(tasks_root.resolve())
 

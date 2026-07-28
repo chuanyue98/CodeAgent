@@ -46,23 +46,70 @@ def _decode_claude_project_path(dir_name: str) -> str:
     return dir_name.replace("-", "/")
 
 
+def _encode_claude_project_dir(path: str) -> str:
+    """Encodes a file path the way Claude Code encodes it for its
+    ``~/.claude/projects/<dir>`` directory names.
+
+    Verified directly against real ``~/.claude/projects`` directories,
+    cross-checked with the ``cwd`` recorded inside their session JSONL
+    files (see investigation notes in the PR/commit that introduced this):
+
+      - ``E:\\demo\\hearthstone-bot``                              -> ``E--demo-hearthstone-bot``
+      - ``E:\\me``                                                 -> ``E--me``
+      - ``C:\\Users\\Administrator``                               -> ``C--Users-Administrator``
+      - ``\\\\wsl.localhost\\Ubuntu-24.04\\home\\cy\\...\\CUITCCA``   -> ``--wsl-localhost-Ubuntu-24-04-home-cy-...-CUITCCA``
+
+    The rule is simply: every character that is not an ASCII letter or
+    digit (``:``, ``\\``, ``/``, ``.``, ``_``, space, and any literal ``-``
+    already present in the path) is replaced 1:1 with a single ``-``. Note
+    the WSL example above: the dots in ``Ubuntu-24.04`` become dashes just
+    like the surrounding path separators, and the *existing* dash in
+    ``Ubuntu-24.04`` is preserved as a dash too — so ``-`` in a dir name is
+    inherently ambiguous about what it originally was.
+
+    Because this collapses several distinct characters onto the same
+    output character, it is a many-to-one mapping: a directory name cannot
+    be decoded back into an unambiguous path in general (see
+    ``_decode_claude_project_path``, which is a best-effort display
+    fallback, not something to match against). It *can*, however, be
+    produced unambiguously from a known path, which is what makes it
+    reliable for matching — see ``_claude_dir_matches``.
+
+    Args:
+        path: A file path (backslash or forward-slash separated).
+
+    Returns:
+        str: The dash-encoded directory name Claude Code would use for it.
+    """
+    return re.sub(r"[^A-Za-z0-9]", "-", path)
+
+
 def _claude_dir_matches(dir_name: str, target_path: str) -> bool:
     """Checks if a Claude project directory name matches a target file path.
 
-    Claude encodes ``E:\\demo\\hearthstone-bot`` as ``E--demo-hearthstone-bot``,
-    but this is ambiguous because ``-`` is used both as a path separator and
-    can appear in directory names. We work around this by comparing the
-    dash-stripped forms of the path components.
+    This used to try to *decode* ``dir_name`` back into a path using a
+    length-based heuristic (accumulate dash-split parts until they got
+    "close enough" to a target segment). That approach is fundamentally
+    unreliable: Claude's encoding (see ``_encode_claude_project_dir``)
+    collapses many different characters onto ``-``, so a decoder walking
+    the dashes has no principled way to know whether a given ``-`` was a
+    path separator, a literal dash in a directory name, a dot, or
+    something else. In rare cases it could match a session history to the
+    wrong project.
 
-    The algorithm:
-    1. Normalize the target path to ``drive:/rest/of/path``
-    2. Split the dir name: ``E--demo-hearthstone-bot`` → drive=``E``, rest=``demo-hearthstone-bot``
-    3. Split the target rest into segments: ``demo``, ``hearthstone-bot``
-    4. Try to match the segments sequentially against the dir name's segments
+    Instead, we go the other way: re-encode the *known* ``target_path``
+    with the same rule Claude uses and compare it directly to
+    ``dir_name``. This mirrors exactly what Claude Code does when it
+    creates the directory, so it can't misfire on ambiguous dashes — it
+    never tries to invert the encoding, only to reproduce it.
 
-    A simpler heuristic that works in practice: compare the strings with all
-    dashes and slashes removed, and check if the target path segments can be
-    found in order within the dir name.
+    Note this does not (and cannot) resolve the underlying ambiguity in
+    Claude's own encoding: e.g. a project at ``.../my-project`` and one at
+    ``.../my/project`` both encode to ``...-my-project``, so Claude Code
+    itself stores their sessions in the same directory. When that happens
+    this function will correctly report a match for *both* target paths,
+    same as Claude Code's own behavior — there is no information left to
+    tell them apart after encoding.
 
     Args:
         dir_name: The Claude projects directory name (e.g. ``E--demo-hearthstone-bot``).
@@ -71,60 +118,10 @@ def _claude_dir_matches(dir_name: str, target_path: str) -> bool:
     Returns:
         bool: True if the directory matches the target path.
     """
-    # Normalize target path
-    target = target_path.replace("\\", "/").rstrip("/")
-    m_target = re.match(r"^([A-Za-z]):/(.*)$", target)
-    if not m_target:
-        # Not a Windows drive path — fall back to exact dash-stripped comparison
-        return (
-            dir_name.replace("-", "").lower()
-            == target.replace("/", "").replace("-", "").lower()
-        )
-
-    target_drive, target_rest = m_target.groups()
-    target_segments = target_rest.split("/")
-
-    # Parse dir name
-    m_dir = re.match(r"^([A-Za-z])--(.*)$", dir_name)
-    if not m_dir:
-        return (
-            dir_name.replace("-", "").lower()
-            == target.replace("/", "").replace("-", "").lower()
-        )
-
-    dir_drive, dir_rest = m_dir.groups()
-    if dir_drive.lower() != target_drive.lower():
+    normalized_target = target_path.replace("\\", "/").rstrip("/")
+    if not normalized_target:
         return False
-
-    # Split dir_rest by single dashes, then try to match target segments
-    # The key insight: we need to find a way to split "demo-hearthstone-bot"
-    # into ["demo", "hearthstone-bot"] (not ["demo", "hearthstone", "bot"])
-    # Strategy: greedy match from the target segments
-    dir_parts = dir_rest.split("-")
-    ti = 0  # target segment index
-    di = 0  # dir parts index
-
-    while ti < len(target_segments) and di < len(dir_parts):
-        target_seg = target_segments[ti].lower()
-        # Try to accumulate dir_parts until they match the target segment
-        accumulated = dir_parts[di].lower()
-        di += 1
-        while accumulated != target_seg and di < len(dir_parts):
-            # Try adding the next part with a dash
-            accumulated += "-" + dir_parts[di].lower()
-            di += 1
-            # If accumulated is now longer than target_seg, no match
-            if len(accumulated) > len(target_seg) + 10:
-                break
-
-        if accumulated == target_seg:
-            ti += 1
-        else:
-            # Couldn't match this segment
-            return False
-
-    # Both target segments and dir parts must be fully consumed
-    return ti == len(target_segments) and di == len(dir_parts)
+    return dir_name.lower() == _encode_claude_project_dir(normalized_target).lower()
 
 
 def parse_claude_session(file_path: Path) -> Optional[UnifiedSession]:

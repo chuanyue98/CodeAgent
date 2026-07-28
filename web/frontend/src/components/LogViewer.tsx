@@ -3,6 +3,12 @@ import { Terminal, AlertCircle, Wifi, WifiOff } from 'lucide-react';
 import { fetchLogFiles, fetchLogFile, useLogStream, type LogFile } from '../api/logs';
 import usePolling from '../hooks/usePolling';
 
+// Rendering every line of a long-running task's log as its own DOM node gets
+// sluggish well before the 10,000-line cap in api/logs.ts is reached. Only
+// the most recent lines are rendered by default; the rest are one click away
+// via the banner below, rather than reaching for a virtualization library.
+const DEFAULT_VISIBLE_LINES = 1500;
+
 export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }) {
   const [files, setFiles] = useState<LogFile[] | undefined>(undefined);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId ?? null);
@@ -11,6 +17,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [filesError, setFilesError] = useState<string | null>(null);
+  const [showAllLines, setShowAllLines] = useState(false);
 
   const { lines: streamLines, error, connected } = useLogStream(selectedTaskId);
 
@@ -29,6 +36,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
     if (!selectedTaskId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
+    setShowAllLines(false);
     fetchLogFile(selectedTaskId).then(res => {
       setInitialContent(res.content);
       setLoading(false);
@@ -56,6 +64,9 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
     ].filter((l: string) => l.trim()),
     [initialContent, selectedTaskId, streamLines],
   );
+
+  const truncated = !showAllLines && allLines.length > DEFAULT_VISIBLE_LINES;
+  const visibleLines = truncated ? allLines.slice(-DEFAULT_VISIBLE_LINES) : allLines;
 
   return (
     <div className="glass-card flex flex-col h-full">
@@ -113,7 +124,20 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
               <span className="text-xs">{error}</span>
             </div>
           )}
-          {allLines.map((line, i) => (
+          {truncated && (
+            <div className="sticky top-0 z-10 mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+              <span>
+                Showing last {DEFAULT_VISIBLE_LINES.toLocaleString()} of {allLines.length.toLocaleString()} lines
+              </span>
+              <button
+                onClick={() => setShowAllLines(true)}
+                className="font-semibold text-amber-900 underline hover:no-underline"
+              >
+                Show all
+              </button>
+            </div>
+          )}
+          {visibleLines.map((line, i) => (
             <div key={i} className="text-slate-600 whitespace-pre-wrap break-all">{line}</div>
           ))}
         </div>

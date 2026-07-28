@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Clock, Plus, Trash2, Play, AlertCircle, PauseCircle, PlayCircle, Pencil, X, Search } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Clock, Plus, Trash2, Play, PauseCircle, PlayCircle, Pencil, X, Search } from 'lucide-react';
 import cronstrue from 'cronstrue';
 import { useProject } from '../context/ProjectContext';
 import usePolling from '../hooks/usePolling';
 import request from '../utils/request';
 import ConfirmDialog from './shared/ConfirmDialog';
+import ErrorState from './shared/ErrorState';
 import {
   fetchSchedules,
   createSchedule,
@@ -52,6 +53,16 @@ export default function CronPage() {
   });
   const [scheduleSearch, setScheduleSearch] = useState('');
 
+  // Guards setState calls in async fetches below from firing after the
+  // component has unmounted (e.g. a fast workspace/page switch while a
+  // request is still in flight).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   // Debounced live preview: translates the raw cron syntax into plain
   // English and the next few actual fire times, so the user isn't expected
   // to already know cron syntax to tell whether what they typed is right.
@@ -70,8 +81,14 @@ export default function CronPage() {
       request<{ valid: boolean; next_runs: number[] }>(
         `/api/schedules/preview?cron_expr=${encodeURIComponent(trimmed)}`,
       )
-        .then(result => setCronPreview({ valid: result.valid, nextRuns: result.next_runs }))
-        .catch(() => setCronPreview({ valid: false, nextRuns: [] }));
+        .then(result => {
+          if (!mountedRef.current) return;
+          setCronPreview({ valid: result.valid, nextRuns: result.next_runs });
+        })
+        .catch(() => {
+          if (!mountedRef.current) return;
+          setCronPreview({ valid: false, nextRuns: [] });
+        });
     }, 300);
     return () => window.clearTimeout(handle);
   }, [cronExpr]);
@@ -84,24 +101,43 @@ export default function CronPage() {
 
   const loadSchedules = useCallback(() => {
     fetchSchedules()
-      .then(setSchedules)
-      .catch(() => setError('Failed to load schedules'));
+      .then(list => {
+        if (!mountedRef.current) return;
+        setSchedules(list);
+      })
+      .catch(() => {
+        if (!mountedRef.current) return;
+        setError('Failed to load schedules');
+      });
   }, []);
+
+  const retrySchedules = useCallback(() => {
+    setError(null);
+    loadSchedules();
+  }, [loadSchedules]);
 
   useEffect(() => {
     request<Task[]>('/api/tasks')
       .then((list) => {
+        if (!mountedRef.current) return;
         setTasks(list);
         if (list.length > 0) setTaskName(prev => prev || list[0].name);
       })
-      .catch(() => setError('Failed to load tasks'));
+      .catch(() => {
+        if (!mountedRef.current) return;
+        setError('Failed to load tasks');
+      });
 
     request<Engine[]>('/api/engines')
       .then((list) => {
+        if (!mountedRef.current) return;
         setEngines(list);
         if (list.length > 0) setEngine(prev => prev || list[0].id);
       })
-      .catch(() => setError('Failed to load engines'));
+      .catch(() => {
+        if (!mountedRef.current) return;
+        setError('Failed to load engines');
+      });
   }, []);
 
   usePolling(loadSchedules, POLL_INTERVAL_MS);
@@ -327,8 +363,8 @@ export default function CronPage() {
         </div>
 
         {error && (
-          <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-red-50/60 border border-red-100 rounded-lg text-xs text-red-600">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}
+          <div className="mb-3">
+            <ErrorState message={error} onRetry={retrySchedules} />
           </div>
         )}
 
