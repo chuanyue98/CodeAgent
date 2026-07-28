@@ -228,8 +228,8 @@ export default function ChatPage() {
       }
       return prev;
     });
-    if (done.session_id) {
-      setActiveSessionId(done.session_id);
+    if (done.sessionId) {
+      setActiveSessionId(done.sessionId);
     }
     setTurnId(null);
     setSending(false);
@@ -283,11 +283,11 @@ export default function ChatPage() {
       const status = await startChatTurn({
         engine: selectedEngine,
         message: text,
-        session_id: activeSessionId,
+        sessionId: activeSessionId,
         group: currentGroup || 'common',
-        project_path: activeProjectPath,
+        projectPath: activeProjectPath,
       });
-      setTurnId(status.task_id);
+      setTurnId(status.taskId);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start turn');
       setSending(false);

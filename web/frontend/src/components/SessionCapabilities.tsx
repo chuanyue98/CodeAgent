@@ -38,7 +38,7 @@ export default function SessionCapabilities({
   useEffect(() => {
     if (!engine) return;
     let cancelled = false;
-    fetchChatCapabilities({ engine, group, project_path: projectPath })
+    fetchChatCapabilities({ engine, group, projectPath })
       .then(data => {
         if (!cancelled) {
           setResult({ key: requestKey, capabilities: data, failed: false });
@@ -101,7 +101,7 @@ export default function SessionCapabilities({
           <div className="grid gap-2 sm:grid-cols-3">
             {RESOURCE_META.map(({ key, label, icon: Icon }) => {
               const active = capabilities.active[key];
-              const inactive = capabilities.configured_but_inactive[key];
+              const inactive = capabilities.configuredButInactive[key];
               return (
                 <div key={key} className="rounded-lg border border-amber-100 bg-white/70 p-2.5">
                   <div className="mb-1.5 flex items-center gap-1.5 font-semibold text-slate-700">

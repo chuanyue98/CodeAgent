@@ -201,7 +201,7 @@ export default function AuditTrail() {
       setConvertState({
         status: 'success',
         targetEngine,
-        message: `Opened in ${ENGINE_LABELS[targetEngine] ?? targetEngine} — new session ${result.new_session_id}`,
+        message: `Opened in ${ENGINE_LABELS[targetEngine] ?? targetEngine} — new session ${result.newSessionId}`,
       });
     } catch (err) {
       setConvertState({

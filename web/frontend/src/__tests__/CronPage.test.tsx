@@ -16,23 +16,23 @@ function jsonResponse(data: unknown) {
 function makeSchedule(overrides: Partial<Schedule>): Schedule {
   return {
     id: 'sched-1',
-    task_name: 'code_review',
+    taskName: 'code_review',
     engine: 'claude',
     group: 'codeagent',
     workspace: '/workspace/proj',
-    cron_expr: '0 9 * * *',
+    cronExpr: '0 9 * * *',
     enabled: true,
-    created_at: 0,
-    last_run_at: null,
-    last_run_status: null,
-    next_run_at: null,
+    createdAt: 0,
+    lastRunAt: null,
+    lastRunStatus: null,
+    nextRunAt: null,
     ...overrides,
   };
 }
 
 const SCHEDULES: Schedule[] = [
-  makeSchedule({ id: 'sched-1', task_name: 'code_review' }),
-  makeSchedule({ id: 'sched-2', task_name: 'dependency_check', engine: 'gemini', cron_expr: '0 0 * * 1' }),
+  makeSchedule({ id: 'sched-1', taskName: 'code_review' }),
+  makeSchedule({ id: 'sched-2', taskName: 'dependency_check', engine: 'gemini', cronExpr: '0 0 * * 1' }),
 ];
 
 beforeEach(() => {
@@ -43,7 +43,7 @@ beforeEach(() => {
     }
     if (url.includes('/api/groups')) return jsonResponse({});
     if (url === '/api/schedules') return jsonResponse(SCHEDULES);
-    if (url.startsWith('/api/schedules/preview')) return jsonResponse({ valid: true, next_runs: [] });
+    if (url.startsWith('/api/schedules/preview')) return jsonResponse({ valid: true, nextRuns: [] });
     if (url.endsWith('/api/tasks')) return jsonResponse([{ name: 'code_review', title: 'Code Review' }]);
     if (url.includes('/api/engines')) return jsonResponse([{ id: 'claude', name: 'Claude' }]);
     return Promise.reject(new Error(`Unhandled fetch to ${url}`));

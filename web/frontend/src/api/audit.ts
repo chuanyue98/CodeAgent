@@ -56,8 +56,8 @@ export interface ConvertSessionParams {
 
 export interface ConvertSessionResult {
   status: string;
-  new_session_id: string;
-  target_engine: string;
+  newSessionId: string;
+  targetEngine: string;
   message?: string;
 }
 
@@ -67,10 +67,10 @@ export interface ConvertAndLaunchResult extends ConvertSessionResult {
 
 function convertBody(params: ConvertSessionParams) {
   return JSON.stringify({
-    source_engine: params.sourceEngine,
-    session_id: params.sessionId,
-    target_engine: params.targetEngine,
-    project_path: params.projectPath,
+    sourceEngine: params.sourceEngine,
+    sessionId: params.sessionId,
+    targetEngine: params.targetEngine,
+    projectPath: params.projectPath,
   });
 }
 
@@ -96,7 +96,7 @@ export async function deleteHistorySession(
   engine: string,
   sessionId: string,
   projectPath: string,
-): Promise<{ status: string; session_id: string }> {
+): Promise<{ status: string; sessionId: string }> {
   const query = new URLSearchParams({ project: projectPath });
   return request(
     `/api/history/${encodeURIComponent(engine)}/${encodeURIComponent(sessionId)}?${query}`,

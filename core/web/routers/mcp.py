@@ -17,14 +17,14 @@ load-bearing for claude/gemini.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
 
 from core.services import mcp_service
+from core.web.case_convert import ProtocolModel, wire
 
 router = APIRouter(prefix="/api/mcp", tags=["mcp"])
 
 
-class AddMcpServerRequest(BaseModel):
+class AddMcpServerRequest(ProtocolModel):
     """Request body for adding an MCP server."""
 
     project: str
@@ -35,6 +35,17 @@ class AddMcpServerRequest(BaseModel):
     transport: str | None = None
 
 
+class McpServerEntry(ProtocolModel):
+    """One configured MCP server, normalized across engines."""
+
+    name: str
+    scope: str
+    transport: str
+    command: list[str] | None = None
+    url: str | None = None
+    env: dict[str, str] = {}
+
+
 @router.get("/{engine}")
 def list_mcp_servers(
     engine: str,
@@ -42,9 +53,10 @@ def list_mcp_servers(
 ) -> list[dict]:
     """Lists configured MCP servers for one engine."""
     try:
-        return mcp_service.list_servers(engine, project)
+        entries = mcp_service.list_servers(engine, project)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return [wire(McpServerEntry(**entry)) for entry in entries]
 
 
 @router.post("/{engine}")

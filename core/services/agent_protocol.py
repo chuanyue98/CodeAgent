@@ -6,24 +6,38 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
+
+from core.web.case_convert import ProtocolModel, _to_camel, wire
+
+__all__ = [
+    "ProtocolModel",
+    "wire",
+    "_to_camel",
+    "utc_now",
+    "PermissionMode",
+    "ApprovalDecision",
+    "SessionStatus",
+    "ProviderCapabilities",
+    "ResourceSnapshot",
+    "AgentSession",
+    "AgentInput",
+    "CreateSessionOptions",
+    "ResumeOptions",
+    "TurnInput",
+    "ProviderSession",
+    "AdapterEvent",
+    "AgentEvent",
+    "AgentAck",
+    "AgentError",
+    "CreateAgentSessionRequest",
+    "ImportAgentSessionRequest",
+    "AgentCommand",
+]
 
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
-
-
-def _to_camel(value: str) -> str:
-    head, *tail = value.split("_")
-    return head + "".join(part.capitalize() for part in tail)
-
-
-class ProtocolModel(BaseModel):
-    model_config = ConfigDict(
-        alias_generator=_to_camel,
-        populate_by_name=True,
-        use_enum_values=True,
-    )
 
 
 class PermissionMode(str, Enum):
@@ -188,9 +202,3 @@ class AgentCommand(ProtocolModel):
     approval_id: str | None = None
     decision: ApprovalDecision | None = None
     input: list[AgentInput] | None = None
-
-
-def wire(model: BaseModel) -> dict[str, Any]:
-    """Return the stable camelCase JSON representation used on the wire."""
-
-    return model.model_dump(mode="json", by_alias=True)
