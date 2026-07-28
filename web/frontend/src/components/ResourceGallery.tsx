@@ -86,6 +86,12 @@ export interface ResourceGalleryProps<M = unknown> {
    * view is a single column.
    */
   renderDetailAside?: (item: ResourceItem<M>) => ReactNode;
+  /**
+   * Optional extra text pulled from an item's kind-specific `meta` (e.g. a
+   * hook's trigger event) that the search box should also match against,
+   * beyond the always-searched name/description.
+   */
+  getSearchableMeta?: (item: ResourceItem<M>) => string;
 }
 
 const getCategoryIcon = (category: string) => {
@@ -120,6 +126,7 @@ function ResourceGallery<M = unknown>({
   labels,
   renderMeta,
   renderDetailAside,
+  getSearchableMeta,
 }: ResourceGalleryProps<M>) {
   const { currentGroup, groups } = useProject();
   const { data: rawData, loading, error, refetch } = useResourceData<unknown>(apiEndpoint);
@@ -160,10 +167,14 @@ function ResourceGallery<M = unknown>({
     groups[currentGroup]?.[resourceType]?.includes(itemId) ?? false;
 
   const filteredItems = selectedCategory && resourceData
-    ? (resourceData[selectedCategory] ?? []).filter(item =>
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.description.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+    ? (resourceData[selectedCategory] ?? []).filter(item => {
+        const term = searchTerm.toLowerCase();
+        return (
+          item.name.toLowerCase().includes(term) ||
+          item.description.toLowerCase().includes(term) ||
+          (getSearchableMeta?.(item).toLowerCase().includes(term) ?? false)
+        );
+      })
     : [];
 
   const toggleItemSelected = (itemId: string) => {
