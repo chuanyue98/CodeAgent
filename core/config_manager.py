@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import logging
 import os
 import re
 from pathlib import Path
 
+from core.logging_config import get_logger
 from core.resource_locator import get_bundled_resource_root, get_default_config_path
 from core.services.config_service import ConfigService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Config-supplied regex patterns are user/admin-editable text, not code we
 # control. Reject anything implausibly long up front as a cheap guard against

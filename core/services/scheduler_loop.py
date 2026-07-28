@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from collections.abc import Callable
 from pathlib import Path
 
+from core.logging_config import get_logger
 from core.services.notifier import notify
 from core.services.runner_service import TaskAlreadyRunningError, TaskRunner
 from core.services.schedule_service import ScheduleService
@@ -18,7 +18,7 @@ from core.services.workspace_service import (
 )
 
 TICK_INTERVAL_SECONDS = 30.0
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Statuses that mean the schedule did NOT fail (either it started fine, or
 # it was deliberately skipped because an overlapping run was still active).
