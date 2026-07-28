@@ -118,7 +118,9 @@ def test_get_tasks_dir_falls_back_when_config_is_not_an_object(tmp_path, monkeyp
     monkeypatch.delenv("CA_TASKS_ROOT", raising=False)
     config_path = tmp_path / "config.json"
     config_path.write_text("[]")
-    monkeypatch.setattr(task_lib, "get_default_config_path", lambda root: config_path)
+    monkeypatch.setattr(
+        "core.task_lib.paths.get_default_config_path", lambda root: config_path
+    )
 
     # Must fall back to the bundled resource root instead of raising
     # AttributeError from calling .get() on a non-dict parsed config.
@@ -132,7 +134,9 @@ def test_get_tasks_dir_falls_back_when_paths_section_is_not_an_object(
     monkeypatch.delenv("CA_TASKS_ROOT", raising=False)
     config_path = tmp_path / "config.json"
     config_path.write_text('{"paths": "oops"}')
-    monkeypatch.setattr(task_lib, "get_default_config_path", lambda root: config_path)
+    monkeypatch.setattr(
+        "core.task_lib.paths.get_default_config_path", lambda root: config_path
+    )
 
     # config itself is a dict (passes the isinstance guard), but
     # config["paths"] is a string -- .get("resource_root") on it must not
