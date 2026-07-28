@@ -7,8 +7,9 @@ import signal
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, BinaryIO, Callable, Dict, List, Optional, cast
+from typing import Any, BinaryIO, cast
 
 from core.config_manager import ConfigManager
 from core.hook_scanner import HookScanner, get_hooks_to_inject
@@ -123,7 +124,7 @@ class BaseEngine:
     def _load_full_config(self) -> dict:
         return self.config_manager.full_config
 
-    def _resolve_config_groups(self, section_name: str) -> List[str]:
+    def _resolve_config_groups(self, section_name: str) -> list[str]:
         cfg = self.full_config.get(section_name, {})
         groups = cfg.get("groups", {})
         mappings = cfg.get("project_mapping", [])
@@ -165,7 +166,7 @@ class BaseEngine:
         section_name: str,
         mapping_key: str,
         value_key: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         cfg = self.full_config.get(section_name, {})
         mappings = cfg.get(mapping_key, [])
         cwd_str = str(Path.cwd().as_posix())
@@ -181,22 +182,22 @@ class BaseEngine:
     def _resolve_path_token(self, raw_path: str) -> Path:
         return self.config_manager.resolve_path_token(raw_path)
 
-    def _get_skill_search_roots(self) -> List[Path]:
+    def _get_skill_search_roots(self) -> list[Path]:
         resource_root = self.config_manager.resolve_resource_root()
         return self.config_manager.get_skill_search_roots(resource_root)
 
-    def _get_plugin_search_roots(self) -> List[Path]:
+    def _get_plugin_search_roots(self) -> list[Path]:
         resource_root = self.config_manager.resolve_resource_root()
         return self.config_manager.get_plugin_search_roots(resource_root)
 
-    def _get_hook_search_roots(self) -> List[Path]:
+    def _get_hook_search_roots(self) -> list[Path]:
         resource_root = self.config_manager.resolve_resource_root()
         return self.config_manager.get_hook_search_roots(resource_root)
 
     def get_current_project_group(self) -> str:
         return self.config_manager.get_current_project_group()
 
-    def get_skills_to_mount(self) -> List[str]:
+    def get_skills_to_mount(self) -> list[str]:
         """Retrieves the list of skill names to be mounted for the current project.
 
         Returns:
@@ -207,7 +208,7 @@ class BaseEngine:
             self.full_config, self.skill_scanner, project_type=project_type
         )
 
-    def get_plugins_to_mount(self) -> List[Dict[str, Any]]:
+    def get_plugins_to_mount(self) -> list[dict[str, Any]]:
         """Retrieves the list of plugins to be mounted for the current project.
 
         Returns:
@@ -220,7 +221,7 @@ class BaseEngine:
         self._print_scan_warnings("Plugin Scanner", warnings)
         return plugins
 
-    def get_prompts_to_inject(self) -> List[str]:
+    def get_prompts_to_inject(self) -> list[str]:
         """Retrieves the list of prompt groups to be injected for the current project.
 
         Returns:
@@ -233,7 +234,7 @@ class BaseEngine:
         self._print_scan_warnings("Prompt Scanner", warnings)
         return prompts
 
-    def get_hooks_to_inject(self) -> List[Dict[str, Any]]:
+    def get_hooks_to_inject(self) -> list[dict[str, Any]]:
         """Retrieves the list of hooks to be injected for the current project.
 
         Returns:
@@ -246,7 +247,7 @@ class BaseEngine:
         self._print_scan_warnings("Hook Scanner", warnings)
         return hooks
 
-    def _print_scan_warnings(self, scanner_name: str, warnings: List[str]) -> None:
+    def _print_scan_warnings(self, scanner_name: str, warnings: list[str]) -> None:
         """Prints non-fatal scan warnings so they are visible to the user."""
         for warning in warnings:
             print(f"⚠️ {scanner_name}: {warning}")
@@ -320,7 +321,7 @@ class BaseEngine:
     def release_resource_lock(self, handle: BinaryIO) -> None:
         self.lock_manager.release_resource_lock(handle)
 
-    def run_shell(self, cmd: List[str], env: dict):
+    def run_shell(self, cmd: list[str], env: dict):
         """Executes a command in a subprocess with the given environment.
 
         Args:
@@ -357,7 +358,7 @@ class BaseEngine:
 
         skill_roots = self._get_skill_search_roots()
 
-        resolved_skills: List[tuple[str, Path]] = []
+        resolved_skills: list[tuple[str, Path]] = []
         resolved_skill_names = set()
 
         def append_resolved_skill(target_name: str, skill_src: Path):
@@ -426,7 +427,7 @@ class BaseEngine:
             except Exception as e:
                 print(f"⚠️ Failed to link skill '{target_name}': {e}")
 
-    def _get_plugin_link_dir(self) -> Optional[Path]:
+    def _get_plugin_link_dir(self) -> Path | None:
         """Returns the directory where this engine's plugin links should be created.
 
         Each engine must override this to return its specific plugin directory:
@@ -549,7 +550,7 @@ class BaseEngine:
         return is_windows_link(path)
 
     def inject_hooks_to_settings(
-        self, settings_rel_path: str, hooks: List[Dict[str, Any]]
+        self, settings_rel_path: str, hooks: list[dict[str, Any]]
     ):
         settings_path = (Path.cwd() / settings_rel_path).absolute()
         self.settings_manager.inject_hooks(settings_path, hooks)
@@ -599,7 +600,7 @@ class BaseEngine:
         if not path.exists():
             return {}
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return {}
@@ -616,7 +617,7 @@ class BaseEngine:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
-    def _format_plugins_for_settings(self, data: Any, plugins: List[dict]) -> Any:
+    def _format_plugins_for_settings(self, data: Any, plugins: list[dict]) -> Any:
         """Formats plugin metadata for the specific engine's settings.
 
         Args:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from croniter import croniter
 
@@ -12,7 +12,7 @@ _SCHEDULES_KEY = "schedules"
 _VALID_ENGINES = {"claude", "gemini", "opencode", "codex"}
 
 
-def _compute_next_run(cron_expr: str, base_time: Optional[float] = None) -> float:
+def _compute_next_run(cron_expr: str, base_time: float | None = None) -> float:
     return croniter(
         cron_expr, base_time if base_time is not None else time.time()
     ).get_next(float)
@@ -38,7 +38,7 @@ class ScheduleService:
     def list_schedules(self) -> list[dict]:
         return self._load().get(_SCHEDULES_KEY, [])
 
-    def get_schedule(self, schedule_id: str) -> Optional[dict]:
+    def get_schedule(self, schedule_id: str) -> dict | None:
         for record in self.list_schedules():
             if record["id"] == schedule_id:
                 return record
@@ -95,7 +95,7 @@ class ScheduleService:
         if new_cron_expr is not None and not croniter.is_valid(new_cron_expr):
             raise ValueError(f"Invalid cron expression: {new_cron_expr!r}")
 
-        found: Optional[dict] = None
+        found: dict | None = None
 
         def _modifier(schedules):
             nonlocal found

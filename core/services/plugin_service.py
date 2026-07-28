@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from core.plugin_scanner import PluginScanner
 
 

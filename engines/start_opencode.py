@@ -8,14 +8,12 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 # 确保能找到 core 模块
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
-
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -209,7 +207,7 @@ export default async ({{ client }}) => {{
             # 仅删除带有明确 CodeAgent 标记的生成适配器。
             if item.is_file() and item.name.startswith("ca_adapter_"):
                 try:
-                    with open(item, "r", encoding="utf-8") as f:
+                    with open(item, encoding="utf-8") as f:
                         if "_ca_injected: true" in f.read(500):
                             item.unlink()
                 except Exception:
@@ -222,7 +220,7 @@ export default async ({{ client }}) => {{
             except Exception:
                 pass
 
-    def build_command(self, message: str, non_interactive: bool) -> List[str]:
+    def build_command(self, message: str, non_interactive: bool) -> list[str]:
         if non_interactive:
             # 非交互模式使用 run
             return [self.OPENCODE_COMMAND, "run", message]
@@ -231,8 +229,8 @@ export default async ({{ client }}) => {{
         return [self.OPENCODE_COMMAND, ".", "--prompt", message]
 
     def build_chat_command(
-        self, message: str, session_id: Optional[str] = None
-    ) -> List[str]:
+        self, message: str, session_id: str | None = None
+    ) -> list[str]:
         """Builds a headless JSON command for one ChatPage turn.
 
         Verified live (see docs/chatpage-cli-spike-results.md spike):

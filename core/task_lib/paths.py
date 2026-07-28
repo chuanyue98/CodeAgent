@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List, Union
 
 from core.resource_locator import get_bundled_resource_root, get_default_config_path
 
@@ -13,7 +13,7 @@ TASKS_DIR = "tasks"
 TASK_FILE_SUFFIX = ".md"
 GENERAL_PROMPT_RELATIVE_PATH = "prompt/general.basic.md"
 
-_ADDITIONAL_TEMPLATE_SEARCH_PATHS: List[str] = []
+_ADDITIONAL_TEMPLATE_SEARCH_PATHS: list[str] = []
 
 
 def get_general_prompt_path() -> Path:
@@ -27,7 +27,7 @@ def get_general_prompt_path() -> Path:
     return script_dir / GENERAL_PROMPT_RELATIVE_PATH
 
 
-def get_tasks_dir(directory: Union[str, Path] = TASKS_DIR) -> Path:
+def get_tasks_dir(directory: str | Path = TASKS_DIR) -> Path:
     """Returns the absolute path to the tasks directory.
 
     Args:
@@ -69,14 +69,14 @@ def get_tasks_dir(directory: Union[str, Path] = TASKS_DIR) -> Path:
     return (Path.cwd() / dir_path).resolve()
 
 
-def set_additional_template_search_paths(paths: Iterable[Union[str, Path]]) -> None:
+def set_additional_template_search_paths(paths: Iterable[str | Path]) -> None:
     """Configures additional search paths for task template rendering.
 
     Args:
         paths: An iterable of paths to add to the template search list.
     """
 
-    resolved_paths: List[str] = []
+    resolved_paths: list[str] = []
 
     for raw_path in paths:
         path_obj = Path(raw_path).expanduser()

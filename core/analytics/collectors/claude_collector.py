@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import List
 
 from core.analytics.models import RawUsageEntry
 
@@ -30,7 +29,7 @@ def _decode_project_path(dir_name: str) -> str:
 
 def scan_claude_usage(
     home: Path | None = None, since_timestamp: str = ""
-) -> List[RawUsageEntry]:
+) -> list[RawUsageEntry]:
     """Scans the Claude projects directory for usage logs.
 
     Args:
@@ -46,7 +45,7 @@ def scan_claude_usage(
     if not base.exists():
         return []
 
-    entries: List[RawUsageEntry] = []
+    entries: list[RawUsageEntry] = []
 
     for project_dir in base.iterdir():
         if not project_dir.is_dir():
@@ -66,7 +65,7 @@ def _parse_claude_file(
     path: Path,
     session_id: str,
     project_path: str,
-    entries: List[RawUsageEntry],
+    entries: list[RawUsageEntry],
     since_timestamp: str = "",
 ) -> None:
     """Parses a single Claude JSONL log file and appends entries to the list.

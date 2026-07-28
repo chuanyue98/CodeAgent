@@ -6,12 +6,13 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from core.prompt_scanner import DEFAULT_GROUP_PROMPTS, PromptScanner
-from core.skill_scanner import SkillScanner
 from core.plugin_scanner import PluginScanner
+from core.prompt_scanner import DEFAULT_GROUP_PROMPTS, PromptScanner
 from core.services.config_service import ConfigService
 from core.services.schedule_service import ScheduleService
 from core.services.scheduler_loop import scheduler_tick_loop
+from core.skill_scanner import SkillScanner
+from core.web.resource_paths import resolve_resource_path
 from core.web.routers import (
     agent,
     analytics,
@@ -31,8 +32,8 @@ from core.web.routers import (
     tasks,
 )
 from core.web.routers.config import get_config_path
-from core.web.routers.tasks import _runner as _task_runner, get_tasks_root
-from core.web.resource_paths import resolve_resource_path
+from core.web.routers.tasks import _runner as _task_runner
+from core.web.routers.tasks import get_tasks_root
 
 CONFIG_PATH = get_config_path()
 FRONTEND_DIST = resolve_resource_path("web/frontend/dist", "CA_FRONTEND_DIST")

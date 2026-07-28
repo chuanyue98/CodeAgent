@@ -12,7 +12,7 @@ import json
 import secrets
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 def _now_ms() -> int:
     """Returns current UTC time as Unix milliseconds."""
-    return int(datetime.now(tz=timezone.utc).timestamp() * 1000)
+    return int(datetime.now(tz=UTC).timestamp() * 1000)
 
 
 def _find_or_create_project(con: sqlite3.Connection, worktree: str, now_ms: int) -> str:

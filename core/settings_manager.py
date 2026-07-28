@@ -4,7 +4,7 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.utils.atomic_write import atomic_write
 
@@ -19,7 +19,7 @@ class SettingsFile:
         if not self.path.exists():
             return {}
         try:
-            with open(self.path, "r", encoding="utf-8") as f:
+            with open(self.path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return {}
@@ -27,7 +27,7 @@ class SettingsFile:
     def save(self, data: Any):
         atomic_write(self.path, json.dumps(data, indent=2, ensure_ascii=False))
 
-    def create_backup(self) -> Optional[Path]:
+    def create_backup(self) -> Path | None:
         backup_path = self.path.with_suffix(self.path.suffix + ".bak")
         if self.path.exists() and not backup_path.exists():
             shutil.copy2(self.path, backup_path)
@@ -50,10 +50,10 @@ class SettingsManager:
     for all engine types (Gemini, Claude, Codex, OpenCode).
     """
 
-    def __init__(self, event_map: Dict[str, str]):
+    def __init__(self, event_map: dict[str, str]):
         self.event_map = event_map
 
-    def inject_hooks(self, settings_path: Path, hooks: List[Dict[str, Any]]):
+    def inject_hooks(self, settings_path: Path, hooks: list[dict[str, Any]]):
         """Injects hook configurations into a settings file."""
         if not hooks:
             return

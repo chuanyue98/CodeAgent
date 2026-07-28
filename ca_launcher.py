@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-import sys
-import subprocess
 import json
 import os
 import shutil
 import socket
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -60,7 +60,7 @@ def load_config():
     }
     if config_path.exists():
         try:
-            with open(config_path, "r", encoding="utf-8-sig") as f:
+            with open(config_path, encoding="utf-8-sig") as f:
                 return {**default_config, **json.load(f)}
         except Exception as e:
             print(f"⚠️ Warning: Failed to load config.json: {e}")
@@ -278,6 +278,7 @@ def run_ui_command():
             sys.path.insert(0, str(root))
 
         import uvicorn
+
         from core.web.server import app
     except ModuleNotFoundError as exc:
         missing_module = exc.name or "required dependency"

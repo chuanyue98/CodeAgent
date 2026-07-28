@@ -5,7 +5,6 @@ import os
 import tempfile
 from dataclasses import asdict
 from pathlib import Path
-from typing import Dict, List
 
 from core.analytics.models import RawUsageEntry
 
@@ -14,13 +13,13 @@ def _history_path() -> Path:
     return Path.home() / ".ca_analytics_history.jsonl"
 
 
-def load_history() -> List[RawUsageEntry]:
+def load_history() -> list[RawUsageEntry]:
     """Loads all historical usage entries from the local JSONL file."""
     path = _history_path()
     if not path.exists():
         return []
 
-    entries: List[RawUsageEntry] = []
+    entries: list[RawUsageEntry] = []
     try:
         with open(path, encoding="utf-8") as f:
             for line in f:
@@ -37,7 +36,7 @@ def load_history() -> List[RawUsageEntry]:
     return entries
 
 
-def append_history(new_entries: List[RawUsageEntry]) -> None:
+def append_history(new_entries: list[RawUsageEntry]) -> None:
     """Appends new usage entries to the local JSONL history file."""
     if not new_entries:
         return
@@ -50,7 +49,7 @@ def append_history(new_entries: List[RawUsageEntry]) -> None:
         pass
 
 
-def save_history(entries: List[RawUsageEntry]) -> None:
+def save_history(entries: list[RawUsageEntry]) -> None:
     """Atomically replaces the history file with the supplied entries."""
     path = _history_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,9 +71,9 @@ def save_history(entries: List[RawUsageEntry]) -> None:
         temp_path.unlink(missing_ok=True)
 
 
-def get_last_timestamps() -> Dict[str, str]:
+def get_last_timestamps() -> dict[str, str]:
     """Returns the latest timestamp seen for each engine target."""
-    last_ts: Dict[str, str] = {}
+    last_ts: dict[str, str] = {}
     path = _history_path()
     if not path.exists():
         return last_ts

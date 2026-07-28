@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ def _default_cache_path() -> Path:
     return Path.home() / ".ca_analytics_cache.json"
 
 
-def load_cache(path: Path | None = None) -> Optional[Any]:
+def load_cache(path: Path | None = None) -> Any | None:
     """Loads cached analytics data from a JSON file.
 
     Returns cached data if it exists, has a compatible schema version, and is

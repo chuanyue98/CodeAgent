@@ -5,9 +5,9 @@ import time
 import pytest
 
 from core.services.config_service import ConfigService
+from core.services.runner_service import TaskAlreadyRunningError
 from core.services.schedule_service import ScheduleService
 from core.services.scheduler_loop import tick_once
-from core.services.runner_service import TaskAlreadyRunningError
 
 
 class _FakeTaskRunner:

@@ -25,13 +25,12 @@ import json
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi import Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
-from core.services.runner_service import TaskRunner
 from core.services.config_service import ConfigService
+from core.services.runner_service import TaskRunner
 from core.web.resource_paths import ROOT_DIR
 from core.web.routers.config import get_config_path
 
@@ -250,7 +249,7 @@ async def stream_chat_turn(turn_id: str):
             if current_size != last_size:
 
                 def _read_new_bytes(p: Path = path, offset: int = last_size) -> str:
-                    with open(p, "r", encoding="utf-8") as fh:
+                    with open(p, encoding="utf-8") as fh:
                         fh.seek(offset)
                         return fh.read()
 

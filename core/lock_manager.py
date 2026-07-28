@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 import sys
 import time
-from typing import BinaryIO
 from pathlib import Path
+from typing import BinaryIO
 
 # Generous enough to outlast a real interactive session holding the lock,
 # but bounded so a permanently stuck or OS-refused lock still surfaces as an

@@ -4,19 +4,18 @@ import sqlite3
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass
 class TaskRunRecord:
     task_id: str
     engine: str
-    pid: Optional[int]
+    pid: int | None
     status: str
     log_path: str
     start_time: float
-    session_id: Optional[str] = None
-    workspace: Optional[str] = None
+    session_id: str | None = None
+    workspace: str | None = None
 
 
 class RunStore:
@@ -88,7 +87,7 @@ class RunStore:
                     ),
                 )
 
-    def get(self, task_id: str) -> Optional[TaskRunRecord]:
+    def get(self, task_id: str) -> TaskRunRecord | None:
         with self._lock:
             row = self._conn.execute(
                 "SELECT task_id, engine, pid, status, log_path, start_time, session_id, workspace FROM runs WHERE task_id = ?",
@@ -105,9 +104,7 @@ class RunStore:
             ).fetchall()
         return [TaskRunRecord(*r) for r in rows]
 
-    def update_status(
-        self, task_id: str, status: str, session_id: Optional[str] = None
-    ):
+    def update_status(self, task_id: str, status: str, session_id: str | None = None):
         with self._lock:
             with self._conn:
                 self._conn.execute(

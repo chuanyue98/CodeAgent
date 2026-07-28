@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List
 
 from core.resource_locator import get_bundled_resource_root
 
@@ -48,8 +48,8 @@ def get_prompts_from_directory(directory: Path) -> str:
 
 def prompt_general(
     task: str | None = None,
-    groups: List[str] | None = None,
-    extra_contents: List[str] | None = None,
+    groups: list[str] | None = None,
+    extra_contents: list[str] | None = None,
     prompt_root: Path | None = None,
 ) -> str:
     """Synthesizes prompts based on specified groups and task instructions.
@@ -116,7 +116,7 @@ def prompt_general(
 
 def prompt_review(
     task: str | None = None,
-    groups: List[str] | None = None,
+    groups: list[str] | None = None,
     prompt_root: Path | None = None,
 ) -> str:
     """Synthesizes code review prompts by including the 'review' group.

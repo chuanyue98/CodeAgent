@@ -12,9 +12,8 @@ Each line has ``{timestamp, type, payload}``.  Relevant ``type`` values:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from core.session_history.models import (
     EngineType,
@@ -49,22 +48,22 @@ def _ms_to_iso(timestamp: object) -> str:
                 return ""
         else:
             if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                parsed = parsed.replace(tzinfo=UTC)
+            return parsed.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
         return ""
     seconds = float(timestamp)
     if seconds > 100_000_000_000:
         seconds /= 1000
     try:
-        return datetime.fromtimestamp(seconds, tz=timezone.utc).strftime(
+        return datetime.fromtimestamp(seconds, tz=UTC).strftime(
             "%Y-%m-%dT%H:%M:%S.000Z"
         )
     except (OverflowError, OSError, ValueError):
         return ""
 
 
-def parse_codex_session(file_path: Path) -> Optional[UnifiedSession]:
+def parse_codex_session(file_path: Path) -> UnifiedSession | None:
     """Parses a single Codex JSONL session file into a UnifiedSession.
 
     Args:
@@ -250,7 +249,7 @@ def parse_codex_session(file_path: Path) -> Optional[UnifiedSession]:
 
 
 def find_codex_sessions(
-    project_path: Optional[str] = None, home: Optional[Path] = None
+    project_path: str | None = None, home: Path | None = None
 ) -> list[UnifiedSession]:
     """Finds all Codex sessions for a given project path.
 

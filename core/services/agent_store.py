@@ -9,7 +9,6 @@ from pathlib import Path
 
 from core.services.agent_protocol import AgentEvent, AgentSession, wire
 
-
 SCHEMA_VERSION = 3
 
 

@@ -10,7 +10,6 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
 
 import click
 
@@ -46,7 +45,7 @@ class Check:
 @dataclass
 class Section:
     title: str
-    checks: List[Check] = field(default_factory=list)
+    checks: list[Check] = field(default_factory=list)
 
     def add(
         self, status: str, label: str, detail: str = "", fix_hint: str = ""
@@ -107,7 +106,7 @@ def check_engines(section: Section) -> None:
             )
 
 
-def check_config(section: Section, root: Path) -> Optional[dict]:
+def check_config(section: Section, root: Path) -> dict | None:
     config_path = root / "config.json"
     config_service = ConfigService(config_path)
     cfg, warnings = config_service.get_config()
@@ -309,9 +308,9 @@ def check_symlink_capability(section: Section, root: Path) -> None:
             test_target.rmdir()
 
 
-def check_stale_injections(section: Section) -> List[Path]:
+def check_stale_injections(section: Section) -> list[Path]:
     """Find stale .ca_injected settings files left by previous crashed sessions."""
-    stale: List[Path] = []
+    stale: list[Path] = []
     cwd = Path.cwd()
 
     candidates = [
@@ -347,7 +346,7 @@ def check_stale_injections(section: Section) -> List[Path]:
 # ── Fix routine ───────────────────────────────────────────────────────────────
 
 
-def fix_stale_injections(stale: List[Path]) -> None:
+def fix_stale_injections(stale: list[Path]) -> None:
     for settings_path in stale:
         backup = settings_path.with_suffix(".json.bak")
         if backup.exists():
@@ -359,7 +358,7 @@ def fix_stale_injections(stale: List[Path]) -> None:
             print(f"  Removed injected {settings_path}")
 
 
-def preview_stale_injections(stale: List[Path]) -> None:
+def preview_stale_injections(stale: list[Path]) -> None:
     """Describe what fix_stale_injections() would do, without touching anything."""
     for settings_path in stale:
         backup = settings_path.with_suffix(".json.bak")
@@ -393,10 +392,10 @@ class _LightweightResolver:
 
                 self_inner.env_manager = EnvironmentManager(root)
                 self_inner.temp_prompt_name = ".ca_prompt.tmp"
-                from core.skill_scanner import SkillScanner
-                from core.prompt_scanner import PromptScanner
                 from core.hook_scanner import HookScanner
                 from core.plugin_scanner import PluginScanner
+                from core.prompt_scanner import PromptScanner
+                from core.skill_scanner import SkillScanner
 
                 resource_root = self_inner.config_manager.resolve_resource_root()
                 self_inner.skill_scanner = SkillScanner(resource_root / "skills")
@@ -411,12 +410,12 @@ class _LightweightResolver:
 
         self._engine = _Stub()
 
-    def get_skills_to_mount(self) -> tuple[List[str], List[str]]:
+    def get_skills_to_mount(self) -> tuple[list[str], list[str]]:
         data = self._engine.get_skills_to_mount()
         _, warnings = self._engine.skill_scanner.scan()
         return data, warnings
 
-    def get_hooks_to_inject(self) -> tuple[List[dict], List[str]]:
+    def get_hooks_to_inject(self) -> tuple[list[dict], list[str]]:
         project_type = self._engine.get_current_project_group()
         return get_hooks_to_inject(
             self._engine.full_config,
@@ -424,7 +423,7 @@ class _LightweightResolver:
             project_type=project_type,
         )
 
-    def get_plugins_to_mount(self) -> tuple[List[dict], List[str]]:
+    def get_plugins_to_mount(self) -> tuple[list[dict], list[str]]:
         project_type = self._engine.get_current_project_group()
         return get_plugins_to_mount(
             self._engine.full_config,
@@ -439,7 +438,7 @@ class _LightweightResolver:
 # ── Renderer ─────────────────────────────────────────────────────────────────
 
 
-def _render(sections: List[Section]) -> int:
+def _render(sections: list[Section]) -> int:
     """Print results and return number of failures.
 
     Uses ``click.style``/``click.echo`` so status markers are color-coded in

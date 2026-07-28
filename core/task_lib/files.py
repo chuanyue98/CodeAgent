@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from core.task_lib.paths import TASK_FILE_SUFFIX, TASKS_DIR, get_tasks_dir
 
 
 def list_tasks(
     directory: str = TASKS_DIR, file_suffix: str = TASK_FILE_SUFFIX
-) -> List[str]:
+) -> list[str]:
     """Lists the names of tasks in the specified directory.
 
     Args:
@@ -31,9 +30,9 @@ def list_tasks(
 
 def show_tasks(
     directory: str = TASKS_DIR,
-    label: Optional[str] = None,
+    label: str | None = None,
     file_suffix: str = TASK_FILE_SUFFIX,
-    history: Optional[Dict[str, str]] = None,
+    history: dict[str, str] | None = None,
     range_selection_hint: bool = False,
 ) -> None:
     """Displays the available tasks in the specified directory.

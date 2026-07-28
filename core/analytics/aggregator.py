@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
 from core.analytics.models import (
     DailyUsage,
@@ -25,10 +25,10 @@ def _parse_ts(ts: str) -> datetime:
         normalized = ts.replace("Z", "+00:00") if ts else ""
         dt = datetime.fromisoformat(normalized) if normalized else datetime.min
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt
     except (ValueError, TypeError):
-        return datetime.min.replace(tzinfo=timezone.utc)
+        return datetime.min.replace(tzinfo=UTC)
 
 
 def _date(ts: str) -> str:
@@ -76,7 +76,7 @@ def _entry_cost(entry: RawUsageEntry) -> float:
 
 
 def _merge_breakdown(
-    breakdowns: Dict[str, ModelBreakdown], entry: RawUsageEntry, cost: float
+    breakdowns: dict[str, ModelBreakdown], entry: RawUsageEntry, cost: float
 ) -> None:
     """Merges a usage entry into a model-specific breakdown dictionary.
 
@@ -96,7 +96,7 @@ def _merge_breakdown(
     bd.cost += cost
 
 
-def aggregate(entries: List[RawUsageEntry]) -> Dict[str, Any]:
+def aggregate(entries: list[RawUsageEntry]) -> dict[str, Any]:
     """Aggregates raw usage entries into daily, monthly, and session-based summaries.
 
     Args:
@@ -109,14 +109,14 @@ def aggregate(entries: List[RawUsageEntry]) -> Dict[str, Any]:
             - monthly: List of MonthlyUsage dictionaries.
             - sessions: List of SessionUsage dictionaries.
     """
-    daily: Dict[tuple, DailyUsage] = {}
-    daily_bds: Dict[tuple, Dict[str, ModelBreakdown]] = defaultdict(dict)
+    daily: dict[tuple, DailyUsage] = {}
+    daily_bds: dict[tuple, dict[str, ModelBreakdown]] = defaultdict(dict)
 
-    monthly: Dict[tuple, MonthlyUsage] = {}
-    monthly_bds: Dict[tuple, Dict[str, ModelBreakdown]] = defaultdict(dict)
+    monthly: dict[tuple, MonthlyUsage] = {}
+    monthly_bds: dict[tuple, dict[str, ModelBreakdown]] = defaultdict(dict)
 
-    sessions: Dict[tuple, SessionUsage] = {}
-    session_bds: Dict[tuple, Dict[str, ModelBreakdown]] = defaultdict(dict)
+    sessions: dict[tuple, SessionUsage] = {}
+    session_bds: dict[tuple, dict[str, ModelBreakdown]] = defaultdict(dict)
 
     def update_usage(usage_obj, entry: RawUsageEntry, cost: float):
         usage_obj.input_tokens += entry.input_tokens

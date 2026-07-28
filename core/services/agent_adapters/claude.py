@@ -302,7 +302,7 @@ class ClaudeAdapter:
             )
             try:
                 return await asyncio.wait_for(future, timeout=300)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return PermissionResultDeny(
                     message="Approval timed out after 300 seconds of inactivity",
                     interrupt=True,

@@ -56,3 +56,35 @@ dev = [
     "ruff>=0.15.4",
     "types-croniter>=2.0.0",
 ]
+
+[tool.ruff.lint]
+# E4/E7/E9 + F: ruff's own implicit default rule set, made explicit here so
+# it's versioned rather than relying on ruff's defaults changing under us.
+# Deliberately not the full E family: E501 (line-too-long) isn't enabled --
+# turning it on would need a separate pass to rewrap ~90 existing lines,
+# which is a line-length style decision, not part of this inspection.
+# I: import sorting -- previously unenforced, which let import order drift
+#    (see the 2026-07-28 engineering inspection). B: common bug patterns.
+# UP: pyupgrade -- converts old-style Optional[X]/Union[X, None]/List[X] to
+#    X | None / list[X] now that the project targets Python >= 3.13 throughout.
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+ignore = [
+    # str+Enum -> enum.StrEnum: agent_protocol.py's enums round-trip through
+    # pydantic camelCase JSON serialization; StrEnum's __str__/__format__
+    # differs subtly from the (str, Enum) mixin, so converting is a wire-
+    # format-affecting change deliberately left out of this lint-only pass.
+    "UP042",
+    # pytest.raises(Exception) in one existing test -- narrowing it to the
+    # precise exception type is a test-quality improvement, not a lint fix.
+    "B017",
+    # %-formatting building a JSON fixture string with literal { }: an
+    # f-string equivalent needs brace-doubling that's easy to get subtly
+    # wrong for low value on a single test fixture.
+    "UP031",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+
+[tool.coverage.report]
+fail_under = 74

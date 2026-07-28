@@ -80,7 +80,7 @@ class TaskService:
         if log_path and os.path.exists(log_path):
             try:
                 # Only read last 100 lines for efficiency
-                with open(log_path, "r", encoding="utf-8") as f:
+                with open(log_path, encoding="utf-8") as f:
                     task_data["logs"] = "".join(collections.deque(f, maxlen=100))
             except Exception:
                 task_data["logs"] = "Failed to read logs."

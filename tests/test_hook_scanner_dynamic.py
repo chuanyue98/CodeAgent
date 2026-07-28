@@ -1,4 +1,5 @@
 import json
+
 from core.hook_scanner import HookScanner, get_hooks_to_inject
 
 

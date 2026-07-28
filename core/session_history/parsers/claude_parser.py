@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Optional
 
 from core.session_history.models import (
     EngineType,
@@ -124,7 +123,7 @@ def _claude_dir_matches(dir_name: str, target_path: str) -> bool:
     return dir_name.lower() == _encode_claude_project_dir(normalized_target).lower()
 
 
-def parse_claude_session(file_path: Path) -> Optional[UnifiedSession]:
+def parse_claude_session(file_path: Path) -> UnifiedSession | None:
     """Parses a single Claude JSONL session file into a UnifiedSession.
 
     Args:
@@ -304,7 +303,7 @@ def _extract_assistant_content(msg: dict) -> tuple[str, list[ToolCallSummary]]:
 
 
 def find_claude_sessions(
-    project_path: Optional[str] = None, home: Optional[Path] = None
+    project_path: str | None = None, home: Path | None = None
 ) -> list[UnifiedSession]:
     """Finds all Claude sessions for a given project path.
 

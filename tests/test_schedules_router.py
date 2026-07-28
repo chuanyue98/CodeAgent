@@ -4,17 +4,17 @@ no real engine CLI or ca_launcher.py is spawned in CI."""
 
 from __future__ import annotations
 
-import os
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from core.services.runner_service import TaskAlreadyRunningError
 from core.web.routers import tasks as tasks_router
 from core.web.server import app
-from core.services.runner_service import TaskAlreadyRunningError
 
 
 class _FakeRunner:
