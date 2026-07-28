@@ -56,6 +56,23 @@ class TaskRunner:
         self._run_store = RunStore(self.log_dir / "runs.db")
         self._load_persisted_runs()
 
+    def reset_for_e2e(self) -> None:
+        """Wipes all run state: log files, DB rows, in-memory tracking.
+
+        Only meant to be called by the isolated E2E test backend's reset
+        endpoint (core/web/routers/e2e.py) between specs, where no run is
+        expected to still be active — it does not attempt to stop any
+        in-flight process.
+        """
+        with self._run_lock:
+            self.active_runs.clear()
+            self._processes.clear()
+            self._stopping_tasks.clear()
+        self._run_store.clear()
+        for pattern in ("*.log", "*.jsonl"):
+            for f in self.log_dir.glob(pattern):
+                f.unlink(missing_ok=True)
+
     def run_task(
         self,
         task_name: str,

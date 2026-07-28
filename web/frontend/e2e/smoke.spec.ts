@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './lib/test-base';
 import AxeBuilder from '@axe-core/playwright';
 
 // One entry per route registered in src/App.tsx's `navItems`/`PAGE_LABELS`.

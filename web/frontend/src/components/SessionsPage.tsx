@@ -1,10 +1,11 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Search, Filter, ChevronDown, ChevronUp, Clock, DollarSign, FileText, AlertCircle, ArrowUpRight, Trash2 } from 'lucide-react';
 import { fetchSessions, type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
 import { deleteHistorySession } from '../api/audit';
 import { buildEventsLink } from '../utils/sessionLink';
 import ConfirmDialog from './shared/ConfirmDialog';
+import ErrorState from './shared/ErrorState';
 
 type SortKey = 'lastActivity' | 'cost' | 'tokens';
 type SortDir = 'asc' | 'desc';
@@ -30,18 +31,36 @@ export default function SessionsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
+
+  // Guards setState calls in the async fetch below from firing after the
+  // component has unmounted (e.g. a fast page switch while the request is
+  // still in flight).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
+    setError(null);
     fetchSessions(500)
       .then(data => {
+        if (!mountedRef.current) return;
         setSessions(data);
         setLoading(false);
       })
       .catch(() => {
+        if (!mountedRef.current) return;
         setLoading(false);
         setError('Failed to load sessions');
       });
-  }, []);
+  }, [reloadNonce]);
+
+  const retryLoad = useCallback(() => setReloadNonce(n => n + 1), []);
 
   // Deep link from the command palette: `?session=<id>` expands that
   // session in place once the list has loaded, instead of forcing the
@@ -197,14 +216,7 @@ export default function SessionsPage() {
   }
 
   if (error) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="glass-card p-5 flex items-center gap-3 bg-red-50/60 border-red-100">
-          <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
-          <span className="font-medium text-red-600 text-sm">{error}</span>
-        </div>
-      </div>
-    );
+    return <ErrorState message={error} onRetry={retryLoad} />;
   }
 
   return (

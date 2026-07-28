@@ -77,59 +77,91 @@ class OpenCodeAdapter:
             raise RuntimeError(self._unavailable_reason)
         self._stopping = False
         self._loop = asyncio.get_running_loop()
-        port = self._reserve_port()
-        self._base_url = f"http://127.0.0.1:{port}"
         self._password = secrets.token_urlsafe(32)
         env = os.environ.copy()
         env["OPENCODE_SERVER_PASSWORD"] = self._password
-        try:
-            self._process = await asyncio.create_subprocess_exec(
-                executable,
-                "serve",
-                "--hostname",
-                "127.0.0.1",
-                "--port",
-                str(port),
-                "--log-level",
-                "WARN",
-                stdin=asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-            )
-            self._stderr_lines = []
-            self._stdout_task = asyncio.create_task(
-                self._drain(self._process.stdout), name="opencode-server-stdout"
-            )
-            self._stderr_task = asyncio.create_task(
-                self._drain(self._process.stderr, self._stderr_lines),
-                name="opencode-server-stderr",
-            )
-            deadline = self._loop.time() + 20
-            while True:
-                if self._process.returncode is not None:
-                    raise OpenCodeProtocolError("OpenCode server exited during startup")
-                try:
-                    health = await self._request_json(
-                        "GET", "/global/health", timeout=2
-                    )
-                    if health.get("healthy") is True:
-                        break
-                except Exception:
-                    if self._loop.time() >= deadline:
-                        raise
-                    await asyncio.sleep(0.1)
-            self._started = True
-            self._unavailable_reason = None
-            self._sse_task = asyncio.create_task(
-                asyncio.to_thread(self._sse_worker), name="opencode-global-events"
-            )
-        except Exception as exc:
-            stderr_tail = "\n".join(self._stderr_lines[-20:])
-            detail = f"\nstderr:\n{stderr_tail}" if stderr_tail else ""
-            self._unavailable_reason = f"OpenCode server failed to start: {exc}{detail}"
-            await self.stop()
-            raise RuntimeError(self._unavailable_reason) from exc
+
+        # _reserve_port() closes its probe socket before the child process
+        # binds the same port, leaving a small TOCTOU window where another
+        # process could grab it first. Rather than reworking process
+        # startup to hand the child an already-bound socket, treat an
+        # immediate exit on the first attempt as a possible port collision
+        # and retry once on a freshly reserved port.
+        max_attempts = 2
+        last_exc: Exception = OpenCodeProtocolError("OpenCode server failed to start")
+        for attempt in range(max_attempts):
+            port = self._reserve_port()
+            self._base_url = f"http://127.0.0.1:{port}"
+            try:
+                await self._spawn_and_wait_healthy(executable, port, env)
+                self._started = True
+                self._unavailable_reason = None
+                self._sse_task = asyncio.create_task(
+                    asyncio.to_thread(self._sse_worker), name="opencode-global-events"
+                )
+                return
+            except Exception as exc:
+                last_exc = exc
+                retry = (
+                    attempt < max_attempts - 1
+                    and self._process is not None
+                    and self._process.returncode is not None
+                )
+                await self.stop()
+                if not retry:
+                    break
+
+        stderr_tail = "\n".join(self._stderr_lines[-20:])
+        detail = f"\nstderr:\n{stderr_tail}" if stderr_tail else ""
+        self._unavailable_reason = (
+            f"OpenCode server failed to start: {last_exc}{detail}"
+        )
+        raise RuntimeError(self._unavailable_reason) from last_exc
+
+    async def _spawn_and_wait_healthy(
+        self, executable: str, port: int, env: dict[str, str]
+    ) -> None:
+        """Spawn the OpenCode server on ``port`` and wait for it to report healthy.
+
+        Raises if the process exits early or never becomes healthy within
+        the startup deadline; the caller decides whether that's worth a
+        retry on a different port.
+        """
+        assert self._loop is not None
+        self._process = await asyncio.create_subprocess_exec(
+            executable,
+            "serve",
+            "--hostname",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--log-level",
+            "WARN",
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        self._stderr_lines = []
+        self._stdout_task = asyncio.create_task(
+            self._drain(self._process.stdout), name="opencode-server-stdout"
+        )
+        self._stderr_task = asyncio.create_task(
+            self._drain(self._process.stderr, self._stderr_lines),
+            name="opencode-server-stderr",
+        )
+        deadline = self._loop.time() + 20
+        while True:
+            if self._process.returncode is not None:
+                raise OpenCodeProtocolError("OpenCode server exited during startup")
+            try:
+                health = await self._request_json("GET", "/global/health", timeout=2)
+                if health.get("healthy") is True:
+                    break
+            except Exception:
+                if self._loop.time() >= deadline:
+                    raise
+                await asyncio.sleep(0.1)
 
     async def stop(self) -> None:
         self._stopping = True
@@ -373,7 +405,15 @@ class OpenCodeAdapter:
             self._base_url + "/global/event", headers=self._headers(), method="GET"
         )
         try:
-            response = urllib.request.urlopen(request, timeout=None)
+            # A long-lived SSE stream legitimately has no data for stretches
+            # at a time, so this can't use a short read timeout without
+            # tearing down idle-but-healthy connections. An unbounded
+            # timeout, though, means a peer that stops responding without
+            # closing the socket (e.g. the OpenCode process wedging) leaves
+            # this thread blocked forever. 300s is a conservative ceiling
+            # that tolerates normal idle gaps while still guaranteeing the
+            # worker eventually notices a truly stuck connection.
+            response = urllib.request.urlopen(request, timeout=300)
             self._sse_response = response
             if self._stopping:
                 response.close()

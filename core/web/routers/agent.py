@@ -189,14 +189,19 @@ async def get_agent_session_history(
     try:
         gateway = _gateway(request)
         gateway.get_session(session_id)
-        events = gateway.store.list_recent_events(session_id, before_sequence, limit)
+        # Fetch one extra event so we can tell whether there's another page
+        # without issuing a second query: if we get back more than `limit`,
+        # the oldest one is dropped and just used as the "more" signal.
+        fetched = await asyncio.to_thread(
+            gateway.store.list_recent_events, session_id, before_sequence, limit + 1
+        )
+        has_more = len(fetched) > limit
+        events = fetched[-limit:] if has_more else fetched
         return {
             "events": [wire(event) for event in events],
             "oldestSequence": events[0].sequence if events else None,
             "latestSequence": events[-1].sequence if events else 0,
-            "hasMore": bool(events)
-            and gateway.store.list_recent_events(session_id, events[0].sequence, 1)
-            != [],
+            "hasMore": has_more,
         }
     except AgentGatewayError as exc:
         raise _http_error(exc) from exc

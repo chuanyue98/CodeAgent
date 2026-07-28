@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../lib/test-base';
 import { resetBackend } from '../lib/reset';
 import { waitForH2 } from '../lib/ui';
 

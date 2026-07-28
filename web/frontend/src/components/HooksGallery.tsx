@@ -90,6 +90,7 @@ function HooksGallery() {
       itemIcon={Anchor}
       labels={labels}
       renderMeta={renderMeta}
+      getSearchableMeta={item => item.meta?.event ?? ''}
     />
   );
 }

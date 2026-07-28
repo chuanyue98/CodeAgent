@@ -6,6 +6,11 @@ import time
 from typing import BinaryIO
 from pathlib import Path
 
+# Generous enough to outlast a real interactive session holding the lock,
+# but bounded so a permanently stuck or OS-refused lock still surfaces as an
+# error instead of hanging forever. ~5 minutes at 0.25s per attempt.
+_WINDOWS_LOCK_MAX_ATTEMPTS = 1200
+
 
 class LockManager:
     """Manages inter-process file locking for engine resources."""
@@ -30,11 +35,7 @@ class LockManager:
             if sys.platform == "win32":
                 import msvcrt
 
-                # Generous enough to outlast a real interactive session
-                # holding the lock, but bounded so a permanently stuck or
-                # OS-refused lock still surfaces as an error instead of
-                # hanging forever.
-                max_attempts = 7200  # ~30 minutes at 0.25s per attempt
+                max_attempts = _WINDOWS_LOCK_MAX_ATTEMPTS
                 for attempt in range(max_attempts):
                     try:
                         msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -7,6 +8,13 @@ from typing import List
 
 from core.resource_locator import get_bundled_resource_root, get_default_config_path
 from core.services.config_service import ConfigService
+
+logger = logging.getLogger(__name__)
+
+# Config-supplied regex patterns are user/admin-editable text, not code we
+# control. Reject anything implausibly long up front as a cheap guard against
+# pathological patterns before even attempting to compile them.
+_MAX_SKILL_ROOT_PATTERN_LENGTH = 200
 
 
 class ConfigManager:
@@ -97,7 +105,24 @@ class ConfigManager:
         roots = []
         for mapping in mappings:
             pattern = mapping.get("pattern")
-            if pattern and re.search(pattern, cwd_str, re.IGNORECASE):
+            if not pattern:
+                continue
+            if len(pattern) > _MAX_SKILL_ROOT_PATTERN_LENGTH:
+                logger.warning(
+                    "Skipping project_skill_root_mapping pattern longer than "
+                    "%d characters",
+                    _MAX_SKILL_ROOT_PATTERN_LENGTH,
+                )
+                continue
+            try:
+                matched = re.search(pattern, cwd_str, re.IGNORECASE)
+            except re.error:
+                logger.warning(
+                    "Skipping invalid project_skill_root_mapping pattern: %r",
+                    pattern,
+                )
+                continue
+            if matched:
                 mapped_path = mapping.get("path")
                 if mapped_path:
                     roots.append(self.resolve_path_token(mapped_path).resolve())

@@ -12,6 +12,8 @@ from core.session_history.models import (
 from core.session_history.parsers.claude_parser import (
     parse_claude_session,
     _decode_claude_project_path,
+    _claude_dir_matches,
+    _encode_claude_project_dir,
 )
 from core.session_history.parsers.codex_parser import _ms_to_iso, parse_codex_session
 from core.session_history.parsers.gemini_parser import parse_gemini_session
@@ -73,6 +75,74 @@ def test_decode_claude_project_path_windows():
         _decode_claude_project_path("C--Users-Administrator")
         == "C:/Users/Administrator"
     )
+
+
+def test_encode_claude_project_dir_matches_real_claude_code_output():
+    """Verified against real ``~/.claude/projects`` directories on this
+    machine, cross-checked with the ``cwd`` recorded inside each session's
+    JSONL. Claude Code's real rule replaces every non-alphanumeric
+    character with a dash — not just path separators, e.g. the dots in
+    ``Ubuntu-24.04`` become dashes too, same as the surrounding
+    backslashes and the existing literal dash."""
+    assert _encode_claude_project_dir("E:/demo/hearthstone-bot") == (
+        "E--demo-hearthstone-bot"
+    )
+    assert _encode_claude_project_dir("E:/me") == "E--me"
+    assert (
+        _encode_claude_project_dir("C:/Users/Administrator") == "C--Users-Administrator"
+    )
+    assert (
+        _encode_claude_project_dir(
+            "//wsl.localhost/Ubuntu-24.04/home/cy/github/chuanyue98/CUITCCA"
+        )
+        == "--wsl-localhost-Ubuntu-24-04-home-cy-github-chuanyue98-CUITCCA"
+    )
+
+
+def test_claude_dir_matches_real_world_samples():
+    """These dir_name/target_path pairs are taken directly from real
+    ``~/.claude/projects/<dir>`` entries and the ``cwd`` field recorded in
+    their session JSONL files."""
+    assert _claude_dir_matches("E--demo-hearthstone-bot", "E:\\demo\\hearthstone-bot")
+    assert _claude_dir_matches("E--demo-hearthstone-bot", "E:/demo/hearthstone-bot")
+    assert _claude_dir_matches("E--me", "E:\\me")
+    assert _claude_dir_matches("C--Users-Administrator", "C:\\Users\\Administrator")
+    assert _claude_dir_matches(
+        "--wsl-localhost-Ubuntu-24-04-home-cy-github-chuanyue98-CUITCCA",
+        "\\\\wsl.localhost\\Ubuntu-24.04\\home\\cy\\github\\chuanyue98\\CUITCCA",
+    )
+
+
+def test_claude_dir_matches_is_case_insensitive():
+    assert _claude_dir_matches("e--demo-test", "E:/demo/test")
+    assert _claude_dir_matches("E--DEMO-TEST", "e:/demo/test")
+
+
+def test_claude_dir_matches_rejects_similar_but_different_paths():
+    assert not _claude_dir_matches("E--demo-project-a", "E:/demo/project-b")
+    # A dir name must not match a shorter/longer prefix of itself.
+    assert not _claude_dir_matches("E--demo-project-a", "E:/demo/project-ab")
+    assert not _claude_dir_matches("E--demo-project-ab", "E:/demo/project-a")
+
+
+def test_claude_dir_matches_handles_dashes_in_project_name():
+    """A project directory whose real name contains a literal dash (e.g.
+    ``my-project``) must still match on its own encoded path."""
+    assert _claude_dir_matches("E--demo-my-project", "E:/demo/my-project")
+    assert _claude_dir_matches("E--demo-my-project", "E:\\demo\\my-project")
+
+
+def test_claude_dir_matches_inherent_claude_code_ambiguity():
+    """Claude Code's own encoding collapses ``my-project`` (a literal dash
+    in the name) and ``my/project`` (a nested directory) onto the exact
+    same directory name, ``...-my-project``. Claude Code itself cannot
+    tell these two projects apart on disk, so this matcher — which mirrors
+    Claude's own encoding rather than trying to invert it — correctly
+    reports a match for *both* target paths against that one directory.
+    This is a pre-existing limitation of Claude Code's own encoding, not
+    something a matcher can resolve after the fact."""
+    assert _claude_dir_matches("E--demo-my-project", "E:/demo/my-project")
+    assert _claude_dir_matches("E--demo-my-project", "E:/demo/my/project")
 
 
 def test_parse_claude_session(tmp_path):
@@ -556,6 +626,25 @@ def test_find_all_sessions_with_project_filter_still_scopes(tmp_path):
     )
 
     sessions = find_all_sessions("E:/demo/project-a", home=tmp_path, engine="claude")
+    assert {s.session_id for s in sessions} == {"sess-a"}
+
+
+def test_find_all_sessions_with_project_filter_scopes_dashed_project_name(tmp_path):
+    """A real project whose name itself contains a dash (e.g.
+    ``hearthstone-bot``) must not be confused with a same-prefix project
+    whose name is one segment longer (e.g. ``hearthstone-bot-v2``)."""
+    from core.session_history.session_finder import find_all_sessions
+
+    _write_claude_session(
+        tmp_path, "E--demo-hearthstone-bot", "sess-a", "2026-07-10T10:00:00.000Z"
+    )
+    _write_claude_session(
+        tmp_path, "E--demo-hearthstone-bot-v2", "sess-b", "2026-07-11T10:00:00.000Z"
+    )
+
+    sessions = find_all_sessions(
+        "E:/demo/hearthstone-bot", home=tmp_path, engine="claude"
+    )
     assert {s.session_id for s in sessions} == {"sess-a"}
 
 

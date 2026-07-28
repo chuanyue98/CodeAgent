@@ -120,6 +120,12 @@ class RunStore:
             with self._conn:
                 self._conn.execute("DELETE FROM runs WHERE task_id = ?", (task_id,))
 
+    def clear(self) -> None:
+        """Deletes every run row. Used to reset the isolated E2E backend."""
+        with self._lock:
+            with self._conn:
+                self._conn.execute("DELETE FROM runs")
+
     def close(self) -> None:
         """Closes the persistent database connection and releases the lock.
 

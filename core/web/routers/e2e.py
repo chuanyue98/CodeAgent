@@ -13,6 +13,10 @@ What "clean" means here:
     wiped and re-seeded from ``web/frontend/e2e/fixtures/`` so any test-
     written state (e.g. claude's ``.mcp.json`` written into a project dir,
     or a schedule referencing a task) is discarded.
+  - Background task run state (``.ca_task_logs/``: log files, the run
+    DB, and in-memory tracking) is wiped, so a task run triggered by one
+    spec (e.g. dashboard.spec.ts's "DB Migrate" run) can't leak a log
+    file into a later spec that asserts an empty log list.
 
 Schedules live inside ``config.json`` under the ``schedules`` key (see
 ScheduleService), so rewriting config also clears them — no separate
@@ -30,6 +34,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from core.analytics.disk_cache import invalidate_cache
 from core.web.resource_paths import ROOT_DIR, resolve_resource_path
+from core.web.routers.tasks import _runner as _task_runner
 
 router = APIRouter(prefix="/api", tags=["e2e"])
 
@@ -104,6 +109,9 @@ def e2e_reset(request: Request) -> dict:
 
     _reseed_tasks()
     reset.append("tasks")
+
+    _task_runner.reset_for_e2e()
+    reset.append("task_runs")
 
     # Seed a small analytics history so the Sessions / Audit / Analytics
     # pages have deterministic data to render and interact with (the

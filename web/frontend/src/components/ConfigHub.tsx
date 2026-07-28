@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Save, Loader2, Plus, Trash2, Folder, Layers, Globe, Zap, Check, X, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useProject, type Config, type GroupDefinition, type Project } from '../context/ProjectContext';
 import request from '../utils/request';
+import LoadingState from './shared/LoadingState';
 
 interface ProxyConfig {
   host: string;
@@ -258,11 +259,7 @@ const ConfigHub: React.FC = () => {
   };
 
   if (loading || !localConfig) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <LoadingState height="h-full" />;
   }
 
   return (

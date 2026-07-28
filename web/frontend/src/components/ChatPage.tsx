@@ -100,6 +100,16 @@ export default function ChatPage() {
 
   const { events, done, error: streamError } = useChatTurnStream(turnId);
 
+  // Guards setState calls in async fetches below from firing after the
+  // component has unmounted (e.g. a fast workspace/page switch while a
+  // request is still in flight).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   // Each event carries the *full* text for its step (not a delta — see
   // extractAssistantText), so the latest text-bearing event is always the
   // complete in-progress answer. Computing this during render (rather than
@@ -131,20 +141,28 @@ export default function ChatPage() {
   useEffect(() => {
     fetchChatEngines()
       .then(list => {
+        if (!mountedRef.current) return;
         setEngines(list);
         if (list.length > 0) setSelectedEngine(prev => prev || list[0].id);
       })
-      .catch(() => setError('Failed to load engines'));
+      .catch(() => {
+        if (!mountedRef.current) return;
+        setError('Failed to load engines');
+      });
   }, []);
 
   const loadSessions = useCallback((engine: string) => {
     setSessionsLoading(true);
     fetchResumableSessions(engine, 30)
       .then(list => {
+        if (!mountedRef.current) return;
         setSessions(list);
         setSessionsLoading(false);
       })
-      .catch(() => setSessionsLoading(false));
+      .catch(() => {
+        if (!mountedRef.current) return;
+        setSessionsLoading(false);
+      });
   }, []);
 
   useEffect(() => {

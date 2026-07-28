@@ -19,4 +19,15 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // e2e/ is Playwright test code, not React components — its fixture
+    // functions conventionally destructure an unused `{}` first param and
+    // take a `use` callback, which the react-hooks/no-empty-pattern rules
+    // (aimed at component code) misread as hook violations.
+    files: ['e2e/**/*.ts'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+      'no-empty-pattern': 'off',
+    },
+  },
 ])

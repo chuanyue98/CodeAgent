@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 CACHE_SCHEMA_VERSION = 3
 CACHE_TTL_SECONDS = 300  # 5 minutes
@@ -65,7 +68,7 @@ def save_cache(data: Any, path: Path | None = None) -> None:
         with open(p, "w", encoding="utf-8") as f:
             json.dump(doc, f, ensure_ascii=False)
     except OSError:
-        pass
+        logger.debug("Failed to write analytics cache to %s", p, exc_info=True)
 
 
 def invalidate_cache(path: Path | None = None) -> None:
@@ -79,4 +82,4 @@ def invalidate_cache(path: Path | None = None) -> None:
         try:
             p.unlink()
         except OSError:
-            pass
+            logger.debug("Failed to remove analytics cache at %s", p, exc_info=True)

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Server, Plus, Trash2, Pencil, X, AlertCircle, Info, Search } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Server, Plus, Trash2, Pencil, X, Info, Search } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import request from '../utils/request';
 import ConfirmDialog from './shared/ConfirmDialog';
+import ErrorState from './shared/ErrorState';
 import { fetchMcpServers, addMcpServer, removeMcpServer, type McpServer } from '../api/mcp';
 
 interface Engine {
@@ -47,6 +48,16 @@ export default function McpPage() {
   const [editingServerName, setEditingServerName] = useState<string | null>(null);
   const [serverSearch, setServerSearch] = useState('');
 
+  // Guards setState calls in async fetches below from firing after the
+  // component has unmounted (e.g. a fast workspace/page switch while a
+  // request is still in flight).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const groupProjects = useMemo(
     () => projects.filter(p => p.group === currentGroup),
     [projects, currentGroup],
@@ -65,10 +76,14 @@ export default function McpPage() {
   useEffect(() => {
     request<Engine[]>('/api/engines')
       .then((list) => {
+        if (!mountedRef.current) return;
         setEngines(list);
         if (list.length > 0) setSelectedEngine(prev => prev || list[0].id);
       })
-      .catch(() => setError('Failed to load engines'));
+      .catch(() => {
+        if (!mountedRef.current) return;
+        setError('Failed to load engines');
+      });
   }, []);
 
   useEffect(() => {
@@ -88,12 +103,23 @@ export default function McpPage() {
       return;
     }
     fetchMcpServers(selectedEngine, projectPath)
-      .then(setServers)
-      .catch(e => setError(e instanceof Error ? e.message : 'Failed to load MCP servers'));
+      .then(list => {
+        if (!mountedRef.current) return;
+        setServers(list);
+      })
+      .catch(e => {
+        if (!mountedRef.current) return;
+        setError(e instanceof Error ? e.message : 'Failed to load MCP servers');
+      });
   }, [selectedEngine, projectPath]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadServers();
+  }, [loadServers]);
+
+  const retryServers = useCallback(() => {
+    setError(null);
     loadServers();
   }, [loadServers]);
 
@@ -238,11 +264,7 @@ export default function McpPage() {
           </div>
         )}
 
-        {error && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-red-50/60 border border-red-100 rounded-lg text-xs text-red-600">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}
-          </div>
-        )}
+        {error && <ErrorState message={error} onRetry={retryServers} />}
 
         <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
           <div className="animate-fade-rise stagger-3 flex-1 glass-card p-4 overflow-y-auto space-y-2">

@@ -187,21 +187,36 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     setSelectedWorkspace(validProjects[0].path);
   }, [selectedWorkspace, setSelectedWorkspace, validProjects]);
 
+  const value = useMemo<ProjectContextType>(() => ({
+    currentGroup,
+    setCurrentGroup,
+    config,
+    projects,
+    validProjects,
+    selectedWorkspace,
+    setSelectedWorkspace,
+    groups,
+    refreshConfig,
+    updateConfig,
+    availableGroups,
+    error,
+  }), [
+    currentGroup,
+    setCurrentGroup,
+    config,
+    projects,
+    validProjects,
+    selectedWorkspace,
+    setSelectedWorkspace,
+    groups,
+    refreshConfig,
+    updateConfig,
+    availableGroups,
+    error,
+  ]);
+
   return (
-    <ProjectContext.Provider value={{
-      currentGroup,
-      setCurrentGroup,
-      config,
-      projects,
-      validProjects,
-      selectedWorkspace,
-      setSelectedWorkspace,
-      groups,
-      refreshConfig,
-      updateConfig,
-      availableGroups,
-      error,
-    }}>
+    <ProjectContext.Provider value={value}>
       {children}
     </ProjectContext.Provider>
   );

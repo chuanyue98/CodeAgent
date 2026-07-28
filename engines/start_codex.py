@@ -36,6 +36,14 @@ CODEX_COMMAND = "codex"
 CODEX_EXEC_SUBCOMMAND = "exec"
 CODEX_SKIP_PERMISSIONS_FLAG = "--dangerously-bypass-approvals-and-sandbox"
 SHELL_FIRST_MARKER = "```shell:first"
+# ``shell:first`` blocks let a prompt/task/code-plan markdown file specify shell
+# commands that this script executes automatically before Codex launches. Those
+# markdown files are not always something the current user personally wrote --
+# they can come from shared code plans, downloaded skills, or marketplace
+# plugins -- so this must never be silent. Setting this env var to a truthy
+# value is an explicit, auditable opt-in to skip the confirmation gate (e.g.
+# for trusted CI pipelines); it is off by default.
+SHELL_FIRST_ALLOW_ENV = "CODEAGENT_ALLOW_SHELL_FIRST"
 
 set_additional_template_search_paths([Path(__file__).resolve().parent.parent])
 
@@ -373,12 +381,93 @@ def extract_shell_first_blocks(text: str) -> Tuple[str, List[str]]:
     return sanitized, commands
 
 
-def run_prelaunch_commands(commands: List[str], env: dict) -> None:
-    """Run shell:first commands before invoking Codex."""
+def _shell_first_allowed_via_override() -> bool:
+    """Checks the explicit opt-in env var that skips the shell:first confirmation gate."""
+    return os.environ.get(SHELL_FIRST_ALLOW_ENV, "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
+def run_prelaunch_commands(
+    commands: List[str],
+    env: dict,
+    codex_non_interactive: bool = False,
+    allow_override: Optional[bool] = None,
+) -> None:
+    """Run shell:first commands before invoking Codex.
+
+    These commands come from markdown text (prompts/tasks/code plans) that may
+    originate from shared files, downloaded skills, or marketplace plugins --
+    not necessarily something the current user wrote or reviewed. This must
+    never execute silently:
+
+    - Non-interactive / no-TTY sessions fail closed: they refuse to run
+      shell:first commands unless ``SHELL_FIRST_ALLOW_ENV`` is explicitly set.
+    - Interactive sessions print the full command text and require a "y"
+      confirmation before each command runs.
+    """
+    if not commands:
+        return
+
+    allow_override = (
+        _shell_first_allowed_via_override()
+        if allow_override is None
+        else allow_override
+    )
+    interactive = (
+        sys.stdin.isatty() and sys.stdout.isatty() and not codex_non_interactive
+    )
+
+    print()
+    print(
+        "⚠️  This prompt/task/code-plan file contains 'shell:first' "
+        "command(s) that would run automatically on this machine before "
+        "Codex launches."
+    )
+    print(
+        "⚠️  Only proceed if you trust where this file came from -- "
+        "shared code plans, skills, and plugins can embed arbitrary shell "
+        "commands."
+    )
+
+    if not interactive and not allow_override:
+        print(
+            "❌ Refusing to run shell:first commands in a non-interactive "
+            f"session. Re-run interactively, or set {SHELL_FIRST_ALLOW_ENV}=1 "
+            "(or pass --allow-shell-first) to explicitly allow this.",
+            file=sys.stderr,
+        )
+        for script in commands:
+            command = script.strip()
+            if not command:
+                continue
+            preview = command.splitlines()[0]
+            suffix = " ..." if "\n" in command else ""
+            print(f"    would run: {preview}{suffix}", file=sys.stderr)
+        sys.exit(1)
+
+    if allow_override:
+        print(
+            f"✅ {SHELL_FIRST_ALLOW_ENV} override active -- running "
+            "shell:first commands without per-command confirmation."
+        )
+
     for script in commands:
         command = script.strip()
         if not command:
             continue
+
+        print("----- shell:first command -----")
+        print(command)
+        print("--------------------------------")
+
+        if interactive and not allow_override:
+            answer = input("Run this command? [y/N]: ").strip().lower()
+            if answer not in ("y", "yes"):
+                print("Skipped by user.")
+                continue
 
         preview = command.splitlines()[0]
         suffix = " ..." if "\n" in command else ""
@@ -567,6 +656,17 @@ def parse_arguments() -> tuple[argparse.Namespace, List[str]]:
         default=True,
         help="开启 YOLO 模式 (默认开启)",
     )
+    parser.add_argument(
+        "--allow-shell-first",
+        action="store_true",
+        dest="allow_shell_first",
+        help=(
+            "Explicitly allow 'shell:first' prelaunch commands from prompt/"
+            "task/code-plan files to run without a per-command confirmation "
+            f"prompt. Equivalent to setting {SHELL_FIRST_ALLOW_ENV}=1. Only "
+            "use this for sources you trust."
+        ),
+    )
 
     return parser.parse_known_args()
 
@@ -689,6 +789,7 @@ def main() -> None:
 
     env = engine.env_manager.get_env()
     pre_launch_commands = list(general_commands) + list(task_commands)
+    allow_shell_first = args.allow_shell_first or _shell_first_allowed_via_override()
 
     resource_lock = engine.acquire_resource_lock(
         Path.home() / ".codex" / ".codeagent-session.lock"
@@ -706,7 +807,12 @@ def main() -> None:
         engine.ensure_plugins_available()
 
         register_signal_handler()
-        run_prelaunch_commands(pre_launch_commands, env)
+        run_prelaunch_commands(
+            pre_launch_commands,
+            env,
+            codex_non_interactive=codex_non_interactive,
+            allow_override=allow_shell_first,
+        )
 
         if code_plan_prompts:
             for prompt, file_path, plan_commands in zip(
@@ -721,7 +827,12 @@ def main() -> None:
                 if prompt:
                     message = f"{message}\n\n{prompt}" if message else prompt
 
-                run_prelaunch_commands(plan_commands, env)
+                run_prelaunch_commands(
+                    plan_commands,
+                    env,
+                    codex_non_interactive=codex_non_interactive,
+                    allow_override=allow_shell_first,
+                )
 
                 concise_msg = engine.write_temp_prompt(message)
                 try:
