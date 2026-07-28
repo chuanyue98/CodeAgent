@@ -89,12 +89,14 @@ def test_encode_claude_project_dir_matches_real_claude_code_output():
     )
     assert _encode_claude_project_dir("E:/me") == "E--me"
     assert (
-        _encode_claude_project_dir("C:/Users/Administrator")
-        == "C--Users-Administrator"
+        _encode_claude_project_dir("C:/Users/Administrator") == "C--Users-Administrator"
     )
-    assert _encode_claude_project_dir(
-        "//wsl.localhost/Ubuntu-24.04/home/cy/github/chuanyue98/CUITCCA"
-    ) == "--wsl-localhost-Ubuntu-24-04-home-cy-github-chuanyue98-CUITCCA"
+    assert (
+        _encode_claude_project_dir(
+            "//wsl.localhost/Ubuntu-24.04/home/cy/github/chuanyue98/CUITCCA"
+        )
+        == "--wsl-localhost-Ubuntu-24-04-home-cy-github-chuanyue98-CUITCCA"
+    )
 
 
 def test_claude_dir_matches_real_world_samples():

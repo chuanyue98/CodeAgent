@@ -412,7 +412,9 @@ def run_prelaunch_commands(
         return
 
     allow_override = (
-        _shell_first_allowed_via_override() if allow_override is None else allow_override
+        _shell_first_allowed_via_override()
+        if allow_override is None
+        else allow_override
     )
     interactive = (
         sys.stdin.isatty() and sys.stdout.isatty() and not codex_non_interactive
