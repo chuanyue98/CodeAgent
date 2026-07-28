@@ -174,3 +174,11 @@ a JSON body shaped like:
 |----------|----------|-------------|
 | `WOODPECKER_TOKEN` | For CI | Woodpecker CI personal access token |
 | `GITHUB_TOKEN` | For CI | GitHub token (from `gh auth token`) |
+| `CA_UI_DEV` | No | Set to `1` to have `ca ui` manage a Vite dev server instead of serving the built `web/frontend/dist/` |
+| `CA_UI_HOST` | No | Bind host for `ca ui`'s API server. Default `127.0.0.1`; use `0.0.0.0` for container/remote access |
+| `CA_CONFIG_PATH` | No | Overrides where `config.json` is read/written. Default is the repo root's `config.json` |
+| `CA_SKIP_AUTO_REGISTER` | No | Suppresses the "run `ca project add`" hint when launching from an unregistered directory |
+| `CA_DEBUG` | No | Set to `1` for verbose skill/hook/plugin/prompt scanner debug output |
+| `CA_TASKS_ROOT` | No | Overrides the task-template directory (default: `tasks/` under the resolved resource root) |
+
+A handful of others (`CA_E2E`, `CA_AGENT_GATEWAY_FAKE`, `CA_ROOT_DIR`, `CA_AGENT_LEGACY_FALLBACK`, `CA_PROJECT_GROUP`, `CODEAGENT_RESOURCE_ROOT`) exist mainly for internal tooling and tests — see `.env.example` for the full list with descriptions.
