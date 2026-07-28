@@ -1,9 +1,27 @@
 import json
 import sys
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 import ca_launcher
+
+
+def _wait_for(predicate, timeout=2.0):
+    """Polls until `predicate()` is truthy or `timeout` seconds elapse.
+
+    run_ui_command() now opens the browser from a background thread (it
+    waits for the API port to accept connections first -- see
+    _wait_for_api_then_open_browser) instead of calling it inline, so
+    tests can no longer assert on the browser-open mock immediately after
+    run_ui_command() returns.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return predicate()
 
 
 @pytest.fixture
@@ -110,7 +128,9 @@ def test_run_ui_command_uses_existing_vite_server(capsys, monkeypatch):
         with patch("ca_launcher._frontend_source_exists", return_value=True):
             with patch("ca_launcher._is_ui_dev_server_running", return_value=True):
                 with patch("ca_launcher._open_browser", mock_open_browser):
-                    assert ca_launcher.run_ui_command() == 0
+                    with patch("ca_launcher.is_tcp_port_open", return_value=True):
+                        assert ca_launcher.run_ui_command() == 0
+                        assert _wait_for(lambda: mock_open_browser.called)
 
     mock_open_browser.assert_called_once_with("http://127.0.0.1:5173")
     mock_uvicorn.run.assert_called_once_with(
@@ -137,7 +157,9 @@ def test_run_ui_command_starts_vite_server_when_available(capsys, monkeypatch):
                     "ca_launcher._start_ui_dev_server", return_value=True
                 ) as mock_start:
                     with patch("ca_launcher._open_browser", mock_open_browser):
-                        assert ca_launcher.run_ui_command() == 0
+                        with patch("ca_launcher.is_tcp_port_open", return_value=True):
+                            assert ca_launcher.run_ui_command() == 0
+                            assert _wait_for(lambda: mock_open_browser.called)
                     mock_start.assert_called_once()
 
     mock_open_browser.assert_called_once_with("http://127.0.0.1:5173")
@@ -167,7 +189,11 @@ def test_run_ui_command_falls_back_to_dist_when_vite_start_fails(capsys, monkeyp
                             "ca_launcher.find_available_port", return_value=8123
                         ):
                             with patch("ca_launcher._open_browser", mock_open_browser):
-                                assert ca_launcher.run_ui_command() == 0
+                                with patch(
+                                    "ca_launcher.is_tcp_port_open", return_value=True
+                                ):
+                                    assert ca_launcher.run_ui_command() == 0
+                                    assert _wait_for(lambda: mock_open_browser.called)
 
     mock_open_browser.assert_called_once_with("http://127.0.0.1:8123")
     mock_uvicorn.run.assert_called_once_with(
