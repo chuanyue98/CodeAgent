@@ -53,12 +53,28 @@ ca doctor              # Check environment
 ca doctor --fix        # Auto-repair issues
 ```
 
-Checks:
-- Python version compatibility
-- Required dependencies
-- Configuration file validity
-- Engine availability
-- Frontend build status
+Checks are grouped into five sections (see `core/doctor.py`):
+
+**Runtime**
+- Python version — confirms Python 3.13+ is in use
+- Engine availability — checks whether each provider CLI (`claude`, `gemini`, `codex`, `opencode`) is found on `PATH`
+
+**Configuration**
+- `config.json` validity — confirms the file exists and parses correctly
+- Resource directories — confirms `prompt/`, `skills/`, `hooks/`, `plugins/`, and `tasks/` exist
+
+**Context Resolution**
+- Skills resolution — confirms every skill declared in the active group resolves to a real directory
+- Hooks resolution — confirms every hook declared in the active group resolves via its `metadata.json`
+- Plugins resolution — confirms every plugin declared in the active group resolves
+
+**Environment**
+- Temp prompt file — confirms `.ca_prompt.tmp` is writable in the project root
+- Proxy reachability — if a proxy is configured, checks whether any configured host:port is reachable
+- Symlink/junction capability — confirms skill-linking will work (directory junctions on Windows, symlinks on Unix)
+
+**Session Integrity**
+- Stale injections — detects leftover `_ca_injected` markers in `.claude/settings.json`, `.gemini/settings.json`, `.opencode/settings.json`, or `.codex/settings.json` from a previous crashed session; `ca doctor --fix` restores the `.bak` backups
 
 ### `ui`
 
@@ -116,6 +132,23 @@ ca project remove /path/to/repo   # Unregister a project
 ```
 
 `ca project add` works in scripts and CI — no TTY required, unlike the interactive prompt that normally appears on first launch from an unregistered directory. If that prompt would otherwise be skipped (non-interactive session, or `CA_SKIP_AUTO_REGISTER` unset), a one-line hint pointing at `ca project add` is printed to stderr instead of failing silently.
+
+### `resources`
+
+Discover skills, plugins, hooks, and prompts without opening the Web UI.
+
+```bash
+ca resources list skills                # List all skills
+ca resources list plugins
+ca resources list hooks
+ca resources list prompts
+
+ca resources list skills --group work   # Check enabled state against a specific group
+```
+
+`ca resources list <kind>` accepts `skills`, `plugins`, `hooks`, or `prompts` for `<kind>`.
+Each row shows the resource id and description, plus a marker for whether it is enabled
+(`--group`, default `codeagent`) or, for hooks, whether it is currently active.
 
 ### `ps` / `stop`
 
