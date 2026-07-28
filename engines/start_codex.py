@@ -19,6 +19,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
+from core.logging_config import get_logger
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     get_tasks_dir,
@@ -44,6 +45,8 @@ SHELL_FIRST_MARKER = "```shell:first"
 # value is an explicit, auditable opt-in to skip the confirmation gate (e.g.
 # for trusted CI pipelines); it is off by default.
 SHELL_FIRST_ALLOW_ENV = "CODEAGENT_ALLOW_SHELL_FIRST"
+
+logger = get_logger(__name__)
 
 set_additional_template_search_paths([Path(__file__).resolve().parent.parent])
 
@@ -301,12 +304,12 @@ class CodexEngine(BaseEngine):
                 current_content = ""
             if self.MARKETPLACE_NAME not in current_content:
                 shutil.copy2(config_path, backup_path)
-                print(f"💾 Created safety backup of global config: {backup_path.name}")
+                logger.info("Created safety backup of global config: %s", backup_path.name)
 
         data = self._load_config(config_path)
         data = self._format_plugins_for_settings(data, plugins)
         self._save_config(config_path, data)
-        print(f"✅ Registered Codex plugins in {config_path}")
+        logger.info("Registered Codex plugins in %s", config_path)
 
     def cleanup_plugins_available(self) -> None:
         """还原全局配置并清理临时市场/缓存"""
@@ -317,14 +320,14 @@ class CodexEngine(BaseEngine):
             # 使用 copy 而非 move(os.replace) 还原，保留备份副本，确保下一轮
             # 仍可从干净备份还原（即使本轮再次崩溃）。
             shutil.copy2(str(backup_path), str(config_path))
-            print("♻️ Restored global config.toml from backup")
+            logger.info("Restored global config.toml from backup")
         elif config_path.exists():
             # 如果没有备份但文件存在，检查是否由 CodeAgent 创建
             try:
                 content = config_path.read_text(encoding="utf-8")
                 if self.MARKETPLACE_NAME in content:
                     config_path.unlink()
-                    print("♻️ Removed temporary global config.toml")
+                    logger.info("Removed temporary global config.toml")
             except Exception:
                 pass
 
@@ -343,7 +346,7 @@ class CodexEngine(BaseEngine):
         cache_root = self._get_plugin_cache_root()
         if cache_root.exists():
             shutil.rmtree(cache_root, ignore_errors=True)
-            print("🧹 Cleaned up local Codex plugin cache")
+            logger.info("Cleaned up local Codex plugin cache")
 
 
 def extract_shell_first_blocks(text: str) -> tuple[str, list[str]]:

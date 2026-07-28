@@ -116,11 +116,13 @@ def test_assemble_prompt_basic(tmp_path, monkeypatch):
     engine = DummyEngine()
     monkeypatch.setattr(engine, "get_prompts_to_inject", lambda: ["base"])
 
-    import core.engine_base
+    import core.engine_base.prompt_mixin
 
-    # Mock prompt_general
+    # Mock prompt_general (patch it where prompt_mixin looks it up, not the
+    # package re-export -- Python resolves free variables against the
+    # defining module).
     monkeypatch.setattr(
-        core.engine_base,
+        core.engine_base.prompt_mixin,
         "prompt_general",
         lambda task, groups, extra_contents=None, prompt_root=None: (
             f"Base Prompt Groups={groups}"
