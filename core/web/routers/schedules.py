@@ -21,8 +21,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from core.services.config_service import ConfigService
-from core.services.schedule_service import ScheduleService
 from core.services.runner_service import TaskAlreadyRunningError
+from core.services.schedule_service import ScheduleService
 from core.web.routers import tasks as tasks_router
 from core.web.routers.config import get_config_path
 

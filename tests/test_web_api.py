@@ -1,7 +1,9 @@
-import pytest
 import json
 from types import SimpleNamespace
+
+import pytest
 from httpx import ASGITransport, AsyncClient
+
 from core.web import server
 from core.web.routers import tasks as tasks_router
 from core.web.server import app
@@ -385,7 +387,7 @@ def test_initialize_default_groups_logic(tmp_path, monkeypatch):
 
     server.initialize_default_groups()
 
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         config = json.load(f)
         assert "groups" in config
         assert "common" in config["groups"]
@@ -393,7 +395,8 @@ def test_initialize_default_groups_logic(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_server_lifespan_cleanup_exceptions(monkeypatch):
-    from unittest.mock import MagicMock, AsyncMock
+    from unittest.mock import AsyncMock, MagicMock
+
     import core.web.server as server_mod
 
     # Mock initialize_default_groups and scheduler_tick_loop to avoid real setup

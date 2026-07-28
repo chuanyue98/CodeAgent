@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import shlex
 import os
+import shlex
 import shutil
 import subprocess
 import sys

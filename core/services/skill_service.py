@@ -1,5 +1,7 @@
-import yaml  # type: ignore[import-untyped]
 from pathlib import Path
+
+import yaml  # type: ignore[import-untyped]
+
 from core.skill_scanner import SkillScanner
 
 

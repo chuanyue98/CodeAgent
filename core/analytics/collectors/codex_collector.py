@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import List
 
 from core.analytics.models import RawUsageEntry
 
@@ -21,9 +20,7 @@ def _ms_to_iso(ms: int) -> str:
     Returns:
         str: The ISO 8601 formatted timestamp string.
     """
-    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%S.000Z"
-    )
+    return datetime.fromtimestamp(ms / 1000, tz=UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 def _iso_to_ms(iso: str) -> int:
@@ -48,7 +45,7 @@ def _iso_to_ms(iso: str) -> int:
 
 def scan_codex_usage(
     home: Path | None = None, since_timestamp: str = ""
-) -> List[RawUsageEntry]:
+) -> list[RawUsageEntry]:
     """Scans the Codex SQLite database for usage statistics.
 
     Args:
@@ -65,7 +62,7 @@ def scan_codex_usage(
         return []
 
     since_ms = _iso_to_ms(since_timestamp)
-    entries: List[RawUsageEntry] = []
+    entries: list[RawUsageEntry] = []
     con = None
     try:
         con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)

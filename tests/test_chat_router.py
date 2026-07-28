@@ -3,8 +3,8 @@ no real engine CLI is spawned in CI."""
 
 from __future__ import annotations
 
-import time
 import json
+import time
 
 import pytest
 from httpx import ASGITransport, AsyncClient

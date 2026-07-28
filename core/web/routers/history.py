@@ -22,7 +22,7 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
@@ -91,10 +91,10 @@ def _parse_ts(ts: str) -> datetime:
         normalized = ts.replace("Z", "+00:00") if ts else ""
         dt = datetime.fromisoformat(normalized) if normalized else datetime.min
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt
     except (ValueError, TypeError):
-        return datetime.min.replace(tzinfo=timezone.utc)
+        return datetime.min.replace(tzinfo=UTC)
 
 
 class ConvertRequest(BaseModel):

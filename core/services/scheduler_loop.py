@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from core.services.notifier import notify
 from core.services.runner_service import TaskAlreadyRunningError, TaskRunner
@@ -27,6 +27,10 @@ _NON_FAILURE_STATUSES = {"started", "completed", "success"}
 
 def _is_failure_status(status: str) -> bool:
     return status not in _NON_FAILURE_STATUSES and not status.startswith("skipped")
+
+
+def _task_exists(tasks_root: Path, record: dict) -> bool:
+    return TaskService(tasks_root).get_task(record["task_name"]) is not None
 
 
 async def _record_and_notify(
@@ -138,11 +142,7 @@ async def tick_once(
                 continue
 
             tasks_root = get_tasks_root()
-            task_exists = await asyncio.to_thread(
-                lambda: (
-                    TaskService(tasks_root).get_task(record["task_name"]) is not None
-                )
-            )
+            task_exists = await asyncio.to_thread(_task_exists, tasks_root, record)
             if not task_exists:
                 await _record_and_notify(schedule_service, record, "task_not_found")
                 continue

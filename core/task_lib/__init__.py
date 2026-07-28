@@ -27,10 +27,14 @@ from core.task_lib.files import (  # noqa: E402
 )
 from core.task_lib.interactive import (  # noqa: E402
     _prompt_for_task_choice as _prompt_for_task_choice,
+)
+from core.task_lib.interactive import (  # noqa: E402
     select_task_interactively,
 )
 from core.task_lib.paths import (  # noqa: E402
     _ADDITIONAL_TEMPLATE_SEARCH_PATHS as _ADDITIONAL_TEMPLATE_SEARCH_PATHS,
+)
+from core.task_lib.paths import (  # noqa: E402
     GENERAL_PROMPT_RELATIVE_PATH,
     TASK_FILE_SUFFIX,
     TASKS_DIR,

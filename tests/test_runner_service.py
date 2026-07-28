@@ -75,8 +75,9 @@ def test_failed_task_start_is_still_queryable(tmp_path):
 
 
 def test_task_runner_kill_all(tmp_path):
-    from core.services.runner_service import TaskRunner
     import time
+
+    from core.services.runner_service import TaskRunner
 
     runner = TaskRunner(tmp_path)
     # Start a dummy long-running command (like sleep 10)
@@ -92,8 +93,9 @@ def test_task_runner_kill_all(tmp_path):
 
 
 def test_task_runner_kill_all_missing_from_active_runs(tmp_path):
-    from core.services.runner_service import TaskRunner
     import time
+
+    from core.services.runner_service import TaskRunner
 
     runner = TaskRunner(tmp_path)
     # Start a dummy long-running command

@@ -16,9 +16,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from core.session_history.models import (
     EngineType,
@@ -39,12 +38,10 @@ def _ms_to_iso(ms: int) -> str:
     """
     if not ms:
         return ""
-    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%S.000Z"
-    )
+    return datetime.fromtimestamp(ms / 1000, tz=UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
-def _find_opencode_db(home: Optional[Path] = None) -> Optional[Path]:
+def _find_opencode_db(home: Path | None = None) -> Path | None:
     """Locates the OpenCode database file.
 
     Checks common locations including XDG data directory.
@@ -68,8 +65,8 @@ def _find_opencode_db(home: Optional[Path] = None) -> Optional[Path]:
 def parse_opencode_session(
     session_id: str,
     db_path: Path,
-    connection: Optional[sqlite3.Connection] = None,
-) -> Optional[UnifiedSession]:
+    connection: sqlite3.Connection | None = None,
+) -> UnifiedSession | None:
     """Parses a single OpenCode session from the SQLite database.
 
     Args:
@@ -253,7 +250,7 @@ def parse_opencode_session(
 
 
 def find_opencode_sessions(
-    project_path: Optional[str] = None, home: Optional[Path] = None
+    project_path: str | None = None, home: Path | None = None
 ) -> list[UnifiedSession]:
     """Finds all OpenCode sessions for a given project path.
 

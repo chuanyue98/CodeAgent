@@ -3,7 +3,6 @@
 import os
 import traceback
 from pathlib import Path
-from typing import Dict, List, Optional
 
 
 class SkillScanner:
@@ -17,7 +16,7 @@ class SkillScanner:
         """
         self.skills_root = skills_root
 
-    def scan(self) -> tuple[Dict[str, List[str]], List[str]]:
+    def scan(self) -> tuple[dict[str, list[str]], list[str]]:
         """Scans the skills root directory for categories and individual skill definitions.
 
         Returns:
@@ -25,8 +24,8 @@ class SkillScanner:
             - A dictionary mapping category names to lists of skill names.
             - A list of warning messages encountered during scanning.
         """
-        result: Dict[str, List[str]] = {}
-        warnings: List[str] = []
+        result: dict[str, list[str]] = {}
+        warnings: list[str] = []
         if not self.skills_root.exists():
             return result, warnings
 
@@ -66,8 +65,8 @@ def get_skills_to_mount(
     config: dict,
     scanner: SkillScanner,
     project_type: str = "common",
-    extra_skills: Optional[List[str]] = None,
-) -> List[str]:
+    extra_skills: list[str] | None = None,
+) -> list[str]:
     """Determines which skills should be mounted based on configuration and environment.
 
     Args:

@@ -6,7 +6,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-
 LINK_MANIFEST = ".codeagent-links.json"
 
 

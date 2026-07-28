@@ -10,14 +10,13 @@ from core.session_history.models import (
     UnifiedSession,
 )
 from core.session_history.parsers.claude_parser import (
-    parse_claude_session,
-    _decode_claude_project_path,
     _claude_dir_matches,
+    _decode_claude_project_path,
     _encode_claude_project_dir,
+    parse_claude_session,
 )
 from core.session_history.parsers.codex_parser import _ms_to_iso, parse_codex_session
 from core.session_history.parsers.gemini_parser import parse_gemini_session
-
 
 # ─── UnifiedSession model tests ───────────────────────────────────────
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 import sys
-from typing import Iterable
+from collections.abc import Iterable
 
 ENGINE_CLI_CANDIDATES: dict[str, tuple[str, ...]] = {
     "claude": ("claude", "claude.cmd"),

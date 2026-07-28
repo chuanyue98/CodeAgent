@@ -18,13 +18,12 @@ from core.services.agent_gateway import AgentGateway, AgentGatewayError
 from core.services.agent_protocol import (
     AgentCommand,
     AgentError,
-    CreateAgentSessionRequest,
     AgentEvent,
+    CreateAgentSessionRequest,
     ImportAgentSessionRequest,
     wire,
 )
 from core.session_history.session_finder import find_session_by_id
-
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 

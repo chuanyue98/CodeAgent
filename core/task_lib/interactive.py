@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-from typing import Dict, List, Optional, Union
 
 from core.task_lib.expressions import (
     parse_combination_expression,
@@ -14,7 +13,7 @@ from core.task_lib.files import list_tasks, show_tasks
 from core.task_lib.paths import TASK_FILE_SUFFIX, TASKS_DIR
 
 
-def _prompt_for_task_choice(tasks: List[str]) -> str:
+def _prompt_for_task_choice(tasks: list[str]) -> str:
     """Reads the user's raw task selection.
 
     In a real terminal this offers arrow-key browsing and incremental
@@ -46,9 +45,9 @@ def _prompt_for_task_choice(tasks: List[str]) -> str:
 def select_task_interactively(
     directory: str = TASKS_DIR,
     file_suffix: str = TASK_FILE_SUFFIX,
-    history: Optional[Dict[str, str]] = None,
+    history: dict[str, str] | None = None,
     allow_range: bool = False,
-) -> Union[str, List[str]]:
+) -> str | list[str]:
     """Interactively prompts the user to select one or more tasks.
 
     Args:

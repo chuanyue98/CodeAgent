@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from core.engine_base import BaseEngine, EnvironmentManager
 
 
@@ -159,7 +160,7 @@ def test_engine_inject_hooks_to_settings(mock_engine, tmp_path, monkeypatch):
     mock_engine.inject_hooks_to_settings("settings.json", hooks)
 
     assert settings_file.exists()
-    with open(settings_file, "r") as f:
+    with open(settings_file) as f:
         data = json.load(f)
         assert data["_ca_injected"] is True
         assert data["hooks"]["pre-commit"][0]["hooks"][0]["name"] == "test-hook"
@@ -488,7 +489,7 @@ def test_inject_plugins_to_settings(mock_engine, tmp_path, monkeypatch):
     mock_engine.inject_plugins_to_settings("settings.json")
 
     assert settings_file.exists()
-    with open(settings_file, "r") as f:
+    with open(settings_file) as f:
         data = json.load(f)
         assert data["_ca_injected"] is True
         assert data["plugins"][0]["name"] == "cool-plugin"

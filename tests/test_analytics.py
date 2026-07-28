@@ -2,11 +2,11 @@ from unittest.mock import patch
 
 import pytest
 
-from core.analytics.models import RawUsageEntry
 from core.analytics.aggregator import aggregate
-from core.analytics.history import append_history, load_history, get_last_timestamps
-from core.analytics.service import _collect_all, get_analytics_data
 from core.analytics.collectors.claude_collector import scan_claude_usage
+from core.analytics.history import append_history, get_last_timestamps, load_history
+from core.analytics.models import RawUsageEntry
+from core.analytics.service import _collect_all, get_analytics_data
 
 
 @pytest.fixture

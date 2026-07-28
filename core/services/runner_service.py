@@ -10,7 +10,6 @@ import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from core.services.run_store import RunStore, TaskRunRecord
 
@@ -18,7 +17,7 @@ _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
 
 # Field name each engine's JSON(L) output uses for its session identifier.
 # codex calls it "thread_id"; the other three call it "session_id"/"sessionID".
-_CHAT_SESSION_ID_FIELDS: Dict[str, tuple[str, ...]] = {
+_CHAT_SESSION_ID_FIELDS: dict[str, tuple[str, ...]] = {
     "claude": ("session_id",),
     "codex": ("thread_id",),
     "opencode": ("sessionID",),
@@ -30,12 +29,12 @@ _CHAT_SESSION_ID_FIELDS: Dict[str, tuple[str, ...]] = {
 class TaskRunStatus:
     task_id: str
     engine: str
-    pid: Optional[int]
+    pid: int | None
     status: str  # "running", "completed", "failed", "stopped"
     log_path: str
     start_time: float
-    session_id: Optional[str] = None
-    workspace: Optional[str] = None
+    session_id: str | None = None
+    workspace: str | None = None
 
 
 class TaskAlreadyRunningError(ValueError):
@@ -47,8 +46,8 @@ class TaskRunner:
 
     def __init__(self, root_dir: Path):
         self.root_dir = root_dir
-        self.active_runs: Dict[str, TaskRunStatus] = {}
-        self._processes: Dict[str, subprocess.Popen] = {}
+        self.active_runs: dict[str, TaskRunStatus] = {}
+        self._processes: dict[str, subprocess.Popen] = {}
         self._stopping_tasks: set[str] = set()
         self._run_lock = threading.RLock()
         self.log_dir = self.root_dir / ".ca_task_logs"
@@ -174,9 +173,9 @@ class TaskRunner:
         self,
         engine: str,
         message: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         group: str = "common",
-        project_path: Optional[str] = None,
+        project_path: str | None = None,
     ) -> TaskRunStatus:
         """Starts one headless, non-interactive ChatPage turn in the background.
 
@@ -312,13 +311,13 @@ class TaskRunner:
             return GeminiEngine()
         raise ValueError(f"Invalid engine: {engine!r}")
 
-    def _extract_chat_session_id(self, engine: str, log_path: Path) -> Optional[str]:
+    def _extract_chat_session_id(self, engine: str, log_path: Path) -> str | None:
         """Scans a completed chat turn's JSONL log for the engine-reported session id."""
         fields = _CHAT_SESSION_ID_FIELDS.get(engine, ())
         if not fields:
             return None
         try:
-            with open(log_path, "r", encoding="utf-8") as f:
+            with open(log_path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if not line:
@@ -335,7 +334,7 @@ class TaskRunner:
             return None
         return None
 
-    def list_runs(self) -> List[TaskRunStatus]:
+    def list_runs(self) -> list[TaskRunStatus]:
         """Returns all tracked task runs, updating their status first."""
         with self._run_lock:
             for task_id in list(self.active_runs.keys()):
@@ -354,7 +353,7 @@ class TaskRunner:
             str(Path(workspace).expanduser().resolve()) if workspace else None
         )
         with self._run_lock:
-            for task_id, run in list(self.active_runs.items()):
+            for task_id, _run in list(self.active_runs.items()):
                 if not task_id.startswith(prefix):
                     continue
                 refreshed = self.get_status(task_id)
@@ -370,7 +369,7 @@ class TaskRunner:
                 return True
         return False
 
-    def get_status(self, task_id: str) -> Optional[TaskRunStatus]:
+    def get_status(self, task_id: str) -> TaskRunStatus | None:
         """Checks if a background task is still running and updates its status."""
         with self._run_lock:
             if task_id not in self.active_runs:

@@ -1,6 +1,7 @@
 import os
-from core.plugin_scanner import PluginScanner, get_plugins_to_mount
+
 from core.engine_base import BaseEngine
+from core.plugin_scanner import PluginScanner, get_plugins_to_mount
 
 
 class DummyEngine(BaseEngine):

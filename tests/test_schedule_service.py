@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC
+
 import pytest
 from freezegun import freeze_time
 
@@ -24,10 +26,10 @@ def test_create_schedule_persists_and_computes_next_run(service):
     assert record["last_run_at"] is None
     assert record["last_run_status"] is None
     # Next 9am UTC after 2026-01-01 00:00 is the same day at 09:00.
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     assert (
-        datetime.fromtimestamp(record["next_run_at"], tz=timezone.utc).isoformat()
+        datetime.fromtimestamp(record["next_run_at"], tz=UTC).isoformat()
         == "2026-01-01T09:00:00+00:00"
     )
     assert service.list_schedules() == [record]
@@ -104,13 +106,13 @@ def test_record_run_updates_status_and_advances_next_run(service):
 
 
 def test_preview_next_runs_returns_requested_count(service):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     with freeze_time("2026-01-01 00:00:00"):
         runs = service.preview_next_runs("0 9 * * *", count=3)
 
     assert len(runs) == 3
-    assert [datetime.fromtimestamp(r, tz=timezone.utc).isoformat() for r in runs] == [
+    assert [datetime.fromtimestamp(r, tz=UTC).isoformat() for r in runs] == [
         "2026-01-01T09:00:00+00:00",
         "2026-01-02T09:00:00+00:00",
         "2026-01-03T09:00:00+00:00",

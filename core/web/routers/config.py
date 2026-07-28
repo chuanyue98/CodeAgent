@@ -3,8 +3,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from core.services.config_service import ConfigService
 from core.resource_locator import get_default_config_path
+from core.services.config_service import ConfigService
 
 router = APIRouter(prefix="/api")
 

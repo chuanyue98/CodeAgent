@@ -7,14 +7,12 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 # 确保能找到 core 模块
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
-
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -38,7 +36,7 @@ class ClaudeEngine(BaseEngine):
         # no accurate value to store here.
         super().__init__("Claude", "")
 
-    def build_command(self, message: str, non_interactive: bool) -> List[str]:
+    def build_command(self, message: str, non_interactive: bool) -> list[str]:
         cmd = [self.CLAUDE_COMMAND, self.CLAUDE_SKIP_PERMISSIONS_FLAG]
         for plugin_meta in self.get_plugins_to_mount():
             plugin_dir = plugin_meta.get("_plugin_dir")
@@ -48,8 +46,8 @@ class ClaudeEngine(BaseEngine):
         return cmd
 
     def build_chat_command(
-        self, message: str, session_id: Optional[str] = None
-    ) -> List[str]:
+        self, message: str, session_id: str | None = None
+    ) -> list[str]:
         """Builds a headless, structured-output command for one ChatPage turn.
 
         Verified live (see docs/chatpage-cli-spike-results.md spike): the

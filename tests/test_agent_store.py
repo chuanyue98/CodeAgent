@@ -10,7 +10,7 @@ from core.services.agent_protocol import (
     ProviderCapabilities,
     SessionStatus,
 )
-from core.services.agent_store import AgentStore, SCHEMA_VERSION
+from core.services.agent_store import SCHEMA_VERSION, AgentStore
 
 
 def _session() -> AgentSession:

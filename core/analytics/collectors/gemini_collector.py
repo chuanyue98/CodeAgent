@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import List
 
 from core.analytics.models import RawUsageEntry
 
 
 def scan_gemini_usage(
     home: Path | None = None, since_timestamp: str = ""
-) -> List[RawUsageEntry]:
+) -> list[RawUsageEntry]:
     """Scans the Gemini temporary directory for usage logs.
 
     Args:
@@ -25,7 +24,7 @@ def scan_gemini_usage(
     if not base.exists():
         return []
 
-    entries: List[RawUsageEntry] = []
+    entries: list[RawUsageEntry] = []
 
     for jsonl_file in base.rglob("*.jsonl"):
         # Gemini has two layouts:
@@ -45,7 +44,7 @@ def _parse_gemini_file(
     path: Path,
     session_id: str,
     workspace: str,
-    entries: List[RawUsageEntry],
+    entries: list[RawUsageEntry],
     since_timestamp: str = "",
 ) -> None:
     """Parses a single Gemini JSONL log file and appends entries to the list.

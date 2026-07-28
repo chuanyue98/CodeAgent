@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass
@@ -79,8 +78,8 @@ class DailyUsage:
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
     cost: float = 0.0
-    models_used: List[str] = field(default_factory=list)
-    model_breakdowns: List[ModelBreakdown] = field(default_factory=list)
+    models_used: list[str] = field(default_factory=list)
+    model_breakdowns: list[ModelBreakdown] = field(default_factory=list)
 
 
 @dataclass
@@ -106,8 +105,8 @@ class MonthlyUsage:
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
     cost: float = 0.0
-    models_used: List[str] = field(default_factory=list)
-    model_breakdowns: List[ModelBreakdown] = field(default_factory=list)
+    models_used: list[str] = field(default_factory=list)
+    model_breakdowns: list[ModelBreakdown] = field(default_factory=list)
 
 
 @dataclass
@@ -137,5 +136,5 @@ class SessionUsage:
     cache_read_tokens: int = 0
     cost: float = 0.0
     last_activity: str = ""
-    models_used: List[str] = field(default_factory=list)
-    model_breakdowns: List[ModelBreakdown] = field(default_factory=list)
+    models_used: list[str] = field(default_factory=list)
+    model_breakdowns: list[ModelBreakdown] = field(default_factory=list)

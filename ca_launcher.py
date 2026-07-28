@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-import sys
-import subprocess
 import json
 import os
 import shutil
 import socket
+import subprocess
+import sys
+import threading
 import time
 from pathlib import Path
 
@@ -59,7 +60,7 @@ def load_config():
     }
     if config_path.exists():
         try:
-            with open(config_path, "r", encoding="utf-8-sig") as f:
+            with open(config_path, encoding="utf-8-sig") as f:
                 return {**default_config, **json.load(f)}
         except Exception as e:
             print(f"⚠️ Warning: Failed to load config.json: {e}")
@@ -209,6 +210,28 @@ def _open_browser(url):
     return True
 
 
+def _wait_for_api_then_open_browser(api_host, api_port, url):
+    """Opens the browser only once the Web UI API is actually accepting
+    connections, in a background thread so it doesn't delay uvicorn.run().
+
+    Opening the browser right before uvicorn.run() (the previous behavior)
+    raced uvicorn's own startup -- mounting 16+ routers and binding the
+    socket takes long enough that the very first page load routinely hit
+    nothing yet listening, surfacing as a connection error or (behind a
+    local proxy) a 502 that only cleared once the user manually refreshed.
+    This applies in both dev-server and built-UI mode: even when the
+    browser's URL points at the Vite dev server, that page's first API
+    calls are proxied straight to this same API port, so it's what
+    actually needs to be ready either way.
+    """
+    deadline = time.time() + UI_DEV_SERVER_START_TIMEOUT
+    while time.time() < deadline:
+        if is_tcp_port_open(api_host, api_port, timeout=0.2):
+            break
+        time.sleep(0.1)
+    _open_browser(url)
+
+
 def _extract_proxy_candidates(proxy_cfg):
     if isinstance(proxy_cfg, list):
         return [
@@ -255,6 +278,7 @@ def run_ui_command():
             sys.path.insert(0, str(root))
 
         import uvicorn
+
         from core.web.server import app
     except ModuleNotFoundError as exc:
         missing_module = exc.name or "required dependency"
@@ -315,12 +339,17 @@ def run_ui_command():
         url = f"http://127.0.0.1:{port}"
         print(f"🚀 Starting Web UI at {url}...")
 
-    _open_browser(url)
+    api_host = os.environ.get("CA_UI_HOST", "127.0.0.1")
+    threading.Thread(
+        target=_wait_for_api_then_open_browser,
+        args=(api_host, port, url),
+        daemon=True,
+    ).start()
 
     try:
         uvicorn.run(
             app,
-            host=os.environ.get("CA_UI_HOST", "127.0.0.1"),
+            host=api_host,
             port=port,
             log_level="info",
         )

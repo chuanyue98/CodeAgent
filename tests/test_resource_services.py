@@ -1,5 +1,5 @@
-from core.services.skill_service import SkillService
 from core.services.plugin_service import PluginService
+from core.services.skill_service import SkillService
 
 
 def test_skill_metadata_extraction(tmp_path):

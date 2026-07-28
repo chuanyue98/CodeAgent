@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -21,12 +21,12 @@ if TYPE_CHECKING:
 
 def _now_iso() -> str:
     """Returns current UTC time as ISO 8601."""
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    return datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 def _now_filename() -> str:
     """Returns current UTC time formatted for Codex filename (dashes for colons)."""
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+    return datetime.now(tz=UTC).strftime("%Y-%m-%dT%H-%M-%S")
 
 
 def write_codex_session(session: UnifiedSession) -> str:
@@ -48,7 +48,7 @@ def write_codex_session(session: UnifiedSession) -> str:
     cwd = session.project_path
 
     # Build file path
-    today = datetime.now(tz=timezone.utc)
+    today = datetime.now(tz=UTC)
     sessions_dir = Path.home() / ".codex" / "sessions"
     day_dir = (
         sessions_dir / f"{today.year:04d}" / f"{today.month:02d}" / f"{today.day:02d}"

@@ -12,7 +12,7 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, cast
 
 # Ensure core modules are importable when running as a script.
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -56,7 +56,7 @@ class CodexEngine(BaseEngine):
     def __init__(self) -> None:
         super().__init__("Codex", "codex-default")
 
-    def build_command(self, message: str, non_interactive: bool) -> List[str]:
+    def build_command(self, message: str, non_interactive: bool) -> list[str]:
         if non_interactive:
             return [
                 CODEX_COMMAND,
@@ -72,8 +72,8 @@ class CodexEngine(BaseEngine):
         ]
 
     def build_chat_command(
-        self, message: str, session_id: Optional[str] = None
-    ) -> List[str]:
+        self, message: str, session_id: str | None = None
+    ) -> list[str]:
         """Builds a headless JSON command for one ChatPage turn.
 
         Verified live (see docs/chatpage-cli-spike-results.md spike):
@@ -145,14 +145,14 @@ class CodexEngine(BaseEngine):
             return raw
         return resolved.as_posix()
 
-    def _prepare_local_marketplace(self, plugins: List[dict]) -> Path:
+    def _prepare_local_marketplace(self, plugins: list[dict]) -> Path:
         marketplace_root = self._get_marketplace_root()
         plugins_root = marketplace_root / "plugins"
         marketplace_plugins_dir = marketplace_root / ".agents" / "plugins"
         plugins_root.mkdir(parents=True, exist_ok=True)
         marketplace_plugins_dir.mkdir(parents=True, exist_ok=True)
 
-        marketplace_entries: List[Dict[str, Any]] = []
+        marketplace_entries: list[dict[str, Any]] = []
         for plugin_meta in plugins:
             plugin_name = plugin_meta["name"]
             plugin_src = plugin_meta.get("_plugin_dir")
@@ -232,7 +232,7 @@ class CodexEngine(BaseEngine):
 
         self._create_skill_link(plugin_src_path, installed_path)
 
-    def _format_plugins_for_settings(self, data: Any, plugins: List[dict]) -> Any:
+    def _format_plugins_for_settings(self, data: Any, plugins: list[dict]) -> Any:
         """实现 Codex 特有的插件注册逻辑 (marketplace + cache install + enabled 状态)"""
         import tomlkit
 
@@ -346,21 +346,21 @@ class CodexEngine(BaseEngine):
             print("🧹 Cleaned up local Codex plugin cache")
 
 
-def extract_shell_first_blocks(text: str) -> Tuple[str, List[str]]:
+def extract_shell_first_blocks(text: str) -> tuple[str, list[str]]:
     """Extract and remove shell:first blocks, returning text and commands."""
     if not text:
         return text, []
 
-    commands: List[str] = []
+    commands: list[str] = []
     lines = text.splitlines()
-    sanitized_lines: List[str] = []
+    sanitized_lines: list[str] = []
     i = 0
 
     while i < len(lines):
         line = lines[i]
         if line.strip() == SHELL_FIRST_MARKER:
             i += 1
-            block_lines: List[str] = []
+            block_lines: list[str] = []
             while i < len(lines) and lines[i].strip() != "```":
                 block_lines.append(lines[i])
                 i += 1
@@ -391,10 +391,10 @@ def _shell_first_allowed_via_override() -> bool:
 
 
 def run_prelaunch_commands(
-    commands: List[str],
+    commands: list[str],
     env: dict,
     codex_non_interactive: bool = False,
-    allow_override: Optional[bool] = None,
+    allow_override: bool | None = None,
 ) -> None:
     """Run shell:first commands before invoking Codex.
 
@@ -511,11 +511,11 @@ def run_prelaunch_commands(
             sys.exit(1)
 
 
-def get_code_plan_history_path(directory: Union[str, Path]) -> Path:
+def get_code_plan_history_path(directory: str | Path) -> Path:
     return get_tasks_dir(directory) / CODE_PLAN_HISTORY_FILENAME
 
 
-def load_code_plan_history(directory: Union[str, Path]) -> dict[str, str]:
+def load_code_plan_history(directory: str | Path) -> dict[str, str]:
     history_path = get_code_plan_history_path(directory)
 
     if not history_path.exists():
@@ -532,9 +532,7 @@ def load_code_plan_history(directory: Union[str, Path]) -> dict[str, str]:
     return {}
 
 
-def save_code_plan_history(
-    directory: Union[str, Path], history: dict[str, str]
-) -> None:
+def save_code_plan_history(directory: str | Path, history: dict[str, str]) -> None:
     history_path = get_code_plan_history_path(directory)
     history_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -544,8 +542,8 @@ def save_code_plan_history(
 
 def update_code_plan_history(
     plan_file: Path,
-    history: Optional[Dict[str, str]] = None,
-) -> Dict[str, str]:
+    history: dict[str, str] | None = None,
+) -> dict[str, str]:
     directory = plan_file.parent
 
     if history is None:
@@ -556,7 +554,7 @@ def update_code_plan_history(
     return history
 
 
-def list_code_plan_directories(pattern: str = CODE_PLAN_DIR_PATTERN) -> List[str]:
+def list_code_plan_directories(pattern: str = CODE_PLAN_DIR_PATTERN) -> list[str]:
     script_dir = Path(__file__).resolve().parent
     directories = [path.name for path in script_dir.glob(pattern) if path.is_dir()]
     return sorted(directories)
@@ -564,8 +562,8 @@ def list_code_plan_directories(pattern: str = CODE_PLAN_DIR_PATTERN) -> List[str
 
 def split_code_plan_argument(
     argument: str,
-    directories: List[str],
-) -> Tuple[Optional[str], str]:
+    directories: list[str],
+) -> tuple[str | None, str]:
     trimmed = argument.strip()
 
     if not trimmed:
@@ -585,7 +583,7 @@ def split_code_plan_argument(
     return None, trimmed
 
 
-def find_directories_for_plan(plan_name: str, directories: List[str]) -> List[str]:
+def find_directories_for_plan(plan_name: str, directories: list[str]) -> list[str]:
     normalized = plan_name.strip()
     if not normalized:
         return []
@@ -596,7 +594,7 @@ def find_directories_for_plan(plan_name: str, directories: List[str]) -> List[st
     if normalized.endswith(CODE_PLAN_FILE_SUFFIX):
         normalized = normalized[: -len(CODE_PLAN_FILE_SUFFIX)]
 
-    matches: List[str] = []
+    matches: list[str] = []
 
     for directory in directories:
         plans = list_tasks(directory, file_suffix=CODE_PLAN_FILE_SUFFIX)
@@ -606,7 +604,7 @@ def find_directories_for_plan(plan_name: str, directories: List[str]) -> List[st
     return matches
 
 
-def select_code_plan_directory_interactively(directories: List[str]) -> str:
+def select_code_plan_directory_interactively(directories: list[str]) -> str:
     print("Available code plan directories:")
     for i, directory in enumerate(directories, 1):
         print(f"  {i}. {directory}")
@@ -630,7 +628,7 @@ def select_code_plan_directory_interactively(directories: List[str]) -> str:
         print(f"Directory not found: {choice}")
 
 
-def parse_arguments() -> tuple[argparse.Namespace, List[str]]:
+def parse_arguments() -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(description="Codex Agent Controller")
     parser.add_argument("-t", "--task", nargs="?", const="", help="Task mode")
     parser.add_argument(
@@ -700,7 +698,7 @@ def main() -> None:
     full_prompt, general_commands = extract_shell_first_blocks(full_prompt)
 
     task_prompt = handle_task_mode(args.task, file_suffix=TASK_FILE_SUFFIX)
-    task_commands: List[str] = []
+    task_commands: list[str] = []
     if task_prompt is not None:
         if not isinstance(task_prompt, str):
             raise TypeError("Task mode returned an unexpected multi-task result")
@@ -710,10 +708,10 @@ def main() -> None:
                 f"{full_prompt}\n\n{task_prompt}" if full_prompt else task_prompt
             )
 
-    code_plan_prompts: List[str] = []
-    code_plan_files: List[Path] = []
+    code_plan_prompts: list[str] = []
+    code_plan_files: list[Path] = []
     codex_non_interactive = args.codex_non_interactive
-    code_plan_history: Optional[Dict[str, str]] = None
+    code_plan_history: dict[str, str] | None = None
 
     if args.code_plan is not None:
         if not code_plan_directories:
@@ -778,9 +776,9 @@ def main() -> None:
                 code_plan_prompts.append(prompt)
                 code_plan_files.append(path)
 
-    plan_command_sets: List[List[str]] = []
+    plan_command_sets: list[list[str]] = []
     if code_plan_prompts:
-        sanitized_prompts: List[str] = []
+        sanitized_prompts: list[str] = []
         for prompt in code_plan_prompts:
             sanitized_prompt, commands = extract_shell_first_blocks(prompt)
             sanitized_prompts.append(sanitized_prompt)
@@ -819,6 +817,7 @@ def main() -> None:
                 code_plan_prompts,
                 code_plan_files,
                 plan_command_sets,
+                strict=False,
             ):
                 relative_plan = f"{file_path.parent.name}/{file_path.name}"
                 print(f"Code Plan: {relative_plan}")
