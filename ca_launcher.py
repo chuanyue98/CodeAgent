@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-import sys
-import subprocess
 import json
 import os
 import shutil
 import socket
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -12,7 +12,12 @@ from pathlib import Path
 import click
 
 from core.console import configure_console_encoding
-from core.resource_locator import get_bundled_resource_root, get_default_config_path
+from core.logging_config import configure_root_logging
+from core.resource_locator import (
+    CODE_ROOT,
+    get_bundled_resource_root,
+    get_default_config_path,
+)
 from core.services.config_service import ConfigService
 
 UI_API_PORT = 8524
@@ -22,10 +27,11 @@ UI_DEV_SERVER_START_TIMEOUT = 15
 _ui_dev_process: subprocess.Popen | None = None
 
 configure_console_encoding()
+configure_root_logging()
 
 
 def _installed_root():
-    return Path(__file__).resolve().parent
+    return CODE_ROOT
 
 
 def _looks_like_project_root(path: Path):
@@ -60,7 +66,7 @@ def load_config():
     }
     if config_path.exists():
         try:
-            with open(config_path, "r", encoding="utf-8-sig") as f:
+            with open(config_path, encoding="utf-8-sig") as f:
                 return {**default_config, **json.load(f)}
         except Exception as e:
             print(f"⚠️ Warning: Failed to load config.json: {e}")
@@ -278,6 +284,7 @@ def run_ui_command():
             sys.path.insert(0, str(root))
 
         import uvicorn
+
         from core.web.server import app
     except ModuleNotFoundError as exc:
         missing_module = exc.name or "required dependency"

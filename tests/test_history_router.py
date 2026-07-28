@@ -324,7 +324,7 @@ async def test_delete_opencode_session(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_delete_session_invalid_source_file(two_project_history, monkeypatch):
-    from core.session_history.models import UnifiedSession, EngineType
+    from core.session_history.models import EngineType, UnifiedSession
 
     # Mock find_session_by_id to return a session with an empty source_file
     dummy_session_empty = UnifiedSession(

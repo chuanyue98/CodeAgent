@@ -22,21 +22,30 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, field_validator
+from pydantic import field_validator
 
+from core.constants import ENGINES
 from core.session_history.audit import build_audit_events
 from core.session_history.session_finder import (
     find_all_sessions,
     find_session_by_id,
 )
+from core.web.case_convert import ProtocolModel, wire
+
+# NOTE: list_sessions/get_audit_events/get_session_detail below intentionally
+# still return raw snake_case dicts. Their shapes (SessionSummary,
+# AuditEvent, and to_full_dict()'s nested `messages`) are consumed by
+# NativeAgentSession (types/agent.ts), ChatPage.tsx, and AuditTrail.tsx --
+# converting them requires coordinated frontend updates across those
+# call sites and is deferred to a dedicated follow-up rather than folded
+# into this pass. convert/convert-and-launch/delete below ARE migrated
+# since their responses are small and self-contained.
 
 router = APIRouter(prefix="/api")
-
-VALID_ENGINES = {"claude", "codex", "gemini", "opencode"}
 
 
 def _validate_source_file_path(source_file: str, engine: str) -> Path:
@@ -91,13 +100,13 @@ def _parse_ts(ts: str) -> datetime:
         normalized = ts.replace("Z", "+00:00") if ts else ""
         dt = datetime.fromisoformat(normalized) if normalized else datetime.min
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt
     except (ValueError, TypeError):
-        return datetime.min.replace(tzinfo=timezone.utc)
+        return datetime.min.replace(tzinfo=UTC)
 
 
-class ConvertRequest(BaseModel):
+class ConvertRequest(ProtocolModel):
     """Request body for cross-engine session conversion."""
 
     source_engine: str
@@ -108,11 +117,27 @@ class ConvertRequest(BaseModel):
     @field_validator("source_engine", "target_engine")
     @classmethod
     def validate_engine(cls, v: str) -> str:
-        if v not in VALID_ENGINES:
+        if v not in ENGINES:
             raise ValueError(
-                f"Invalid engine '{v}'. Must be one of: {', '.join(sorted(VALID_ENGINES))}"
+                f"Invalid engine '{v}'. Must be one of: {', '.join(sorted(ENGINES))}"
             )
         return v
+
+
+class ConvertResponse(ProtocolModel):
+    status: str
+    new_session_id: str
+    target_engine: str
+    message: str | None = None
+
+
+class ConvertAndLaunchResponse(ConvertResponse):
+    terminal: str | None = None
+
+
+class DeleteSessionResponse(ProtocolModel):
+    status: str
+    session_id: str
 
 
 @router.get("/history")
@@ -249,12 +274,14 @@ async def convert_session(req: ConvertRequest) -> dict:
 
     try:
         new_id = await asyncio.to_thread(write_session, session, req.target_engine)
-        return {
-            "status": "ok",
-            "new_session_id": new_id,
-            "target_engine": req.target_engine,
-            "message": f"Session converted to {req.target_engine}. Use '{req.target_engine} continue' or equivalent to resume.",
-        }
+        return wire(
+            ConvertResponse(
+                status="ok",
+                new_session_id=new_id,
+                target_engine=req.target_engine,
+                message=f"Session converted to {req.target_engine}. Use '{req.target_engine} continue' or equivalent to resume.",
+            )
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error": str(e)}) from e
 
@@ -289,9 +316,8 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
     # Launch the engine in a visible terminal (same mechanism as /api/launch).
     import sys
 
-    from core.web.routers.launch import launch_in_terminal
+    from core.web.routers.launch import _CA_LAUNCHER, launch_in_terminal
 
-    _CA_LAUNCHER = Path(__file__).resolve().parents[3] / "ca_launcher.py"
     cmd = [sys.executable, str(_CA_LAUNCHER), req.target_engine]
 
     try:
@@ -303,12 +329,14 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
             status_code=500, detail=f"Failed to open terminal: {exc}"
         ) from exc
 
-    return {
-        "status": "launched",
-        "new_session_id": new_id,
-        "target_engine": req.target_engine,
-        "terminal": terminal,
-    }
+    return wire(
+        ConvertAndLaunchResponse(
+            status="launched",
+            new_session_id=new_id,
+            target_engine=req.target_engine,
+            terminal=terminal,
+        )
+    )
 
 
 @router.delete("/history/{engine}/{session_id}")
@@ -356,4 +384,4 @@ async def delete_session(
                 status_code=500, detail={"error": f"Failed to delete session file: {e}"}
             ) from e
 
-    return {"status": "deleted", "session_id": session_id}
+    return wire(DeleteSessionResponse(status="deleted", session_id=session_id))

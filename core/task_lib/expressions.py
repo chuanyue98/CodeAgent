@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import sys
-from typing import List, Optional, Tuple
 
 from core.task_lib.files import list_tasks
 
 
-def parse_range_expression(expression: str) -> Optional[Tuple[int, int]]:
+def parse_range_expression(expression: str) -> tuple[int, int] | None:
     """Parses a range expression like '3-5'.
 
     Args:
@@ -36,8 +35,8 @@ def parse_range_expression(expression: str) -> Optional[Tuple[int, int]]:
 
 def parse_combination_expression(
     expression: str,
-    available_tasks: List[str],
-) -> Optional[List[str]]:
+    available_tasks: list[str],
+) -> list[str] | None:
     """Parses a combination expression like '1+2', supporting indices or task names.
 
     Args:
@@ -57,7 +56,7 @@ def parse_combination_expression(
     if any(not part for part in parts):
         raise ValueError("Combination expression contains empty items")
 
-    combined: List[str] = []
+    combined: list[str] = []
     task_total = len(available_tasks)
 
     for part in parts:
@@ -84,7 +83,7 @@ def resolve_task_range(
     expression: str,
     directory: str,
     file_suffix: str,
-) -> List[str]:
+) -> list[str]:
     """Resolves a task range expression into a list of task names.
 
     Args:

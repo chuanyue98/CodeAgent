@@ -3,8 +3,8 @@ no real engine CLI is spawned in CI."""
 
 from __future__ import annotations
 
-import time
 import json
+import time
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -197,12 +197,12 @@ async def test_get_chat_turn_returns_status(fake_runner, registered_project):
                 "project_path": str(registered_project),
             },
         )
-        turn_id = start.json()["task_id"]
+        turn_id = start.json()["taskId"]
 
         response = await ac.get(f"/api/chat/turns/{turn_id}")
 
     assert response.status_code == 200
-    assert response.json()["task_id"] == turn_id
+    assert response.json()["taskId"] == turn_id
 
 
 @pytest.mark.asyncio
@@ -270,7 +270,7 @@ async def test_cancel_chat_turn_stops_running_process(fake_runner, registered_pr
                 "project_path": str(registered_project),
             },
         )
-        response = await ac.post(f"/api/chat/turns/{start.json()['task_id']}/cancel")
+        response = await ac.post(f"/api/chat/turns/{start.json()['taskId']}/cancel")
 
     assert response.status_code == 200
     assert response.json()["status"] == "stopped"
@@ -330,14 +330,14 @@ async def test_chat_capabilities_distinguish_configured_from_active(
     assert response.status_code == 200
     data = response.json()
     assert data["mode"] == "legacy_one_shot"
-    assert data["codeagent_resources_injected"] is False
+    assert data["codeagentResourcesInjected"] is False
     assert data["active"] == {"skills": [], "hooks": [], "plugins": []}
-    assert data["configured_but_inactive"] == {
+    assert data["configuredButInactive"] == {
         "skills": ["base/review"],
         "hooks": ["base/audit"],
         "plugins": ["base/browser"],
     }
-    assert data["provider_native"]["status"] == "unknown"
+    assert data["providerNative"]["status"] == "unknown"
 
 
 @pytest.mark.asyncio
@@ -387,12 +387,12 @@ async def test_chat_capabilities_tolerate_warnings_and_null_resources(
         )
 
     assert response.status_code == 200
-    assert response.json()["configured_but_inactive"] == {
+    assert response.json()["configuredButInactive"] == {
         "skills": [],
         "hooks": ["base/audit"],
         "plugins": [],
     }
-    assert response.json()["configuration_warnings"] == ["deprecated field"]
+    assert response.json()["configurationWarnings"] == ["deprecated field"]
 
 
 @pytest.mark.asyncio

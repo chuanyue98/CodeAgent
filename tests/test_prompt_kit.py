@@ -1,7 +1,8 @@
 """prompt_kit.py 的单元测试"""
 
 import pytest
-from core.prompt_kit import prompt_general, prompt_review, get_prompts_from_directory
+
+from core.prompt_kit import get_prompts_from_directory, prompt_general, prompt_review
 
 
 @pytest.fixture

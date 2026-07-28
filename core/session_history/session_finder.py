@@ -7,7 +7,6 @@ It calls each engine's ``find_*_sessions`` function and merges the results.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from core.session_history.models import UnifiedMessage, UnifiedSession
 from core.session_history.parsers import (
@@ -87,9 +86,9 @@ def _deduplicate_sessions(
 
 
 def find_all_sessions(
-    project_path: Optional[str] = None,
-    home: Optional[Path] = None,
-    engine: Optional[str] = None,
+    project_path: str | None = None,
+    home: Path | None = None,
+    engine: str | None = None,
 ) -> list[UnifiedSession]:
     """Finds sessions across all AI engines for a given project path.
 
@@ -130,8 +129,8 @@ def find_session_by_id(
     session_id: str,
     engine: str,
     project_path: str,
-    home: Optional[Path] = None,
-) -> Optional[UnifiedSession]:
+    home: Path | None = None,
+) -> UnifiedSession | None:
     """Finds a specific session by its ID and engine.
 
     Args:
@@ -151,9 +150,9 @@ def find_session_by_id(
 
 
 def get_session_summaries(
-    project_path: Optional[str] = None,
-    home: Optional[Path] = None,
-    engine: Optional[str] = None,
+    project_path: str | None = None,
+    home: Path | None = None,
+    engine: str | None = None,
 ) -> list[dict]:
     """Returns lightweight session summaries for list views.
 

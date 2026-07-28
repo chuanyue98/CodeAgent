@@ -4,9 +4,12 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
+from core.logging_config import get_logger
 from core.utils.atomic_write import atomic_write
+
+logger = get_logger(__name__)
 
 
 class SettingsFile:
@@ -19,7 +22,7 @@ class SettingsFile:
         if not self.path.exists():
             return {}
         try:
-            with open(self.path, "r", encoding="utf-8") as f:
+            with open(self.path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return {}
@@ -27,7 +30,7 @@ class SettingsFile:
     def save(self, data: Any):
         atomic_write(self.path, json.dumps(data, indent=2, ensure_ascii=False))
 
-    def create_backup(self) -> Optional[Path]:
+    def create_backup(self) -> Path | None:
         backup_path = self.path.with_suffix(self.path.suffix + ".bak")
         if self.path.exists() and not backup_path.exists():
             shutil.copy2(self.path, backup_path)
@@ -50,10 +53,10 @@ class SettingsManager:
     for all engine types (Gemini, Claude, Codex, OpenCode).
     """
 
-    def __init__(self, event_map: Dict[str, str]):
+    def __init__(self, event_map: dict[str, str]):
         self.event_map = event_map
 
-    def inject_hooks(self, settings_path: Path, hooks: List[Dict[str, Any]]):
+    def inject_hooks(self, settings_path: Path, hooks: list[dict[str, Any]]):
         """Injects hook configurations into a settings file."""
         if not hooks:
             return
@@ -63,7 +66,7 @@ class SettingsManager:
         sf = SettingsFile(settings_path)
         backup = sf.create_backup()
         if backup:
-            print(f"💾 Created safety backup: {backup.name}")
+            logger.info("Created safety backup: %s", backup.name)
 
         data = sf.load()
 
@@ -109,7 +112,7 @@ class SettingsManager:
         """Restores a settings file from its backup or removes injected files."""
         sf = SettingsFile(settings_path)
         if sf.restore_backup():
-            print(f"♻️ Restored {settings_path.name} from backup")
+            logger.info("Restored %s from backup", settings_path.name)
             return
 
         if settings_path.exists():
@@ -117,6 +120,6 @@ class SettingsManager:
                 data = sf.load()
                 if isinstance(data, dict) and data.get("_ca_injected") is True:
                     settings_path.unlink()
-                    print(f"♻️ Removed injected {settings_path.name}")
+                    logger.info("Removed injected %s", settings_path.name)
             except Exception:
                 pass

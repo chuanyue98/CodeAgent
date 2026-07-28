@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+
 from core.hook_scanner import HookScanner
 
 
@@ -30,7 +31,7 @@ class HookService:
         active_hooks = set()
         if self.config_path.exists():
             try:
-                with open(self.config_path, "r", encoding="utf-8-sig") as f:
+                with open(self.config_path, encoding="utf-8-sig") as f:
                     config = json.load(f)
                     project_hooks = config.get("hooks", {}).get("project_hooks", {})
                     for hooks in project_hooks.values():

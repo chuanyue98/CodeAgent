@@ -1,4 +1,5 @@
 import json
+
 from core.engine_base import BaseEngine
 
 
@@ -16,7 +17,7 @@ def test_inject_hooks_to_settings_new_file(tmp_path, monkeypatch):
     settings_path = tmp_path / settings_rel_path
     assert settings_path.exists()
 
-    with open(settings_path, "r", encoding="utf-8") as f:
+    with open(settings_path, encoding="utf-8") as f:
         data = json.load(f)
 
     assert "hooks" in data
@@ -63,7 +64,7 @@ def test_inject_hooks_to_settings_update_existing(tmp_path, monkeypatch):
 
     engine.inject_hooks_to_settings(settings_rel_path, hooks)
 
-    with open(settings_path, "r", encoding="utf-8") as f:
+    with open(settings_path, encoding="utf-8") as f:
         data = json.load(f)
 
     event_hooks = data["hooks"]["BeforeAgent"][0]["hooks"]

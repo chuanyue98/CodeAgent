@@ -4,7 +4,9 @@ import json
 import os
 import traceback
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any
+
+from core.resource_locator import CODE_ROOT
 
 
 class PluginScanner:
@@ -18,7 +20,7 @@ class PluginScanner:
         """
         self.plugins_root = plugins_root
 
-    def scan(self) -> tuple[Dict[str, Dict[str, Any]], List[str]]:
+    def scan(self) -> tuple[dict[str, dict[str, Any]], list[str]]:
         """Scans the plugins root directory for categories and plugin metadata.
 
         Returns:
@@ -26,8 +28,8 @@ class PluginScanner:
             - A dictionary mapping category names to dictionaries of plugin metadata.
             - A list of warning strings.
         """
-        result: Dict[str, Dict[str, Any]] = {}
-        warnings: List[str] = []
+        result: dict[str, dict[str, Any]] = {}
+        warnings: list[str] = []
         if not self.plugins_root.exists():
             return result, warnings
 
@@ -45,7 +47,7 @@ class PluginScanner:
                 metadata = {}
                 if metadata_path.exists():
                     try:
-                        with open(metadata_path, "r", encoding="utf-8-sig") as f:
+                        with open(metadata_path, encoding="utf-8-sig") as f:
                             metadata = json.load(f)
                     except Exception as e:
                         msg = f"Failed to load metadata from {metadata_path}: {e}"
@@ -79,7 +81,7 @@ def get_plugins_to_mount(
     config: dict,
     scanner: PluginScanner,
     project_type: str = "common",
-) -> tuple[List[Dict[str, Any]], List[str]]:
+) -> tuple[list[dict[str, Any]], list[str]]:
     """Determines which plugins should be mounted based on configuration and environment.
 
     Args:
@@ -108,7 +110,7 @@ def get_plugins_to_mount(
 
     # 2. Automatically load local plugins/ subdirectory if it exists in CWD
     cwd = Path.cwd()
-    if cwd.resolve() != Path(__file__).resolve().parent.parent.resolve():
+    if cwd.resolve() != CODE_ROOT:
         local_plugins = cwd / "plugins"
         if local_plugins.exists():
             # Scan local plugins

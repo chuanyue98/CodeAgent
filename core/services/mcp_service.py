@@ -34,14 +34,15 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-_VALID_ENGINES = {"claude", "codex", "gemini", "opencode"}
+from core.constants import ENGINES
+
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
 
 
 def _validate_engine(engine: str) -> None:
-    if engine not in _VALID_ENGINES:
+    if engine not in ENGINES:
         raise ValueError(f"Invalid engine: {engine!r}")
 
 
@@ -236,10 +237,10 @@ def _run_cli(cmd: list[str], cwd: str) -> None:
 def _build_add_command(
     engine: str,
     name: str,
-    command: Optional[list[str]],
-    url: Optional[str],
+    command: list[str] | None,
+    url: str | None,
     env_pairs: list[str],
-    transport: Optional[str],
+    transport: str | None,
 ) -> list[str]:
     """Builds each engine's ``mcp add`` invocation using the exact flag
     ordering confirmed live by the pre-build spike (see module docstring).
@@ -304,10 +305,10 @@ def add_server(
     engine: str,
     project_path: str,
     name: str,
-    command: Optional[list[str]] = None,
-    url: Optional[str] = None,
-    env: Optional[dict[str, str]] = None,
-    transport: Optional[str] = None,
+    command: list[str] | None = None,
+    url: str | None = None,
+    env: dict[str, str] | None = None,
+    transport: str | None = None,
 ) -> None:
     """Adds an MCP server via the engine's own ``mcp add`` CLI subcommand."""
     _validate_engine(engine)

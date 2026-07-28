@@ -4,17 +4,17 @@ no real engine CLI or ca_launcher.py is spawned in CI."""
 
 from __future__ import annotations
 
-import os
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from core.services.runner_service import TaskAlreadyRunningError
 from core.web.routers import tasks as tasks_router
 from core.web.server import app
-from core.services.runner_service import TaskAlreadyRunningError
 
 
 class _FakeRunner:
@@ -82,7 +82,7 @@ async def test_create_and_list_schedule():
         )
         assert create.status_code == 200
         record = create.json()
-        assert record["task_name"] == "nightly-review"
+        assert record["taskName"] == "nightly-review"
         assert record["enabled"] is True
         assert record["group"] == "common"
 
@@ -102,7 +102,7 @@ async def test_preview_schedule_valid_cron_returns_next_runs():
         assert response.status_code == 200
         body = response.json()
         assert body["valid"] is True
-        assert len(body["next_runs"]) == 3
+        assert len(body["nextRuns"]) == 3
 
 
 @pytest.mark.asyncio
@@ -114,7 +114,7 @@ async def test_preview_schedule_invalid_cron_returns_valid_false():
             "/api/schedules/preview", params={"cron_expr": "not a cron"}
         )
         assert response.status_code == 200
-        assert response.json() == {"valid": False, "next_runs": []}
+        assert response.json() == {"valid": False, "nextRuns": []}
 
 
 @pytest.mark.asyncio

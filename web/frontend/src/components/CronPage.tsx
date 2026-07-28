@@ -78,12 +78,12 @@ export default function CronPage() {
       return;
     }
     const handle = window.setTimeout(() => {
-      request<{ valid: boolean; next_runs: number[] }>(
+      request<{ valid: boolean; nextRuns: number[] }>(
         `/api/schedules/preview?cron_expr=${encodeURIComponent(trimmed)}`,
       )
         .then(result => {
           if (!mountedRef.current) return;
-          setCronPreview({ valid: result.valid, nextRuns: result.next_runs });
+          setCronPreview({ valid: result.valid, nextRuns: result.nextRuns });
         })
         .catch(() => {
           if (!mountedRef.current) return;
@@ -149,11 +149,11 @@ export default function CronPage() {
     try {
       const project = projects.find(item => item.path === workspace);
       const values = {
-        task_name: taskName,
+        taskName: taskName,
         engine,
         group: project?.group || 'common',
         workspace,
-        cron_expr: cronExpr.trim(),
+        cronExpr: cronExpr.trim(),
       };
       if (editingScheduleId) {
         await updateSchedule(editingScheduleId, values);
@@ -181,9 +181,9 @@ export default function CronPage() {
       project => project.path === schedule.workspace,
     ) ? schedule.workspace : availableWorkspaces[0]?.path;
     setEditingScheduleId(schedule.id);
-    setTaskName(schedule.task_name);
+    setTaskName(schedule.taskName);
     setEngine(schedule.engine);
-    setCronExpr(schedule.cron_expr);
+    setCronExpr(schedule.cronExpr);
     setWorkspace(scheduleWorkspace || '');
     setError(null);
   };
@@ -218,9 +218,9 @@ export default function CronPage() {
     const q = scheduleSearch.trim().toLowerCase();
     if (!q) return schedules;
     return schedules.filter(schedule =>
-      schedule.task_name.toLowerCase().includes(q) ||
+      schedule.taskName.toLowerCase().includes(q) ||
       schedule.engine.toLowerCase().includes(q) ||
-      schedule.cron_expr.toLowerCase().includes(q) ||
+      schedule.cronExpr.toLowerCase().includes(q) ||
       (schedule.workspace || '').toLowerCase().includes(q),
     );
   }, [schedules, scheduleSearch]);
@@ -399,23 +399,23 @@ export default function CronPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-sm text-slate-800 truncate">
-                    {schedule.task_name}
+                    {schedule.taskName}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-mono">
                     {schedule.engine}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-mono">
-                    {schedule.cron_expr}
+                    {schedule.cronExpr}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 bg-primary/5 text-primary rounded truncate max-w-56">
                     {schedule.workspace || 'Workspace required'}
                   </span>
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-3">
-                  <span>Next: {formatTimestamp(schedule.next_run_at)}</span>
-                  {schedule.last_run_status && (
+                  <span>Next: {formatTimestamp(schedule.nextRunAt)}</span>
+                  {schedule.lastRunStatus && (
                     <span>
-                      Last: {schedule.last_run_status} ({formatTimestamp(schedule.last_run_at)})
+                      Last: {schedule.lastRunStatus} ({formatTimestamp(schedule.lastRunAt)})
                     </span>
                   )}
                 </div>
@@ -450,7 +450,7 @@ export default function CronPage() {
       {pendingDeleteSchedule && (
         <ConfirmDialog
           title="Delete this schedule?"
-          description={`"${pendingDeleteSchedule.task_name}" (${pendingDeleteSchedule.cron_expr}) will stop running. This cannot be undone.`}
+          description={`"${pendingDeleteSchedule.taskName}" (${pendingDeleteSchedule.cronExpr}) will stop running. This cannot be undone.`}
           confirmLabel="Delete"
           onConfirm={() => void confirmDelete()}
           onCancel={() => setPendingDeleteId(null)}

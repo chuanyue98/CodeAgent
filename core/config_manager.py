@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-import logging
 import os
 import re
 from pathlib import Path
-from typing import List
 
+from core.logging_config import get_logger
 from core.resource_locator import get_bundled_resource_root, get_default_config_path
 from core.services.config_service import ConfigService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Config-supplied regex patterns are user/admin-editable text, not code we
 # control. Reject anything implausibly long up front as a cheap guard against
@@ -92,7 +91,7 @@ class ConfigManager:
 
         return best_match_group or self.full_config.get("default_group", "common")
 
-    def get_skill_search_roots(self, resource_root: Path) -> List[Path]:
+    def get_skill_search_roots(self, resource_root: Path) -> list[Path]:
         """Identifies all root directories where skills should be searched."""
         skill_path_cfg = self.full_config.get("paths", {}).get("skills", "skills")
         default_root = (resource_root / skill_path_cfg).resolve()
@@ -138,7 +137,7 @@ class ConfigManager:
 
         return roots
 
-    def get_plugin_search_roots(self, resource_root: Path) -> List[Path]:
+    def get_plugin_search_roots(self, resource_root: Path) -> list[Path]:
         """Identifies all root directories where plugins should be searched."""
         plugin_path_cfg = self.full_config.get("paths", {}).get("plugins", "plugins")
         default_root = (resource_root / plugin_path_cfg).resolve()
@@ -156,7 +155,7 @@ class ConfigManager:
 
         return roots
 
-    def get_hook_search_roots(self, resource_root: Path) -> List[Path]:
+    def get_hook_search_roots(self, resource_root: Path) -> list[Path]:
         """Identifies all root directories where hooks should be searched."""
         hook_path_cfg = self.full_config.get("paths", {}).get("hooks", "hooks")
         default_root = (resource_root / hook_path_cfg).resolve()

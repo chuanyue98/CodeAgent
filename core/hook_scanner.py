@@ -4,7 +4,9 @@ import json
 import os
 import traceback
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
+from core.resource_locator import CODE_ROOT
 
 
 class HookScanner:
@@ -21,7 +23,7 @@ class HookScanner:
         else:
             self.hooks_roots = hooks_roots
 
-    def scan(self) -> tuple[Dict[str, Dict[str, Any]], list[str]]:
+    def scan(self) -> tuple[dict[str, dict[str, Any]], list[str]]:
         """Scans the hook root directories for categories and hook metadata.
 
         Returns:
@@ -29,7 +31,7 @@ class HookScanner:
             - A dictionary mapping category names to dictionaries of hook metadata.
             - A list of warning strings encountered during scanning.
         """
-        result: Dict[str, Dict[str, Any]] = {}
+        result: dict[str, dict[str, Any]] = {}
         warnings: list[str] = []
         # Iterate in reverse order so that hooks in earlier roots override later ones
         for root in reversed(self.hooks_roots):
@@ -48,7 +50,7 @@ class HookScanner:
                     if item.is_dir() and (item / "metadata.json").exists():
                         metadata_path = item / "metadata.json"
                         try:
-                            with open(metadata_path, "r", encoding="utf-8-sig") as f:
+                            with open(metadata_path, encoding="utf-8-sig") as f:
                                 metadata = json.load(f)
                                 metadata["_hook_dir"] = str(item.resolve().as_posix())
                                 # Use category/name as unique identifier for overriding
@@ -112,7 +114,7 @@ def get_hooks_to_inject(
             add_hook(hn)
 
     # 4. Automatic loading: include hooks from non-standard roots (e.g., project-local hooks)
-    ca_root = Path(__file__).resolve().parent.parent
+    ca_root = CODE_ROOT
     ca_hooks_root = (ca_root / "hooks").resolve()
 
     for root in scanner.hooks_roots:

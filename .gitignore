@@ -56,3 +56,18 @@ config.json
 gha-creds-*.json
 build/
 *.png
+
+# Tool caches -- excluded today only because ruff/mypy/pytest each write
+# their own internal "*" ignore file into these dirs at runtime. Listed
+# explicitly so a tool version that stops doing that (or a deleted cache)
+# can't get one of these accidentally committed via `git add -A`.
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# One-off generated HTML review/audit reports (fonts, chart libs, zipped
+# bundles) -- deliverables from a point-in-time review, not source. See
+# the 2026-07-28 engineering inspection for why these keep recurring.
+.trae-html-share-packages/
+uiux-review/
+codeagent-audit-report/

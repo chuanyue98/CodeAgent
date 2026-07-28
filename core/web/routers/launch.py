@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import shlex
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -9,10 +9,12 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from core.constants import ENGINES
+from core.resource_locator import CODE_ROOT
+
 router = APIRouter(prefix="/api/launch", tags=["launch"])
 
-ENGINES = {"claude", "gemini", "opencode", "codex"}
-_CA_LAUNCHER = Path(__file__).resolve().parents[3] / "ca_launcher.py"
+_CA_LAUNCHER = CODE_ROOT / "ca_launcher.py"
 
 
 def terminal_capability() -> dict:

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 
 from core.session_history.models import (
     EngineType,
@@ -25,7 +24,7 @@ from core.session_history.models import (
 )
 
 
-def parse_gemini_session(file_path: Path) -> Optional[UnifiedSession]:
+def parse_gemini_session(file_path: Path) -> UnifiedSession | None:
     """Parses a single Gemini JSONL session file into a UnifiedSession.
 
     Args:
@@ -217,7 +216,7 @@ def _extract_gemini_response(
 
 
 def find_gemini_sessions(
-    project_path: Optional[str] = None, home: Optional[Path] = None
+    project_path: str | None = None, home: Path | None = None
 ) -> list[UnifiedSession]:
     """Finds all Gemini sessions for a given project path.
 

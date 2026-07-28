@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
 
 from core.task_lib.expressions import (
     parse_combination_expression,
@@ -17,14 +16,14 @@ from core.task_lib.paths import TASK_FILE_SUFFIX, TASKS_DIR
 
 
 def handle_task_mode(
-    task_arg: Optional[str],
+    task_arg: str | None,
     directory: str = TASKS_DIR,
     label: str = "Task",
     file_suffix: str = TASK_FILE_SUFFIX,
-    history: Optional[Dict[str, str]] = None,
+    history: dict[str, str] | None = None,
     with_path: bool = False,
     allow_range: bool = False,
-) -> Optional[Union[str, Tuple[str, Path], Tuple[List[str], List[Path]]]]:
+) -> str | tuple[str, Path] | tuple[list[str], list[Path]] | None:
     """Handles task selection and returns the corresponding prompt content.
 
     Args:
@@ -42,7 +41,7 @@ def handle_task_mode(
     if task_arg is None:
         return None
 
-    selection: Union[str, List[str]]
+    selection: str | list[str]
 
     if task_arg == "":
         task_name = select_task_interactively(
@@ -60,7 +59,7 @@ def handle_task_mode(
         available_tasks = list_tasks(directory, file_suffix=file_suffix)
         is_literal_task_name = task_arg in available_tasks
 
-        combination_selection: Optional[List[str]] = None
+        combination_selection: list[str] | None = None
         if "+" in task_arg and not is_literal_task_name:
             if not available_tasks:
                 print(
@@ -125,11 +124,11 @@ def handle_task_mode(
 
 
 def load_multiple_tasks(
-    task_names: List[str],
+    task_names: list[str],
     directory: str,
     label: str,
     file_suffix: str,
-) -> Tuple[List[str], List[Path]]:
+) -> tuple[list[str], list[Path]]:
     """Batch loads task prompts from multiple task names.
 
     Args:
@@ -141,8 +140,8 @@ def load_multiple_tasks(
     Returns:
         A tuple containing a list of prompts and a list of Path objects.
     """
-    prompts: List[str] = []
-    files: List[Path] = []
+    prompts: list[str] = []
+    files: list[Path] = []
 
     for name in task_names:
         result = handle_task_mode(

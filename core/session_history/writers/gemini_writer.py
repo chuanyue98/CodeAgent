@@ -8,9 +8,9 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from core.utils.atomic_write import atomic_write
 
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 def _now_iso() -> str:
     """Returns current UTC time as ISO 8601."""
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    return datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 def write_gemini_session(session: UnifiedSession) -> str:
@@ -45,7 +45,7 @@ def write_gemini_session(session: UnifiedSession) -> str:
     chats_dir.mkdir(parents=True, exist_ok=True)
 
     # Generate filename: session-YYYY-MM-DDTHH-MM-<8hexhash>.jsonl
-    time_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H-%M")
+    time_str = datetime.now(tz=UTC).strftime("%Y-%m-%dT%H-%M")
     short_hash = hashlib.md5(new_session_id.encode()).hexdigest()[:8]
     filename = f"session-{time_str}-{short_hash}.jsonl"
     file_path = chats_dir / filename

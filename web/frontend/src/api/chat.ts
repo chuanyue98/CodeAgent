@@ -9,13 +9,13 @@ export interface ChatEngine {
 }
 
 export interface ChatTurnStatus {
-  task_id: string;
+  taskId: string;
   engine: string;
   pid: number | null;
   status: 'running' | 'completed' | 'failed' | 'stopped' | string;
-  log_path: string;
-  start_time: number;
-  session_id: string | null;
+  logPath: string;
+  startTime: number;
+  sessionId: string | null;
 }
 
 export interface SessionSummary {
@@ -39,12 +39,12 @@ export interface ChatCapabilities {
   mode: 'legacy_one_shot';
   engine: string;
   group: string;
-  project_path: string | null;
-  configuration_warnings: string[];
-  codeagent_resources_injected: boolean;
+  projectPath: string | null;
+  configurationWarnings: string[];
+  codeagentResourcesInjected: boolean;
   active: ChatResourceSet;
-  configured_but_inactive: ChatResourceSet;
-  provider_native: {
+  configuredButInactive: ChatResourceSet;
+  providerNative: {
     status: 'unknown';
     reason: string;
   };
@@ -63,23 +63,29 @@ export async function fetchResumableSessions(engine: string, limit = 50): Promis
 export async function fetchChatCapabilities(params: {
   engine: string;
   group: string;
-  project_path?: string | null;
+  projectPath?: string | null;
 }): Promise<ChatCapabilities> {
   const query = new URLSearchParams({ engine: params.engine, group: params.group });
-  if (params.project_path) query.set('project_path', params.project_path);
+  if (params.projectPath) query.set('project_path', params.projectPath);
   return request(`/api/chat/capabilities?${query.toString()}`);
 }
 
 export async function startChatTurn(params: {
   engine: string;
   message: string;
-  session_id?: string | null;
+  sessionId?: string | null;
   group?: string;
-  project_path: string;
+  projectPath: string;
 }): Promise<ChatTurnStatus> {
   return request('/api/chat/turns', {
     method: 'POST',
-    body: JSON.stringify(params),
+    body: JSON.stringify({
+      engine: params.engine,
+      message: params.message,
+      sessionId: params.sessionId,
+      group: params.group,
+      projectPath: params.projectPath,
+    }),
   });
 }
 
@@ -99,7 +105,7 @@ export interface ChatStreamEvent {
 
 export function useChatTurnStream(turnId: string | null) {
   const [events, setEvents] = useState<Record<string, unknown>[]>([]);
-  const [done, setDone] = useState<{ status: string; session_id: string | null } | null>(null);
+  const [done, setDone] = useState<{ status: string; sessionId: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
 
@@ -152,7 +158,7 @@ export function useChatTurnStream(turnId: string | null) {
       try {
         setDone(JSON.parse(event.data));
       } catch {
-        setDone({ status: 'completed', session_id: null });
+        setDone({ status: 'completed', sessionId: null });
       }
       eventSource.close();
     });

@@ -9,10 +9,11 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 - **Multi-Engine Support** — Seamlessly switch between Claude, Gemini, Codex, and OpenCode without changing your workflow
 - **Prompt Sovereignty** — Your engineering rules live in your repo as Plain Markdown. No hidden system prompts
 - **Modular Skills System** — Atomic, reusable automation capabilities with instruction files and executable scripts
-- **Lifecycle Hooks** — Execute custom commands on `session-start`, `pre-commit`, `post-tool`, and more
+- **Lifecycle Hooks** — Execute custom commands on the `before_tool` / `after_tool` events (e.g. branch protection, CI monitoring, pre-commit linting)
 - **Plugin Architecture** — Bundle skills, prompts, and hooks into domain-specific capability packages
 - **Analytics Dashboard** — Built-in web UI for monitoring usage, costs, and session history across all engines
 - **Session Management** — List, view, and convert sessions between different engine formats
+- **Background Task Management** — List (`ca ps`) and stop (`ca stop`) background task runs, or fan a task out across every registered project at once with `ca batch-run`
 - **Scheduled Tasks** — Cron-like scheduler for automated recurring execution
 - **Task Authoring** — Interview-style workflow for creating new task templates
 - **YOLO Mode** — Non-interactive approval mode for automated pipelines
@@ -56,7 +57,7 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
    - Groups of skills, prompts, and hooks for specific domains
 
 5. **Hooks** — Lifecycle event triggers (`hooks/`)
-   - Execute commands during `session-start`, `pre-commit`, `post-tool`, etc.
+   - Execute commands on the `before_tool` / `after_tool` events (declared per-hook in `metadata.json`)
 
 6. **Tasks** — High-level execution blueprints (`tasks/`)
    - Pre-defined workflows like `refactor`, `code_review`, `create_pr`
@@ -187,6 +188,23 @@ ca resources list prompts
 ca resources list skills --group work
 ```
 
+### Background Task Management
+
+```bash
+# List running background task runs (started via the CLI, Web UI, or scheduler)
+ca ps
+ca ps --all              # Include completed/failed/stopped runs
+
+# Stop a running task by id
+ca stop <task_id>
+
+# Run one task across every registered project at once
+ca batch-run code_review --engine claude --group work
+ca batch-run code_review --engine claude --dry-run   # Preview targets without starting anything
+```
+
+See [docs/commands.md](docs/commands.md) for the full command reference.
+
 ## Configuration
 
 CodeAgent uses a `config.json` for project-specific settings:
@@ -308,6 +326,7 @@ bun run build      # Production build
 | [docs/configuration.md](docs/configuration.md) | Configuration reference |
 | [docs/architecture.md](docs/architecture.md) | Architecture deep dive |
 | [docs/commands.md](docs/commands.md) | CLI command reference |
+| [docs/deployment.md](docs/deployment.md) | Docker / production deployment guide |
 | [docs/multi-agent-orchestration-design.md](docs/multi-agent-orchestration-design.md) | Multi-agent crew design |
 
 ## Why CodeAgent?
@@ -318,7 +337,7 @@ bun run build      # Production build
 
 3. **Context Efficiency** — Only inject the prompts and skills you need. Save tokens and improve AI focus by avoiding irrelevant context.
 
-4. **Local First** — No complex Docker setups required. Runs natively on your host with symbolic link safety and zero infrastructure dependencies.
+4. **Local First** — Runs natively on your host with symbolic link safety and zero infrastructure dependencies; no Docker setup is required to get started. If you do want a containerized deployment (e.g. for a shared/remote dashboard), CodeAgent ships a `Dockerfile` for that — see [docs/deployment.md](docs/deployment.md).
 
 5. **Extensible by Design** — Add new engines, skills, prompts, hooks, or plugins without modifying the core framework.
 

@@ -20,7 +20,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Protocol
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
@@ -43,7 +43,7 @@ except ImportError:  # pragma: no cover - exercised only on POSIX
 
 from core.services.config_service import ConfigService
 from core.web.routers.config import get_config_path
-from core.web.routers.launch import ENGINES, _CA_LAUNCHER
+from core.web.routers.launch import _CA_LAUNCHER, ENGINES
 
 router = APIRouter(prefix="/api/pty", tags=["pty"])
 
@@ -103,7 +103,7 @@ class PtySession(Protocol):
     async def kill(self) -> None: ...
     async def close(self) -> None: ...
     @property
-    def returncode(self) -> Optional[int]: ...
+    def returncode(self) -> int | None: ...
 
 
 class SpawnError(Exception):
@@ -143,12 +143,12 @@ class _PosixSession:
             os.close(self._master_fd)
 
     @property
-    def returncode(self) -> Optional[int]:
+    def returncode(self) -> int | None:
         return self._process.returncode
 
 
 async def _spawn_posix(
-    engine: str, working_dir: Path, output_queue: "asyncio.Queue[bytes | str | None]"
+    engine: str, working_dir: Path, output_queue: asyncio.Queue[bytes | str | None]
 ) -> _PosixSession:
     import pty  # POSIX-only; imported lazily so the module still loads on Windows.
 
@@ -216,7 +216,7 @@ class _WindowsSession:  # pragma: no cover - exercised only on Windows
         self._pty = pty_process
         self._loop = loop
         self._queue = output_queue
-        self._returncode: Optional[int] = None
+        self._returncode: int | None = None
         # Set by close() before it tears down the pty, so the reader thread
         # (whose blocking read() unblocks once the pty closes) knows not to
         # post into a queue tied to a loop that may already be shutting
@@ -294,7 +294,7 @@ class _WindowsSession:  # pragma: no cover - exercised only on Windows
         await asyncio.to_thread(self._reader_thread.join, 3)
 
     @property
-    def returncode(self) -> Optional[int]:
+    def returncode(self) -> int | None:
         if self._returncode is not None:
             return self._returncode
         with contextlib.suppress(Exception):
@@ -304,7 +304,7 @@ class _WindowsSession:  # pragma: no cover - exercised only on Windows
 
 
 async def _spawn_windows(  # pragma: no cover - exercised only on Windows
-    engine: str, working_dir: Path, output_queue: "asyncio.Queue[bytes | str | None]"
+    engine: str, working_dir: Path, output_queue: asyncio.Queue[bytes | str | None]
 ) -> _WindowsSession:
     loop = asyncio.get_running_loop()
     env = {**os.environ, "TERM": "xterm-256color"}
@@ -345,7 +345,7 @@ async def pty_websocket(
 
     await websocket.accept()
 
-    output_queue: "asyncio.Queue[bytes | str | None]" = asyncio.Queue()
+    output_queue: asyncio.Queue[bytes | str | None] = asyncio.Queue()
 
     try:
         if sys.platform == "win32":  # pragma: no cover - exercised only on Windows

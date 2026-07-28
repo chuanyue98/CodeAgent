@@ -47,7 +47,7 @@ def _list_log_files() -> list[dict]:
 
 def _read_log(path: Path, max_lines: int = 1000) -> str:
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             lines = deque(fh, maxlen=max_lines)
             return "".join(lines)
     except Exception:
@@ -91,7 +91,7 @@ async def stream_log_file(task_id: str):
 
             if current_size != last_size:
                 try:
-                    with open(path, "r", encoding="utf-8") as fh:
+                    with open(path, encoding="utf-8") as fh:
                         fh.seek(last_size)
                         new_data = fh.read()
                         if new_data:

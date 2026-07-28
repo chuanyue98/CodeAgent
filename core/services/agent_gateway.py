@@ -17,11 +17,11 @@ from core.services.agent_protocol import (
     ApprovalDecision,
     CreateSessionOptions,
     PermissionMode,
+    ProviderCapabilities,
+    ResourceSnapshot,
     ResumeOptions,
     SessionStatus,
     TurnInput,
-    ProviderCapabilities,
-    ResourceSnapshot,
     utc_now,
     wire,
 )

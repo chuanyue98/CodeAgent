@@ -8,14 +8,12 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 # 确保能找到 core 模块
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
-
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -47,7 +45,7 @@ class GeminiEngine(BaseEngine):
         model_name: str,
         non_interactive: bool,
         approval_mode: str = "auto_edit",
-    ) -> List[str]:
+    ) -> list[str]:
         # 基础命令列表
         cmd = ["gemini", "--model", model_name, "--approval-mode", approval_mode]
 
@@ -58,8 +56,8 @@ class GeminiEngine(BaseEngine):
         return cmd
 
     def build_chat_command(
-        self, message: str, session_id: Optional[str] = None
-    ) -> List[str]:
+        self, message: str, session_id: str | None = None
+    ) -> list[str]:
         """Builds a headless JSON command for one ChatPage turn (new session only).
 
         Resume-by-session-id is intentionally unsupported: the CLI spike hit
@@ -86,7 +84,7 @@ class GeminiEngine(BaseEngine):
             "--skip-trust",
         ]
 
-    def run_engine(self, cmd: List[str], env: dict):
+    def run_engine(self, cmd: list[str], env: dict):
         """执行引擎命令"""
         self.run_shell(cmd, env)
 
@@ -94,7 +92,7 @@ class GeminiEngine(BaseEngine):
         """返回默认模型"""
         return self.default_model
 
-    def _format_plugins_for_settings(self, data: dict, plugins: List[dict]) -> dict:
+    def _format_plugins_for_settings(self, data: dict, plugins: list[dict]) -> dict:
         """实现 Gemini 特有的扩展注册逻辑 (严格 Session 控制)"""
         # 获取当前 CodeAgent 允许的插件名集合
         allowed_plugin_names = {p["name"] for p in plugins}

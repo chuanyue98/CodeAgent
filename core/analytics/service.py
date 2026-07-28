@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Any
 
-from core.analytics.aggregator import aggregate, _entry_cost
+from core.analytics.aggregator import _entry_cost, aggregate
 from core.analytics.collectors.claude_collector import scan_claude_usage
 from core.analytics.collectors.codex_collector import scan_codex_usage
 from core.analytics.collectors.gemini_collector import scan_gemini_usage
@@ -19,7 +19,7 @@ from core.analytics.models import RawUsageEntry
 from core.analytics.pricing import get_rates
 
 
-def _collect_all() -> List[RawUsageEntry]:
+def _collect_all() -> list[RawUsageEntry]:
     """Collects usage entries incrementally and merges them with history.
 
     Returns:
@@ -30,7 +30,7 @@ def _collect_all() -> List[RawUsageEntry]:
     last_ts = get_last_timestamps()
 
     # 2. Collect only new entries
-    new_entries: List[RawUsageEntry] = []
+    new_entries: list[RawUsageEntry] = []
     new_entries.extend(scan_claude_usage(since_timestamp=last_ts.get("claude", "")))
     new_entries.extend(scan_gemini_usage(since_timestamp=last_ts.get("gemini", "")))
     new_entries.extend(scan_opencode_usage(since_timestamp=last_ts.get("opencode", "")))
@@ -57,7 +57,7 @@ def _collect_all() -> List[RawUsageEntry]:
     return history
 
 
-def _build_engine_summary(entries: List[RawUsageEntry]) -> List[Dict[str, Any]]:
+def _build_engine_summary(entries: list[RawUsageEntry]) -> list[dict[str, Any]]:
     """Builds a summarized report of usage statistics grouped by engine.
 
     Args:
@@ -68,7 +68,7 @@ def _build_engine_summary(entries: List[RawUsageEntry]) -> List[Dict[str, Any]]:
             statistics for a specific engine (target), including token counts,
             estimated cost, session count, and unique models used.
     """
-    stats: Dict[str, Dict[str, Any]] = defaultdict(
+    stats: dict[str, dict[str, Any]] = defaultdict(
         lambda: {
             "inputTokens": 0,
             "outputTokens": 0,
@@ -107,8 +107,8 @@ def _build_engine_summary(entries: List[RawUsageEntry]) -> List[Dict[str, Any]]:
     return result
 
 
-def _build_model_summary(entries: List[RawUsageEntry]) -> List[Dict[str, Any]]:
-    stats: Dict[str, Dict[str, Any]] = defaultdict(
+def _build_model_summary(entries: list[RawUsageEntry]) -> list[dict[str, Any]]:
+    stats: dict[str, dict[str, Any]] = defaultdict(
         lambda: {
             "inputTokens": 0,
             "outputTokens": 0,
@@ -159,7 +159,7 @@ def _build_model_summary(entries: List[RawUsageEntry]) -> List[Dict[str, Any]]:
     return result
 
 
-def get_analytics_data(force_refresh: bool = False) -> Dict[str, Any]:
+def get_analytics_data(force_refresh: bool = False) -> dict[str, Any]:
     """Retrieves analytics data, using cache if available and not forced to refresh.
 
     Args:
@@ -183,7 +183,7 @@ def get_analytics_data(force_refresh: bool = False) -> Dict[str, Any]:
     return data
 
 
-def refresh_analytics_data() -> Dict[str, Any]:
+def refresh_analytics_data() -> dict[str, Any]:
     """Invalidates the cache and forces a fresh collection of analytics data.
 
     Returns:

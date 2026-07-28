@@ -6,8 +6,11 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from core.logging_config import get_logger
 
 LINK_MANIFEST = ".codeagent-links.json"
+
+logger = get_logger(__name__)
 
 
 def is_windows_link(path: Path) -> bool:
@@ -106,7 +109,7 @@ class LinkManager:
             return
 
         if not (is_windows_link(path) or path.is_symlink()):
-            print(f"⚠️ Refusing to remove unmanaged path: {path}")
+            logger.warning("Refusing to remove unmanaged path: %s", path)
             return
 
         try:
@@ -122,7 +125,7 @@ class LinkManager:
             else:
                 path.unlink(missing_ok=True)
         except Exception as e:
-            print(f"⚠️ Security: Failed to remove link {path}: {e}")
+            logger.warning("Security: failed to remove link %s: %s", path, e)
 
     def ensure_managed_link(self, source: Path, target: Path, link_path: Path) -> bool:
         """Create a link without replacing user-owned files or links."""
@@ -141,7 +144,7 @@ class LinkManager:
             ):
                 self.safe_remove_link(target)
             else:
-                print(f"⚠️ Refusing to replace unmanaged path: {target}")
+                logger.warning("Refusing to replace unmanaged path: %s", target)
                 return False
 
         self.create_skill_link(source, target)

@@ -25,13 +25,14 @@ import json
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi import Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import Field
 
-from core.services.runner_service import TaskRunner
+from core.constants import ENGINES
 from core.services.config_service import ConfigService
+from core.services.runner_service import TaskRunner
+from core.web.case_convert import ProtocolModel, wire
 from core.web.resource_paths import ROOT_DIR
 from core.web.routers.config import get_config_path
 
@@ -57,7 +58,7 @@ router = APIRouter(
 _runner = TaskRunner(ROOT_DIR)
 
 
-class StartChatTurnRequest(BaseModel):
+class StartChatTurnRequest(ProtocolModel):
     """Request body for starting one ChatPage turn."""
 
     engine: str
@@ -65,6 +66,43 @@ class StartChatTurnRequest(BaseModel):
     session_id: str | None = None
     group: str = "common"
     project_path: str = Field(min_length=1)
+
+
+class ChatTurnStatusResponse(ProtocolModel):
+    """Wire shape for ``core.services.runner_service.TaskRunStatus``."""
+
+    task_id: str
+    engine: str
+    pid: int | None = None
+    status: str
+    log_path: str
+    start_time: float
+    session_id: str | None = None
+    workspace: str | None = None
+
+
+class ChatResourceSet(ProtocolModel):
+    skills: list[str]
+    hooks: list[str]
+    plugins: list[str]
+
+
+class ProviderNativeStatus(ProtocolModel):
+    status: str
+    reason: str
+
+
+class ChatCapabilitiesResponse(ProtocolModel):
+    mode: str
+    engine: str
+    group: str
+    project_path: str | None
+    configuration_warnings: list[str]
+    codeagent_resources_injected: bool
+    active: ChatResourceSet
+    configured_but_inactive: ChatResourceSet
+    provider_native: ProviderNativeStatus
+    notice: str
 
 
 _RESOURCE_NAMES = ("skills", "hooks", "plugins")
@@ -119,7 +157,7 @@ async def get_chat_capabilities(
     provider-native capabilities remain unknown because their discovery is
     internal to each CLI and is not exposed by the one-shot protocol.
     """
-    if engine not in {"claude", "gemini", "opencode", "codex"}:
+    if engine not in ENGINES:
         raise HTTPException(status_code=400, detail=f"Invalid engine: {engine!r}")
 
     service = ConfigService(get_config_path())
@@ -141,28 +179,30 @@ async def get_chat_capabilities(
     for resource in _RESOURCE_NAMES:
         value = group_definition.get(resource)
         configured[resource] = list(value) if isinstance(value, list) else []
-    return {
-        "mode": "legacy_one_shot",
-        "engine": engine,
-        "group": group,
-        "project_path": project_path,
-        "configuration_warnings": warnings,
-        "codeagent_resources_injected": False,
-        "active": {resource: [] for resource in _RESOURCE_NAMES},
-        "configured_but_inactive": configured,
-        "provider_native": {
-            "status": "unknown",
-            "reason": (
-                "The provider CLI does not expose its discovered native skills, "
-                "hooks, or plugins through the legacy one-shot Chat protocol."
+    return wire(
+        ChatCapabilitiesResponse(
+            mode="legacy_one_shot",
+            engine=engine,
+            group=group,
+            project_path=project_path,
+            configuration_warnings=warnings,
+            codeagent_resources_injected=False,
+            active=ChatResourceSet(**{resource: [] for resource in _RESOURCE_NAMES}),
+            configured_but_inactive=ChatResourceSet(**configured),
+            provider_native=ProviderNativeStatus(
+                status="unknown",
+                reason=(
+                    "The provider CLI does not expose its discovered native skills, "
+                    "hooks, or plugins through the legacy one-shot Chat protocol."
+                ),
             ),
-        },
-        "notice": (
-            "Legacy Web Chat bypasses CodeAgent's launcher-based capability "
-            "injection. Resources configured for this group are not active in "
-            "the current Web Chat session."
-        ),
-    }
+            notice=(
+                "Legacy Web Chat bypasses CodeAgent's launcher-based capability "
+                "injection. Resources configured for this group are not active in "
+                "the current Web Chat session."
+            ),
+        )
+    )
 
 
 @router.post("/turns")
@@ -177,13 +217,14 @@ async def start_chat_turn(req: StartChatTurnRequest) -> dict:
     """
     project_path, group = _registered_project(req.project_path)
     try:
-        return _runner.run_chat_turn(
+        status = _runner.run_chat_turn(
             req.engine,
             req.message,
             session_id=req.session_id,
             group=group,
             project_path=project_path,
-        ).__dict__
+        )
+        return wire(ChatTurnStatusResponse(**status.__dict__))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -201,7 +242,7 @@ async def get_chat_turn(turn_id: str) -> dict:
     status = _runner.get_status(turn_id)
     if not status:
         raise HTTPException(status_code=404, detail="Turn not found")
-    return status.__dict__
+    return wire(ChatTurnStatusResponse(**status.__dict__))
 
 
 @router.post("/turns/{turn_id}/cancel")
@@ -214,8 +255,8 @@ async def cancel_chat_turn(turn_id: str) -> dict:
         raise HTTPException(status_code=409, detail="Turn is no longer running")
     if not _runner.stop_task(turn_id):
         raise HTTPException(status_code=500, detail="Failed to stop turn")
-    stopped = _runner.get_status(turn_id)
-    return (stopped or status).__dict__
+    stopped = _runner.get_status(turn_id) or status
+    return wire(ChatTurnStatusResponse(**stopped.__dict__))
 
 
 @router.get("/turns/{turn_id}/stream")
@@ -250,7 +291,7 @@ async def stream_chat_turn(turn_id: str):
             if current_size != last_size:
 
                 def _read_new_bytes(p: Path = path, offset: int = last_size) -> str:
-                    with open(p, "r", encoding="utf-8") as fh:
+                    with open(p, encoding="utf-8") as fh:
                         fh.seek(offset)
                         return fh.read()
 
@@ -279,7 +320,7 @@ async def stream_chat_turn(turn_id: str):
                     yield f"data: {trailing}\n\n"
                 done_payload = {
                     "status": current_status.status,
-                    "session_id": current_status.session_id,
+                    "sessionId": current_status.session_id,
                 }
                 yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"
                 return

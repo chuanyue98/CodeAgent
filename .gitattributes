@@ -1,0 +1,38 @@
+# Normalize line endings to LF in the repository regardless of each
+# contributor's local core.autocrlf setting -- this session hit the
+# "LF will be replaced by CRLF" warning firsthand on several commits.
+# Git still checks files out using the platform's native line ending
+# unless core.autocrlf is configured to keep LF; this only guarantees
+# what's *stored* in the repo is consistent.
+* text=auto eol=lf
+
+*.py text eol=lf
+*.pyi text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.sh text eol=lf
+
+# Windows batch/PowerShell scripts genuinely want CRLF.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets -- never touch line endings.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+*.whl binary

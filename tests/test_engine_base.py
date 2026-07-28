@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from core.engine_base import BaseEngine, EnvironmentManager
 
 
@@ -159,7 +160,7 @@ def test_engine_inject_hooks_to_settings(mock_engine, tmp_path, monkeypatch):
     mock_engine.inject_hooks_to_settings("settings.json", hooks)
 
     assert settings_file.exists()
-    with open(settings_file, "r") as f:
+    with open(settings_file) as f:
         data = json.load(f)
         assert data["_ca_injected"] is True
         assert data["hooks"]["pre-commit"][0]["hooks"][0]["name"] == "test-hook"
@@ -169,7 +170,7 @@ def test_engine_inject_hooks_to_settings(mock_engine, tmp_path, monkeypatch):
     assert not settings_file.exists()
 
 
-def test_ensure_skills_link_deduplicates_same_skill_name(monkeypatch, tmp_path, capsys):
+def test_ensure_skills_link_deduplicates_same_skill_name(monkeypatch, tmp_path, caplog):
     # Reuse original test logic but integrated with new mock structure if needed
     # (Original test 1)
     engine = DummyEngine(root_dir=tmp_path / "ca")
@@ -198,15 +199,15 @@ def test_ensure_skills_link_deduplicates_same_skill_name(monkeypatch, tmp_path, 
         lambda: [project_skills_root, builtin_root],
     )
 
-    engine.ensure_skills_link(".gemini/skills")
+    with caplog.at_level("INFO"):
+        engine.ensure_skills_link(".gemini/skills")
 
     mounted_root = project_root / ".gemini" / "skills"
     assert (mounted_root / "ui-ux-pro-max" / "SKILL.md").read_text(
         encoding="utf-8"
     ) == "project"
 
-    output = capsys.readouterr().out
-    assert "Skip duplicate skill 'ui-ux-pro-max'" in output
+    assert "Skip duplicate skill 'ui-ux-pro-max'" in caplog.text
 
 
 def test_ensure_skills_link_preserves_unmanaged_links_and_regular_dirs(
@@ -276,7 +277,7 @@ def test_ensure_skills_link_does_not_replace_regular_file(monkeypatch, tmp_path)
 
 
 def test_ensure_skills_link_warns_when_resolved_dir_has_no_skill_md(
-    monkeypatch, tmp_path, capsys
+    monkeypatch, tmp_path, caplog
 ):
     """A skill group directory that resolves but contains no SKILL.md
     (directly or in a subdirectory) -- e.g. an empty or half-written skill
@@ -303,34 +304,34 @@ def test_ensure_skills_link_warns_when_resolved_dir_has_no_skill_md(
     )
     monkeypatch.setattr(engine, "_get_skill_search_roots", lambda: [builtin_root])
 
-    engine.ensure_skills_link(".gemini/skills")
+    with caplog.at_level("INFO"):
+        engine.ensure_skills_link(".gemini/skills")
 
-    output = capsys.readouterr().out
-    assert "broken-skill" in output
-    assert "no SKILL.md" in output
+    assert "broken-skill" in caplog.text
+    assert "no SKILL.md" in caplog.text
 
     mounted_root = project_root / ".gemini" / "skills"
     assert (mounted_root / "good-skill" / "SKILL.md").exists()
     assert not (mounted_root / "broken-skill").exists()
 
 
-def test_safe_remove_link_reports_windows_rmdir_failure(mock_engine, tmp_path, capsys):
+def test_safe_remove_link_reports_windows_rmdir_failure(mock_engine, tmp_path, caplog):
     target = tmp_path / "linked-dir"
     target.mkdir()
 
-    with patch("os.name", "nt"):
-        with patch.object(Path, "is_symlink", return_value=True):
-            with patch.object(Path, "is_dir", return_value=True):
-                with patch("subprocess.run") as mock_run:
-                    mock_run.return_value = MagicMock(
-                        returncode=1,
-                        stderr=b"Access is denied.",
-                        stdout=b"",
-                    )
-                    mock_engine._safe_remove_link(target)
+    with caplog.at_level("WARNING"):
+        with patch("os.name", "nt"):
+            with patch.object(Path, "is_symlink", return_value=True):
+                with patch.object(Path, "is_dir", return_value=True):
+                    with patch("subprocess.run") as mock_run:
+                        mock_run.return_value = MagicMock(
+                            returncode=1,
+                            stderr=b"Access is denied.",
+                            stdout=b"",
+                        )
+                        mock_engine._safe_remove_link(target)
 
-    output = capsys.readouterr().out
-    assert "Access is denied" in output
+    assert "Access is denied" in caplog.text
 
 
 def test_create_skill_link_unix(mock_engine, tmp_path):
@@ -488,7 +489,7 @@ def test_inject_plugins_to_settings(mock_engine, tmp_path, monkeypatch):
     mock_engine.inject_plugins_to_settings("settings.json")
 
     assert settings_file.exists()
-    with open(settings_file, "r") as f:
+    with open(settings_file) as f:
         data = json.load(f)
         assert data["_ca_injected"] is True
         assert data["plugins"][0]["name"] == "cool-plugin"

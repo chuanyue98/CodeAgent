@@ -12,9 +12,9 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from core.utils.atomic_write import atomic_write
 
@@ -43,7 +43,7 @@ def _encode_project_path(path: str) -> str:
 
 def _now_iso() -> str:
     """Returns the current UTC time as an ISO 8601 string."""
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    return datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 def write_claude_session(session: UnifiedSession) -> str:

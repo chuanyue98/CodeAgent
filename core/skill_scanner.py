@@ -3,7 +3,8 @@
 import os
 import traceback
 from pathlib import Path
-from typing import Dict, List, Optional
+
+from core.resource_locator import CODE_ROOT
 
 
 class SkillScanner:
@@ -17,7 +18,7 @@ class SkillScanner:
         """
         self.skills_root = skills_root
 
-    def scan(self) -> tuple[Dict[str, List[str]], List[str]]:
+    def scan(self) -> tuple[dict[str, list[str]], list[str]]:
         """Scans the skills root directory for categories and individual skill definitions.
 
         Returns:
@@ -25,8 +26,8 @@ class SkillScanner:
             - A dictionary mapping category names to lists of skill names.
             - A list of warning messages encountered during scanning.
         """
-        result: Dict[str, List[str]] = {}
-        warnings: List[str] = []
+        result: dict[str, list[str]] = {}
+        warnings: list[str] = []
         if not self.skills_root.exists():
             return result, warnings
 
@@ -66,8 +67,8 @@ def get_skills_to_mount(
     config: dict,
     scanner: SkillScanner,
     project_type: str = "common",
-    extra_skills: Optional[List[str]] = None,
-) -> List[str]:
+    extra_skills: list[str] | None = None,
+) -> list[str]:
     """Determines which skills should be mounted based on configuration and environment.
 
     Args:
@@ -100,7 +101,7 @@ def get_skills_to_mount(
 
     # 4. Automatically load skills from the local 'skills/' subdirectory
     cwd = Path.cwd()
-    if cwd != Path(__file__).resolve().parent.parent:
+    if cwd != CODE_ROOT:
         local_skills = cwd / "skills"
         if local_skills.exists():
             for item in local_skills.iterdir():

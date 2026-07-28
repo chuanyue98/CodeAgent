@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
-import logging
 import urllib.error
 import urllib.request
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def _webhook_urls(config: dict) -> list[str]:

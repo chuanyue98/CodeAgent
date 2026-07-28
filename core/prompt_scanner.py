@@ -3,7 +3,6 @@
 import os
 import traceback
 from pathlib import Path
-from typing import Dict, List
 
 DEFAULT_GROUP_PROMPTS: dict[str, list[str]] = {
     "common": ["base", "engineering", "coding"],
@@ -24,7 +23,7 @@ class PromptScanner:
         """
         self.prompt_root = prompt_root
 
-    def scan(self) -> tuple[Dict[str, List[str]], List[str]]:
+    def scan(self) -> tuple[dict[str, list[str]], list[str]]:
         """Scans the prompt root directory for prompt groups and files.
 
         Returns:
@@ -32,8 +31,8 @@ class PromptScanner:
             - A dictionary mapping group names to lists of prompt names (file stems).
             - A list of warning strings.
         """
-        result: Dict[str, List[str]] = {}
-        warnings: List[str] = []
+        result: dict[str, list[str]] = {}
+        warnings: list[str] = []
         if not self.prompt_root.exists():
             return result, warnings
 
@@ -67,8 +66,8 @@ def get_prompts_to_inject(
     config: dict,
     scanner: PromptScanner,
     project_type: str = "common",
-    extra_prompts: List[str] | None = None,
-) -> tuple[List[str], List[str]]:
+    extra_prompts: list[str] | None = None,
+) -> tuple[list[str], list[str]]:
     """Determines which prompt groups should be injected based on configuration.
 
     Args:
@@ -81,14 +80,14 @@ def get_prompts_to_inject(
         A tuple of prompt group names to inject and warning messages.
     """
     scanned, scan_warnings = scanner.scan()
-    result: List[str] = []
+    result: list[str] = []
     groups_cfg = config.get("groups", {})
     project_group_cfg = groups_cfg.get(project_type, {})
     group_prompts_configured = (
         project_type in groups_cfg and "prompts" in project_group_cfg
     )
 
-    def add_items(items: List[str] | None) -> None:
+    def add_items(items: list[str] | None) -> None:
         if not items:
             return
         for item in items:
