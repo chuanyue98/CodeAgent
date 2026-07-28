@@ -92,7 +92,9 @@ class OpenCodeEngine(BaseEngine):
                 except OSError:
                     existing = ""
                 if "_ca_injected: true" not in existing[:500]:
-                    logger.warning("Refusing to replace unmanaged path: %s", adapter_file)
+                    logger.warning(
+                        "Refusing to replace unmanaged path: %s", adapter_file
+                    )
                     continue
 
             # 写入生成的适配器代码 (带有 _ca_injected 标记以便清理)

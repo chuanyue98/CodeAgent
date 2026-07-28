@@ -136,7 +136,9 @@ def initialize_default_groups() -> None:
                 }
                 changed = True
                 logger.info(
-                    "Initialized group '%s' with %d skills", group_name, len(skills_list)
+                    "Initialized group '%s' with %d skills",
+                    group_name,
+                    len(skills_list),
                 )
 
             else:

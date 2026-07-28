@@ -186,7 +186,9 @@ class _LinksMixin:
                             or result.stdout.decode(errors="replace").strip()
                             or f"rmdir exited with code {result.returncode}"
                         )
-                        logger.warning("Security: Failed to remove link %s: %s", path, detail)
+                        logger.warning(
+                            "Security: Failed to remove link %s: %s", path, detail
+                        )
                 else:
                     path.unlink(missing_ok=True)
             else:

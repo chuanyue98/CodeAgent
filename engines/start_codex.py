@@ -304,7 +304,9 @@ class CodexEngine(BaseEngine):
                 current_content = ""
             if self.MARKETPLACE_NAME not in current_content:
                 shutil.copy2(config_path, backup_path)
-                logger.info("Created safety backup of global config: %s", backup_path.name)
+                logger.info(
+                    "Created safety backup of global config: %s", backup_path.name
+                )
 
         data = self._load_config(config_path)
         data = self._format_plugins_for_settings(data, plugins)
