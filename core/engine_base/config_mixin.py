@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.hook_scanner import get_hooks_to_inject
 from core.logging_config import get_logger
@@ -8,11 +8,28 @@ from core.plugin_scanner import get_plugins_to_mount
 from core.prompt_scanner import get_prompts_to_inject
 from core.skill_scanner import get_skills_to_mount
 
+if TYPE_CHECKING:
+    from core.config_manager import ConfigManager
+    from core.hook_scanner import HookScanner
+    from core.plugin_scanner import PluginScanner
+    from core.prompt_scanner import PromptScanner
+    from core.skill_scanner import SkillScanner
+
 logger = get_logger(__name__)
 
 
 class _ConfigMixin:
     """Project-group/config resolution and resource discovery (skills, plugins, prompts, hooks)."""
+
+    # Provided by BaseEngine.__init__ -- declared here so mypy knows these
+    # exist without this mixin owning their construction.
+    if TYPE_CHECKING:
+        config_manager: "ConfigManager"
+        full_config: dict
+        skill_scanner: "SkillScanner"
+        plugin_scanner: "PluginScanner"
+        prompt_scanner: "PromptScanner"
+        hook_scanner: "HookScanner"
 
     def _resolve_resource_root(self) -> Path:
         return self.config_manager.resolve_resource_root()

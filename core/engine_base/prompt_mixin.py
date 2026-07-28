@@ -5,17 +5,26 @@ import sys
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from core.engine_base.environment import EngineExecutionError
 from core.logging_config import get_logger
 from core.prompt_kit import prompt_general, prompt_review
+
+if TYPE_CHECKING:
+    from core.prompt_scanner import PromptScanner
 
 logger = get_logger(__name__)
 
 
 class _PromptMixin:
     """Prompt assembly, temp-file lifecycle, and subprocess execution."""
+
+    # Provided by _ConfigMixin / BaseEngine.__init__.
+    if TYPE_CHECKING:
+        prompt_scanner: "PromptScanner"
+
+        def get_prompts_to_inject(self) -> list[str]: ...
 
     def assemble_prompt(self, task: str | None = None, is_review: bool = False) -> str:
         """Assembles the final system prompt by combining base prompts and injected groups.

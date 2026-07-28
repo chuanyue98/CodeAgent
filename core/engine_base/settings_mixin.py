@@ -1,15 +1,24 @@
 import json
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.logging_config import get_logger
+
+if TYPE_CHECKING:
+    from core.settings_manager import SettingsManager
 
 logger = get_logger(__name__)
 
 
 class _SettingsMixin:
     """Injecting hooks/plugins into engine-specific settings files."""
+
+    # Provided by BaseEngine.__init__ / _ConfigMixin.
+    if TYPE_CHECKING:
+        settings_manager: "SettingsManager"
+
+        def get_plugins_to_mount(self) -> list[dict[str, Any]]: ...
 
     def inject_hooks_to_settings(
         self, settings_rel_path: str, hooks: list[dict[str, Any]]

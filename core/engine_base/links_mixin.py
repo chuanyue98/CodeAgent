@@ -1,15 +1,29 @@
 import os
 import subprocess
 from pathlib import Path
-from typing import BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 from core.logging_config import get_logger
+
+if TYPE_CHECKING:
+    from core.link_manager import LinkManager
+    from core.lock_manager import LockManager
 
 logger = get_logger(__name__)
 
 
 class _LinksMixin:
     """Resource locking passthrough and skills/plugins symlink management."""
+
+    # Provided by BaseEngine.__init__ / _ConfigMixin.
+    if TYPE_CHECKING:
+        lock_manager: "LockManager"
+        link_manager: "LinkManager"
+
+        def get_current_project_group(self) -> str: ...
+        def get_skills_to_mount(self) -> list[str]: ...
+        def get_plugins_to_mount(self) -> list[dict[str, Any]]: ...
+        def _get_skill_search_roots(self) -> list[Path]: ...
 
     def acquire_resource_lock(self, lock_path: Path) -> BinaryIO:
         return self.lock_manager.acquire_resource_lock(lock_path)
