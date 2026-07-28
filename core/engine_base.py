@@ -18,6 +18,7 @@ from core.lock_manager import LockManager
 from core.plugin_scanner import PluginScanner, get_plugins_to_mount
 from core.prompt_kit import prompt_general, prompt_review
 from core.prompt_scanner import PromptScanner, get_prompts_to_inject
+from core.resource_locator import CODE_ROOT
 from core.settings_manager import SettingsManager
 from core.skill_scanner import SkillScanner, get_skills_to_mount
 
@@ -101,7 +102,7 @@ class BaseEngine:
         """
         self.name = name
         self.default_model = default_model
-        self.root_dir = Path(__file__).resolve().parent.parent
+        self.root_dir = CODE_ROOT
         self.config_manager = ConfigManager(self.root_dir)
         self.full_config = self.config_manager.full_config
         self.env_manager = EnvironmentManager(self.root_dir)

@@ -6,10 +6,10 @@ from typing import Any
 
 from croniter import croniter
 
+from core.constants import ENGINES
 from core.services.config_service import ConfigService
 
 _SCHEDULES_KEY = "schedules"
-_VALID_ENGINES = {"claude", "gemini", "opencode", "codex"}
 
 
 def _compute_next_run(cron_expr: str, base_time: float | None = None) -> float:
@@ -62,7 +62,7 @@ class ScheduleService:
         enabled: bool = True,
         workspace: str | None = None,
     ) -> dict:
-        if engine not in _VALID_ENGINES:
+        if engine not in ENGINES:
             raise ValueError(f"Invalid engine: {engine!r}")
         if not croniter.is_valid(cron_expr):
             raise ValueError(f"Invalid cron expression: {cron_expr!r}")
@@ -89,7 +89,7 @@ class ScheduleService:
         return record
 
     def update_schedule(self, schedule_id: str, **fields: Any) -> dict:
-        if fields.get("engine") is not None and fields["engine"] not in _VALID_ENGINES:
+        if fields.get("engine") is not None and fields["engine"] not in ENGINES:
             raise ValueError(f"Invalid engine: {fields['engine']!r}")
         new_cron_expr = fields.get("cron_expr")
         if new_cron_expr is not None and not croniter.is_valid(new_cron_expr):

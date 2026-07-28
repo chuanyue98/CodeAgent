@@ -36,12 +36,13 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-_VALID_ENGINES = {"claude", "codex", "gemini", "opencode"}
+from core.constants import ENGINES
+
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
 
 
 def _validate_engine(engine: str) -> None:
-    if engine not in _VALID_ENGINES:
+    if engine not in ENGINES:
         raise ValueError(f"Invalid engine: {engine!r}")
 
 
