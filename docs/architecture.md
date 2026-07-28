@@ -119,13 +119,29 @@ Each skill is a self-contained directory with a `SKILL.md` (YAML frontmatter + m
 
 ### 5. Hooks (`hooks/`)
 
-Lifecycle event triggers that execute commands at specific points:
+Lifecycle event triggers that execute commands at specific points. Each hook declares its
+trigger via the `event` field in its `metadata.json` (see `hooks/base/*/metadata.json`).
+Only two canonical events exist today — there is no `session-start` or generic
+`post-tool` event:
 
-| Hook Name | Trigger | Purpose |
-|-----------|---------|---------|
-| `branch-protection` | `pre-commit` | Enforce branch naming policies |
-| `ci-monitor` | `post-tool` | Check CI status after tool calls |
-| `pre-commit` | `pre-commit` | Run checks before commits |
+| Event | Meaning |
+|-------|---------|
+| `before_tool` | Fires before the AI engine executes a tool call |
+| `after_tool` | Fires after the AI engine executes a tool call |
+
+| Hook Name | Event | Purpose |
+|-----------|-------|---------|
+| `branch-protection` | `before_tool` | Blocks accidental direct commits/pushes to the main branch |
+| `ci-monitor` | `after_tool` | Monitors CI status after `git push`, until checks pass or fail |
+| `pre-commit` | `before_tool` | Runs `ruff check` / `ruff format` before allowing a commit; blocks the commit on failure |
+
+Note: the hook directory named `pre-commit` is just a hook's name — it is not the git
+`pre-commit` hook mechanism, and its actual `event` value is `before_tool` like the others.
+
+`before_tool`/`after_tool` are translated to each engine's vendor-specific event names via
+`EVENT_MAP` in the engine adapter (`core/engine_base.py`). As of this writing, `EVENT_MAP`
+is only populated for the Claude (`PreToolUse`/`PostToolUse`) and Gemini
+(`BeforeTool`/`AfterTool`) engines; the Codex and OpenCode adapters do not yet declare one.
 
 ### 6. Plugins (`plugins/`)
 
