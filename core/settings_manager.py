@@ -6,7 +6,10 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from core.logging_config import get_logger
 from core.utils.atomic_write import atomic_write
+
+logger = get_logger(__name__)
 
 
 class SettingsFile:
@@ -63,7 +66,7 @@ class SettingsManager:
         sf = SettingsFile(settings_path)
         backup = sf.create_backup()
         if backup:
-            print(f"💾 Created safety backup: {backup.name}")
+            logger.info("Created safety backup: %s", backup.name)
 
         data = sf.load()
 
@@ -109,7 +112,7 @@ class SettingsManager:
         """Restores a settings file from its backup or removes injected files."""
         sf = SettingsFile(settings_path)
         if sf.restore_backup():
-            print(f"♻️ Restored {settings_path.name} from backup")
+            logger.info("Restored %s from backup", settings_path.name)
             return
 
         if settings_path.exists():
@@ -117,6 +120,6 @@ class SettingsManager:
                 data = sf.load()
                 if isinstance(data, dict) and data.get("_ca_injected") is True:
                     settings_path.unlink()
-                    print(f"♻️ Removed injected {settings_path.name}")
+                    logger.info("Removed injected %s", settings_path.name)
             except Exception:
                 pass

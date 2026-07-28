@@ -18,11 +18,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class JsonRpcStdioTransport:

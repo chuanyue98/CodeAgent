@@ -12,6 +12,7 @@ from pathlib import Path
 import click
 
 from core.console import configure_console_encoding
+from core.logging_config import configure_root_logging
 from core.resource_locator import (
     CODE_ROOT,
     get_bundled_resource_root,
@@ -26,6 +27,7 @@ UI_DEV_SERVER_START_TIMEOUT = 15
 _ui_dev_process: subprocess.Popen | None = None
 
 configure_console_encoding()
+configure_root_logging()
 
 
 def _installed_root():

@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from core.logging_config import configure_root_logging, get_logger
 from core.plugin_scanner import PluginScanner
 from core.prompt_scanner import DEFAULT_GROUP_PROMPTS, PromptScanner
 from core.services.config_service import ConfigService
@@ -34,6 +35,10 @@ from core.web.routers import (
 from core.web.routers.config import get_config_path
 from core.web.routers.tasks import _runner as _task_runner
 from core.web.routers.tasks import get_tasks_root
+
+configure_root_logging()
+
+logger = get_logger(__name__)
 
 CONFIG_PATH = get_config_path()
 FRONTEND_DIST = resolve_resource_path("web/frontend/dist", "CA_FRONTEND_DIST")
@@ -130,8 +135,10 @@ def initialize_default_groups() -> None:
                     "plugins": plugins_list,
                 }
                 changed = True
-                print(
-                    f"✅ Initialized group '{group_name}' with {len(skills_list)} skills"
+                logger.info(
+                    "Initialized group '%s' with %d skills",
+                    group_name,
+                    len(skills_list),
                 )
 
             else:

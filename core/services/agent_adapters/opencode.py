@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import logging
 import os
 import secrets
 import shutil
@@ -16,6 +15,7 @@ import urllib.request
 from collections.abc import AsyncIterator
 from typing import Any
 
+from core.logging_config import get_logger
 from core.services.agent_adapters._event_queue import (
     iter_events,
     put_event_dropping_oldest,
@@ -32,7 +32,7 @@ from core.services.agent_protocol import (
     TurnInput,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class OpenCodeProtocolError(RuntimeError):

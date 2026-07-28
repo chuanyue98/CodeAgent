@@ -14,11 +14,14 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
+from core.logging_config import get_logger
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
     show_tasks,
 )
+
+logger = get_logger(__name__)
 
 
 class OpenCodeEngine(BaseEngine):
@@ -89,7 +92,9 @@ class OpenCodeEngine(BaseEngine):
                 except OSError:
                     existing = ""
                 if "_ca_injected: true" not in existing[:500]:
-                    print(f"⚠️ Refusing to replace unmanaged path: {adapter_file}")
+                    logger.warning(
+                        "Refusing to replace unmanaged path: %s", adapter_file
+                    )
                     continue
 
             # 写入生成的适配器代码 (带有 _ca_injected 标记以便清理)
@@ -98,8 +103,8 @@ class OpenCodeEngine(BaseEngine):
             mounted_count += 1
 
         if mounted_count:
-            print(
-                f"🔌 Ensured {mounted_count} plugins (with auto-adapters) in {link_dir}"
+            logger.info(
+                "Ensured %d plugins (with auto-adapters) in %s", mounted_count, link_dir
             )
 
     def _generate_universal_adapter(self, name: str, src_path: Path) -> str:

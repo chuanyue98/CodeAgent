@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
-import logging
 import time
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 CACHE_SCHEMA_VERSION = 3
 CACHE_TTL_SECONDS = 300  # 5 minutes

@@ -1,34 +1,34 @@
 export interface Schedule {
   id: string;
-  task_name: string;
+  taskName: string;
   engine: string;
   group: string;
   workspace: string | null;
-  cron_expr: string;
+  cronExpr: string;
   enabled: boolean;
-  created_at: number;
-  last_run_at: number | null;
-  last_run_status: string | null;
-  next_run_at: number | null;
+  createdAt: number;
+  lastRunAt: number | null;
+  lastRunStatus: string | null;
+  nextRunAt: number | null;
 }
 
 export interface CreateScheduleParams {
-  task_name: string;
+  taskName: string;
   engine: string;
   group?: string;
   workspace: string;
-  cron_expr: string;
+  cronExpr: string;
   enabled?: boolean;
 }
 
 import request from '../utils/request';
 
 export interface UpdateScheduleParams {
-  task_name?: string;
+  taskName?: string;
   engine?: string;
   group?: string;
   workspace?: string;
-  cron_expr?: string;
+  cronExpr?: string;
   enabled?: boolean;
 }
 

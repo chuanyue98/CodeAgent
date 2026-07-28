@@ -7,11 +7,11 @@ receive the provider-neutral events defined in :mod:`agent_protocol`.
 from __future__ import annotations
 
 import asyncio
-import logging
 import shutil
 from collections.abc import AsyncIterator
 from typing import Any
 
+from core.logging_config import get_logger
 from core.services.agent_adapters._event_queue import (
     iter_events,
     put_event_dropping_oldest,
@@ -29,7 +29,7 @@ from core.services.agent_protocol import (
     wire,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class CodexProtocolError(RuntimeError):
