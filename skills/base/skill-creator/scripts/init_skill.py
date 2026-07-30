@@ -14,8 +14,21 @@
 import sys
 from pathlib import Path
 
+# This script reports results with emoji, which a non-UTF-8 console (cp936 on
+# a Chinese Windows install, for one) cannot encode -- every run died on a
+# UnicodeEncodeError at the final banner, whatever the actual result was.
+# Mirrors core/console.py; skills run standalone from an arbitrary cwd, so
+# they cannot import it.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
-SKILL_TEMPLATE = """
+# The backslash keeps the file starting at "---" rather than a blank line.
+# Without it every generated skill failed quick_validate.py's
+# content.startswith("---") check -- and core/services/skill_service.py uses
+# the same test, so the Web UI showed no description and rendered the raw
+# frontmatter block above the docs.
+SKILL_TEMPLATE = """\
 ---
 name: {skill_name}
 description: [TODO: 完整且信息丰富地解释该技能的作用以及何时使用它。包括何时使用此技能——触发它的特定场景、文件类型或任务。]

@@ -13,7 +13,16 @@
 import sys
 import zipfile
 from pathlib import Path
+
 from quick_validate import validate_skill
+
+# Emoji in the result banners cannot be encoded by a non-UTF-8 console (cp936
+# on a Chinese Windows install, for one), which killed every run with a
+# UnicodeEncodeError before it could report anything. Mirrors
+# core/console.py; skills run standalone and cannot import it.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def package_skill(skill_path, output_dir=None):

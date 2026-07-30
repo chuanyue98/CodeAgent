@@ -1,6 +1,15 @@
+import os
 import re
 import sys
-import os
+
+# The ✅/❌ result banners cannot be encoded by a non-UTF-8 console (cp936 on a
+# Chinese Windows install, for one), so every run died on a UnicodeEncodeError
+# at the very last line -- the check's verdict never reached the caller, pass
+# or fail. Mirrors core/console.py; skills run standalone from an arbitrary
+# cwd, so they cannot import it.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def check_content(content):
@@ -34,7 +43,7 @@ if __name__ == "__main__":
         arg = sys.argv[1]
         # 如果是文件路径则读取文件，否则视为直接传入的文本
         if os.path.isfile(arg):
-            with open(arg, "r", encoding="utf-8") as f:
+            with open(arg, encoding="utf-8") as f:
                 text = f.read()
         else:
             text = " ".join(sys.argv[1:])
