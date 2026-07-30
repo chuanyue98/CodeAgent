@@ -159,6 +159,11 @@ server only has to be configured once:
 ca mcp list                 # Every engine's configured servers
 ca mcp list claude          # Just one engine
 
+ca mcp add claude fs -- npx -y @modelcontextprotocol/server-filesystem /data
+ca mcp add codex api --url https://example.com/mcp --transport http
+ca mcp add gemini fs --env LOG=debug -- npx -y server-fs
+ca mcp remove gemini fs
+
 ca mcp sync claude                          # claude → the other three
 ca mcp sync claude --to gemini --to codex   # Only these targets
 ca mcp sync claude --name filesystem        # Only this server
@@ -185,8 +190,8 @@ Reads and syncs are unaffected.
 One engine failing (its CLI missing from `PATH`, say) does not abort the others; each
 result is reported per engine and the command exits non-zero if anything failed.
 
-Adding and removing individual servers is currently Web UI only (`POST`/`DELETE
-/api/mcp/{engine}`); the CLI covers listing and syncing.
+`ca doctor` reports servers that exist on some engines but not others, so drift
+surfaces without diffing four native config files by hand.
 
 ### `ps` / `stop`
 

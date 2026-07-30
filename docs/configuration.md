@@ -7,7 +7,7 @@ CodeAgent uses `config.json` at the project root for all configuration. The file
 ```json
 {
   "default_mode": "local",
-  "language": "hybrid",
+  "language": "auto",
   "groups": { ... },
   "project_registry": [ ... ],
   "proxy": [ ... ],
@@ -21,13 +21,32 @@ CodeAgent uses `config.json` at the project root for all configuration. The file
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `default_mode` | string | `"local"` | Execution mode: `local` or `remote` |
-| `language` | string | `"hybrid"` | Language preference: `hybrid`, `chinese`, `english` |
+| `language` | string | auto | UI language: `en`, `zh`, or `auto` (see below) |
 | `groups` | object | `{}` | Named configuration groups (see below) |
 | `project_registry` | array | `[]` | Maps project paths to groups |
 | `proxy` | array | `[]` | Proxy server configurations |
 | `paths` | object | `{}` | Custom resource paths |
 | `schedules` | array | `[]` | Cron-style scheduled tasks |
 | `notifications` | object | `{}` | Webhook URLs to notify on schedule failure |
+
+### Language
+
+`language` sets the language of user-facing CLI output. Accepted values are
+`en`, `zh`, or `auto` (equivalently: omitted, or the legacy value `hybrid`).
+Locale forms like `zh-CN` and `en_US` are accepted too.
+
+Resolution order, first match wins:
+
+1. The `CA_LANG` environment variable — overrides everything for one
+   invocation, e.g. `CA_LANG=en ca doctor`. The launcher also uses it to pass
+   its choice down to the engine subprocesses, so both halves of a session
+   speak the same language.
+2. `language` in `config.json`.
+3. The OS locale (`LANGUAGE` / `LC_ALL` / `LC_MESSAGES` / `LANG`).
+4. English.
+
+This setting previously existed in `config.json` but nothing read it — output
+was a fixed mix of English and Chinese regardless of what you set.
 
 ## Groups
 

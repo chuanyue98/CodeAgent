@@ -19,6 +19,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
+from core.i18n import t
 from core.logging_config import get_logger
 from core.task_lib import (
     TASK_FILE_SUFFIX,
@@ -698,7 +699,7 @@ def parse_arguments() -> tuple[argparse.Namespace, list[str]]:
         "--yolo",
         action="store_true",
         default=True,
-        help="开启 YOLO 模式 (默认开启)",
+        help=t("cli.help.yolo_default_on"),
     )
     parser.add_argument(
         "--allow-shell-first",
@@ -913,6 +914,10 @@ def main() -> None:
         try:
             # 1. 还原配置到注入前状态
             engine.restore_settings(".codex/config.toml")
+            # 1b. 清理旧版本遗留的 .codex/settings.json —— codex 从不读取它，
+            #     钩子改写 config.toml 后它就成了孤儿，不清会让 ca doctor 一直报
+            #     "stale injections"。
+            engine.restore_settings(".codex/settings.json")
             # 2. 还原全局 config.toml 并清理缓存
             engine.cleanup_plugins_available()
             # 3. 清理插件链接，避免 ~/.codex/plugins/ 下符号链接泄漏

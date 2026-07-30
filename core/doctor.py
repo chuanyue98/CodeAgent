@@ -309,6 +309,114 @@ def check_symlink_capability(section: Section, root: Path) -> None:
             test_target.rmdir()
 
 
+def check_hook_delivery(section: Section, root: Path, cfg: dict) -> None:
+    """Reports which engines will actually run the configured hooks.
+
+    Resolving a hook only means CodeAgent found it — whether the engine then
+    honours it is a separate question, and one that used to be invisible: a
+    hook could be green in "Context Resolution" while silently doing nothing
+    under the engine you were about to launch.
+    """
+    try:
+        engine = _LightweightResolver(root, cfg)
+        hooks, _ = engine.get_hooks_to_inject()
+    except Exception as exc:
+        section.add(WARN, "Hook delivery", f"could not evaluate: {exc}")
+        return
+
+    if not hooks:
+        section.add(INFO, "Hook delivery", "no hooks configured for this group")
+        return
+
+    count = len(hooks)
+    section.add(OK, f"Hook delivery ({count})", "claude, gemini, opencode: supported")
+
+    # codex only loads project-local config -- hooks included -- for projects
+    # marked trusted in the user-level config. Untrusted, it starts normally
+    # and drops them without an error.
+    try:
+        import tomlkit
+
+        project = Path.cwd().resolve()
+        user_config = Path.home() / ".codex" / "config.toml"
+        trusted = False
+        if user_config.exists():
+            doc = tomlkit.parse(user_config.read_text(encoding="utf-8"))
+            for key, value in (doc.get("projects", {}) or {}).items():
+                try:
+                    if Path(key).resolve() == project:
+                        trusted = (
+                            hasattr(value, "get")
+                            and value.get("trust_level") == "trusted"
+                        )
+                        break
+                except OSError:
+                    continue
+
+        if trusted:
+            section.add(OK, "codex hooks", "project is trusted")
+        else:
+            section.add(
+                WARN,
+                "codex hooks",
+                f"'{project}' is not a trusted codex project; hooks are ignored",
+                f'Add [projects."{project}"] with trust_level = "trusted" '
+                f"to {user_config}",
+            )
+    except Exception as exc:
+        section.add(INFO, "codex hooks", f"trust state unknown: {exc}")
+
+
+def check_mcp_drift(section: Section) -> None:
+    """Reports MCP servers configured on some engines but not others.
+
+    Adding a server to one engine and forgetting the rest is the exact drift
+    `ca mcp sync` exists to fix, so surface it here instead of leaving the
+    user to diff four native config files by hand.
+    """
+    try:
+        from core.constants import ENGINES
+        from core.services import mcp_service
+
+        project = str(Path.cwd())
+        by_engine: dict[str, set[str]] = {}
+        for name in sorted(ENGINES):
+            by_engine[name] = {
+                entry["name"] for entry in mcp_service.list_servers(name, project)
+            }
+    except Exception as exc:
+        section.add(WARN, "MCP drift", f"could not evaluate: {exc}")
+        return
+
+    everything = set().union(*by_engine.values()) if by_engine else set()
+    if not everything:
+        section.add(INFO, "MCP servers", "none configured on any engine")
+        return
+
+    shared = set.intersection(*by_engine.values())
+    drifted = sorted(everything - shared)
+    if not drifted:
+        section.add(
+            OK,
+            f"MCP servers ({len(shared)})",
+            "configured identically on all four engines",
+        )
+        return
+
+    detail = ", ".join(
+        f"{name} (on: {', '.join(e for e in sorted(by_engine) if name in by_engine[e])})"
+        for name in drifted[:4]
+    )
+    if len(drifted) > 4:
+        detail += f", +{len(drifted) - 4} more"
+    section.add(
+        WARN,
+        f"MCP drift ({len(drifted)} server(s) not on every engine)",
+        detail,
+        "Run: ca mcp sync <engine>   (add --dry-run to preview)",
+    )
+
+
 def check_stale_injections(section: Section) -> list[Path]:
     """Find stale .ca_injected settings files left by previous crashed sessions."""
     stale: list[Path] = []
@@ -520,8 +628,13 @@ def get_doctor_sections(fix: bool = False, dry_run: bool = False) -> list[Sectio
         check_proxy(s4, cfg)
     check_symlink_capability(s4, root)
 
-    s5 = Section("Session Integrity")
-    stale = check_stale_injections(s5)
+    s5 = Section("Cross-Engine Parity")
+    if cfg is not None:
+        check_hook_delivery(s5, root, cfg)
+    check_mcp_drift(s5)
+
+    s6 = Section("Session Integrity")
+    stale = check_stale_injections(s6)
     if dry_run and stale:
         print("  --dry-run: no changes will be made. Preview of 'ca doctor --fix':")
         preview_stale_injections(stale)
@@ -532,7 +645,7 @@ def get_doctor_sections(fix: bool = False, dry_run: bool = False) -> list[Sectio
         print("  Done. Re-run 'ca doctor' to verify.")
         print()
 
-    return [s1, s2, s3, s4, s5]
+    return [s1, s2, s3, s4, s5, s6]
 
 
 def run_doctor(fix: bool = False, dry_run: bool = False) -> int:

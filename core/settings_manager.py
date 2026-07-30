@@ -48,12 +48,32 @@ class SettingsFile:
             return
         atomic_write(self.path, json.dumps(data, indent=2, ensure_ascii=False))
 
+    def is_injected(self) -> bool:
+        """True if this file is one CodeAgent wrote, not the user's own."""
+        data = self.load()
+        return isinstance(data, dict) and data.get("_ca_injected") is True
+
     def create_backup(self) -> Path | None:
         backup_path = self.path.with_suffix(self.path.suffix + ".bak")
-        if self.path.exists() and not backup_path.exists():
-            shutil.copy2(self.path, backup_path)
-            return backup_path
-        return None
+        if not self.path.exists() or backup_path.exists():
+            return None
+
+        # Never back up a file CodeAgent itself injected. That state is left
+        # behind by a crashed run, and backing it up poisons the backup
+        # permanently: every later restore would put the injection straight
+        # back, so `ca doctor` keeps reporting stale injections and --fix
+        # cannot clear them. Skipping the backup instead lets restore fall
+        # through to deleting the orphan, which self-heals on the next run.
+        if self.is_injected():
+            logger.info(
+                "Not backing up %s: it is a leftover CodeAgent injection, "
+                "not user content",
+                self.path.name,
+            )
+            return None
+
+        shutil.copy2(self.path, backup_path)
+        return backup_path
 
     def restore_backup(self) -> bool:
         backup_path = self.path.with_suffix(self.path.suffix + ".bak")

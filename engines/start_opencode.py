@@ -14,6 +14,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
+from core.i18n import t
 from core.logging_config import get_logger
 from core.task_lib import (
     TASK_FILE_SUFFIX,
@@ -484,17 +485,22 @@ export default async () => {{
 def main():
     engine = OpenCodeEngine()
     parser = argparse.ArgumentParser(description="OpenCode Agent Controller")
-    parser.add_argument("-t", "--task", nargs="?", const="", help="任务模式")
-    parser.add_argument("--list", action="store_true", help="列出所有任务")
     parser.add_argument(
-        "-ni", "--non-interactive", action="store_true", help="非交互模式"
+        "-t", "--task", nargs="?", const="", help=t("cli.help.task_mode")
+    )
+    parser.add_argument("--list", action="store_true", help=t("cli.help.list_tasks"))
+    parser.add_argument(
+        "-ni",
+        "--non-interactive",
+        action="store_true",
+        help=t("cli.help.non_interactive"),
     )
     parser.add_argument(
         "-y",
         "--yolo",
         action="store_true",
         default=True,
-        help="开启 YOLO 模式 (默认开启)",
+        help=t("cli.help.yolo_default_on"),
     )
     args, unknown = parser.parse_known_args()
 

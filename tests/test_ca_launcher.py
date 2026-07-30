@@ -239,7 +239,12 @@ def test_main_default_engine_with_proxy(monkeypatch, capsys):
             assert kwargs["env"] is not None
             assert "HTTP_PROXY" in kwargs["env"]
             captured = capsys.readouterr()
-            assert "🌐 代理已启用" in captured.out
+            assert (
+                ca_launcher.t(
+                    "proxy.enabled", scheme="http", host="127.0.0.1", port=1087
+                )
+                in captured.out
+            )
 
 
 def test_proxy_word_after_prompt_is_not_treated_as_a_flag(monkeypatch):
@@ -256,7 +261,8 @@ def test_proxy_word_after_prompt_is_not_treated_as_a_flag(monkeypatch):
         ca_launcher.main()
         args, kwargs = mock_run.call_args
         assert "start_claude_code.py" in args[0][1]
-        assert kwargs["env"] is None
+        assert "HTTP_PROXY" not in kwargs["env"]
+        assert kwargs["env"][ca_launcher.CA_LANG_ENV] in ("en", "zh")
         assert args[0][2:] == ["do", "something", "--proxy", "settings", "-y"]
 
 
@@ -269,7 +275,7 @@ def test_main_passes_dash_p_through_to_engine(monkeypatch):
         assert "start_claude_code.py" in cmd[1]
         assert "-p" in cmd
         assert "hello" in cmd
-        assert kwargs["env"] is None
+        assert "HTTP_PROXY" not in kwargs["env"]
 
 
 def test_prompt_starting_with_a_reserved_word_still_launches_the_engine(monkeypatch):
@@ -800,3 +806,121 @@ def test_mcp_list_covers_all_engines_by_default(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     for engine in ("claude", "codex", "gemini", "opencode"):
         assert engine in out
+
+
+def test_mcp_add_passes_command_and_env(tmp_path, monkeypatch, capsys):
+    _mcp_config(tmp_path)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "ca_launcher.py",
+            "mcp",
+            "add",
+            "claude",
+            "fs",
+            "--env",
+            "LOG=debug",
+            "--",
+            "npx",
+            "-y",
+            "server-fs",
+        ],
+    )
+    fake = MagicMock()
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.services.mcp_service.add_server", fake),
+    ):
+        ca_launcher.main()
+
+    kwargs = fake.call_args.kwargs
+    assert kwargs["command"] == ["npx", "-y", "server-fs"]
+    assert kwargs["env"] == {"LOG": "debug"}
+    assert kwargs["url"] is None
+    out = capsys.readouterr().out
+    assert "Added 'fs' to claude" in out
+    # The point of the whole feature: nudge toward propagating it.
+    assert "ca mcp sync claude" in out
+
+
+def test_mcp_add_supports_a_url_server(tmp_path, monkeypatch):
+    _mcp_config(tmp_path)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["ca_launcher.py", "mcp", "add", "codex", "api", "--url", "https://x/mcp"],
+    )
+    fake = MagicMock()
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.services.mcp_service.add_server", fake),
+    ):
+        ca_launcher.main()
+
+    assert fake.call_args.kwargs["url"] == "https://x/mcp"
+    assert fake.call_args.kwargs["command"] is None
+
+
+def test_mcp_add_rejects_malformed_env(tmp_path, monkeypatch, capsys):
+    _mcp_config(tmp_path)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["ca_launcher.py", "mcp", "add", "claude", "fs", "--env", "OOPS", "--", "x"],
+    )
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.services.mcp_service.add_server") as fake,
+        pytest.raises(SystemExit) as exc,
+    ):
+        ca_launcher.main()
+
+    assert exc.value.code == 1
+    assert "KEY=VALUE" in capsys.readouterr().out
+    fake.assert_not_called()
+
+
+def test_mcp_add_surfaces_a_cli_failure(tmp_path, monkeypatch, capsys):
+    _mcp_config(tmp_path)
+    monkeypatch.setattr(
+        "sys.argv", ["ca_launcher.py", "mcp", "add", "claude", "fs", "--", "x"]
+    )
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch(
+            "core.services.mcp_service.add_server",
+            side_effect=RuntimeError("'claude' CLI not found on PATH"),
+        ),
+        pytest.raises(SystemExit) as exc,
+    ):
+        ca_launcher.main()
+
+    assert exc.value.code == 1
+    assert "not found on PATH" in capsys.readouterr().out
+
+
+def test_mcp_remove_reports_a_missing_server(tmp_path, monkeypatch, capsys):
+    _mcp_config(tmp_path)
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "mcp", "remove", "gemini", "no"])
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.services.mcp_service.remove_server", side_effect=KeyError("no")),
+        pytest.raises(SystemExit) as exc,
+    ):
+        ca_launcher.main()
+
+    assert exc.value.code == 1
+    assert "No such MCP server in gemini" in capsys.readouterr().out
+
+
+def test_mcp_remove_succeeds(tmp_path, monkeypatch, capsys):
+    _mcp_config(tmp_path)
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "mcp", "remove", "gemini", "fs"])
+    fake = MagicMock()
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.services.mcp_service.remove_server", fake),
+    ):
+        ca_launcher.main()
+
+    assert fake.call_args.args[0] == "gemini"
+    assert fake.call_args.args[2] == "fs"
+    assert "Removed 'fs' from gemini" in capsys.readouterr().out
