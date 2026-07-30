@@ -28,11 +28,16 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --all-groups
 
+      # Lint the whole repo rather than a hand-maintained path list. The list
+      # left skills/ (and hooks/, plugins/) unchecked, and since pre-commit
+      # only sees changed files, 7 violations sat there untouched through a
+      # repo-wide lint normalization. ruff honours .gitignore, so vendored
+      # trees like node_modules stay out on their own.
       - name: Lint (ruff)
-        run: uv run ruff check ca_launcher.py core engines tests setup.py
+        run: uv run ruff check .
 
       - name: Format check (ruff)
-        run: uv run ruff format --check ca_launcher.py core engines tests setup.py
+        run: uv run ruff format --check .
 
       - name: Type check (mypy)
         run: uv run mypy core engines ca_launcher.py
