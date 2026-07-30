@@ -13,21 +13,39 @@ logger = get_logger(__name__)
 
 
 class SettingsFile:
-    """Reads and writes a JSON settings file with atomic backup."""
+    """Reads and writes a settings file with atomic backup.
+
+    Defaults to JSON, but switches to TOML for ``.toml`` paths — codex keeps
+    its hook configuration in ``config.toml`` rather than a JSON settings
+    file, and writing JSON there produced a file codex never read.
+    """
 
     def __init__(self, path: Path):
         self.path = path
+        self.is_toml = path.suffix.lower() == ".toml"
 
     def load(self) -> Any:
         if not self.path.exists():
             return {}
         try:
-            with open(self.path, encoding="utf-8") as f:
-                return json.load(f)
+            text = self.path.read_text(encoding="utf-8")
+        except Exception:
+            return {}
+        try:
+            if self.is_toml:
+                import tomlkit
+
+                return tomlkit.parse(text)
+            return json.loads(text)
         except Exception:
             return {}
 
     def save(self, data: Any):
+        if self.is_toml:
+            import tomlkit
+
+            atomic_write(self.path, tomlkit.dumps(data))
+            return
         atomic_write(self.path, json.dumps(data, indent=2, ensure_ascii=False))
 
     def create_backup(self) -> Path | None:

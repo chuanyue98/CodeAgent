@@ -720,3 +720,83 @@ def test_ensure_project_registered_silent_when_already_registered(
         ca_launcher.main()
 
     assert capsys.readouterr().err == ""
+
+
+def _mcp_config(tmp_path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({"groups": {}, "project_registry": []}))
+    return config_path
+
+
+def test_mcp_sync_reports_each_engine_result(tmp_path, monkeypatch, capsys):
+    _mcp_config(tmp_path)
+    monkeypatch.setattr(
+        "sys.argv", ["ca_launcher.py", "mcp", "sync", "claude", "--to", "gemini"]
+    )
+    fake = MagicMock(
+        return_value=[
+            {"engine": "gemini", "name": "srv1", "action": "added", "detail": "ok"}
+        ]
+    )
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.services.mcp_service.sync_servers", fake),
+    ):
+        ca_launcher.main()
+
+    out = capsys.readouterr().out
+    assert "gemini" in out and "srv1" in out
+    assert fake.call_args.kwargs["targets"] == ["gemini"]
+    assert fake.call_args.kwargs["names"] is None
+
+
+def test_mcp_sync_exits_nonzero_when_an_engine_fails(tmp_path, monkeypatch, capsys):
+    _mcp_config(tmp_path)
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "mcp", "sync", "claude"])
+    fake = MagicMock(
+        return_value=[
+            {"engine": "codex", "name": "srv1", "action": "failed", "detail": "boom"}
+        ]
+    )
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.services.mcp_service.sync_servers", fake),
+        pytest.raises(SystemExit) as exc,
+    ):
+        ca_launcher.main()
+
+    assert exc.value.code == 1
+    assert "1 of 1 operations failed" in capsys.readouterr().out
+
+
+def test_mcp_sync_rejects_an_invalid_request(tmp_path, monkeypatch, capsys):
+    _mcp_config(tmp_path)
+    monkeypatch.setattr(
+        "sys.argv", ["ca_launcher.py", "mcp", "sync", "claude", "--to", "claude"]
+    )
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch(
+            "core.services.mcp_service.sync_servers",
+            side_effect=ValueError("Cannot sync 'claude' onto itself"),
+        ),
+        pytest.raises(SystemExit) as exc,
+    ):
+        ca_launcher.main()
+
+    assert exc.value.code == 1
+    assert "onto itself" in capsys.readouterr().out
+
+
+def test_mcp_list_covers_all_engines_by_default(tmp_path, monkeypatch, capsys):
+    _mcp_config(tmp_path)
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "mcp", "list"])
+    with (
+        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.services.mcp_service.list_servers", return_value=[]),
+    ):
+        ca_launcher.main()
+
+    out = capsys.readouterr().out
+    for engine in ("claude", "codex", "gemini", "opencode"):
+        assert engine in out

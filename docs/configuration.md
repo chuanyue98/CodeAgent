@@ -59,6 +59,66 @@ Each group defines which skills, prompts, hooks, and plugins to inject:
 | `hooks` | array | Hook directories to register |
 | `plugins` | array | Plugin directories to activate |
 
+#### Hook support by engine
+
+Hooks are declared once per group, but not every engine can run them. The
+canonical `before_tool` / `after_tool` events map to each engine's own names at
+launch:
+
+| Engine | Target file | Events | Status |
+|---|---|---|---|
+| claude | `.claude/settings.json` | `PreToolUse` / `PostToolUse` | Supported |
+| gemini | `.gemini/settings.json` | `BeforeTool` / `AfterTool` | Supported |
+| codex | `.codex/config.toml` | `PreToolUse` / `PostToolUse` | Supported — requires project trust (see below) |
+| opencode | `.opencode/plugins/ca_hooks_bridge.js` | `tool.execute.before` / `tool.execute.after` | Supported via a generated bridge plugin |
+
+Codex only loads a project's `.codex/config.toml` — hooks included — if the
+project is marked trusted in the user-level `~/.codex/config.toml`. Without it,
+codex starts normally and silently ignores the hooks, so CodeAgent prints a
+warning with the entry to add:
+
+```toml
+[projects."E:\\path\\to\\project"]
+trust_level = "trusted"
+```
+
+See [Codex Hooks Spike Results](codex-hooks-spike-results.md) for how this was
+verified.
+
+#### How the OpenCode bridge works
+
+OpenCode has no shell-command hook mechanism — its hooks are JavaScript
+functions returned by a plugin module. CodeAgent therefore generates
+`.opencode/plugins/ca_hooks_bridge.js` at launch and removes it on exit. The
+bridge spawns each hook with the same Claude-shaped JSON payload the other
+engines send, so **an existing hook runs unmodified**:
+
+```json
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "opencode_tool_name": "bash",
+  "tool_input": { "command": "git commit -m ..." },
+  "session_id": "..."
+}
+```
+
+Two details worth knowing:
+
+- **Tool names are normalized.** OpenCode's shell tool is `bash`, but the
+  shipped hooks match Claude's `Bash`, so the bridge maps known ids across and
+  passes unknown ones through untouched. The raw id is always available as
+  `opencode_tool_name`.
+- **A denial surfaces as a tool error.** `tool.execute.before` returns void, so
+  throwing is the only way to stop a call. The hook's
+  `permissionDecisionReason` (or its stderr, for the exit-code-2 convention)
+  becomes the error message the model sees. For `after_tool` the tool has
+  already run, so feedback is appended to the tool output instead of discarding
+  a valid result.
+
+A hook that cannot start, or that exceeds the 600s timeout, is logged to stderr
+and **fails open** — a broken hook will not brick the session.
+
 ### Default Groups
 
 The project ships with four groups:

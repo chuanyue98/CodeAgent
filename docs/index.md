@@ -58,5 +58,6 @@ CodeAgent is a CLI-first AI orchestration framework that injects your private en
 
 - [Multi-Agent Orchestration Design](multi-agent-orchestration-design.md) — Crew (DAG/Wave) coordination for multi-agent workflows
 - [MCP CLI Spike Results](mcp-cli-spike-results.md) — Model Context Protocol integration research
+- [Codex Hooks Spike Results](codex-hooks-spike-results.md) — How codex actually loads hooks (TOML shape, project trust)
 - [Hermes Web UI Reference](hermes-web-ui-reference.md) — Web UI design reference
 - [ChatPage CLI Spike Results](chatpage-cli-spike-results.md) — CLI chat page design research

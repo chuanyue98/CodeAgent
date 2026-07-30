@@ -14,6 +14,7 @@ class _FakeMcpService:
     def __init__(self):
         self.added: list[dict] = []
         self.removed: list[dict] = []
+        self.synced: list[dict] = []
         self._servers = [
             {
                 "name": "srv1",
@@ -62,6 +63,36 @@ class _FakeMcpService:
         self.removed.append(
             {"engine": engine, "project_path": project_path, "name": name}
         )
+
+    def sync_servers(
+        self,
+        source_engine,
+        project_path,
+        targets=None,
+        names=None,
+        overwrite=False,
+        dry_run=False,
+    ):
+        if source_engine == "shell":
+            raise ValueError("Invalid engine: 'shell'")
+        self.synced.append(
+            {
+                "source_engine": source_engine,
+                "project_path": project_path,
+                "targets": targets,
+                "names": names,
+                "overwrite": overwrite,
+                "dry_run": dry_run,
+            }
+        )
+        return [
+            {
+                "engine": "gemini",
+                "name": "srv1",
+                "action": "added",
+                "detail": "ok",
+            }
+        ]
 
 
 @pytest.fixture
@@ -162,3 +193,60 @@ async def test_remove_mcp_server_missing_returns_404(fake_service):
         )
 
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_sync_mcp_servers(fake_service):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.post(
+            "/api/mcp/sync",
+            json={
+                "project": "/tmp/proj",
+                "source": "claude",
+                "targets": ["gemini"],
+                "dryRun": True,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"engine": "gemini", "name": "srv1", "action": "added", "detail": "ok"}
+    ]
+    assert fake_service.synced == [
+        {
+            "source_engine": "claude",
+            "project_path": "/tmp/proj",
+            "targets": ["gemini"],
+            "names": None,
+            "overwrite": False,
+            "dry_run": True,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sync_route_is_not_shadowed_by_the_engine_route(fake_service):
+    """``/sync`` must match the literal path, not POST ``/{engine}``."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.post(
+            "/api/mcp/sync", json={"project": "/tmp/proj", "source": "claude"}
+        )
+
+    assert response.status_code == 200
+    assert fake_service.synced and not fake_service.added
+
+
+@pytest.mark.asyncio
+async def test_sync_mcp_servers_invalid_engine_returns_400(fake_service):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.post(
+            "/api/mcp/sync", json={"project": "/tmp/proj", "source": "shell"}
+        )
+
+    assert response.status_code == 400
