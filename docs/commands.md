@@ -150,6 +150,44 @@ ca resources list skills --group work   # Check enabled state against a specific
 Each row shows the resource id and description, plus a marker for whether it is enabled
 (`--group`, default `codeagent`) or, for hooks, whether it is currently active.
 
+### `mcp`
+
+Inspect MCP servers across engines, and copy them from one engine to the others so a
+server only has to be configured once:
+
+```bash
+ca mcp list                 # Every engine's configured servers
+ca mcp list claude          # Just one engine
+
+ca mcp sync claude                          # claude → the other three
+ca mcp sync claude --to gemini --to codex   # Only these targets
+ca mcp sync claude --name filesystem        # Only this server
+ca mcp sync claude --dry-run                # Preview without writing
+ca mcp sync claude --overwrite              # Replace same-named servers instead of skipping
+```
+
+Sync replays each definition through the target engine's own `mcp add` path, so every
+engine keeps writing its own native config format — no config file is ever copied across.
+A server already present in a target is skipped unless `--overwrite` is passed.
+
+Two things to know about scope, both confirmed live rather than assumed from `--help`:
+
+- **claude and gemini are per-project** (`.mcp.json`, `.gemini/settings.json`), so they
+  read and write relative to the current directory.
+- **codex and opencode are global** (`~/.codex/config.toml`,
+  `~/.config/opencode/opencode.jsonc` or `.json`) — syncing *into* them affects every
+  project on the machine, not just this one.
+
+If your `opencode.jsonc` contains comments, removing a server rewrites the file as plain
+JSON and would drop them, so that one operation refuses and asks you to edit by hand.
+Reads and syncs are unaffected.
+
+One engine failing (its CLI missing from `PATH`, say) does not abort the others; each
+result is reported per engine and the command exits non-zero if anything failed.
+
+Adding and removing individual servers is currently Web UI only (`POST`/`DELETE
+/api/mcp/{engine}`); the CLI covers listing and syncing.
+
 ### `ps` / `stop`
 
 Manage background task runs (started via the CLI, Web UI, or scheduler) from the command line:
@@ -202,6 +240,9 @@ ca history list --engine gemini
 
 # Convert a Claude session for OpenCode
 ca history convert claude <session_id> opencode
+
+# Copy Claude's MCP servers to every other engine
+ca mcp sync claude
 
 # Check environment health
 ca doctor --fix

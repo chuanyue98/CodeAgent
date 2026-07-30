@@ -56,8 +56,49 @@ class CodexEngine(BaseEngine):
 
     MARKETPLACE_NAME = "codeagent-local"
 
+    # Confirmed live against codex-cli 0.142.5 via the app-server's
+    # ``hooks/list`` method: codex uses the same PascalCase event names and the
+    # same matcher-group structure as Claude, just expressed in TOML.
+    EVENT_MAP = {
+        "before_tool": "PreToolUse",
+        "after_tool": "PostToolUse",
+    }
+
     def __init__(self) -> None:
         super().__init__("Codex", "codex-default")
+
+    def warn_if_project_untrusted(self) -> None:
+        """Warns when codex will silently ignore the hooks just injected.
+
+        Project-local ``.codex/config.toml`` — hooks included — is only loaded
+        for projects marked trusted in the user-level ``~/.codex/config.toml``.
+        Without that entry codex starts normally and drops the hooks without
+        any error, so surface it here rather than let it fail silently.
+        """
+        project = Path.cwd().resolve()
+        try:
+            config = self._load_config(self._get_user_config_path())
+            projects = config.get("projects", {}) or {}
+            entry = None
+            for key, value in projects.items():
+                try:
+                    if Path(key).resolve() == project:
+                        entry = value
+                        break
+                except OSError:
+                    continue
+            trust = (entry or {}).get("trust_level") if entry else None
+        except Exception:
+            return
+
+        if trust != "trusted":
+            print(
+                f"⚠️  Codex will ignore the injected hooks: '{project}' is not a "
+                "trusted project.\n"
+                f"   Add this to {self._get_user_config_path()} to enable them:\n"
+                f'   [projects."{project}"]\n'
+                '   trust_level = "trusted"'
+            )
 
     def build_command(self, message: str, non_interactive: bool) -> list[str]:
         if non_interactive:
@@ -804,7 +845,11 @@ def main() -> None:
 
         # 注入动态钩子
         resolved_hooks = engine.get_hooks_to_inject()
-        engine.inject_hooks_to_settings(".codex/settings.json", resolved_hooks)
+        # Codex reads hooks from .codex/config.toml (TOML, Claude-shaped
+        # matcher groups); the old .codex/settings.json was never read by it.
+        engine.inject_hooks_to_settings(".codex/config.toml", resolved_hooks)
+        if resolved_hooks:
+            engine.warn_if_project_untrusted()
 
         # Codex 读取用户级插件配置与安装缓存，而不是项目内 .codex/config.toml
         engine.ensure_plugins_available()
@@ -867,7 +912,7 @@ def main() -> None:
     finally:
         try:
             # 1. 还原配置到注入前状态
-            engine.restore_settings(".codex/settings.json")
+            engine.restore_settings(".codex/config.toml")
             # 2. 还原全局 config.toml 并清理缓存
             engine.cleanup_plugins_available()
             # 3. 清理插件链接，避免 ~/.codex/plugins/ 下符号链接泄漏

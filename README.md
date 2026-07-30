@@ -13,6 +13,7 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 - **Plugin Architecture** — Bundle skills, prompts, and hooks into domain-specific capability packages
 - **Analytics Dashboard** — Built-in web UI for monitoring usage, costs, and session history across all engines
 - **Session Management** — List, view, and convert sessions between different engine formats
+- **MCP Sync** — Configure an MCP server once, then `ca mcp sync <engine>` copies it into every other engine's native config
 - **Background Task Management** — List (`ca ps`) and stop (`ca stop`) background task runs, or fan a task out across every registered project at once with `ca batch-run`
 - **Scheduled Tasks** — Cron-like scheduler for automated recurring execution
 - **Task Authoring** — Interview-style workflow for creating new task templates

@@ -78,3 +78,88 @@ def test_inject_hooks_to_settings_update_existing(tmp_path, monkeypatch):
 
     new_hook = next(h for h in event_hooks if h["name"] == "new-hook")
     assert new_hook["command"] == "brand new"
+
+
+def test_inject_hooks_writes_toml_for_codex_config(tmp_path, monkeypatch):
+    """codex reads hooks from .codex/config.toml, so a .toml target must be
+    written as TOML rather than JSON — the shape below is the one codex-cli
+    0.142.5 was confirmed to parse via its app-server ``hooks/list`` method."""
+    import tomlkit
+
+    monkeypatch.chdir(tmp_path)
+    engine = BaseEngine("Dummy", "dummy-model")
+    engine.settings_manager.event_map = {
+        "before_tool": "PreToolUse",
+        "after_tool": "PostToolUse",
+    }
+
+    engine.inject_hooks_to_settings(
+        ".codex/config.toml",
+        [
+            {"name": "branch-protection", "event": "before_tool", "command": "run me"},
+            {"name": "ci-monitor", "event": "after_tool", "command": "run me too"},
+        ],
+    )
+
+    raw = (tmp_path / ".codex" / "config.toml").read_text(encoding="utf-8")
+    assert "[[hooks.PreToolUse]]" in raw
+    assert "[[hooks.PreToolUse.hooks]]" in raw
+
+    data = tomlkit.parse(raw)
+    pre = data["hooks"]["PreToolUse"]
+    assert pre[0]["matcher"] == "*"
+    assert pre[0]["hooks"][0]["command"] == "run me"
+    assert pre[0]["hooks"][0]["type"] == "command"
+    assert data["hooks"]["PostToolUse"][0]["hooks"][0]["command"] == "run me too"
+
+
+def test_inject_hooks_preserves_existing_toml_settings(tmp_path, monkeypatch):
+    """A project's own .codex/config.toml keys must survive hook injection."""
+    import tomlkit
+
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text('model = "keep-me"\n', encoding="utf-8")
+
+    engine = BaseEngine("Dummy", "dummy-model")
+    engine.settings_manager.event_map = {"before_tool": "PreToolUse"}
+    engine.inject_hooks_to_settings(
+        ".codex/config.toml",
+        [{"name": "h", "event": "before_tool", "command": "c"}],
+    )
+
+    data = tomlkit.parse(config_path.read_text(encoding="utf-8"))
+    assert data["model"] == "keep-me"
+    assert data["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == "c"
+
+
+def test_restore_settings_recovers_the_original_toml(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    original = 'model = "keep-me"\n'
+    config_path.write_text(original, encoding="utf-8")
+
+    engine = BaseEngine("Dummy", "dummy-model")
+    engine.settings_manager.event_map = {"before_tool": "PreToolUse"}
+    engine.inject_hooks_to_settings(
+        ".codex/config.toml", [{"name": "h", "event": "before_tool", "command": "c"}]
+    )
+    engine.restore_settings(".codex/config.toml")
+
+    assert config_path.read_text(encoding="utf-8") == original
+
+
+def test_restore_settings_removes_a_toml_file_codeagent_created(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    engine = BaseEngine("Dummy", "dummy-model")
+    engine.settings_manager.event_map = {"before_tool": "PreToolUse"}
+    engine.inject_hooks_to_settings(
+        ".codex/config.toml", [{"name": "h", "event": "before_tool", "command": "c"}]
+    )
+    assert (tmp_path / ".codex" / "config.toml").exists()
+
+    engine.restore_settings(".codex/config.toml")
+
+    assert not (tmp_path / ".codex" / "config.toml").exists()

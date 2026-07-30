@@ -12,6 +12,7 @@ from pathlib import Path
 import click
 
 from core.console import configure_console_encoding
+from core.constants import ENGINES
 from core.logging_config import configure_root_logging
 from core.resource_locator import (
     CODE_ROOT,
@@ -1183,6 +1184,116 @@ def resources_list(ctx, kind, group):
         )
         desc = f" — {description}" if description else ""
         click.echo(f"  {mark} {resource_id}{desc}")
+
+
+_ENGINE_CHOICE = click.Choice(sorted(ENGINES))
+
+
+@cli.group(name="mcp", invoke_without_command=True)
+@click.pass_context
+def mcp(ctx):
+    """Inspect and sync MCP servers across engines."""
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+
+
+@mcp.command(name="list")
+@click.argument("engine", type=_ENGINE_CHOICE, required=False)
+@click.pass_context
+def mcp_list(ctx, engine):
+    """List configured MCP servers for ENGINE (default: all four)."""
+    _ensure_project_on_path(ctx.obj["root"])
+    from core.services import mcp_service
+
+    project_path = str(Path.cwd())
+    engines = [engine] if engine else sorted(ENGINES)
+
+    for name in engines:
+        try:
+            servers = mcp_service.list_servers(name, project_path)
+        except Exception as exc:
+            click.echo(f"{click.style(name, bold=True)}: ⚠️  {exc}")
+            continue
+
+        scope = "project" if name in ("claude", "gemini") else "global"
+        header = f"{name} ({scope})"
+        if not servers:
+            click.echo(f"{click.style(header, bold=True)}: (none)")
+            continue
+        click.echo(click.style(f"{header} — {len(servers)}", bold=True))
+        for server in servers:
+            target = server["url"] or " ".join(server["command"] or [])
+            click.echo(f"  ● {server['name']}  [{server['transport']}]  {target}")
+
+
+@mcp.command(name="sync")
+@click.argument("source", type=_ENGINE_CHOICE)
+@click.option(
+    "--to",
+    "targets",
+    multiple=True,
+    type=_ENGINE_CHOICE,
+    help="Target engine; repeatable. Defaults to every engine but SOURCE.",
+)
+@click.option(
+    "--name",
+    "names",
+    multiple=True,
+    help="Only sync this server; repeatable. Defaults to all of SOURCE's.",
+)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    help="Replace same-named servers in the targets instead of skipping them.",
+)
+@click.option(
+    "--dry-run", is_flag=True, help="Show what would change without writing anything."
+)
+@click.pass_context
+def mcp_sync(ctx, source, targets, names, overwrite, dry_run):
+    """Copy SOURCE's MCP servers into the other engines' native configs.
+
+    codex and opencode store MCP servers globally rather than per-project, so
+    syncing into them affects every project on this machine.
+    """
+    _ensure_project_on_path(ctx.obj["root"])
+    from core.services import mcp_service
+
+    try:
+        results = mcp_service.sync_servers(
+            source,
+            str(Path.cwd()),
+            targets=list(targets) or None,
+            names=list(names) or None,
+            overwrite=overwrite,
+            dry_run=dry_run,
+        )
+    except ValueError as exc:
+        print(f"❌ {exc}")
+        sys.exit(1)
+
+    if not results:
+        print(f"Nothing to sync — {source} has no MCP servers configured.")
+        return
+
+    marks = {
+        "added": click.style("+", fg="green"),
+        "replaced": click.style("~", fg="yellow"),
+        "skipped": click.style("=", fg="bright_black"),
+        "failed": click.style("!", fg="red"),
+    }
+    if dry_run:
+        click.echo(click.style("Dry run — nothing was written.", bold=True))
+    for engine_name in dict.fromkeys(item["engine"] for item in results):
+        click.echo(click.style(engine_name, bold=True))
+        for item in (r for r in results if r["engine"] == engine_name):
+            mark = marks.get(item["action"], "?")
+            click.echo(f"  {mark} {item['name']} — {item['detail']}")
+
+    failed = sum(1 for item in results if item["action"] == "failed")
+    if failed:
+        print(f"\n⚠️  {failed} of {len(results)} operations failed.")
+        sys.exit(1)
 
 
 def main():
