@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from core import doctor
 
 
@@ -126,3 +128,131 @@ def test_lightweight_resolver_uses_config_manager(tmp_path, monkeypatch):
     assert resolver.get_current_project_group() == "codeagent"
     assert resolver._get_skill_search_roots() == [(tmp_path / "skills").resolve()]
     assert resolver.get_skills_to_mount()[0] == []
+
+
+# --- cross-engine parity checks -----------------------------------------
+
+
+def _mcp_servers(mapping):
+    """Builds a mcp_service.list_servers stand-in from {engine: [names]}."""
+
+    def list_servers(engine, project_path):
+        return [{"name": n} for n in mapping.get(engine, [])]
+
+    return list_servers
+
+
+def test_mcp_drift_reports_nothing_when_no_servers_anywhere(monkeypatch):
+    from core.services import mcp_service
+
+    monkeypatch.setattr(mcp_service, "list_servers", _mcp_servers({}))
+    section = doctor.Section("Parity")
+
+    doctor.check_mcp_drift(section)
+
+    assert section.checks[0].status == doctor.INFO
+    assert "none configured" in section.checks[0].detail
+
+
+def test_mcp_drift_is_ok_when_all_engines_match(monkeypatch):
+    from core.services import mcp_service
+
+    monkeypatch.setattr(
+        mcp_service,
+        "list_servers",
+        _mcp_servers(dict.fromkeys(("claude", "codex", "gemini", "opencode"), ["fs"])),
+    )
+    section = doctor.Section("Parity")
+
+    doctor.check_mcp_drift(section)
+
+    assert section.checks[0].status == doctor.OK
+
+
+def test_mcp_drift_names_the_engines_a_server_is_on(monkeypatch):
+    from core.services import mcp_service
+
+    monkeypatch.setattr(
+        mcp_service,
+        "list_servers",
+        _mcp_servers({"claude": ["fs"], "codex": [], "gemini": [], "opencode": []}),
+    )
+    section = doctor.Section("Parity")
+
+    doctor.check_mcp_drift(section)
+
+    check = section.checks[0]
+    assert check.status == doctor.WARN
+    assert "fs" in check.detail
+    assert "claude" in check.detail
+    assert "ca mcp sync" in check.fix_hint
+
+
+def test_mcp_drift_survives_an_unreadable_engine_config(monkeypatch):
+    from core.services import mcp_service
+
+    def boom(engine, project_path):
+        raise RuntimeError("nope")
+
+    monkeypatch.setattr(mcp_service, "list_servers", boom)
+    section = doctor.Section("Parity")
+
+    doctor.check_mcp_drift(section)
+
+    assert section.checks[0].status == doctor.WARN
+    assert "could not evaluate" in section.checks[0].detail
+
+
+def test_hook_delivery_is_quiet_without_hooks(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        doctor._LightweightResolver, "get_hooks_to_inject", lambda self: ([], [])
+    )
+    section = doctor.Section("Parity")
+
+    doctor.check_hook_delivery(section, tmp_path, {"groups": {}})
+
+    assert section.checks[0].status == doctor.INFO
+    assert "no hooks configured" in section.checks[0].detail
+
+
+def test_hook_delivery_warns_when_codex_project_is_untrusted(tmp_path, monkeypatch):
+    """A hook can resolve fine yet be silently ignored by codex."""
+    monkeypatch.setattr(
+        doctor._LightweightResolver,
+        "get_hooks_to_inject",
+        lambda self: ([{"name": "h", "event": "before_tool", "command": "c"}], []),
+    )
+    home = tmp_path / "home"
+    (home / ".codex").mkdir(parents=True)
+    (home / ".codex" / "config.toml").write_text('model = "x"\n', encoding="utf-8")
+    monkeypatch.setattr(doctor.Path, "home", lambda: home)
+    monkeypatch.chdir(tmp_path)
+    section = doctor.Section("Parity")
+
+    doctor.check_hook_delivery(section, tmp_path, {"groups": {}})
+
+    codex_check = next(c for c in section.checks if "codex" in c.label)
+    assert codex_check.status == doctor.WARN
+    assert "trust_level" in codex_check.fix_hint
+
+
+def test_hook_delivery_is_ok_when_codex_project_is_trusted(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        doctor._LightweightResolver,
+        "get_hooks_to_inject",
+        lambda self: ([{"name": "h", "event": "before_tool", "command": "c"}], []),
+    )
+    monkeypatch.chdir(tmp_path)
+    project = str(Path(tmp_path).resolve()).replace("\\", "\\\\")
+    home = tmp_path / "home"
+    (home / ".codex").mkdir(parents=True)
+    (home / ".codex" / "config.toml").write_text(
+        f'[projects."{project}"]\ntrust_level = "trusted"\n', encoding="utf-8"
+    )
+    monkeypatch.setattr(doctor.Path, "home", lambda: home)
+    section = doctor.Section("Parity")
+
+    doctor.check_hook_delivery(section, tmp_path, {"groups": {}})
+
+    codex_check = next(c for c in section.checks if "codex" in c.label)
+    assert codex_check.status == doctor.OK

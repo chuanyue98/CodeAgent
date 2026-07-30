@@ -13,6 +13,8 @@ import click
 
 from core.console import configure_console_encoding
 from core.constants import ENGINES
+from core.i18n import ENV_VAR as CA_LANG_ENV
+from core.i18n import resolve_language, t
 from core.logging_config import configure_root_logging
 from core.resource_locator import (
     CODE_ROOT,
@@ -62,7 +64,8 @@ def load_config():
     config_path = get_default_config_path(root)
     default_config = {
         "default_mode": "local",
-        "language": "hybrid",
+        # "auto" defers to the OS locale; "en"/"zh" pin it. See core/i18n.py.
+        "language": "auto",
         "proxy": {"host": "127.0.0.1", "port": 1087},
     }
     if config_path.exists():
@@ -493,20 +496,16 @@ def _ensure_project_registered(root: Path, config: dict) -> None:
         return
 
     if not sys.stdin.isatty() or not sys.stdout.isatty():
-        print(
-            f"ℹ️  {cwd} 尚未注册到任何资源组，本次将使用默认设置运行。\n"
-            f"   如需注册: ca project add {cwd} --group <group-name>",
-            file=sys.stderr,
-        )
+        print(t("project.unregistered_hint", cwd=cwd), file=sys.stderr)
         return
 
     groups = list(config.get("groups", {}).keys()) or ["common"]
-    print(f"\n📌 当前目录尚未注册到任何资源组: {cwd}")
-    print("请选择要绑定的资源组 (以后从这个目录启动会自动加载对应技能集):")
+    print(t("project.unregistered_title", cwd=cwd))
+    print(t("project.pick_group"))
     for i, g in enumerate(groups, 1):
         print(f"  {i}. {g}")
-    print("  n. 新建资源组")
-    print("  直接回车. 跳过 (本次使用默认组, 不写入配置)")
+    print(t("project.new_group_option"))
+    print(t("project.skip_option"))
 
     choice = input("> ").strip().lower()
     if not choice:
@@ -514,9 +513,11 @@ def _ensure_project_registered(root: Path, config: dict) -> None:
 
     is_new_group = False
     if choice == "n":
-        new_name = input("新组名称: ").strip().lower().replace(" ", "-")
+        new_name = (
+            input(t("project.new_group_prompt")).strip().lower().replace(" ", "-")
+        )
         if not new_name:
-            print("⚠️ 未输入组名, 跳过注册。")
+            print(t("project.no_group_name"))
             return
         chosen_group = new_name
         is_new_group = new_name not in config.get("groups", {})
@@ -527,7 +528,7 @@ def _ensure_project_registered(root: Path, config: dict) -> None:
                 raise IndexError
             chosen_group = groups[idx]
         except (ValueError, IndexError):
-            print("⚠️ 无效输入, 跳过注册。")
+            print(t("project.invalid_choice"))
             return
 
     config_path = get_default_config_path(root)
@@ -550,7 +551,7 @@ def _ensure_project_registered(root: Path, config: dict) -> None:
     persisted, _ = service.get_config()
     config["project_registry"] = persisted.get("project_registry", [])
     config["groups"] = persisted.get("groups", {})
-    print(f"✅ 已将当前目录注册到组 [{chosen_group}]\n")
+    print(t("project.registered", group=chosen_group))
 
 
 def _launch_engine(ctx, args):
@@ -639,7 +640,20 @@ def cli(ctx, proxy, yolo):
     child_env = None
     if proxy:
         child_env, proxy_host, proxy_port, proxy_scheme = build_proxy_env(config)
-        print(f"🌐 代理已启用: {proxy_scheme}://{proxy_host}:{proxy_port}")
+        print(
+            t(
+                "proxy.enabled",
+                scheme=proxy_scheme,
+                host=proxy_host,
+                port=proxy_port,
+            )
+        )
+
+    # Engines run as separate processes and would otherwise re-resolve the
+    # language on their own. Pin the launcher's choice so both halves of a
+    # session speak the same language even if the config changes mid-run.
+    child_env = child_env if child_env is not None else os.environ.copy()
+    child_env[CA_LANG_ENV] = resolve_language()
 
     ctx.obj.update(
         config=config,
@@ -724,14 +738,14 @@ def new(ctx, name):
     # 确定启动命令：使用默认引擎 (opencode) 运行 interview 任务
     engine_script = str(root / "engines" / "start_opencode.py")
 
-    print(f"✍️ 启动任务编排专家为您编写新任务: {task_name}...")
-    print(f"📂 目标位置: {target_file}")
+    print(t("task.authoring_start", name=task_name))
+    print(t("task.target_location", path=target_file))
 
     # 构建命令：直接注入任务创建的专项意图
     cmd = [
         sys.executable,
         engine_script,
-        f"请启动‘任务编排专家 (Task Authoring)’模式，目标是为 CodeAgent 编写一个新的自动化任务剧本，文件名为：{target_file}",
+        t("task.authoring_prompt") + str(target_file),
     ]
 
     return subprocess.run(cmd, env=child_env).returncode
@@ -973,8 +987,8 @@ def batch_run(ctx, task_name, engine, group, dry_run):
         sys.exit(1)
 
     print(f"📋 {len(targets)} project(s) will run '{task_name}' with {engine}:")
-    for t in targets:
-        print(f"  - {t['path']}  (group: {t.get('group', '?')})")
+    for target in targets:
+        print(f"  - {target['path']}  (group: {target.get('group', '?')})")
 
     if dry_run:
         print("\n(dry run — nothing started)")
@@ -985,9 +999,9 @@ def batch_run(ctx, task_name, engine, group, dry_run):
     skipped: list[str] = []
     failed: list[tuple[str, str]] = []
 
-    for t in targets:
-        workspace = t["path"]
-        proj_group = t.get("group") or "common"
+    for target in targets:
+        workspace = target["path"]
+        proj_group = target.get("group") or "common"
         try:
             status = runner.run_task(
                 task_name,
@@ -1224,6 +1238,86 @@ def mcp_list(ctx, engine):
         for server in servers:
             target = server["url"] or " ".join(server["command"] or [])
             click.echo(f"  ● {server['name']}  [{server['transport']}]  {target}")
+
+
+@mcp.command(name="add")
+@click.argument("engine", type=_ENGINE_CHOICE)
+@click.argument("name")
+@click.argument("command", nargs=-1)
+@click.option("--url", default=None, help="Remote server URL, instead of a command.")
+@click.option(
+    "--env",
+    "env_pairs",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Environment variable for the server; repeatable.",
+)
+@click.option(
+    "--transport",
+    default=None,
+    help="Transport for a --url server (e.g. http, sse). Ignored for stdio.",
+)
+@click.pass_context
+def mcp_add(ctx, engine, name, command, url, env_pairs, transport):
+    """Add an MCP server to ENGINE.
+
+    Pass the launch command after NAME, or use --url for a remote server:
+
+      ca mcp add claude fs -- npx -y @modelcontextprotocol/server-filesystem /data
+
+      ca mcp add codex api --url https://example.com/mcp
+    """
+    _ensure_project_on_path(ctx.obj["root"])
+    from core.services import mcp_service
+
+    env: dict[str, str] = {}
+    for pair in env_pairs:
+        key, sep, value = pair.partition("=")
+        if not sep:
+            print(f"❌ --env expects KEY=VALUE, got: {pair}")
+            sys.exit(1)
+        env[key] = value
+
+    try:
+        mcp_service.add_server(
+            engine,
+            str(Path.cwd()),
+            name,
+            command=list(command) or None,
+            url=url,
+            env=env or None,
+            transport=transport,
+        )
+    except (ValueError, RuntimeError) as exc:
+        print(f"❌ {exc}")
+        sys.exit(1)
+
+    scope = "project" if engine in ("claude", "gemini") else "global"
+    print(f"✅ Added '{name}' to {engine} ({scope} scope)")
+    others = sorted(ENGINES - {engine})
+    print(f"   Copy it to the others with: ca mcp sync {engine}")
+    print(f"   (targets: {', '.join(others)})")
+
+
+@mcp.command(name="remove")
+@click.argument("engine", type=_ENGINE_CHOICE)
+@click.argument("name")
+@click.pass_context
+def mcp_remove(ctx, engine, name):
+    """Remove MCP server NAME from ENGINE."""
+    _ensure_project_on_path(ctx.obj["root"])
+    from core.services import mcp_service
+
+    try:
+        mcp_service.remove_server(engine, str(Path.cwd()), name)
+    except KeyError:
+        print(f"❌ No such MCP server in {engine}: {name}")
+        sys.exit(1)
+    except (ValueError, RuntimeError) as exc:
+        print(f"❌ {exc}")
+        sys.exit(1)
+
+    print(f"🗑️  Removed '{name}' from {engine}")
 
 
 @mcp.command(name="sync")

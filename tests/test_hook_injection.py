@@ -163,3 +163,58 @@ def test_restore_settings_removes_a_toml_file_codeagent_created(tmp_path, monkey
     engine.restore_settings(".codex/config.toml")
 
     assert not (tmp_path / ".codex" / "config.toml").exists()
+
+
+def test_a_leftover_injection_is_never_backed_up(tmp_path, monkeypatch):
+    """Regression: a crashed run leaves an injected settings file behind. If
+    the next run backs that up, the backup is poisoned forever — every later
+    restore puts the injection right back, so `ca doctor` reports stale
+    injections that --fix can never clear."""
+    monkeypatch.chdir(tmp_path)
+    settings = tmp_path / ".gemini" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text(
+        json.dumps({"hooks": {"X": []}, "_ca_injected": True}), encoding="utf-8"
+    )
+
+    engine = BaseEngine("Dummy", "dummy-model")
+    engine.inject_hooks_to_settings(
+        ".gemini/settings.json", [{"name": "h", "event": "X", "command": "c"}]
+    )
+
+    assert not settings.with_suffix(".json.bak").exists()
+
+
+def test_a_leftover_injection_self_heals_on_the_next_cycle(tmp_path, monkeypatch):
+    """With no poisoned backup, restore deletes the orphan instead of
+    resurrecting it — so one normal run cleans up after a crashed one."""
+    monkeypatch.chdir(tmp_path)
+    settings = tmp_path / ".gemini" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text(json.dumps({"_ca_injected": True}), encoding="utf-8")
+
+    engine = BaseEngine("Dummy", "dummy-model")
+    engine.inject_hooks_to_settings(
+        ".gemini/settings.json", [{"name": "h", "event": "X", "command": "c"}]
+    )
+    engine.restore_settings(".gemini/settings.json")
+
+    assert not settings.exists()
+
+
+def test_a_users_own_settings_are_still_backed_up_and_restored(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    settings = tmp_path / ".gemini" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    original = json.dumps({"theme": "dark"})
+    settings.write_text(original, encoding="utf-8")
+
+    engine = BaseEngine("Dummy", "dummy-model")
+    engine.inject_hooks_to_settings(
+        ".gemini/settings.json", [{"name": "h", "event": "X", "command": "c"}]
+    )
+    assert settings.with_suffix(".json.bak").exists()
+
+    engine.restore_settings(".gemini/settings.json")
+
+    assert json.loads(settings.read_text(encoding="utf-8")) == {"theme": "dark"}
