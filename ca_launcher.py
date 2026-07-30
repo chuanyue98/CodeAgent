@@ -73,7 +73,7 @@ def load_config():
             with open(config_path, encoding="utf-8-sig") as f:
                 return {**default_config, **json.load(f)}
         except Exception as e:
-            print(f"⚠️ Warning: Failed to load config.json: {e}")
+            print(t("config.load_failed", error=e))
     return default_config
 
 
@@ -209,13 +209,13 @@ def _can_open_browser():
 
 def _open_browser(url):
     if not _can_open_browser():
-        print(f"🌐 Open the UI in your browser: {url}")
+        print(t("ui.open_in_browser", url=url))
         return False
 
     import webbrowser
 
     if not webbrowser.open(url):
-        print(f"🌐 Open the UI in your browser: {url}")
+        print(t("ui.open_in_browser", url=url))
         return False
     return True
 
@@ -292,13 +292,7 @@ def run_ui_command():
         from core.web.server import app
     except ModuleNotFoundError as exc:
         missing_module = exc.name or "required dependency"
-        print(
-            f"❌ Missing dependency for 'ca ui': {missing_module}\n"
-            "Install project dependencies first:\n"
-            "  uv sync\n"
-            "or:\n"
-            "  pip install -e ."
-        )
+        print(t("ui.missing_dependency", module=missing_module))
         return 1
 
     use_dev_server = False
@@ -307,26 +301,25 @@ def run_ui_command():
             use_dev_server = True
         else:
             print(
-                f"⚙️ Starting Vite dev server at http://{UI_DEV_SERVER_HOST}:{UI_DEV_SERVER_PORT} ..."
+                t(
+                    "ui.vite_starting",
+                    host=UI_DEV_SERVER_HOST,
+                    port=UI_DEV_SERVER_PORT,
+                )
             )
             use_dev_server = _start_ui_dev_server()
             if not use_dev_server:
                 if _frontend_dist_exists():
-                    print(
-                        "⚠️ Failed to start Vite dev server; falling back to built UI."
-                    )
+                    print(t("ui.vite_failed_fallback"))
                 else:
-                    print(
-                        "❌ Failed to start Vite dev server, and no built UI was found.\n"
-                        "Install frontend deps in web/frontend and retry."
-                    )
+                    print(t("ui.vite_failed_no_dist"))
                     return 1
 
     if use_dev_server:
         port = UI_API_PORT
         url = f"http://{UI_DEV_SERVER_HOST}:{UI_DEV_SERVER_PORT}"
-        print(f"⚡ Detected Vite dev server at {url}")
-        print(f"🚀 Starting Web UI API at http://127.0.0.1:{port} ...")
+        print(t("ui.vite_detected", url=url))
+        print(t("ui.api_starting", port=port))
     else:
         if not _frontend_dist_exists():
             # This is the very first command most people run after cloning,
@@ -334,20 +327,16 @@ def run_ui_command():
             # tools and leaving the reader to assemble the commands.
             frontend_root = _frontend_root()
             print(
-                "❌ The Web UI has not been built yet "
-                f"(expected {frontend_root / 'dist' / 'index.html'}).\n"
-                "\n"
-                "Build it once with:\n"
-                f"  cd {frontend_root}\n"
-                "  bun install && bun run build      # or: npm install && npm run build\n"
-                "\n"
-                "Then run `ca ui` again. For live-reloading frontend work, "
-                "set CA_UI_DEV=1 instead to have `ca ui` manage a Vite dev server."
+                t(
+                    "ui.not_built",
+                    index_path=frontend_root / "dist" / "index.html",
+                    frontend_root=frontend_root,
+                )
             )
             return 1
         port = find_available_port(UI_API_PORT)
         url = f"http://127.0.0.1:{port}"
-        print(f"🚀 Starting Web UI at {url}...")
+        print(t("ui.starting", url=url))
 
     api_host = os.environ.get("CA_UI_HOST", "127.0.0.1")
     threading.Thread(
@@ -375,13 +364,14 @@ def run_ui_command():
 # ============================================================================
 
 EPILOG = """\
-Engines: gemini, claude, opencode, codex (default: gemini)
+Engines: gemini, claude, opencode, codex
+         (default: gemini; set "default_engine" in config.json to change)
 
 YOLO mode is enabled by default.
 
 \b
 Examples:
-  ca                       Start the default engine (gemini)
+  ca                       Start the default engine
   ca claude do something   Start claude with extra args
   ca --proxy gemini        Start gemini with proxy enabled
   ca doctor --fix          Run health check and auto-repair
@@ -554,6 +544,37 @@ def _ensure_project_registered(root: Path, config: dict) -> None:
     print(t("project.registered", group=chosen_group))
 
 
+FALLBACK_ENGINE = "gemini"
+
+
+def _resolve_default_engine(config: dict, engine_script_map: dict) -> str:
+    """Returns the engine ``ca`` launches when no engine name is given.
+
+    Reads ``default_engine`` from config.json so a claude-first (or
+    codex-first) user does not have to name their engine on every single
+    invocation. An unrecognized value falls back rather than failing: the
+    default engine is not worth aborting a launch over, but it is worth
+    saying out loud, since silently starting a different engine than the one
+    configured would be its own surprise.
+    """
+    configured = config.get("default_engine")
+    if configured is None:
+        return FALLBACK_ENGINE
+    name = str(configured).strip().lower()
+    if name in engine_script_map:
+        return name
+    print(
+        t(
+            "engine.unknown_default",
+            value=configured,
+            known=", ".join(sorted(engine_script_map)),
+            fallback=FALLBACK_ENGINE,
+        ),
+        file=sys.stderr,
+    )
+    return FALLBACK_ENGINE
+
+
 def _launch_engine(ctx, args):
     """Build and run the engine subprocess.
 
@@ -571,7 +592,7 @@ def _launch_engine(ctx, args):
     engine_script_map = obj["engine_script_map"]
     _ensure_project_registered(obj["root"], obj["config"])
 
-    engine_name = "gemini"
+    engine_name = _resolve_default_engine(obj["config"], engine_script_map)
     extra_params = []
 
     if args:
@@ -589,10 +610,7 @@ def _launch_engine(ctx, args):
         extra_params.append("-y")
 
     if obj.get("yolo", True):
-        print(
-            "⚠️  YOLO mode is ON: the engine may edit files and run commands "
-            "without asking for approval."
-        )
+        print(t("engine.yolo_warning"))
 
     target_script = engine_script_map[engine_name]
     cmd = [sys.executable, target_script] + extra_params
@@ -758,17 +776,17 @@ def _history_list(ctx, engine):
     project_path = str(Path.cwd())
     sessions = find_all_sessions(project_path, engine=engine)
     if not sessions:
-        print("📝 No sessions found for this project.")
+        print(t("history.none"))
         return
 
-    print(f"📋 Found {len(sessions)} session(s) for {project_path}:\n")
+    print(t("history.found", count=len(sessions), path=project_path))
     for i, s in enumerate(sessions):
-        title = s.title or s.first_user_message[:60] or "(no title)"
+        title = s.title or s.first_user_message[:60] or t("history.no_title")
         print(
             f"  [{i + 1}] {s.engine.value:8s} | {s.started_at[:19]:19s} | {s.message_count:3d} msgs | {title}"
         )
         print(f"       ID: {s.session_id}")
-    print("\nUse: ca history show <engine> <session_id>")
+    print(t("history.show_hint"))
 
 
 @cli.group(invoke_without_command=True)
@@ -800,19 +818,23 @@ def show(ctx, engine_name, session_id):
     project_path = str(Path.cwd())
     session = find_session_by_id(session_id, engine_name, project_path)
     if not session:
-        print(f"❌ Session not found: {engine_name}/{session_id}")
+        print(t("history.not_found", engine=engine_name, session_id=session_id))
         return
 
     print(f"{'=' * 60}")
-    print(f"Engine:    {session.engine.value}")
-    print(f"Session:   {session.session_id}")
-    print(f"Started:   {session.started_at}")
-    print(f"Messages:  {session.message_count}")
-    print(f"Model:     {session.model or '(unknown)'}")
+    print(f"{t('history.field_engine')}  {session.engine.value}")
+    print(f"{t('history.field_session')}  {session.session_id}")
+    print(f"{t('history.field_started')}  {session.started_at}")
+    print(f"{t('history.field_messages')}  {session.message_count}")
+    print(f"{t('history.field_model')}  {session.model or t('history.unknown_model')}")
     print(f"{'=' * 60}\n")
 
     for msg in session.messages:
-        role_label = "👤 USER" if msg.role == "user" else "🤖 ASSISTANT"
+        role_label = (
+            t("history.role_user")
+            if msg.role == "user"
+            else t("history.role_assistant")
+        )
         print(f"[{msg.timestamp[:19] if msg.timestamp else ''}] {role_label}")
         if msg.content:
             # Truncate very long messages for terminal display
@@ -820,9 +842,9 @@ def show(ctx, engine_name, session_id):
             print(text)
         for tc in msg.tool_calls:
             print(
-                f"  🔧 {tc.name}({tc.args_preview[:80]})"
+                f"  * {tc.name}({tc.args_preview[:80]})"
                 if tc.args_preview
-                else f"  🔧 {tc.name}"
+                else f"  * {tc.name}"
             )
         print()
 
@@ -842,40 +864,38 @@ def convert(ctx, source_engine, session_id, target_engine, yes):
     project_path = str(Path.cwd())
     session = find_session_by_id(session_id, source_engine, project_path)
     if not session:
-        print(f"❌ Session not found: {source_engine}/{session_id}")
+        print(t("history.not_found", engine=source_engine, session_id=session_id))
         return
 
-    title = session.title or session.first_user_message[:60] or "(no title)"
-    print("About to convert a session (the source session is left untouched):")
-    print(f"  Source: {source_engine}/{session_id}  ({session.message_count} msgs)")
-    print(f"  Title:  {title}")
-    print(f"  Target: {target_engine}")
+    title = session.title or session.first_user_message[:60] or t("history.no_title")
+    print(t("convert.about_to"))
+    print(
+        t(
+            "convert.line_source",
+            engine=source_engine,
+            session_id=session_id,
+            count=session.message_count,
+        )
+    )
+    print(t("convert.line_title", title=title))
+    print(t("convert.line_target", engine=target_engine))
 
     if not yes:
         if not (sys.stdin.isatty() and sys.stdout.isatty()):
-            print(
-                "❌ Refusing to convert without confirmation in a non-interactive "
-                "session. Re-run with --yes to skip this prompt."
-            )
+            print(t("convert.needs_confirmation"))
             return
-        if not click.confirm("Proceed with conversion?", default=False):
-            print("Cancelled.")
+        if not click.confirm(t("convert.confirm"), default=False):
+            print(t("convert.cancelled"))
             return
 
     try:
         new_id = write_session(session, target_engine)
-        print(f"✅ Converted {source_engine} → {target_engine}")
-        print(f"   New session ID: {new_id}")
-        if target_engine == "claude":
-            print(f"   Resume with: claude -r {new_id}")
-        elif target_engine == "codex":
-            print("   Resume with: codex continue")
-        elif target_engine == "gemini":
-            print("   Resume with: gemini (select from history)")
-        elif target_engine == "opencode":
-            print("   Resume with: opencode (select from history)")
+        print(t("convert.done", source=source_engine, target=target_engine))
+        print(t("convert.new_id", session_id=new_id))
+        if target_engine in ENGINES:
+            print(t(f"convert.resume_{target_engine}", session_id=new_id))
     except Exception as e:
-        print(f"❌ Conversion failed: {e}")
+        print(t("convert.failed", error=e))
 
 
 def _get_task_runner(root: Path):
@@ -900,7 +920,7 @@ def ps(ctx, show_all):
     if not show_all:
         runs = [r for r in runs if r.status == "running"]
     if not runs:
-        print("No running tasks." if not show_all else "No tracked task runs.")
+        print(t("ps.none_tracked") if show_all else t("ps.none_running"))
         return
 
     runs.sort(key=lambda r: r.start_time, reverse=True)
@@ -910,9 +930,7 @@ def ps(ctx, show_all):
         workspace = r.workspace or "-"
         print(f"{r.task_id:38s} {r.engine:9s} {r.status:10s} {pid_str:8s} {workspace}")
     if not show_all:
-        print(
-            "\nUse `ca stop <task id>` to terminate one, or `ca ps --all` to see recent history."
-        )
+        print(t("ps.hint"))
 
 
 @cli.command()
@@ -924,16 +942,16 @@ def stop(ctx, task_id):
     runner = _get_task_runner(ctx.obj["root"])
     status = runner.get_status(task_id)
     if status is None:
-        print(f"❌ No such task run: {task_id}")
-        print("   Use `ca ps --all` to see known task ids.")
+        print(t("stop.not_found", task_id=task_id))
+        print(t("stop.list_hint"))
         sys.exit(1)
     if status.status != "running":
-        print(f"⚠️  Task {task_id} is not running (status: {status.status}).")
+        print(t("stop.not_running", task_id=task_id, status=status.status))
         return
     if runner.stop_task(task_id):
-        print(f"🛑 Stopped {task_id}")
+        print(t("stop.stopped", task_id=task_id))
     else:
-        print(f"❌ Failed to stop {task_id}")
+        print(t("stop.failed", task_id=task_id))
         sys.exit(1)
 
 
@@ -977,21 +995,34 @@ def batch_run(ctx, task_name, engine, group, dry_run):
     ]
     targets = [item for item in registry if group is None or item.get("group") == group]
     if not targets:
-        scope = f" in group '{group}'" if group else ""
-        print(f"❌ No registered projects{scope} found in project_registry.")
+        scope = t("batch.scope_group", group=group) if group else ""
+        print(t("batch.no_projects", scope=scope))
         sys.exit(1)
 
     tasks_root = resolve_resource_path("tasks", "CA_TASKS_ROOT")
     if TaskService(tasks_root).get_task(task_name) is None:
-        print(f"❌ No such task: {task_name} (looked in {tasks_root})")
+        print(t("batch.no_task", task=task_name, root=tasks_root))
         sys.exit(1)
 
-    print(f"📋 {len(targets)} project(s) will run '{task_name}' with {engine}:")
+    print(
+        t(
+            "batch.plan_header",
+            count=len(targets),
+            task=task_name,
+            engine=engine,
+        )
+    )
     for target in targets:
-        print(f"  - {target['path']}  (group: {target.get('group', '?')})")
+        print(
+            t(
+                "batch.plan_row",
+                path=target["path"],
+                group=target.get("group", "?"),
+            )
+        )
 
     if dry_run:
-        print("\n(dry run — nothing started)")
+        print(t("batch.dry_run"))
         return
 
     runner = _get_task_runner(ctx.obj["root"])
@@ -1024,14 +1055,21 @@ def batch_run(ctx, task_name, engine, group, dry_run):
 
     print()
     for workspace, task_id in started:
-        print(f"  ✅ started {task_id}  ({workspace})")
+        print(t("batch.started_row", task_id=task_id, workspace=workspace))
     for workspace in skipped:
-        print(f"  ⏭️  skipped, already running  ({workspace})")
+        print(t("batch.skipped_row", workspace=workspace))
     for workspace, reason in failed:
-        print(f"  ❌ failed: {reason}  ({workspace})")
-    print(f"\n{len(started)} started, {len(skipped)} skipped, {len(failed)} failed.")
+        print(t("batch.failed_row", reason=reason, workspace=workspace))
+    print(
+        t(
+            "batch.summary",
+            started=len(started),
+            skipped=len(skipped),
+            failed=len(failed),
+        )
+    )
     if started:
-        print("Use `ca ps` to track progress, `ca stop <task_id>` to cancel one.")
+        print(t("batch.track_hint"))
     if failed:
         sys.exit(1)
 
@@ -1062,23 +1100,17 @@ def project_add(ctx, path, group):
     root = ctx.obj["root"]
     resolved = Path(path).expanduser().resolve()
     if not resolved.is_dir():
-        print(f"❌ Not a directory: {resolved}")
+        print(t("project.not_a_directory", path=resolved))
         sys.exit(1)
 
     config = ctx.obj["config"]
     if group not in config.get("groups", {}):
-        print(
-            f"⚠️  Group '{group}' doesn't exist yet in config.json's groups — "
-            "the project will register, but won't have any skills/prompts/hooks "
-            "mounted until the group is created (e.g. via the Web UI's Config Hub)."
-        )
+        print(t("project.group_missing", group=group))
 
     service = ConfigService(get_default_config_path(root))
     registry = service.add_project(str(resolved), group)
-    print(f"✅ Registered {resolved} → group '{group}'")
-    print(
-        f"   project_registry now has {len(registry)} entr{'y' if len(registry) == 1 else 'ies'}."
-    )
+    print(t("project.add_ok", path=resolved, group=group))
+    print(t("project.registry_size", count=len(registry)))
 
 
 @project.command(name="remove")
@@ -1092,9 +1124,9 @@ def project_remove(ctx, path):
     before = service.get_config()[0].get("project_registry", [])
     registry = service.delete_project(str(resolved))
     if len(registry) == len(before):
-        print(f"⚠️  {resolved} was not found in project_registry.")
+        print(t("project.remove_missing", path=resolved))
         sys.exit(1)
-    print(f"🗑️  Removed {resolved} from project_registry.")
+    print(t("project.removed", path=resolved))
 
 
 @project.command(name="list")
@@ -1104,13 +1136,20 @@ def project_list(ctx):
     config = ctx.obj["config"]
     registry = config.get("project_registry", [])
     if not registry:
-        print("No projects registered.")
+        print(t("project.none_registered"))
         return
     for item in registry:
         path = item.get("path", "?")
         available = path != "?" and Path(path).expanduser().is_dir()
-        mark = "✓" if available else "✗ (missing)"
-        print(f"  {mark}  {path}  (group: {item.get('group', '?')})")
+        mark = "v" if available else t("project.missing_marker")
+        print(
+            t(
+                "project.list_row",
+                mark=mark,
+                path=path,
+                group=item.get("group", "?"),
+            )
+        )
 
 
 _RESOURCE_KINDS = ("skills", "plugins", "hooks", "prompts")
@@ -1185,11 +1224,25 @@ def resources_list(ctx, kind, group):
             rows.append((item["id"], item["description"], item["id"] in enabled_ids))
 
     if not rows:
-        print(f"No {kind} found.")
+        print(t("resources.none", kind=kind))
         return
 
-    label = "active" if kind == "hooks" else f"enabled in '{group}'"
-    click.echo(click.style(f"{kind.capitalize()} ({len(rows)}) — {label}", bold=True))
+    label = (
+        t("resources.label_active")
+        if kind == "hooks"
+        else t("resources.label_enabled_in", group=group)
+    )
+    click.echo(
+        click.style(
+            t(
+                "resources.header",
+                kind=kind.capitalize(),
+                count=len(rows),
+                label=label,
+            ),
+            bold=True,
+        )
+    )
     for resource_id, description, enabled in sorted(rows):
         mark = (
             click.style("●", fg="green")
@@ -1274,7 +1327,7 @@ def mcp_add(ctx, engine, name, command, url, env_pairs, transport):
     for pair in env_pairs:
         key, sep, value = pair.partition("=")
         if not sep:
-            print(f"❌ --env expects KEY=VALUE, got: {pair}")
+            print(t("mcp.bad_env_pair", pair=pair))
             sys.exit(1)
         env[key] = value
 
@@ -1289,14 +1342,18 @@ def mcp_add(ctx, engine, name, command, url, env_pairs, transport):
             transport=transport,
         )
     except (ValueError, RuntimeError) as exc:
-        print(f"❌ {exc}")
+        print(t("mcp.error", error=exc))
         sys.exit(1)
 
-    scope = "project" if engine in ("claude", "gemini") else "global"
-    print(f"✅ Added '{name}' to {engine} ({scope} scope)")
+    scope = (
+        t("mcp.scope_project")
+        if engine in ("claude", "gemini")
+        else t("mcp.scope_global")
+    )
+    print(t("mcp.added", name=name, engine=engine, scope=scope))
     others = sorted(ENGINES - {engine})
-    print(f"   Copy it to the others with: ca mcp sync {engine}")
-    print(f"   (targets: {', '.join(others)})")
+    print(t("mcp.sync_hint", engine=engine))
+    print(t("mcp.sync_targets", targets=", ".join(others)))
 
 
 @mcp.command(name="remove")
@@ -1311,13 +1368,13 @@ def mcp_remove(ctx, engine, name):
     try:
         mcp_service.remove_server(engine, str(Path.cwd()), name)
     except KeyError:
-        print(f"❌ No such MCP server in {engine}: {name}")
+        print(t("mcp.not_found", engine=engine, name=name))
         sys.exit(1)
     except (ValueError, RuntimeError) as exc:
-        print(f"❌ {exc}")
+        print(t("mcp.error", error=exc))
         sys.exit(1)
 
-    print(f"🗑️  Removed '{name}' from {engine}")
+    print(t("mcp.removed", name=name, engine=engine))
 
 
 @mcp.command(name="sync")
@@ -1363,11 +1420,11 @@ def mcp_sync(ctx, source, targets, names, overwrite, dry_run):
             dry_run=dry_run,
         )
     except ValueError as exc:
-        print(f"❌ {exc}")
+        print(t("mcp.error", error=exc))
         sys.exit(1)
 
     if not results:
-        print(f"Nothing to sync — {source} has no MCP servers configured.")
+        print(t("mcp.nothing_to_sync", source=source))
         return
 
     marks = {
@@ -1377,7 +1434,7 @@ def mcp_sync(ctx, source, targets, names, overwrite, dry_run):
         "failed": click.style("!", fg="red"),
     }
     if dry_run:
-        click.echo(click.style("Dry run — nothing was written.", bold=True))
+        click.echo(click.style(t("mcp.dry_run"), bold=True))
     for engine_name in dict.fromkeys(item["engine"] for item in results):
         click.echo(click.style(engine_name, bold=True))
         for item in (r for r in results if r["engine"] == engine_name):
@@ -1386,7 +1443,7 @@ def mcp_sync(ctx, source, targets, names, overwrite, dry_run):
 
     failed = sum(1 for item in results if item["action"] == "failed")
     if failed:
-        print(f"\n⚠️  {failed} of {len(results)} operations failed.")
+        print(t("mcp.partial_failure", failed=failed, total=len(results)))
         sys.exit(1)
 
 
@@ -1399,7 +1456,7 @@ def main():
     except click.exceptions.Abort:
         sys.exit(1)
     except KeyboardInterrupt:
-        print("\n\n👋 Cancelled")
+        print(t("cli.cancelled"))
         sys.exit(0)
 
 

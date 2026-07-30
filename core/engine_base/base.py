@@ -29,7 +29,6 @@ class BaseEngine(_ConfigMixin, _PromptMixin, _LinksMixin, _SettingsMixin):
         root_dir (Path): The root directory of the CodeAgent project.
         full_config (dict): The complete configuration loaded from config.json.
         env_manager (EnvironmentManager): Manager for environment variables.
-        temp_prompt_name (str): Filename for the temporary prompt file.
         skill_scanner (SkillScanner): Scanner for discovering skills.
         prompt_scanner (PromptScanner): Scanner for discovering prompts.
         hook_scanner (HookScanner): Scanner for discovering hooks.
@@ -51,7 +50,6 @@ class BaseEngine(_ConfigMixin, _PromptMixin, _LinksMixin, _SettingsMixin):
         self.config_manager = ConfigManager(self.root_dir)
         self.full_config = self.config_manager.full_config
         self.env_manager = EnvironmentManager(self.root_dir)
-        self.temp_prompt_name = ".ca_prompt.tmp"
         self._temp_prompt_paths: set = set()
         self.link_manager = LinkManager()
         self.lock_manager = LockManager()

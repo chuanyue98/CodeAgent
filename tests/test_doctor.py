@@ -2,7 +2,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core import doctor
+import pytest
+
+from core import doctor, i18n
+
+
+@pytest.fixture(autouse=True)
+def _english_output():
+    """Doctor output is translated, so pin a language before asserting on it.
+
+    Without this the assertions below would pass or fail depending on the
+    developer's OS locale.
+    """
+    i18n.set_language("en")
+    yield
+    i18n.set_language(None)
 
 
 def test_check_python_statuses():
@@ -256,3 +270,70 @@ def test_hook_delivery_is_ok_when_codex_project_is_trusted(tmp_path, monkeypatch
 
     codex_check = next(c for c in section.checks if "codex" in c.label)
     assert codex_check.status == doctor.OK
+
+
+# --- Windows junction probe -------------------------------------------------
+#
+# The probe used to run in the project root and clean up with Path.exists(),
+# which follows a junction to its target and so reports False for a dangling
+# one. A leftover then made every later `mklink /j` fail with "file already
+# exists", so the check reported a permanent, self-inflicted false failure.
+
+
+def test_junction_probe_leaves_nothing_in_the_project_root(tmp_path):
+    section = doctor.Section("Env")
+    doctor.check_symlink_capability(section, tmp_path)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_junction_probe_sweeps_a_dangling_legacy_probe(tmp_path, monkeypatch):
+    """A dangling leftover must not be mistaken for missing capability."""
+    removed: list[Path] = []
+    monkeypatch.setattr(doctor, "is_windows_link", lambda p: True)
+    monkeypatch.setattr(doctor, "_remove_probe_dir", lambda p: removed.append(p))
+
+    stale = tmp_path / ".ca_doctor_link_probe"
+    stale.mkdir()
+    doctor._sweep_legacy_probes(tmp_path)
+
+    assert removed == [stale]
+
+
+def test_sweep_never_removes_a_directory_with_real_content(tmp_path, monkeypatch):
+    """Only ever reclaim a link or an empty dir -- never user content."""
+    removed: list[Path] = []
+    monkeypatch.setattr(doctor, "is_windows_link", lambda p: False)
+    monkeypatch.setattr(doctor, "_remove_probe_dir", lambda p: removed.append(p))
+
+    occupied = tmp_path / ".ca_doctor_target_probe"
+    occupied.mkdir()
+    (occupied / "keep.txt").write_text("not ours", encoding="utf-8")
+    doctor._sweep_legacy_probes(tmp_path)
+
+    assert removed == []
+    assert (occupied / "keep.txt").exists()
+
+
+def test_temp_prompt_check_targets_the_dir_engines_actually_write_to(tmp_path):
+    """It used to probe <project>/.ca_prompt.tmp, which nothing writes any more."""
+    section = doctor.Section("Env")
+    doctor.check_temp_file(section, tmp_path)
+
+    assert section.checks[0].status == doctor.OK
+    assert doctor.TEMP_PROMPT_DIRNAME in section.checks[0].detail
+    assert not (tmp_path / ".ca_prompt.tmp").exists()
+
+
+def test_display_width_counts_cjk_as_two_columns():
+    """Section titles are translated, and _render rules them to this width;
+    a len()-based rule underlines a Chinese heading to half its size."""
+    assert doctor._display_width("Runtime") == 7
+    assert doctor._display_width("运行环境") == 8
+    assert doctor._display_width("CodeAgent 健康检查") == 18
+
+
+def test_every_translated_section_title_has_a_width():
+    """Guards the rule length for whichever language doctor renders in."""
+    i18n.set_language("zh")
+    titles = [s.title for s in doctor.get_doctor_sections(fix=False)]
+    assert titles and all(doctor._display_width(x) >= len(x) for x in titles)

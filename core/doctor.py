@@ -8,12 +8,17 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import click
 
+from core.constants import TEMP_PROMPT_DIRNAME
 from core.hook_scanner import get_hooks_to_inject
+from core.i18n import t
+from core.link_manager import is_windows_link
 from core.plugin_scanner import get_plugins_to_mount
 from core.resource_locator import CODE_ROOT
 from core.services.config_service import ConfigService
@@ -79,10 +84,13 @@ def check_python(section: Section) -> None:
     if ver >= (3, 13):
         section.add(OK, label)
     elif ver >= (3, 10):
-        section.add(WARN, label, "CodeAgent requires Python 3.13+", "Upgrade Python")
+        section.add(WARN, label, t("doctor.python_too_old"), t("doctor.python_upgrade"))
     else:
         section.add(
-            FAIL, label, "Unsupported Python version", "Upgrade to Python 3.13+"
+            FAIL,
+            label,
+            t("doctor.python_unsupported"),
+            t("doctor.python_upgrade_to"),
         )
 
 
@@ -97,12 +105,12 @@ def check_engines(section: Section) -> None:
             if found:
                 break
         if found:
-            section.add(OK, f"Engine: {engine}", found)
+            section.add(OK, t("doctor.engine_label", engine=engine), found)
         else:
             section.add(
                 WARN,
-                f"Engine: {engine}",
-                "binary not found in PATH",
+                t("doctor.engine_label", engine=engine),
+                t("doctor.engine_missing"),
                 ENGINE_INSTALL_HINTS.get(engine, ""),
             )
 
@@ -120,14 +128,14 @@ def check_config(section: Section, root: Path) -> dict | None:
             section.add(
                 FAIL,
                 "config.json",
-                "file not found",
-                "Run: ca (first launch creates defaults)",
+                t("doctor.config_not_found"),
+                t("doctor.config_first_launch"),
             )
         else:
-            section.add(FAIL, "config.json", "failed to load or parse configuration")
+            section.add(FAIL, "config.json", t("doctor.config_unparsable"))
         return None
 
-    section.add(OK, "config.json", "valid configuration")
+    section.add(OK, "config.json", t("doctor.config_valid"))
     return cfg
 
 
@@ -142,9 +150,9 @@ def check_directories(section: Section, root: Path) -> None:
     for label, path in dirs.items():
         if path.exists():
             subdirs = [d for d in path.iterdir() if d.is_dir()]
-            section.add(OK, label, f"{len(subdirs)} subdirectories")
+            section.add(OK, label, t("doctor.dir_subdirs", count=len(subdirs)))
         else:
-            section.add(WARN, label, "directory not found")
+            section.add(WARN, label, t("doctor.dir_missing"))
 
 
 def check_skills_resolution(section: Section, root: Path, cfg: dict) -> None:
@@ -154,11 +162,11 @@ def check_skills_resolution(section: Section, root: Path, cfg: dict) -> None:
         # Use a minimal stand-in to get resolution logic without launching
         engine = _LightweightResolver(root, cfg)
         project_type = engine.get_current_project_group()
-        section.add(INFO, f"Active project group: {project_type}")
+        section.add(INFO, t("doctor.active_group", group=project_type))
 
         skills, warnings = engine.get_skills_to_mount()
         for w in warnings:
-            section.add(WARN, "Skill Scanner", w)
+            section.add(WARN, t("doctor.skill_scanner"), w)
 
         skill_roots = engine._get_skill_search_roots()
 
@@ -170,16 +178,22 @@ def check_skills_resolution(section: Section, root: Path, cfg: dict) -> None:
 
         total = len(skills)
         if not missing:
-            section.add(OK, f"Skills ({total} declared)", "all resolved")
+            section.add(
+                OK,
+                t("doctor.skills_declared", total=total),
+                t("doctor.all_resolved"),
+            )
         else:
             section.add(
                 WARN,
-                f"Skills ({total} declared, {len(missing)} missing)",
+                t("doctor.skills_missing", total=total, missing=len(missing)),
                 ", ".join(missing),
-                "Check skills/ directory or config.json groups",
+                t("doctor.skills_hint"),
             )
     except Exception as e:
-        section.add(WARN, "Skills resolution", f"could not evaluate: {e}")
+        section.add(
+            WARN, t("doctor.skills_error"), t("doctor.could_not_evaluate", error=e)
+        )
 
 
 def check_hooks_resolution(section: Section, root: Path, cfg: dict) -> None:
@@ -188,7 +202,7 @@ def check_hooks_resolution(section: Section, root: Path, cfg: dict) -> None:
         project_type = engine.get_current_project_group()
         hooks, warnings = engine.get_hooks_to_inject()
         for w in warnings:
-            section.add(WARN, "Hook Scanner", w)
+            section.add(WARN, t("doctor.hook_scanner"), w)
 
         declared = cfg.get("groups", {}).get(project_type, {}).get("hooks", [])
         missing = []
@@ -197,16 +211,22 @@ def check_hooks_resolution(section: Section, root: Path, cfg: dict) -> None:
                 missing.append(name)
 
         if not missing:
-            section.add(OK, f"Hooks ({len(hooks)} resolved)")
+            section.add(OK, t("doctor.hooks_resolved", count=len(hooks)))
         else:
             section.add(
                 WARN,
-                f"Hooks ({len(declared)} declared, {len(missing)} unresolved)",
+                t(
+                    "doctor.hooks_unresolved",
+                    declared=len(declared),
+                    missing=len(missing),
+                ),
                 ", ".join(missing),
-                "Check hooks/ directory or metadata.json files",
+                t("doctor.hooks_hint"),
             )
     except Exception as e:
-        section.add(WARN, "Hooks resolution", f"could not evaluate: {e}")
+        section.add(
+            WARN, t("doctor.hooks_error"), t("doctor.could_not_evaluate", error=e)
+        )
 
 
 def check_plugins_resolution(section: Section, root: Path, cfg: dict) -> None:
@@ -215,7 +235,7 @@ def check_plugins_resolution(section: Section, root: Path, cfg: dict) -> None:
         project_type = engine.get_current_project_group()
         plugins, warnings = engine.get_plugins_to_mount()
         for w in warnings:
-            section.add(WARN, "Plugin Scanner", w)
+            section.add(WARN, t("doctor.plugin_scanner"), w)
 
         declared = cfg.get("groups", {}).get(project_type, {}).get("plugins", [])
         missing = []
@@ -225,37 +245,52 @@ def check_plugins_resolution(section: Section, root: Path, cfg: dict) -> None:
                 missing.append(name)
 
         if not missing:
-            section.add(OK, f"Plugins ({len(plugins)} resolved)")
+            section.add(OK, t("doctor.plugins_resolved", count=len(plugins)))
         else:
             section.add(
                 WARN,
-                f"Plugins ({len(declared)} declared, {len(missing)} unresolved)",
+                t(
+                    "doctor.plugins_unresolved",
+                    declared=len(declared),
+                    missing=len(missing),
+                ),
                 ", ".join(missing),
-                "Check plugins/ directory",
+                t("doctor.plugins_hint"),
             )
     except Exception as e:
-        section.add(WARN, "Plugins resolution", f"could not evaluate: {e}")
+        section.add(
+            WARN, t("doctor.plugins_error"), t("doctor.could_not_evaluate", error=e)
+        )
 
 
 def check_temp_file(section: Section, root: Path) -> None:
-    tmp = root / ".ca_prompt.tmp"
+    """Verifies the directory engines actually write assembled prompts into.
+
+    This used to probe ``<project>/.ca_prompt.tmp``, a location
+    ``_PromptMixin.write_temp_prompt`` stopped using when it moved to
+    ``mkstemp`` under the system temp directory — so the check could pass
+    while the real target was unwritable, and vice versa.
+    """
+    prompt_dir = Path(tempfile.gettempdir()) / TEMP_PROMPT_DIRNAME
     try:
-        tmp.write_text("probe", encoding="utf-8")
-        tmp.unlink()
-        section.add(OK, "Temp prompt file writable", str(tmp))
+        prompt_dir.mkdir(parents=True, exist_ok=True)
+        fd, probe_name = tempfile.mkstemp(dir=prompt_dir, prefix="ca_doctor.")
+        os.close(fd)
+        Path(probe_name).unlink(missing_ok=True)
+        section.add(OK, t("doctor.temp_prompt_ok"), str(prompt_dir))
     except OSError as e:
         section.add(
             FAIL,
-            "Temp prompt file",
-            f"not writable: {e}",
-            "Check directory permissions",
+            t("doctor.temp_prompt_label"),
+            t("doctor.temp_prompt_failed", error=e),
+            t("doctor.temp_prompt_hint", path=prompt_dir),
         )
 
 
 def check_proxy(section: Section, cfg: dict) -> None:
     proxy_cfg = cfg.get("proxy")
     if not proxy_cfg:
-        section.add(INFO, "Proxy", "not configured (use --proxy flag to enable)")
+        section.add(INFO, t("doctor.proxy_label"), t("doctor.proxy_unset"))
         return
 
     from ca_launcher import _extract_proxy_candidates, is_tcp_port_open
@@ -264,49 +299,107 @@ def check_proxy(section: Section, cfg: dict) -> None:
     reachable = [(h, p) for h, p in candidates if is_tcp_port_open(h, p)]
     if reachable:
         h, p = reachable[0]
-        section.add(OK, f"Proxy {h}:{p}", "reachable")
+        section.add(
+            OK, f"{t('doctor.proxy_label')} {h}:{p}", t("doctor.proxy_reachable")
+        )
     else:
         all_str = ", ".join(f"{h}:{p}" for h, p in candidates)
         section.add(
             WARN,
-            "Proxy",
-            f"none of the configured addresses reachable ({all_str})",
-            "Start your proxy or update config.json",
+            t("doctor.proxy_label"),
+            t("doctor.proxy_unreachable", addresses=all_str),
+            t("doctor.proxy_hint"),
         )
+
+
+#: Probe names used by earlier versions, which created them in the project
+#: root. Left behind, a dangling one made every later run report a false
+#: failure (see :func:`_sweep_legacy_probes`).
+_LEGACY_PROBE_NAMES = (".ca_doctor_link_probe", ".ca_doctor_target_probe")
+
+
+def _remove_probe_dir(path: Path) -> None:
+    """Removes a probe directory or junction, dangling ones included.
+
+    ``Path.exists()`` follows a junction to its target and so reports False
+    for a dangling one — the exact case that used to leave probes behind.
+    ``os.path.lexists`` inspects the link itself instead.
+    """
+    if not os.path.lexists(path):
+        return
+    if os.name == "nt":
+        subprocess.run(["cmd", "/c", "rmdir", str(path)], capture_output=True)
+    else:
+        try:
+            path.unlink()
+        except OSError:
+            try:
+                path.rmdir()
+            except OSError:
+                pass
+
+
+def _sweep_legacy_probes(root: Path) -> None:
+    """Clears probe artifacts an older doctor may have left in the repo root.
+
+    These are unambiguously ours (fixed names, always empty or a junction to
+    an empty directory), and a dangling one is actively harmful: it makes
+    ``mklink /j`` fail with "file already exists", so the junction check
+    reports a permanent false failure, and ``git status`` warns on every run.
+    Nothing here can self-heal, so sweep it unconditionally.
+    """
+    for name in _LEGACY_PROBE_NAMES:
+        candidate = root / name
+        if not os.path.lexists(candidate):
+            continue
+        # Only ever remove a link or an empty directory — never real content.
+        if not is_windows_link(candidate) and any(candidate.iterdir()):
+            continue
+        _remove_probe_dir(candidate)
 
 
 def check_symlink_capability(section: Section, root: Path) -> None:
     """On Windows, verify we can create directory junctions."""
     if os.name != "nt":
-        section.add(OK, "Symlink capability", "Unix (symlinks available)")
+        section.add(OK, t("doctor.symlink_label"), t("doctor.symlink_unix"))
         return
 
-    # Try mklink /j — works without elevated privileges
-    test_target = root / ".ca_doctor_target_probe"
-    test_link = root / ".ca_doctor_link_probe"
+    _sweep_legacy_probes(root)
+
+    # Probe in a private temp directory rather than the project root: it keeps
+    # the check out of the user's working tree (and out of `git status`), and
+    # a freshly made directory cannot collide with a previous run's leftovers.
+    probe_dir = Path(tempfile.mkdtemp(prefix="ca-doctor-junction-"))
+    test_target = probe_dir / "target"
+    test_link = probe_dir / "link"
     try:
-        test_target.mkdir(exist_ok=True)
+        test_target.mkdir()
+        # mklink /j needs no elevated privileges; a non-zero exit here is a
+        # real capability failure rather than leftover state.
         result = subprocess.run(
             ["cmd", "/c", "mklink", "/j", str(test_link), str(test_target)],
             capture_output=True,
             check=False,
         )
         if result.returncode == 0:
-            section.add(OK, "Windows junction support", "available (no admin required)")
+            section.add(OK, t("doctor.junction_label"), t("doctor.junction_ok"))
         else:
+            detail = (
+                result.stderr.decode(errors="replace").strip()
+                or result.stdout.decode(errors="replace").strip()
+                or t("doctor.junction_exit_code", code=result.returncode)
+            )
             section.add(
                 WARN,
-                "Windows junction support",
-                "mklink /j failed — skill linking may not work",
-                "Enable Developer Mode or run as Administrator",
+                t("doctor.junction_label"),
+                t("doctor.junction_failed", detail=detail),
+                t("doctor.junction_hint"),
             )
     except Exception as e:
-        section.add(WARN, "Windows junction support", str(e))
+        section.add(WARN, t("doctor.junction_label"), str(e))
     finally:
-        if test_link.exists():
-            subprocess.run(["cmd", "/c", "rmdir", str(test_link)], capture_output=True)
-        if test_target.exists():
-            test_target.rmdir()
+        _remove_probe_dir(test_link)
+        shutil.rmtree(probe_dir, ignore_errors=True)
 
 
 def check_hook_delivery(section: Section, root: Path, cfg: dict) -> None:
@@ -321,15 +414,25 @@ def check_hook_delivery(section: Section, root: Path, cfg: dict) -> None:
         engine = _LightweightResolver(root, cfg)
         hooks, _ = engine.get_hooks_to_inject()
     except Exception as exc:
-        section.add(WARN, "Hook delivery", f"could not evaluate: {exc}")
+        section.add(
+            WARN,
+            t("doctor.hook_delivery_label"),
+            t("doctor.could_not_evaluate", error=exc),
+        )
         return
 
     if not hooks:
-        section.add(INFO, "Hook delivery", "no hooks configured for this group")
+        section.add(
+            INFO, t("doctor.hook_delivery_label"), t("doctor.hook_delivery_none")
+        )
         return
 
     count = len(hooks)
-    section.add(OK, f"Hook delivery ({count})", "claude, gemini, opencode: supported")
+    section.add(
+        OK,
+        t("doctor.hook_delivery_count", count=count),
+        t("doctor.hook_delivery_supported"),
+    )
 
     # codex only loads project-local config -- hooks included -- for projects
     # marked trusted in the user-level config. Untrusted, it starts normally
@@ -354,17 +457,24 @@ def check_hook_delivery(section: Section, root: Path, cfg: dict) -> None:
                     continue
 
         if trusted:
-            section.add(OK, "codex hooks", "project is trusted")
+            section.add(OK, t("doctor.codex_hooks_label"), t("doctor.codex_trusted"))
         else:
             section.add(
                 WARN,
-                "codex hooks",
-                f"'{project}' is not a trusted codex project; hooks are ignored",
-                f'Add [projects."{project}"] with trust_level = "trusted" '
-                f"to {user_config}",
+                t("doctor.codex_hooks_label"),
+                t("doctor.codex_untrusted", project=project),
+                t(
+                    "doctor.codex_trust_hint",
+                    project=project,
+                    config=user_config,
+                ),
             )
     except Exception as exc:
-        section.add(INFO, "codex hooks", f"trust state unknown: {exc}")
+        section.add(
+            INFO,
+            t("doctor.codex_hooks_label"),
+            t("doctor.codex_trust_unknown", error=exc),
+        )
 
 
 def check_mcp_drift(section: Section) -> None:
@@ -385,12 +495,16 @@ def check_mcp_drift(section: Section) -> None:
                 entry["name"] for entry in mcp_service.list_servers(name, project)
             }
     except Exception as exc:
-        section.add(WARN, "MCP drift", f"could not evaluate: {exc}")
+        section.add(
+            WARN,
+            t("doctor.mcp_drift_label"),
+            t("doctor.could_not_evaluate", error=exc),
+        )
         return
 
     everything = set().union(*by_engine.values()) if by_engine else set()
     if not everything:
-        section.add(INFO, "MCP servers", "none configured on any engine")
+        section.add(INFO, t("doctor.mcp_servers_label"), t("doctor.mcp_none"))
         return
 
     shared = set.intersection(*by_engine.values())
@@ -398,22 +512,26 @@ def check_mcp_drift(section: Section) -> None:
     if not drifted:
         section.add(
             OK,
-            f"MCP servers ({len(shared)})",
-            "configured identically on all four engines",
+            t("doctor.mcp_in_sync_label", count=len(shared)),
+            t("doctor.mcp_in_sync"),
         )
         return
 
     detail = ", ".join(
-        f"{name} (on: {', '.join(e for e in sorted(by_engine) if name in by_engine[e])})"
+        t(
+            "doctor.mcp_drift_entry",
+            name=name,
+            engines=", ".join(e for e in sorted(by_engine) if name in by_engine[e]),
+        )
         for name in drifted[:4]
     )
     if len(drifted) > 4:
-        detail += f", +{len(drifted) - 4} more"
+        detail += t("doctor.mcp_drift_more", count=len(drifted) - 4)
     section.add(
         WARN,
-        f"MCP drift ({len(drifted)} server(s) not on every engine)",
+        t("doctor.mcp_drift_count", count=len(drifted)),
         detail,
-        "Run: ca mcp sync <engine>   (add --dry-run to preview)",
+        t("doctor.mcp_drift_hint"),
     )
 
 
@@ -443,12 +561,12 @@ def check_stale_injections(section: Section) -> list[Path]:
         names = ", ".join(p.name for p in stale)
         section.add(
             WARN,
-            "Stale injections",
-            f"settings still contain _ca_injected marker: {names}",
-            "Run: ca doctor --fix  (auto-restores from .bak backups)",
+            t("doctor.stale_label"),
+            t("doctor.stale_found", names=names),
+            t("doctor.stale_hint"),
         )
     else:
-        section.add(OK, "Stale injections", "none found")
+        section.add(OK, t("doctor.stale_label"), t("doctor.stale_none"))
     return stale
 
 
@@ -460,11 +578,11 @@ def fix_stale_injections(stale: list[Path]) -> None:
         backup = settings_path.with_suffix(".json.bak")
         if backup.exists():
             os.replace(str(backup), str(settings_path))
-            print(f"  Restored {settings_path} from backup")
+            print(t("doctor.restored", path=settings_path))
         else:
             # No backup means ca created the file — safe to remove
             settings_path.unlink()
-            print(f"  Removed injected {settings_path}")
+            print(t("doctor.removed_injected", path=settings_path))
 
 
 def preview_stale_injections(stale: list[Path]) -> None:
@@ -472,9 +590,9 @@ def preview_stale_injections(stale: list[Path]) -> None:
     for settings_path in stale:
         backup = settings_path.with_suffix(".json.bak")
         if backup.exists():
-            print(f"  Would restore {settings_path} from backup")
+            print(t("doctor.would_restore", path=settings_path))
         else:
-            print(f"  Would remove injected {settings_path}")
+            print(t("doctor.would_remove", path=settings_path))
 
 
 # ── Lightweight resolver (avoids running a real engine) ───────────────────────
@@ -500,7 +618,6 @@ class _LightweightResolver:
                 from core.engine_base import EnvironmentManager
 
                 self_inner.env_manager = EnvironmentManager(root)
-                self_inner.temp_prompt_name = ".ca_prompt.tmp"
                 from core.hook_scanner import HookScanner
                 from core.plugin_scanner import PluginScanner
                 from core.prompt_scanner import PromptScanner
@@ -547,6 +664,16 @@ class _LightweightResolver:
 # ── Renderer ─────────────────────────────────────────────────────────────────
 
 
+def _display_width(text: str) -> int:
+    """Terminal columns ``text`` occupies, not its character count.
+
+    Section titles are translated, and CJK characters render two columns
+    wide -- so a ``len()``-based rule underlines a Chinese heading to barely
+    half its width.
+    """
+    return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
+
+
 def _render(sections: list[Section]) -> int:
     """Print results and return number of failures.
 
@@ -558,7 +685,7 @@ def _render(sections: list[Section]) -> int:
     warnings = 0
     for section in sections:
         click.echo(f"\n  {section.title}")
-        click.echo("  " + "─" * len(section.title))
+        click.echo("  " + "─" * _display_width(section.title))
         for c in section.checks:
             status = click.style(c.status, fg=_STATUS_COLORS.get(c.status), bold=True)
             line = f"  {status}  {c.label}"
@@ -576,7 +703,7 @@ def _render(sections: list[Section]) -> int:
     if failures:
         click.echo(
             click.style(
-                f"  Result: {failures} failure(s), {warnings} warning(s) — run 'ca doctor --fix' for auto-repairs",
+                t("doctor.result_failures", failures=failures, warnings=warnings),
                 fg="red",
                 bold=True,
             )
@@ -584,12 +711,12 @@ def _render(sections: list[Section]) -> int:
     elif warnings:
         click.echo(
             click.style(
-                f"  Result: {warnings} warning(s) — check the hints above",
+                t("doctor.result_warnings", warnings=warnings),
                 fg="yellow",
             )
         )
     else:
-        click.echo(click.style("  Result: all checks passed", fg="green", bold=True))
+        click.echo(click.style(t("doctor.result_ok"), fg="green", bold=True))
     click.echo()
     return failures
 
@@ -605,44 +732,44 @@ def get_doctor_sections(fix: bool = False, dry_run: bool = False) -> list[Sectio
     """
     root = CODE_ROOT
 
-    s1 = Section("Runtime")
+    s1 = Section(t("doctor.section_runtime"))
     check_python(s1)
     check_engines(s1)
 
-    s2 = Section("Configuration")
+    s2 = Section(t("doctor.section_configuration"))
     cfg = check_config(s2, root)
     if cfg is not None:
         check_directories(s2, root)
 
-    s3 = Section("Context Resolution")
+    s3 = Section(t("doctor.section_context"))
     if cfg is not None:
         check_skills_resolution(s3, root, cfg)
         check_hooks_resolution(s3, root, cfg)
         check_plugins_resolution(s3, root, cfg)
     else:
-        s3.add(INFO, "Skipped", "config.json could not be loaded")
+        s3.add(INFO, t("doctor.skipped"), t("doctor.skipped_no_config"))
 
-    s4 = Section("Environment")
+    s4 = Section(t("doctor.section_environment"))
     check_temp_file(s4, root)
     if cfg is not None:
         check_proxy(s4, cfg)
     check_symlink_capability(s4, root)
 
-    s5 = Section("Cross-Engine Parity")
+    s5 = Section(t("doctor.section_parity"))
     if cfg is not None:
         check_hook_delivery(s5, root, cfg)
     check_mcp_drift(s5)
 
-    s6 = Section("Session Integrity")
+    s6 = Section(t("doctor.section_sessions"))
     stale = check_stale_injections(s6)
     if dry_run and stale:
-        print("  --dry-run: no changes will be made. Preview of 'ca doctor --fix':")
+        print(t("doctor.dry_run_banner"))
         preview_stale_injections(stale)
         print()
     elif fix and stale:
-        print("  Applying fixes...")
+        print(t("doctor.applying_fixes"))
         fix_stale_injections(stale)
-        print("  Done. Re-run 'ca doctor' to verify.")
+        print(t("doctor.fixes_done"))
         print()
 
     return [s1, s2, s3, s4, s5, s6]
@@ -651,14 +778,13 @@ def get_doctor_sections(fix: bool = False, dry_run: bool = False) -> list[Sectio
 def run_doctor(fix: bool = False, dry_run: bool = False) -> int:
     """Run all health checks. Returns exit code (0 = OK, 1 = failures)."""
     click.echo()
-    click.echo(click.style("  CodeAgent Health Check", bold=True))
-    click.echo("  " + "=" * 22)
+    title = t("doctor.title")
+    click.echo(click.style(f"  {title}", bold=True))
+    click.echo("  " + "=" * _display_width(title))
     if dry_run:
-        click.echo(
-            "  --dry-run mode: previewing what --fix would change; nothing is applied"
-        )
+        click.echo(f"  {t('doctor.mode_dry_run')}")
     elif fix:
-        click.echo("  --fix mode: auto-repairable issues will be resolved")
+        click.echo(f"  {t('doctor.mode_fix')}")
     sections = get_doctor_sections(fix=fix, dry_run=dry_run)
     failures = _render(sections)
     return 1 if failures else 0

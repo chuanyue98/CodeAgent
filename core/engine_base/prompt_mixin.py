@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from core.constants import TEMP_PROMPT_DIRNAME
 from core.engine_base.environment import EngineExecutionError
 from core.logging_config import get_logger
 from core.prompt_kit import prompt_general, prompt_review
@@ -56,7 +57,7 @@ class _PromptMixin:
         Returns:
             str: A guidance message for the agent on how to load the prompt.
         """
-        prompt_dir = Path(tempfile.gettempdir()) / "codeagent-prompts"
+        prompt_dir = Path(tempfile.gettempdir()) / TEMP_PROMPT_DIRNAME
         prompt_dir.mkdir(parents=True, exist_ok=True)
         fd, temp_name = tempfile.mkstemp(
             dir=prompt_dir, prefix="ca_prompt.", suffix=".tmp", text=True

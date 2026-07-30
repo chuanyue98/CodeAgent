@@ -924,3 +924,36 @@ def test_mcp_remove_succeeds(tmp_path, monkeypatch, capsys):
     assert fake.call_args.args[0] == "gemini"
     assert fake.call_args.args[2] == "fs"
     assert "Removed 'fs' from gemini" in capsys.readouterr().out
+
+
+# --- default engine ---------------------------------------------------------
+#
+# `ca` hard-coded gemini, so anyone working primarily in another engine had to
+# name it on every single invocation.
+
+_ENGINE_MAP = {"gemini": "g", "claude": "c", "opencode": "o", "codex": "x"}
+
+
+def test_default_engine_falls_back_when_unset():
+    assert ca_launcher._resolve_default_engine({}, _ENGINE_MAP) == "gemini"
+
+
+@pytest.mark.parametrize("value", ["claude", "CLAUDE", "  codex  "])
+def test_default_engine_honours_config(value):
+    expected = value.strip().lower()
+    assert (
+        ca_launcher._resolve_default_engine({"default_engine": value}, _ENGINE_MAP)
+        == expected
+    )
+
+
+def test_unknown_default_engine_warns_and_falls_back(capsys):
+    """Worth saying out loud -- silently starting a different engine than the
+    one configured would be its own surprise -- but not worth aborting over."""
+    resolved = ca_launcher._resolve_default_engine(
+        {"default_engine": "gpt5"}, _ENGINE_MAP
+    )
+    assert resolved == "gemini"
+    stderr = capsys.readouterr().err
+    assert "gpt5" in stderr
+    assert "claude" in stderr  # lists what it does know
