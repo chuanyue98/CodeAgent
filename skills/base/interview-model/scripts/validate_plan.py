@@ -30,7 +30,7 @@ def validate_plan(file_path: str):
     expected_phase_num = 1
     valid_statuses = {"未开始", "进行中", "已完成"}
 
-    for num_str, name, body in phases:
+    for num_str, _name, body in phases:
         num = int(num_str)
 
         # 1. 检查编号连续性

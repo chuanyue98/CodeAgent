@@ -3,10 +3,19 @@
 技能快速验证脚本 - 最小版本
 """
 
-import sys
 import re
-import yaml
+import sys
 from pathlib import Path
+
+import yaml
+
+# Keep verdicts readable on a console whose default encoding isn't UTF-8
+# (cp936 on a Chinese Windows install, for one), where the Chinese messages
+# below would otherwise come out as mojibake. Mirrors core/console.py; skills
+# run standalone from an arbitrary cwd, so they cannot import it.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def validate_skill(skill_path):
@@ -18,8 +27,11 @@ def validate_skill(skill_path):
     if not skill_md.exists():
         return False, "未找到 SKILL.md"
 
-    # Read and validate frontmatter
-    content = skill_md.read_text()
+    # Read and validate frontmatter. SKILL.md is UTF-8 (every one in this repo
+    # contains Chinese); without an explicit encoding read_text() falls back to
+    # the platform default -- cp936 on a Chinese Windows install -- and dies on
+    # a UnicodeDecodeError before validating anything.
+    content = skill_md.read_text(encoding="utf-8")
     if not content.startswith("---"):
         return False, "未找到 YAML frontmatter"
 
@@ -72,6 +84,16 @@ def validate_skill(skill_path):
 
     # Extract and validate description
     description = frontmatter.get("description", "")
+    # Checked before the type check: init_skill.py's stub is `[TODO: ...]`,
+    # which happens to be valid YAML flow-sequence syntax, so a freshly
+    # scaffolded skill failed with "Description 必须是字符串，实际为 list" --
+    # that reads as a broken validator rather than "you haven't filled in the
+    # template yet". Failing here is still correct; only the wording changes.
+    if "TODO" in str(description):
+        return False, (
+            "Description 仍是 init_skill.py 生成的 TODO 占位符。"
+            "请替换为真实描述：说明该技能做什么，以及何时应该触发它。"
+        )
     if not isinstance(description, str):
         return False, f"Description 必须是字符串，实际为 {type(description).__name__}"
     description = description.strip()

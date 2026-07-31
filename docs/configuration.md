@@ -7,6 +7,7 @@ CodeAgent uses `config.json` at the project root for all configuration. The file
 ```json
 {
   "default_mode": "local",
+  "default_engine": "gemini",
   "language": "auto",
   "groups": { ... },
   "project_registry": [ ... ],
@@ -21,6 +22,7 @@ CodeAgent uses `config.json` at the project root for all configuration. The file
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `default_mode` | string | `"local"` | Execution mode: `local` or `remote` |
+| `default_engine` | string | `"gemini"` | Engine `ca` launches when none is named (see below) |
 | `language` | string | auto | UI language: `en`, `zh`, or `auto` (see below) |
 | `groups` | object | `{}` | Named configuration groups (see below) |
 | `project_registry` | array | `[]` | Maps project paths to groups |
@@ -28,6 +30,18 @@ CodeAgent uses `config.json` at the project root for all configuration. The file
 | `paths` | object | `{}` | Custom resource paths |
 | `schedules` | array | `[]` | Cron-style scheduled tasks |
 | `notifications` | object | `{}` | Webhook URLs to notify on schedule failure |
+
+### Default Engine
+
+`default_engine` picks which engine a bare `ca` (or `ca <free-form prompt>`)
+starts. Accepted values are `claude`, `gemini`, `opencode`, and `codex`; naming
+an engine explicitly — `ca claude ...` — always wins over this setting.
+
+Without it, `ca` always started `gemini`, so anyone working primarily in
+another engine had to name it on every single invocation.
+
+An unrecognized value does not abort the launch: CodeAgent prints a warning
+naming the known engines and falls back to `gemini`.
 
 ### Language
 
