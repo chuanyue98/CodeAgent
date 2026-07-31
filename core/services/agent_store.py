@@ -199,6 +199,23 @@ class AgentStore:
             ).fetchall()
         return [self._session_from_row(row) for row in rows]
 
+    def list_sessions_by_provider(self, provider: str) -> list[AgentSession]:
+        """All sessions belonging to one provider, regardless of age.
+
+        The Gateway's adapter supervisor has to touch every session a
+        crashed provider owns. It used to do that with
+        ``list_sessions(limit=10_000)`` plus a Python-side filter, which
+        deserializes the entire table -- including every other provider's
+        sessions -- on each crash, reconnect, and shutdown.
+        """
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT * FROM agent_sessions WHERE provider = ? "
+                "ORDER BY updated_at DESC",
+                (provider,),
+            ).fetchall()
+        return [self._session_from_row(row) for row in rows]
+
     def delete_session(self, session_id: str) -> bool:
         with self._lock, self._connection:
             cursor = self._connection.execute(

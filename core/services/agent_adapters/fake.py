@@ -27,6 +27,13 @@ class FakeAgentAdapter:
         self.cancelled: list[tuple[str, str]] = []
 
     async def start(self) -> None:
+        # A restarted adapter gets a fresh stream, mirroring the real ones
+        # (which spawn a new subprocess and a new queue). Without this the
+        # ``None`` sentinel that stop() enqueues survives into the next
+        # run and ends the new event pump immediately, so the Gateway's
+        # supervisor would see every reconnect die on arrival.
+        while not self._events.empty():
+            self._events.get_nowait()
         self._started = True
 
     async def stop(self) -> None:

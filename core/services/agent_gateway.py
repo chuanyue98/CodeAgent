@@ -7,6 +7,7 @@ from collections import OrderedDict, defaultdict
 from pathlib import Path
 from uuid import uuid4
 
+from core.logging_config import get_logger
 from core.services.agent_adapters.base import AgentAdapter
 from core.services.agent_protocol import (
     AdapterEvent,
@@ -28,6 +29,8 @@ from core.services.agent_protocol import (
 from core.services.agent_store import AgentStore
 from core.services.config_service import ConfigService
 
+logger = get_logger(__name__)
+
 
 class AgentGatewayError(Exception):
     def __init__(self, code: str, message: str, *, status_code: int = 400):
@@ -46,17 +49,25 @@ class AgentGateway:
         *,
         subscriber_queue_size: int = 512,
         event_retention: int = 5000,
+        reconnect_base_delay: float = 1.0,
+        reconnect_max_delay: float = 60.0,
+        healthy_run_seconds: float = 30.0,
     ):
         self.store = store
         self.config_path = Path(config_path)
         self.adapters = {adapter.provider_id: adapter for adapter in adapters}
         self.subscriber_queue_size = subscriber_queue_size
         self.event_retention = event_retention
+        self.reconnect_base_delay = reconnect_base_delay
+        self.reconnect_max_delay = reconnect_max_delay
+        self.healthy_run_seconds = healthy_run_seconds
         self._adapter_tasks: list[asyncio.Task] = []
         self._subscribers: dict[str, set[asyncio.Queue[AgentEvent | None]]] = (
             defaultdict(set)
         )
         self._acks: dict[str, OrderedDict[str, AgentAck]] = defaultdict(OrderedDict)
+        self._reconnect_now: dict[str, asyncio.Event] = {}
+        self._reconnect_attempts: dict[str, int] = {}
         self._started = False
 
     async def start(self) -> None:
@@ -64,15 +75,18 @@ class AgentGateway:
             return
         self._started = True
         for adapter in self.adapters.values():
-            try:
-                await adapter.start()
-            except Exception:
-                # One unavailable provider must not take down the Gateway.
-                continue
+            self._reconnect_now[adapter.provider_id] = asyncio.Event()
+            # The first attempt is awaited inline rather than left to the
+            # supervisor: create_session() gates on adapter.capabilities()
+            # .available, which only becomes true once start() has run, so
+            # deferring it would let a request arriving immediately after
+            # boot see a provider that is merely not-yet-started as
+            # unavailable.
+            started = await self._try_start_adapter(adapter)
             self._adapter_tasks.append(
                 asyncio.create_task(
-                    self._pump_adapter(adapter),
-                    name=f"agent-events-{adapter.provider_id}",
+                    self._supervise_adapter(adapter, already_started=started),
+                    name=f"agent-supervisor-{adapter.provider_id}",
                 )
             )
 
@@ -86,15 +100,29 @@ class AgentGateway:
                     queue.get_nowait()
                 queue.put_nowait(None)
         self._subscribers.clear()
+        # _started is already False, so a supervisor whose pump unblocks
+        # because of this stop() returns instead of treating it as a crash
+        # and scheduling a reconnect.
         for adapter in self.adapters.values():
             try:
                 await adapter.stop()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "Ignoring stop() failure for %s during shutdown: %s",
+                    adapter.provider_id,
+                    exc,
+                )
+        # Wake any supervisor currently sleeping out a reconnect backoff so
+        # it observes the cleared _started flag and exits promptly, rather
+        # than sitting in a wait_for() that cancel() then has to interrupt.
+        for event in self._reconnect_now.values():
+            event.set()
         for task in self._adapter_tasks:
             task.cancel()
         await asyncio.gather(*self._adapter_tasks, return_exceptions=True)
         self._adapter_tasks.clear()
+        self._reconnect_now.clear()
+        self._reconnect_attempts.clear()
         for session in self.store.list_sessions(limit=10_000):
             if session.status in {SessionStatus.BUSY, SessionStatus.READY}:
                 session.status = SessionStatus.DISCONNECTED
@@ -469,38 +497,212 @@ class AgentGateway:
             cache.popitem(last=False)
         return ack
 
-    async def _pump_adapter(self, adapter: AgentAdapter) -> None:
+    async def _try_start_adapter(self, adapter: AgentAdapter) -> bool:
+        """Starts an adapter, reporting failure rather than raising.
+
+        One unavailable provider must never take down the Gateway or the
+        other providers.
+        """
+        try:
+            await adapter.start()
+            return True
+        except Exception as exc:
+            logger.info(
+                "Provider %s is not available yet: %s", adapter.provider_id, exc
+            )
+            return False
+
+    async def _supervise_adapter(
+        self, adapter: AgentAdapter, *, already_started: bool
+    ) -> None:
+        """Keeps one provider's event pump alive for the Gateway's lifetime.
+
+        Previously this was a bare pump: when ``events()`` raised, every
+        session for that provider was marked ERROR and the task simply
+        returned. Nothing ever restarted it, so a single transient failure
+        -- a CLI subprocess dying, a protocol hiccup, a provider that was
+        merely slow to install -- removed that provider permanently until
+        the user restarted the whole server. A long-lived ``ca ui`` would
+        lose providers one by one with no way back.
+
+        Three failure modes are handled here, all of which used to be
+        terminal:
+
+        * ``events()`` raises -- the crash case.
+        * ``events()`` returns cleanly (the ``None`` sentinel in
+          ``iter_events``), which produced no error event at all: the pump
+          just stopped and the provider went quiet with the UI still
+          showing it as healthy.
+        * ``start()`` failed at boot, which previously skipped creating a
+          pump task entirely.
+
+        Sessions are moved to DISCONNECTED rather than ERROR because they
+        are recoverable: ERROR is terminal in the UI, and the session is
+        resumable again as soon as the provider comes back.
+        """
+        loop = asyncio.get_running_loop()
+        delay = self.reconnect_base_delay
+        running = already_started
+        if not running:
+            await self._publish_provider_state(adapter, connected=False)
+
+        while self._started:
+            if not running:
+                running = await self._try_start_adapter(adapter)
+                if not running:
+                    # Announce each failed attempt so a prolonged outage
+                    # visibly counts up in the UI instead of showing one
+                    # frozen "reconnecting" line for minutes.
+                    self._bump_attempt(adapter.provider_id)
+                    await self._publish_provider_state(
+                        adapter,
+                        connected=False,
+                        reason="Provider is still unavailable",
+                    )
+                    if not await self._wait_before_retry(adapter, delay):
+                        return
+                    delay = min(delay * 2, self.reconnect_max_delay)
+                    continue
+                self._reconnect_attempts.pop(adapter.provider_id, None)
+                delay = self.reconnect_base_delay
+                await self._publish_provider_state(adapter, connected=True)
+
+            started_at = loop.time()
+            reason = await self._pump_adapter(adapter)
+            running = False
+            if not self._started:
+                return
+
+            # A pump that stayed up a while then died is a fresh incident,
+            # not an escalating crash loop -- reset the backoff so recovery
+            # from an occasional blip stays fast while a provider that dies
+            # on every start still backs off to the cap.
+            if loop.time() - started_at >= self.healthy_run_seconds:
+                delay = self.reconnect_base_delay
+                self._reconnect_attempts.pop(adapter.provider_id, None)
+
+            # Counted before publishing so the disconnect event names the
+            # attempt that is about to happen ("attempt 1"), not the zero
+            # attempts made so far.
+            self._bump_attempt(adapter.provider_id)
+            await self._mark_provider_disconnected(adapter, reason)
+            try:
+                await adapter.stop()
+            except Exception as exc:
+                logger.debug(
+                    "Ignoring stop() failure while restarting %s: %s",
+                    adapter.provider_id,
+                    exc,
+                )
+            if not await self._wait_before_retry(adapter, delay):
+                return
+            delay = min(delay * 2, self.reconnect_max_delay)
+
+    def _bump_attempt(self, provider_id: str) -> int:
+        attempts = self._reconnect_attempts.get(provider_id, 0) + 1
+        self._reconnect_attempts[provider_id] = attempts
+        return attempts
+
+    async def _pump_adapter(self, adapter: AgentAdapter) -> str:
+        """Forwards adapter events until the stream ends. Never raises.
+
+        Returns a human-readable reason the stream ended, for the
+        disconnect event the supervisor publishes.
+        """
         try:
             async for adapter_event in adapter.events():
                 await self._handle_adapter_event(adapter.provider_id, adapter_event)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            for session in self.store.list_sessions(limit=10_000):
-                if session.provider != adapter.provider_id:
-                    continue
-                session.status = SessionStatus.ERROR
-                session.updated_at = utc_now()
-                self.store.upsert_session(session)
-                await self.publish(
-                    AgentEvent(
-                        type="error",
-                        session_id=session.id,
-                        data={
-                            "code": "provider_crashed",
-                            "message": str(exc),
-                            "retryable": True,
-                        },
-                    )
+            return str(exc) or exc.__class__.__name__
+        return "Provider event stream ended"
+
+    def request_reconnect(self, provider_id: str) -> bool:
+        """Wakes a supervisor that is sleeping between retries.
+
+        Lets the UI offer "retry now" instead of making the user wait out a
+        backoff that may be up to ``reconnect_max_delay`` long. Returns
+        False for an unknown provider.
+        """
+        event = self._reconnect_now.get(provider_id)
+        if event is None:
+            return False
+        event.set()
+        return True
+
+    async def _wait_before_retry(self, adapter: AgentAdapter, delay: float) -> bool:
+        """Sleeps ``delay`` seconds, cut short by :meth:`request_reconnect`.
+
+        Returns False when the Gateway shut down during the wait, meaning
+        the supervisor should exit rather than loop again.
+        """
+        logger.info(
+            "Provider %s reconnect attempt %d in %.1fs",
+            adapter.provider_id,
+            self._reconnect_attempts.get(adapter.provider_id, 0),
+            delay,
+        )
+        event = self._reconnect_now[adapter.provider_id]
+        event.clear()
+        try:
+            await asyncio.wait_for(event.wait(), timeout=delay)
+        except TimeoutError:
+            pass
+        return self._started
+
+    async def _mark_provider_disconnected(
+        self, adapter: AgentAdapter, reason: str
+    ) -> None:
+        for session in self.store.list_sessions_by_provider(adapter.provider_id):
+            if session.status in {SessionStatus.CLOSED, SessionStatus.DISCONNECTED}:
+                continue
+            session.status = SessionStatus.DISCONNECTED
+            session.updated_at = utc_now()
+            self.store.upsert_session(session)
+            await self.publish(
+                AgentEvent(
+                    type="error",
+                    session_id=session.id,
+                    data={
+                        "code": "provider_disconnected",
+                        "message": reason,
+                        "retryable": True,
+                    },
                 )
+            )
+        await self._publish_provider_state(adapter, connected=False, reason=reason)
+
+    async def _publish_provider_state(
+        self, adapter: AgentAdapter, *, connected: bool, reason: str | None = None
+    ) -> None:
+        """Announces a provider's connectivity on each of its sessions.
+
+        Events are per-session because that is the only channel clients
+        subscribe to; a client with no session for this provider learns the
+        same thing from ``GET /api/agent/providers``.
+        """
+        payload: dict = {
+            "provider": adapter.provider_id,
+            "connected": connected,
+            "attempt": self._reconnect_attempts.get(adapter.provider_id, 0),
+        }
+        if reason:
+            payload["reason"] = reason
+        for session in self.store.list_sessions_by_provider(adapter.provider_id):
+            await self.publish(
+                AgentEvent(
+                    type="provider.connected" if connected else "provider.disconnected",
+                    session_id=session.id,
+                    data=payload,
+                )
+            )
 
     async def _handle_adapter_event(
         self, provider: str, adapter_event: AdapterEvent
     ) -> None:
         if adapter_event.type == "error" and not adapter_event.provider_session_id:
-            for failed_session in self.store.list_sessions(limit=10_000):
-                if failed_session.provider != provider:
-                    continue
+            for failed_session in self.store.list_sessions_by_provider(provider):
                 failed_session.status = SessionStatus.ERROR
                 failed_session.updated_at = utc_now()
                 self.store.upsert_session(failed_session)

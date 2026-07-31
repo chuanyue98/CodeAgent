@@ -1,4 +1,5 @@
 import request from '../utils/request';
+import { withToken } from '../utils/token';
 import type {
   AgentCommand,
   AgentEvent,
@@ -86,10 +87,17 @@ export function deleteAgentSession(sessionId: string): Promise<void> {
   });
 }
 
+/** Cuts short the Gateway's reconnect backoff for one provider. */
+export function reconnectAgentProvider(providerId: string): Promise<{ status: string }> {
+  return request(`/api/agent/providers/${encodeURIComponent(providerId)}/reconnect`, {
+    method: 'POST',
+  });
+}
+
 export function agentEventsUrl(sessionId: string, afterSequence = 0): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const query = new URLSearchParams({ afterSequence: String(afterSequence) });
-  return `${protocol}//${window.location.host}/api/agent/sessions/${encodeURIComponent(sessionId)}/events?${query}`;
+  return withToken(`${protocol}//${window.location.host}/api/agent/sessions/${encodeURIComponent(sessionId)}/events?${query}`);
 }
 
 export function sendAgentCommand(socket: WebSocket, command: AgentCommand): void {

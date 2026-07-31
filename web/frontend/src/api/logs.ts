@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import request from '../utils/request';
+import { withToken } from '../utils/token';
 
 export interface LogFile {
   task_id: string;
@@ -34,7 +35,8 @@ export function useLogStream(taskId: string | null) {
     setError(null);
     setConnected(false);
 
-    const url = `/api/logs/${encodeURIComponent(taskId)}/stream`;
+    // EventSource cannot set headers, so the token rides the query string.
+    const url = withToken(`/api/logs/${encodeURIComponent(taskId)}/stream`);
     const eventSource = new EventSource(url);
 
     eventSource.onopen = () => { setConnected(true); setError(null); };

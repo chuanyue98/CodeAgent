@@ -8,6 +8,15 @@ export interface AgentMessage {
   pending?: boolean;
 }
 
+/** Live connectivity of the provider backing this session. */
+export interface ProviderConnectivity {
+  connected: boolean;
+  /** Why it dropped, when known. Absent once reconnected. */
+  reason?: string;
+  /** Which reconnect attempt the Gateway is on. 0 before the first retry. */
+  attempt: number;
+}
+
 export interface AgentSessionState {
   session: AgentSession | null;
   messages: AgentMessage[];
@@ -15,6 +24,7 @@ export interface AgentSessionState {
   approvals: ApprovalRequest[];
   activeTurnId: string | null;
   lastSequence: number;
+  provider: ProviderConnectivity | null;
 }
 
 export const initialAgentSessionState: AgentSessionState = {
@@ -24,6 +34,7 @@ export const initialAgentSessionState: AgentSessionState = {
   approvals: [],
   activeTurnId: null,
   lastSequence: 0,
+  provider: null,
 };
 
 export type AgentSessionAction =
@@ -145,7 +156,22 @@ export function agentSessionReducer(
     }
   } else if (event.type === 'turn.completed') {
     next.activeTurnId = null;
+  } else if (event.type === 'provider.disconnected') {
+    next.provider = {
+      connected: false,
+      reason: dataString(event.data, 'reason') || undefined,
+      attempt: typeof event.data.attempt === 'number' ? event.data.attempt : 0,
+    };
+  } else if (event.type === 'provider.connected') {
+    next.provider = {
+      connected: true,
+      attempt: typeof event.data.attempt === 'number' ? event.data.attempt : 0,
+    };
   } else if (event.type === 'error') {
+    // A provider drop already drives the banner via provider.disconnected.
+    // Appending a transcript bubble too would stack one up on every retry
+    // cycle of an outage, burying the conversation under identical errors.
+    if (dataString(event.data, 'code') === 'provider_disconnected') return next;
     next.messages = [
       ...state.messages,
       {

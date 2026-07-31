@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 from pathlib import Path
 
 import click
@@ -340,6 +341,28 @@ def run_ui_command():
         print(t("ui.starting", url=url))
 
     api_host = os.environ.get("CA_UI_HOST", "127.0.0.1")
+
+    # The API requires a per-install token (core/web/security.py). Hand it
+    # to the browser through the URL it is opened with; the SPA stores it
+    # and strips it from the address bar on boot. Anyone opening the UI by
+    # typing the URL manually needs `ca ui --show-token`, which is why the
+    # token is printed on a non-loopback bind below.
+    from core.web.security import (
+        TOKEN_QUERY_PARAM,
+        auth_enabled,
+        get_ui_token,
+        is_loopback_hostname,
+    )
+
+    if auth_enabled():
+        token = get_ui_token()
+        url = f"{url}?{TOKEN_QUERY_PARAM}={urllib.parse.quote(token)}"
+        if not is_loopback_hostname(api_host):
+            # Binding a LAN-reachable interface makes the token the only
+            # thing standing between the network and a shell on this
+            # machine, so say so loudly rather than failing silently later.
+            print(t("ui.non_loopback_warning", host=api_host))
+
     threading.Thread(
         target=_wait_for_api_then_open_browser,
         args=(api_host, port, url),
@@ -727,9 +750,19 @@ def doctor(ctx, fix, dry_run):
 
 
 @cli.command()
+@click.option(
+    "--show-token",
+    is_flag=True,
+    help="Print the Web UI token and exit, for opening the UI manually.",
+)
 @click.pass_context
-def ui(ctx):
+def ui(ctx, show_token):
     """Start the Web UI."""
+    if show_token:
+        from core.web.security import get_ui_token
+
+        print(t("ui.token_line", token=get_ui_token()))
+        return 0
     return run_ui_command()
 
 

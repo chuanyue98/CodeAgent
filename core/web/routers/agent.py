@@ -24,6 +24,7 @@ from core.services.agent_protocol import (
     wire,
 )
 from core.session_history.session_finder import find_session_by_id
+from core.web.security import verify_websocket
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
@@ -64,6 +65,21 @@ async def list_agent_providers(request: Request) -> list[dict]:
         return [wire(value) for value in await _gateway(request).providers()]
     except AgentGatewayError as exc:
         raise _http_error(exc) from exc
+
+
+@router.post("/providers/{provider_id}/reconnect")
+async def reconnect_agent_provider(provider_id: str, request: Request) -> dict:
+    """Cuts short a provider's reconnect backoff.
+
+    The Gateway retries a crashed provider on its own with exponential
+    backoff up to a minute; this lets someone who just fixed the cause
+    (installed the CLI, signed in) skip the wait instead of watching a
+    disconnected banner for the rest of the interval.
+    """
+    gateway = _gateway(request)
+    if not gateway.request_reconnect(provider_id):
+        raise HTTPException(status_code=404, detail="Provider not found")
+    return {"status": "reconnecting", "provider": provider_id}
 
 
 @router.get("/sessions")
@@ -231,6 +247,12 @@ async def agent_session_events(
     session_id: str,
     after_sequence: int = Query(0, alias="afterSequence", ge=0),
 ) -> None:
+    # Router-level Depends() does not run for WebSocket handshakes, so the
+    # same token/Origin gate the HTTP routes get is applied explicitly here
+    # -- and before accept(), so an unauthorized caller never receives a
+    # usable socket. This stream replays the full conversation history.
+    if not await verify_websocket(websocket):
+        return
     await websocket.accept()
     try:
         gateway = _gateway(websocket)

@@ -1,3 +1,5 @@
+import { authHeaders } from './token';
+
 interface RequestConfig extends RequestInit {
   timeout?: number;
 }
@@ -16,6 +18,7 @@ async function request<T = unknown>(url: string, config: RequestConfig = {}): Pr
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders(),
         ...(restConfig.headers as Record<string, string>),
       },
     });
@@ -24,6 +27,14 @@ async function request<T = unknown>(url: string, config: RequestConfig = {}): Pr
 
     if (!response.ok) {
       let detail = `Request failed with status ${response.status}`;
+      if (response.status === 401) {
+        // The token is missing or stale -- a generic "Request failed with
+        // status 401" sends people hunting through logs for a backend
+        // fault, so name the actual fix instead.
+        throw new Error(
+          'Not authorized. Reopen the UI with `ca ui`, or run `ca ui --show-token`.',
+        );
+      }
       try {
         const body = await response.json() as { detail?: string | { error?: string; message?: string } };
         if (typeof body.detail === 'string') detail = body.detail;

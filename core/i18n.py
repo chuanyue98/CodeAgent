@@ -294,6 +294,23 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Starting Web UI at {url}...",
         "zh": "正在启动 Web UI: {url}...",
     },
+    "ui.non_loopback_warning": {
+        "en": (
+            "⚠️  Bound to {host}, which is reachable from the network. The UI "
+            "token is now the only thing protecting shell access on this "
+            "machine. Run `ca ui --show-token` to read it, and prefer putting "
+            "an authenticating proxy in front of this server."
+        ),
+        "zh": (
+            "⚠️  已绑定到 {host}，该地址可从网络访问。此时 UI token 是保护本机 "
+            "shell 权限的唯一屏障。可用 `ca ui --show-token` 查看 token，"
+            "并建议在本服务前置一层带认证的反向代理。"
+        ),
+    },
+    "ui.token_line": {
+        "en": "UI token: {token}",
+        "zh": "UI token：{token}",
+    },
     # --- ca history ---
     "history.none": {
         "en": "No sessions found for this project.",
