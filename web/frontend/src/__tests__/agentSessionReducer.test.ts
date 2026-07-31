@@ -110,4 +110,50 @@ describe('agentSessionReducer', () => {
     ]);
     expect(secondCompleted.messages[0].id).not.toBe(secondCompleted.messages[1].id);
   });
+  test('tracks provider connectivity across a drop and recovery', () => {
+    const dropped = agentSessionReducer(initialAgentSessionState, {
+      type: 'event',
+      event: event(1, 'provider.disconnected', {
+        provider: 'claude',
+        connected: false,
+        reason: 'adapter process died',
+        attempt: 2,
+      }),
+    });
+    expect(dropped.provider).toEqual({
+      connected: false,
+      reason: 'adapter process died',
+      attempt: 2,
+    });
+
+    const recovered = agentSessionReducer(dropped, {
+      type: 'event',
+      event: event(2, 'provider.connected', { provider: 'claude', connected: true, attempt: 0 }),
+    });
+    expect(recovered.provider).toEqual({ connected: true, attempt: 0 });
+  });
+
+  test('keeps provider_disconnected errors out of the transcript', () => {
+    // The Gateway emits one of these per retry cycle. Rendering each as an
+    // error bubble would bury the conversation during a long outage — the
+    // banner reports the outage instead.
+    const state = agentSessionReducer(initialAgentSessionState, {
+      type: 'event',
+      event: event(1, 'error', {
+        code: 'provider_disconnected',
+        message: 'adapter process died',
+      }),
+    });
+    expect(state.messages).toHaveLength(0);
+  });
+
+  test('still shows genuine provider errors in the transcript', () => {
+    const state = agentSessionReducer(initialAgentSessionState, {
+      type: 'event',
+      event: event(1, 'error', { code: 'provider_error', message: 'model refused' }),
+    });
+    expect(state.messages).toHaveLength(1);
+    expect(state.messages[0].role).toBe('error');
+    expect(state.messages[0].text).toBe('model refused');
+  });
 });

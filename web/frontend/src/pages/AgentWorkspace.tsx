@@ -133,6 +133,7 @@ export default function AgentWorkspace() {
               connected={workspace.connected}
               connecting={workspace.connecting}
               stateActiveTurnId={workspace.state.activeTurnId}
+              provider={workspace.state.provider}
               sessionResourceSnapshot={workspace.sessionResourceSnapshot}
               sessionResourceGroup={workspace.sessionResourceGroup}
               resourceCount={workspace.resourceCount}

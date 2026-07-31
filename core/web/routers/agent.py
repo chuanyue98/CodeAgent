@@ -67,6 +67,21 @@ async def list_agent_providers(request: Request) -> list[dict]:
         raise _http_error(exc) from exc
 
 
+@router.post("/providers/{provider_id}/reconnect")
+async def reconnect_agent_provider(provider_id: str, request: Request) -> dict:
+    """Cuts short a provider's reconnect backoff.
+
+    The Gateway retries a crashed provider on its own with exponential
+    backoff up to a minute; this lets someone who just fixed the cause
+    (installed the CLI, signed in) skip the wait instead of watching a
+    disconnected banner for the rest of the interval.
+    """
+    gateway = _gateway(request)
+    if not gateway.request_reconnect(provider_id):
+        raise HTTPException(status_code=404, detail="Provider not found")
+    return {"status": "reconnecting", "provider": provider_id}
+
+
 @router.get("/sessions")
 async def list_agent_sessions(
     request: Request, limit: int = Query(100, ge=1, le=500)
