@@ -20,7 +20,7 @@ from core.hook_scanner import get_hooks_to_inject
 from core.i18n import t
 from core.link_manager import is_windows_link
 from core.plugin_scanner import get_plugins_to_mount
-from core.resource_locator import CODE_ROOT
+from core.resource_locator import CODE_ROOT, seed_config_if_missing
 from core.services.config_service import ConfigService
 
 # ── Status symbols ────────────────────────────────────────────────────────────
@@ -115,8 +115,18 @@ def check_engines(section: Section) -> None:
             )
 
 
-def check_config(section: Section, root: Path) -> dict | None:
+def check_config(section: Section, root: Path, fix: bool = False) -> dict | None:
     config_path = root / "config.json"
+
+    # A fresh clone has no config.json -- it is gitignored -- and the old hint
+    # ("Run: ca, first launch creates defaults") was untrue: nothing wrote the
+    # file. --fix now seeds it from the tracked template, so the repair the
+    # result line advertises actually applies to this failure.
+    if fix and not config_path.exists():
+        seeded = seed_config_if_missing(root)
+        if seeded is not None:
+            print(t("doctor.config_seeded", path=seeded))
+
     config_service = ConfigService(config_path)
     cfg, warnings = config_service.get_config()
 
@@ -129,7 +139,7 @@ def check_config(section: Section, root: Path) -> dict | None:
                 FAIL,
                 "config.json",
                 t("doctor.config_not_found"),
-                t("doctor.config_first_launch"),
+                t("doctor.config_run_fix"),
             )
         else:
             section.add(FAIL, "config.json", t("doctor.config_unparsable"))
@@ -177,7 +187,18 @@ def check_skills_resolution(section: Section, root: Path, cfg: dict) -> None:
                 missing.append(name)
 
         total = len(skills)
-        if not missing:
+        if total == 0:
+            # "Skills (0 declared) -- all resolved" used to render green, which
+            # is literally true and badly misleading: the Skills system is the
+            # product's headline feature, and a config with no groups mounted
+            # nothing while the report looked entirely healthy.
+            section.add(
+                WARN,
+                t("doctor.skills_declared", total=0),
+                t("doctor.skills_none_detail", group=project_type),
+                t("doctor.skills_none_hint", group=project_type),
+            )
+        elif not missing:
             section.add(
                 OK,
                 t("doctor.skills_declared", total=total),
@@ -737,7 +758,7 @@ def get_doctor_sections(fix: bool = False, dry_run: bool = False) -> list[Sectio
     check_engines(s1)
 
     s2 = Section(t("doctor.section_configuration"))
-    cfg = check_config(s2, root)
+    cfg = check_config(s2, root, fix=fix)
     if cfg is not None:
         check_directories(s2, root)
 
