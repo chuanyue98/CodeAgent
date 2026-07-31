@@ -194,6 +194,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh": "代码审查 PR URL",
     },
     # --- config / engine selection ---
+    "config.seeded": {
+        "en": "Created {path} from the bundled template (first launch)",
+        "zh": "已根据内置模板创建 {path} (首次启动)",
+    },
     "config.load_failed": {
         "en": "[!] Warning: Failed to load config.json: {error}",
         "zh": "[!] 警告: 加载 config.json 失败: {error}",
@@ -589,9 +593,13 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
     # configuration
     "doctor.config_not_found": {"en": "file not found", "zh": "文件不存在"},
-    "doctor.config_first_launch": {
-        "en": "Run: ca (first launch creates defaults)",
-        "zh": "运行: ca (首次启动会生成默认配置)",
+    "doctor.config_run_fix": {
+        "en": "Run: ca doctor --fix  (seeds config.json from config.example.json)",
+        "zh": "运行: ca doctor --fix  (从 config.example.json 生成 config.json)",
+    },
+    "doctor.config_seeded": {
+        "en": "  Created {path} from the bundled template",
+        "zh": "  已根据内置模板创建 {path}",
     },
     "doctor.config_unparsable": {
         "en": "failed to load or parse configuration",
@@ -617,6 +625,22 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh": "技能 (声明 {total} 个，缺失 {missing} 个)",
     },
     "doctor.all_resolved": {"en": "all resolved", "zh": "全部解析成功"},
+    "doctor.skills_none_detail": {
+        "en": "no skills will be mounted for group '{group}'",
+        "zh": "资源组 '{group}' 不会挂载任何技能",
+    },
+    # Deliberately not "run ca doctor --fix": seeding only applies to a
+    # *missing* config.json, and this warning only fires when one exists.
+    "doctor.skills_none_hint": {
+        "en": (
+            "Add entries to groups.{group}.skills in config.json "
+            "(see config.example.json), or use the Web UI's Config Hub"
+        ),
+        "zh": (
+            "请在 config.json 的 groups.{group}.skills 中添加技能 "
+            "(可参考 config.example.json)，或通过 Web UI 的 Config Hub 配置"
+        ),
+    },
     "doctor.skills_hint": {
         "en": "Check skills/ directory or config.json groups",
         "zh": "请检查 skills/ 目录或 config.json 中的 groups",

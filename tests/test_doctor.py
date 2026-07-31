@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from core import doctor, i18n
+from core import doctor, i18n, resource_locator
 
 
 @pytest.fixture(autouse=True)
@@ -337,3 +337,69 @@ def test_every_translated_section_title_has_a_width():
     i18n.set_language("zh")
     titles = [s.title for s in doctor.get_doctor_sections(fix=False)]
     assert titles and all(doctor._display_width(x) >= len(x) for x in titles)
+
+
+# --- first-run config seeding -----------------------------------------------
+#
+# config.json is gitignored, so a fresh clone had none, and the in-memory
+# fallback carries no `groups` -- which mounted zero skills while the report
+# still looked healthy.
+
+
+def test_missing_config_points_at_a_repair_that_exists(tmp_path):
+    section = doctor.Section("Config")
+    assert doctor.check_config(section, tmp_path) is None
+    assert section.checks[0].status == doctor.FAIL
+    assert "ca doctor --fix" in section.checks[0].fix_hint
+
+
+def test_fix_seeds_config_from_the_tracked_template(tmp_path, monkeypatch):
+    """--fix turns the reported failure into a working config, using the real
+    seeding path rather than a stand-in for it."""
+    (tmp_path / "config.example.json").write_text(
+        '{"groups": {"common": {"skills": ["base/x"]}}}', encoding="utf-8"
+    )
+    # get_default_config_path / get_bundled_resource_root both resolve from
+    # CODE_ROOT; point them at the fixture so the real function runs.
+    monkeypatch.setattr(resource_locator, "CODE_ROOT", tmp_path)
+    monkeypatch.setenv("CA_CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setenv("CODEAGENT_RESOURCE_ROOT", str(tmp_path))
+
+    section = doctor.Section("Config")
+    cfg = doctor.check_config(section, tmp_path, fix=True)
+
+    assert cfg is not None
+    assert section.checks[0].status == doctor.OK
+    assert (tmp_path / "config.json").exists()
+    assert cfg["groups"]["common"]["skills"] == ["base/x"]
+
+
+def test_seeding_never_overwrites_an_existing_config(tmp_path, monkeypatch):
+    """The file holds the user's groups and project registry."""
+    (tmp_path / "config.example.json").write_text('{"groups": {}}', encoding="utf-8")
+    existing = tmp_path / "config.json"
+    existing.write_text('{"mine": true}', encoding="utf-8")
+    monkeypatch.setenv("CA_CONFIG_PATH", str(existing))
+    monkeypatch.setenv("CODEAGENT_RESOURCE_ROOT", str(tmp_path))
+
+    assert resource_locator.seed_config_if_missing(tmp_path) is None
+    assert existing.read_text(encoding="utf-8") == '{"mine": true}'
+
+
+def test_zero_skills_warns_instead_of_reporting_green(tmp_path, monkeypatch):
+    """ "Skills (0 declared) -- all resolved" read as healthy while the
+    product's headline feature was mounting nothing."""
+    for directory in ("skills", "prompt", "hooks", "plugins"):
+        (tmp_path / directory).mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    section = doctor.Section("Context")
+    doctor.check_skills_resolution(
+        section, tmp_path, {"groups": {"codeagent": {"skills": []}}}
+    )
+
+    skills_check = [c for c in section.checks if "Skills" in c.label][0]
+    assert skills_check.status == doctor.WARN
+    assert "no skills will be mounted" in skills_check.detail
+    # The hint must not promise --fix: seeding only applies to a missing file.
+    assert "--fix" not in skills_check.fix_hint

@@ -20,6 +20,7 @@ from core.resource_locator import (
     CODE_ROOT,
     get_bundled_resource_root,
     get_default_config_path,
+    seed_config_if_missing,
 )
 from core.services.config_service import ConfigService
 
@@ -590,6 +591,16 @@ def _launch_engine(ctx, args):
     obj = ctx.ensure_object(dict)
     child_env = obj.get("child_env")
     engine_script_map = obj["engine_script_map"]
+
+    # Seed here rather than in load_config(): this is the "first launch"
+    # doctor's hint used to promise, and it keeps read-only invocations like
+    # `ca --help` from writing files as a side effect. Without it, a fresh
+    # clone launched with no groups at all and mounted zero skills.
+    seeded = seed_config_if_missing(obj["root"])
+    if seeded is not None:
+        print(t("config.seeded", path=seeded))
+        obj["config"] = load_config()
+
     _ensure_project_registered(obj["root"], obj["config"])
 
     engine_name = _resolve_default_engine(obj["config"], engine_script_map)

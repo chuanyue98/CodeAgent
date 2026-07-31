@@ -80,16 +80,24 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 ### Installation
 
 ```bash
-git clone https://github.com/chuanyue98/CodeAgent.git
+# --recurse-submodules matters: the bundled plugins live in a submodule,
+# and a plain clone leaves plugins/base/superpowers empty.
+git clone --recurse-submodules https://github.com/chuanyue98/CodeAgent.git
 cd CodeAgent
 
 python -m venv .venv && source .venv/bin/activate
 uv sync                     # or: pip install -e .
 
-ca doctor                   # confirms which provider CLIs were found
+ca doctor --fix             # checks the provider CLIs, and creates config.json
 ```
 
-`ca doctor --fix` repairs most of what it reports.
+`config.json` is gitignored — it holds machine-specific project paths — so a
+fresh clone has none. `ca doctor --fix` seeds it from the tracked
+`config.example.json`, which is also what your first `ca <engine>` run does.
+Until it exists, no skills, prompts, or plugins are mounted.
+
+Already cloned without `--recurse-submodules`? Run `git submodule update
+--init --recursive`.
 
 ### First run (about two minutes)
 
@@ -208,12 +216,14 @@ See [docs/commands.md](docs/commands.md) for the full command reference.
 
 ## Configuration
 
-CodeAgent uses a `config.json` for project-specific settings:
+CodeAgent uses a `config.json` for project-specific settings. It is gitignored;
+`config.example.json` is the tracked template it is seeded from.
 
 ```json
 {
   "default_mode": "local",
-  "language": "hybrid",
+  "default_engine": "gemini",
+  "language": "auto",
   "groups": {
     "codeagent": {
       "skills": ["base/task-authoring", "base/architect-planning"],
