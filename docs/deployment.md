@@ -90,6 +90,43 @@ If you run CodeAgent natively on a host (no container) and want the dashboard re
 other machines, the same `CA_UI_HOST=0.0.0.0 ca ui` override applies — just be aware this
 removes the loopback-only default and exposes the dashboard to your network.
 
+## Web UI authentication
+
+The API is not safe to expose unauthenticated: a caller can register a workspace and open a
+PTY running a provider CLI with your credentials. `core/web/security.py` applies three checks
+to every `/api` route (static assets and `/api/health` stay open so the browser can load the
+app and so readiness probes work):
+
+- **`Host` header** must name this server. Blocks DNS rebinding, which defeats a
+  bind-address check.
+- **`Origin`**, when present, must be loopback or match `Host`. Blocks drive-by WebSocket
+  hijacking — a WebSocket handshake is *not* subject to the same-origin policy, so without
+  this any page you visit could open `ws://127.0.0.1:8524/api/pty/ws` and drive a shell.
+- **Token**, from the `X-CA-Token` header or a `ca_token` query parameter (the query form
+  exists because `EventSource` and `WebSocket` cannot set headers).
+
+`ca ui` generates the token at `~/.codeagent/ui-token` and opens the browser with it in the
+URL; the app stores it in `sessionStorage` and strips it from the address bar. To open the UI
+manually, get the value with `ca ui --show-token`.
+
+### In a container
+
+Behind Docker's port mapping the `Host` your users send is whatever they typed, and the
+container's own `Host` expectations differ from a native install. Two options:
+
+```bash
+# Reachable as http://codeagent.internal:8524
+CA_UI_ALLOWED_HOSTS=codeagent.internal CA_UI_TOKEN=<a-long-random-secret> ca ui
+
+# Behind a reverse proxy that already authenticates AND validates Host
+CA_UI_AUTH=off CA_UI_ALLOWED_HOSTS='*' ca ui
+```
+
+Set `CA_UI_TOKEN` explicitly for containers — a generated token inside an ephemeral
+filesystem changes on every restart. Do not use `CA_UI_AUTH=off` without something in front
+doing authentication: it leaves shell access on the machine open to anything that can reach
+the port.
+
 ## Persistent state
 
 CodeAgent writes state to a handful of paths outside its own source tree. Mount these as

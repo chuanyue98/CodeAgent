@@ -6,6 +6,11 @@ import App from './App.tsx'
 import { ProjectProvider } from './context/ProjectContext.tsx'
 import { SystemMetricsProvider } from './context/SystemMetricsContext.tsx'
 import ErrorBoundary from './components/shared/ErrorBoundary.tsx'
+import { bootstrapToken } from './utils/token.ts'
+
+// Must run before the first API call: lifts ?ca_token=... out of the URL
+// the launcher opened and into sessionStorage. See utils/token.ts.
+bootstrapToken()
 
 // App-wide boundary: each route already owns its own ErrorBoundary +
 // Suspense pair (see App.tsx), which isolates lazy-loaded page errors.

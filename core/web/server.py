@@ -3,7 +3,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from core.logging_config import configure_root_logging, get_logger
@@ -35,6 +35,7 @@ from core.web.routers import (
 from core.web.routers.config import get_config_path
 from core.web.routers.tasks import _runner as _task_runner
 from core.web.routers.tasks import get_tasks_root
+from core.web.security import HostHeaderMiddleware, require_token
 
 configure_root_logging()
 
@@ -235,23 +236,42 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CodeAgent Web UI", lifespan=lifespan)
 
-# Mount modular routers
-app.include_router(agent.router)
-app.include_router(analytics.router)
-app.include_router(chat.router)
-app.include_router(config.router)
-app.include_router(history.router)
-app.include_router(hooks.router)
-app.include_router(launch.router)
-app.include_router(logs.router)
-app.include_router(mcp.router)
-app.include_router(plugins.router)
-app.include_router(prompts.router)
-app.include_router(pty.router)
-app.include_router(schedules.router)
-app.include_router(skills.router)
-app.include_router(system.router)
-app.include_router(tasks.router)
+# Rejects Host headers that aren't this machine, defeating DNS rebinding.
+# Applies to every route -- including static assets -- because rebinding
+# does not care which path it targets. See core/web/security.py.
+app.add_middleware(HostHeaderMiddleware)
+
+# Every /api router requires the local UI token. Deliberately NOT applied
+# to /api/health (defined on `app` below, so it is not covered by these
+# router-level dependencies), to the SPA fallback, or to /assets: the
+# browser has to load index.html before it can read the token out of the
+# URL the launcher opened, and /api/health is the launcher's own readiness
+# probe.
+#
+# This covers the WebSocket routes in agent/pty too -- router-level
+# dependencies run for WS handshakes as well, which is why require_token
+# takes an HTTPConnection rather than a Request. Those two routes *also*
+# call verify_websocket() inline: they are the ones that spawn a shell and
+# replay whole conversations, so they stay protected even if a future
+# refactor mounts their router without these dependencies.
+_authenticated = [Depends(require_token)]
+
+app.include_router(agent.router, dependencies=_authenticated)
+app.include_router(analytics.router, dependencies=_authenticated)
+app.include_router(chat.router, dependencies=_authenticated)
+app.include_router(config.router, dependencies=_authenticated)
+app.include_router(history.router, dependencies=_authenticated)
+app.include_router(hooks.router, dependencies=_authenticated)
+app.include_router(launch.router, dependencies=_authenticated)
+app.include_router(logs.router, dependencies=_authenticated)
+app.include_router(mcp.router, dependencies=_authenticated)
+app.include_router(plugins.router, dependencies=_authenticated)
+app.include_router(prompts.router, dependencies=_authenticated)
+app.include_router(pty.router, dependencies=_authenticated)
+app.include_router(schedules.router, dependencies=_authenticated)
+app.include_router(skills.router, dependencies=_authenticated)
+app.include_router(system.router, dependencies=_authenticated)
+app.include_router(tasks.router, dependencies=_authenticated)
 
 # E2E-only reset endpoint — mounted exclusively when CA_E2E=1 so the
 # production app never exposes it. See core/web/routers/e2e.py.

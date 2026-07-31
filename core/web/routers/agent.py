@@ -24,6 +24,7 @@ from core.services.agent_protocol import (
     wire,
 )
 from core.session_history.session_finder import find_session_by_id
+from core.web.security import verify_websocket
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
@@ -231,6 +232,12 @@ async def agent_session_events(
     session_id: str,
     after_sequence: int = Query(0, alias="afterSequence", ge=0),
 ) -> None:
+    # Router-level Depends() does not run for WebSocket handshakes, so the
+    # same token/Origin gate the HTTP routes get is applied explicitly here
+    # -- and before accept(), so an unauthorized caller never receives a
+    # usable socket. This stream replays the full conversation history.
+    if not await verify_websocket(websocket):
+        return
     await websocket.accept()
     try:
         gateway = _gateway(websocket)

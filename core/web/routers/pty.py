@@ -44,6 +44,7 @@ except ImportError:  # pragma: no cover - exercised only on POSIX
 from core.services.config_service import ConfigService
 from core.web.routers.config import get_config_path
 from core.web.routers.launch import _CA_LAUNCHER, ENGINES
+from core.web.security import verify_websocket
 
 router = APIRouter(prefix="/api/pty", tags=["pty"])
 
@@ -330,6 +331,12 @@ async def pty_websocket(
     engine: str = Query(...),
     cwd: str = Query(...),
 ) -> None:
+    # Authenticate before anything else: this endpoint hands the caller an
+    # interactive shell, and a WebSocket handshake is not subject to the
+    # same-origin policy, so without this any page the user visits could
+    # open one. verify_websocket() closes the socket itself on failure.
+    if not await verify_websocket(websocket):
+        return
     capability = pty_capability()
     if not capability["available"]:
         await websocket.close(code=1013, reason=capability["reason"])

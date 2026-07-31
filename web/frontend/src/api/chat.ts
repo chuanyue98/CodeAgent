@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import request from '../utils/request';
+import { withToken } from '../utils/token';
 
 export interface ChatEngine {
   id: string;
@@ -128,7 +129,8 @@ export function useChatTurnStream(turnId: string | null) {
   useEffect(() => {
     if (!turnId) return;
 
-    const url = `/api/chat/turns/${encodeURIComponent(turnId)}/stream`;
+    // EventSource cannot set headers, so the token rides the query string.
+    const url = withToken(`/api/chat/turns/${encodeURIComponent(turnId)}/stream`);
     const eventSource = new EventSource(url);
     sourceRef.current = eventSource;
 

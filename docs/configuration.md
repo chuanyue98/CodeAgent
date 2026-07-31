@@ -269,6 +269,9 @@ a JSON body shaped like:
 | `GITHUB_TOKEN` | For CI | GitHub token (from `gh auth token`) |
 | `CA_UI_DEV` | No | Set to `1` to have `ca ui` manage a Vite dev server instead of serving the built `web/frontend/dist/` |
 | `CA_UI_HOST` | No | Bind host for `ca ui`'s API server. Default `127.0.0.1`; use `0.0.0.0` for container/remote access |
+| `CA_UI_TOKEN` | No | Pins the Web UI token instead of using the generated `~/.codeagent/ui-token`. For containers and test harnesses |
+| `CA_UI_AUTH` | No | Set to `0`/`off` to disable Web UI **token** checking. Host and Origin checks still apply. Only when an authenticating proxy sits in front |
+| `CA_UI_ALLOWED_HOSTS` | No | Comma-separated extra `Host` values the Web UI accepts, for deployments reached under a real hostname. `*` accepts any Host and disables the DNS-rebinding defence |
 | `CA_CONFIG_PATH` | No | Overrides where `config.json` is read/written. Default is the repo root's `config.json` |
 | `CA_SKIP_AUTO_REGISTER` | No | Suppresses the "run `ca project add`" hint when launching from an unregistered directory |
 | `CA_DEBUG` | No | Set to `1` for verbose skill/hook/plugin/prompt scanner debug output |

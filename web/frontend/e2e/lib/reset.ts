@@ -8,7 +8,12 @@ import { expect } from '@playwright/test';
  * page.request so it is independent of any page-level state.
  */
 export async function resetBackend(baseURL: string): Promise<void> {
-  const res = await fetch(`${baseURL}/api/__e2e_reset`, { method: 'POST' });
+  const res = await fetch(`${baseURL}/api/__e2e_reset`, {
+    method: 'POST',
+    // Same UI token the browser gets seeded with in test-base.ts; this
+    // call bypasses the page, so it carries the header itself.
+    headers: { 'X-CA-Token': 'codeagent-e2e-token' },
+  });
   const status = res.status;
   expect(
     status,

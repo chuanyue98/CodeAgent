@@ -45,6 +45,12 @@ export CA_PLUGINS_ROOT="$SCRATCH/plugins"
 # Playwright cleanup can restore a clean baseline (see core/web/routers/e2e.py).
 export CA_E2E=1
 export CA_AGENT_GATEWAY_FAKE=1
+
+# Pin the Web UI token instead of letting the server mint a random one per
+# scratch $HOME, so e2e/lib/test-base.ts can seed the same value into the
+# browser. The auth path stays fully exercised — specs authenticate for
+# real rather than running against a disabled check.
+export CA_UI_TOKEN="codeagent-e2e-token"
 export CA_AGENT_DB="$SCRATCH/agent-gateway.sqlite3"
 
 mkdir -p "$CA_TASKS_ROOT" "$CA_SKILLS_ROOT" "$CA_PROMPTS_ROOT" "$CA_HOOKS_ROOT" "$CA_PLUGINS_ROOT"

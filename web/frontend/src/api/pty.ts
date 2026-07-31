@@ -1,4 +1,5 @@
 import request from '../utils/request';
+import { withToken } from '../utils/token';
 
 export interface PtyCapability {
   available: boolean;
@@ -12,5 +13,5 @@ export function fetchPtyStatus(): Promise<PtyCapability> {
 export function ptyWebSocketUrl(engine: string, cwd: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const query = new URLSearchParams({ engine, cwd });
-  return `${protocol}//${window.location.host}/api/pty/ws?${query}`;
+  return withToken(`${protocol}//${window.location.host}/api/pty/ws?${query}`);
 }
