@@ -20,7 +20,7 @@ jobs:
           enable-cache: true   # caches ~/.cache/uv between runs
 
       - name: Set up Python 3.13
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
@@ -98,7 +98,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Set up Python 3.13
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
@@ -154,7 +154,7 @@ jobs:
           enable-cache: true
 
       - name: Set up Python 3.13
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
