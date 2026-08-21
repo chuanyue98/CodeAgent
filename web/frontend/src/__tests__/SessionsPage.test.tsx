@@ -2,25 +2,28 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import SessionsPage from '../components/SessionsPage';
-import type { NativeAgentSession } from '../types/agent';
+import type { SessionUsage } from '../api/analytics';
 
-function session(overrides: Partial<NativeAgentSession>): NativeAgentSession {
+function session(overrides: Partial<SessionUsage>): SessionUsage {
   return {
-    session_id: 'session-a',
-    engine: 'claude',
-    project_path: '/workspace/project-a',
-    started_at: '2026-07-20T10:00:00Z',
-    ended_at: '2026-07-20T10:05:00Z',
-    message_count: 3,
-    title: 'title-a',
-    model: 'claude-opus',
+    sessionId: 'session-a',
+    target: 'claude',
+    projectPath: '/workspace/project-a',
+    inputTokens: 100,
+    outputTokens: 50,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    cost: 0.12,
+    lastActivity: '2026-07-20T10:00:00Z',
+    modelsUsed: ['claude-opus'],
+    modelBreakdowns: [],
     ...overrides,
   };
 }
 
-const SESSIONS: NativeAgentSession[] = [
-  session({ session_id: 'session-a', engine: 'claude', project_path: '/workspace/project-a', title: 'title-a' }),
-  session({ session_id: 'session-b', engine: 'gemini', project_path: '/workspace/project-b', title: 'title-b' }),
+const SESSIONS: SessionUsage[] = [
+  session({ sessionId: 'session-a', target: 'claude', projectPath: '/workspace/project-a' }),
+  session({ sessionId: 'session-b', target: 'gemini', projectPath: '/workspace/project-b' }),
 ];
 
 let deleteCalls: string[];
@@ -28,13 +31,12 @@ let deleteCalls: string[];
 beforeEach(() => {
   deleteCalls = [];
   globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-    if (url.includes('/api/history') && !init?.method) {
-      const body = { sessions: SESSIONS, count: SESSIONS.length };
+    if (url.includes('/api/analytics/sessions')) {
       return Promise.resolve({
         ok: true,
         status: 200,
-        text: async () => JSON.stringify(body),
-        json: async () => body,
+        text: async () => JSON.stringify(SESSIONS),
+        json: async () => SESSIONS,
       });
     }
     if (url.startsWith('/api/history/') && init?.method === 'DELETE') {
@@ -63,21 +65,14 @@ function renderSessionsPage() {
   );
 }
 
-describe('SessionsPage session browser', () => {
-  test('lists all native sessions across engines', async () => {
-    renderSessionsPage();
-    await screen.findByText('2 sessions');
-    expect(screen.getByText('title-a')).toBeVisible();
-    expect(screen.getByText('title-b')).toBeVisible();
-    expect(screen.getAllByText('claude').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('gemini').length).toBeGreaterThan(0);
-  });
-
+describe('SessionsPage batch delete', () => {
   test('selecting sessions and confirming deletes only the selected ones', async () => {
     renderSessionsPage();
+
     await screen.findByText('2 sessions');
 
     fireEvent.click(screen.getByLabelText('Select session session-a'));
+
     expect(await screen.findByText('1 selected')).toBeVisible();
 
     fireEvent.click(screen.getByRole('button', { name: /Delete selected/ }));
@@ -91,12 +86,13 @@ describe('SessionsPage session browser', () => {
     expect(deleteCalls[0]).toContain('/api/history/claude/session-a');
 
     await screen.findByText('1 session');
-    expect(screen.queryByText('title-a')).not.toBeInTheDocument();
-    expect(screen.getByText('title-b')).toBeVisible();
+    expect(screen.queryByText('/workspace/project-a')).not.toBeInTheDocument();
+    expect(screen.getByText('/workspace/project-b')).toBeVisible();
   });
 
   test('select-all-filtered then delete removes every visible session', async () => {
     renderSessionsPage();
+
     await screen.findByText('2 sessions');
 
     fireEvent.click(screen.getByLabelText('Select all sessions matching the current filters'));

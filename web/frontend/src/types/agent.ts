@@ -58,32 +58,6 @@ export interface NativeAgentSession {
   model: string | null;
 }
 
-export interface HistoryToolCall {
-  name: string;
-  args_preview: string;
-  result_preview: string;
-}
-
-export interface HistoryMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
-  tool_calls: HistoryToolCall[];
-  model: string;
-}
-
-export interface HistorySessionDetail extends NativeAgentSession {
-  source_file: string;
-  messages: HistoryMessage[];
-}
-
-export interface ContinueHistoryResult {
-  status: string;
-  engine: string;
-  session_id: string;
-  terminal: string;
-}
-
 export interface AgentEvent {
   type: string;
   sequence: number;

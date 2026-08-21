@@ -5,8 +5,6 @@ import type {
   AgentEvent,
   AgentGatewayStatus,
   AgentSession,
-  ContinueHistoryResult,
-  HistorySessionDetail,
   NativeAgentSession,
   PermissionMode,
   ProviderCapabilities,
@@ -31,38 +29,6 @@ export async function fetchNativeAgentSessions(
   const query = new URLSearchParams({ engine: provider, limit: String(limit) });
   const result = await request<{ sessions: NativeAgentSession[] }>(`/api/history?${query}`);
   return result.sessions;
-}
-
-/** Lists every native session across all engines (the session browser source). */
-export async function fetchAllHistorySessions(limit = 500): Promise<NativeAgentSession[]> {
-  const query = new URLSearchParams({ limit: String(limit) });
-  const result = await request<{ sessions: NativeAgentSession[] }>(`/api/history?${query}`);
-  return result.sessions;
-}
-
-/** Fetches the full conversation (messages + tool calls) for one session. */
-export async function fetchHistorySessionDetail(
-  engine: string,
-  sessionId: string,
-  projectPath: string,
-): Promise<HistorySessionDetail> {
-  const query = new URLSearchParams({ project: projectPath });
-  return request(
-    `/api/history/${encodeURIComponent(engine)}/${encodeURIComponent(sessionId)}?${query}`,
-  );
-}
-
-/** Resumes a session in its native engine, in a visible terminal. */
-export async function continueHistorySession(
-  engine: string,
-  sessionId: string,
-  projectPath: string,
-): Promise<ContinueHistoryResult> {
-  const query = new URLSearchParams({ project: projectPath });
-  return request(
-    `/api/history/${encodeURIComponent(engine)}/${encodeURIComponent(sessionId)}/continue?${query}`,
-    { method: 'POST' },
-  );
 }
 
 export function importAgentSession(payload: {
