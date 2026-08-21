@@ -20,7 +20,7 @@ test('renders the seeded sessions and filter panel', async ({ page }) => {
 
 test('search filters the session list', async ({ page }) => {
   await gotoSessions(page);
-  await page.getByPlaceholder('Project or session...').fill('e2e-gemini-project');
+  await page.getByPlaceholder('Title, project or id…').fill('e2e-gemini-project');
   await expect(page.locator('main')).toContainText('1 session');
   await expect(page.locator('main')).toContainText('e2e-gemini-project');
 });
@@ -35,17 +35,10 @@ test('engine toggle narrows the list to that engine', async ({ page }) => {
   await expect(page.locator('main')).toContainText('2 sessions');
 });
 
-test('sort buttons toggle their direction', async ({ page }) => {
+test('expanding a session row reveals its conversation', async ({ page }) => {
   await gotoSessions(page);
-  const costBtn = page.getByRole('button', { name: 'Cost' });
-  await costBtn.click();
-  await expect(costBtn).toContainText('↓');
-  await costBtn.click();
-  await expect(costBtn).toContainText('↑');
-});
-
-test('expanding a session row reveals its model breakdown', async ({ page }) => {
-  await gotoSessions(page);
-  await page.locator('div.cursor-pointer', { hasText: 'e2e-claude-project' }).click();
-  await expect(page.locator('main')).toContainText('Model Breakdown');
+  // new SessionsPage expands via the chevron button, not the whole row
+  const row = page.locator('div.border', { hasText: 'e2e-claude-project' }).first();
+  await row.getByRole('button', { name: /Expand conversation/ }).click();
+  await expect(page.locator('main')).toContainText('Continue');
 });
