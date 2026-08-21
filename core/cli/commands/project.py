@@ -24,7 +24,12 @@ def project(ctx):  # type: ignore[no-untyped-def]
 
 @project.command(name="add")
 @click.argument("path", required=False, default=".")
-@click.option("--group", default="common", show_default=True, help="Resource group to bind this project to.")
+@click.option(
+    "--group",
+    default="common",
+    show_default=True,
+    help="Resource group to bind this project to.",
+)
 @click.pass_context
 def project_add(ctx, path, group):  # type: ignore[no-untyped-def]
     root = ctx.obj["root"]

@@ -15,7 +15,12 @@ from .. import helpers as _helpers
 
 
 @click.command()
-@click.option("--all", "show_all", is_flag=True, help="Include completed/failed/stopped runs, not just running ones")
+@click.option(
+    "--all",
+    "show_all",
+    is_flag=True,
+    help="Include completed/failed/stopped runs, not just running ones",
+)
 @click.pass_context
 def ps(ctx, show_all):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
@@ -59,9 +64,22 @@ def stop(ctx, task_id):  # type: ignore[no-untyped-def]
 
 @click.command(name="batch-run")
 @click.argument("task_name")
-@click.option("--engine", required=True, type=click.Choice(["claude", "gemini", "opencode", "codex"]), help="Engine to run the task with in every target project.")
-@click.option("--group", default=None, help="Only target projects registered under this resource group (default: all registered projects).")
-@click.option("--dry-run", is_flag=True, help="List the projects that would run, without starting anything.")
+@click.option(
+    "--engine",
+    required=True,
+    type=click.Choice(["claude", "gemini", "opencode", "codex"]),
+    help="Engine to run the task with in every target project.",
+)
+@click.option(
+    "--group",
+    default=None,
+    help="Only target projects registered under this resource group (default: all registered projects).",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="List the projects that would run, without starting anything.",
+)
 @click.pass_context
 def batch_run(ctx, task_name, engine, group, dry_run):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
@@ -70,7 +88,11 @@ def batch_run(ctx, task_name, engine, group, dry_run):  # type: ignore[no-untype
     from core.web.resource_paths import resolve_resource_path
 
     config = ctx.obj["config"]
-    registry = [item for item in config.get("project_registry", []) if isinstance(item, dict) and item.get("path")]
+    registry = [
+        item
+        for item in config.get("project_registry", [])
+        if isinstance(item, dict) and item.get("path")
+    ]
     targets = [item for item in registry if group is None or item.get("group") == group]
     if not targets:
         scope = t("batch.scope_group", group=group) if group else ""
@@ -94,7 +116,14 @@ def batch_run(ctx, task_name, engine, group, dry_run):  # type: ignore[no-untype
         workspace = target["path"]
         proj_group = target.get("group") or "common"
         try:
-            status = runner.run_task(task_name, engine, proj_group, tasks_root=tasks_root, workspace=workspace, prevent_overlap=True)
+            status = runner.run_task(
+                task_name,
+                engine,
+                proj_group,
+                tasks_root=tasks_root,
+                workspace=workspace,
+                prevent_overlap=True,
+            )
         except TaskAlreadyRunningError:
             skipped.append(workspace)
             continue
@@ -112,7 +141,14 @@ def batch_run(ctx, task_name, engine, group, dry_run):  # type: ignore[no-untype
         print(t("batch.skipped_row", workspace=workspace))
     for workspace, reason in failed:
         print(t("batch.failed_row", reason=reason, workspace=workspace))
-    print(t("batch.summary", started=len(started), skipped=len(skipped), failed=len(failed)))
+    print(
+        t(
+            "batch.summary",
+            started=len(started),
+            skipped=len(skipped),
+            failed=len(failed),
+        )
+    )
     if started:
         print(t("batch.track_hint"))
     if failed:
@@ -149,7 +185,11 @@ def new(ctx, name):  # type: ignore[no-untyped-def]
 
 @click.command()
 @click.option("--fix", is_flag=True, help="Auto-repair issues")
-@click.option("--dry-run", is_flag=True, help="Show what --fix would change, without making any changes")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what --fix would change, without making any changes",
+)
 @click.pass_context
 def doctor(ctx, fix, dry_run):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
@@ -159,7 +199,11 @@ def doctor(ctx, fix, dry_run):  # type: ignore[no-untyped-def]
 
 
 @click.command()
-@click.option("--show-token", is_flag=True, help="Print the Web UI token and exit, for opening the UI manually.")
+@click.option(
+    "--show-token",
+    is_flag=True,
+    help="Print the Web UI token and exit, for opening the UI manually.",
+)
 @click.pass_context
 def ui(ctx, show_token):  # type: ignore[no-untyped-def]
     if show_token:

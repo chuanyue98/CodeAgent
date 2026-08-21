@@ -25,7 +25,9 @@ def _history_list(ctx, engine):  # type: ignore[no-untyped-def]
     print(t("history.found", count=len(sessions), path=project_path))
     for i, s in enumerate(sessions):
         title = s.title or s.first_user_message[:60] or t("history.no_title")
-        print(f"  [{i + 1}] {s.engine.value:8s} | {s.started_at[:19]:19s} | {s.message_count:3d} msgs | {title}")
+        print(
+            f"  [{i + 1}] {s.engine.value:8s} | {s.started_at[:19]:19s} | {s.message_count:3d} msgs | {title}"
+        )
         print(f"       ID: {s.session_id}")
     print(t("history.show_hint"))
 
@@ -68,13 +70,21 @@ def show(ctx, engine_name, session_id):  # type: ignore[no-untyped-def]
     print(f"{t('history.field_model')}  {session.model or t('history.unknown_model')}")
     print(f"{'=' * 60}\n")
     for msg in session.messages:
-        role_label = t("history.role_user") if msg.role == "user" else t("history.role_assistant")
+        role_label = (
+            t("history.role_user")
+            if msg.role == "user"
+            else t("history.role_assistant")
+        )
         print(f"[{msg.timestamp[:19] if msg.timestamp else ''}] {role_label}")
         if msg.content:
             text = msg.content if len(msg.content) <= 500 else msg.content[:500] + "..."
             print(text)
         for tc in msg.tool_calls:
-            print(f"  * {tc.name}({tc.args_preview[:80]})" if tc.args_preview else f"  * {tc.name}")
+            print(
+                f"  * {tc.name}({tc.args_preview[:80]})"
+                if tc.args_preview
+                else f"  * {tc.name}"
+            )
         print()
 
 
@@ -97,7 +107,14 @@ def convert(ctx, source_engine, session_id, target_engine, yes):  # type: ignore
         return
     title = session.title or session.first_user_message[:60] or t("history.no_title")
     print(t("convert.about_to"))
-    print(t("convert.line_source", engine=source_engine, session_id=session_id, count=session.message_count))
+    print(
+        t(
+            "convert.line_source",
+            engine=source_engine,
+            session_id=session_id,
+            count=session.message_count,
+        )
+    )
     print(t("convert.line_title", title=title))
     print(t("convert.line_target", engine=target_engine))
     if not yes:

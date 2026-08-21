@@ -67,7 +67,11 @@ def resolve_resource_root_from_config(
     so callers can fall back to ``get_bundled_resource_root``.
     """
 
-    raw = config.get("paths", {}).get("resource_root") if isinstance(config, dict) else None
+    raw = (
+        config.get("paths", {}).get("resource_root")
+        if isinstance(config, dict)
+        else None
+    )
     if not raw:
         return None
     expanded = str(raw).replace("$CODEAGENT", code_root.as_posix())

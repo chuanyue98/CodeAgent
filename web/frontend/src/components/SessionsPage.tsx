@@ -71,11 +71,12 @@ export default function SessionsPage() {
   const mountedRef = useRef(true);
   const expandedControllersRef = useRef<Map<string, AbortController>>(new Map());
   useEffect(() => {
+    const controllers = expandedControllersRef.current;
     return () => {
       mountedRef.current = false;
       // abort any in-flight detail fetches on unmount
-      expandedControllersRef.current.forEach(c => c.abort());
-      expandedControllersRef.current.clear();
+      controllers.forEach(c => c.abort());
+      controllers.clear();
     };
   }, []);
 
@@ -83,6 +84,7 @@ export default function SessionsPage() {
   useEffect(() => {
     if (sessions.length === 0) return;
     const live = new Set(sessions.map(sessionKey));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- derived state prune is intentional and cheap
     setExpanded(prev => {
       const next: Record<string, DetailState> = {};
       let changed = false;
@@ -124,6 +126,7 @@ export default function SessionsPage() {
       if (existing?.status === 'loaded' || existing?.status === 'loading') return;
       const controller = new AbortController();
       expandedControllersRef.current.set(key, controller);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- deep-link auto-expand needs sync loading state
       setExpanded(prev => ({ ...prev, [key]: { status: 'loading' } }));
       void fetchHistorySessionDetail(match.engine, match.session_id, match.project_path)
         .then(detail => {

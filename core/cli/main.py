@@ -65,7 +65,9 @@ class CodeAgentGroup(click.Group):
             cmd_name = args[0]
             cmd = self.get_command(ctx, cmd_name)
             if cmd is not None:
-                handled, error = _reserved_command_can_handle(cmd, ctx, cmd_name, args[1:])
+                handled, error = _reserved_command_can_handle(
+                    cmd, ctx, cmd_name, args[1:]
+                )
                 if handled:
                     return cmd_name, cmd, args[1:]
                 if error is not None:
@@ -77,11 +79,17 @@ class CodeAgentGroup(click.Group):
 @click.group(
     cls=CodeAgentGroup,
     invoke_without_command=True,
-    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True, allow_interspersed_args=False),
+    context_settings=dict(
+        ignore_unknown_options=True,
+        allow_extra_args=True,
+        allow_interspersed_args=False,
+    ),
     epilog=EPILOG,
 )
 @click.option("--proxy", is_flag=True, help="Enable proxy from config.json")
-@click.option("-y", "--yolo", is_flag=True, flag_value=True, default=True, help="Enable YOLO mode")
+@click.option(
+    "-y", "--yolo", is_flag=True, flag_value=True, default=True, help="Enable YOLO mode"
+)
 @click.pass_context
 def cli(ctx, proxy, yolo):  # type: ignore[no-untyped-def]
     """CodeAgent: Professional AI Engineering Shell."""
@@ -97,16 +105,29 @@ def cli(ctx, proxy, yolo):  # type: ignore[no-untyped-def]
     }
     child_env = None
     if proxy:
-        child_env, proxy_host, proxy_port, proxy_scheme = _helpers_mod.build_proxy_env(config)
+        child_env, proxy_host, proxy_port, proxy_scheme = _helpers_mod.build_proxy_env(
+            config
+        )
         print(t("proxy.enabled", scheme=proxy_scheme, host=proxy_host, port=proxy_port))
     child_env = child_env if child_env is not None else os.environ.copy()
     child_env[CA_LANG_ENV] = resolve_language()
-    ctx.obj.update(config=config, root=root, engine_script_map=engine_script_map, child_env=child_env, proxy=proxy, yolo=yolo)
+    ctx.obj.update(
+        config=config,
+        root=root,
+        engine_script_map=engine_script_map,
+        child_env=child_env,
+        proxy=proxy,
+        yolo=yolo,
+    )
     if ctx.invoked_subcommand is None:
         return _helpers_mod._launch_engine(ctx, [])
 
 
-@cli.command(name="_launch", hidden=True, context_settings=dict(ignore_unknown_options=True, allow_extra_args=True))
+@cli.command(
+    name="_launch",
+    hidden=True,
+    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
+)
 @click.argument("args", nargs=-1)
 @click.pass_context
 def _launch(ctx, args):  # type: ignore[no-untyped-def]

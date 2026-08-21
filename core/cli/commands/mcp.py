@@ -55,8 +55,18 @@ def mcp_list(ctx, engine):  # type: ignore[no-untyped-def]
 @click.argument("name")
 @click.argument("command", nargs=-1)
 @click.option("--url", default=None, help="Remote server URL, instead of a command.")
-@click.option("--env", "env_pairs", multiple=True, metavar="KEY=VALUE", help="Environment variable for the server; repeatable.")
-@click.option("--transport", default=None, help="Transport for a --url server (e.g. http, sse). Ignored for stdio.")
+@click.option(
+    "--env",
+    "env_pairs",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Environment variable for the server; repeatable.",
+)
+@click.option(
+    "--transport",
+    default=None,
+    help="Transport for a --url server (e.g. http, sse). Ignored for stdio.",
+)
 @click.pass_context
 def mcp_add(ctx, engine, name, command, url, env_pairs, transport):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
@@ -70,11 +80,23 @@ def mcp_add(ctx, engine, name, command, url, env_pairs, transport):  # type: ign
             sys.exit(1)
         env[key] = value
     try:
-        mcp_service.add_server(engine, str(Path.cwd()), name, command=list(command) or None, url=url, env=env or None, transport=transport)
+        mcp_service.add_server(
+            engine,
+            str(Path.cwd()),
+            name,
+            command=list(command) or None,
+            url=url,
+            env=env or None,
+            transport=transport,
+        )
     except (ValueError, RuntimeError) as exc:
         print(t("mcp.error", error=exc))
         sys.exit(1)
-    scope = t("mcp.scope_project") if engine in ("claude", "gemini") else t("mcp.scope_global")
+    scope = (
+        t("mcp.scope_project")
+        if engine in ("claude", "gemini")
+        else t("mcp.scope_global")
+    )
     print(t("mcp.added", name=name, engine=engine, scope=scope))
     others = sorted(ENGINES - {engine})
     print(t("mcp.sync_hint", engine=engine))
@@ -102,24 +124,53 @@ def mcp_remove(ctx, engine, name):  # type: ignore[no-untyped-def]
 
 @mcp.command(name="sync")
 @click.argument("source", type=_ENGINE_CHOICE)
-@click.option("--to", "targets", multiple=True, type=_ENGINE_CHOICE, help="Target engine; repeatable. Defaults to every engine but SOURCE.")
-@click.option("--name", "names", multiple=True, help="Only sync this server; repeatable. Defaults to all of SOURCE's.")
-@click.option("--overwrite", is_flag=True, help="Replace same-named servers in the targets instead of skipping them.")
-@click.option("--dry-run", is_flag=True, help="Show what would change without writing anything.")
+@click.option(
+    "--to",
+    "targets",
+    multiple=True,
+    type=_ENGINE_CHOICE,
+    help="Target engine; repeatable. Defaults to every engine but SOURCE.",
+)
+@click.option(
+    "--name",
+    "names",
+    multiple=True,
+    help="Only sync this server; repeatable. Defaults to all of SOURCE's.",
+)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    help="Replace same-named servers in the targets instead of skipping them.",
+)
+@click.option(
+    "--dry-run", is_flag=True, help="Show what would change without writing anything."
+)
 @click.pass_context
 def mcp_sync(ctx, source, targets, names, overwrite, dry_run):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.services import mcp_service
 
     try:
-        results = mcp_service.sync_servers(source, str(Path.cwd()), targets=list(targets) or None, names=list(names) or None, overwrite=overwrite, dry_run=dry_run)
+        results = mcp_service.sync_servers(
+            source,
+            str(Path.cwd()),
+            targets=list(targets) or None,
+            names=list(names) or None,
+            overwrite=overwrite,
+            dry_run=dry_run,
+        )
     except ValueError as exc:
         print(t("mcp.error", error=exc))
         sys.exit(1)
     if not results:
         print(t("mcp.nothing_to_sync", source=source))
         return
-    marks = {"added": click.style("+", fg="green"), "replaced": click.style("~", fg="yellow"), "skipped": click.style("=", fg="bright_black"), "failed": click.style("!", fg="red")}
+    marks = {
+        "added": click.style("+", fg="green"),
+        "replaced": click.style("~", fg="yellow"),
+        "skipped": click.style("=", fg="bright_black"),
+        "failed": click.style("!", fg="red"),
+    }
     if dry_run:
         click.echo(click.style(t("mcp.dry_run"), bold=True))
     for engine_name in dict.fromkeys(item["engine"] for item in results):

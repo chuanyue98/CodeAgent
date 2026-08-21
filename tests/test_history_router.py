@@ -168,7 +168,9 @@ async def test_continue_session_launches_native_resume(
         return "cmd"
 
     monkeypatch.setattr("core.web.routers.launch.launch_in_terminal", fake_launch)
-    monkeypatch.setattr("core.web.routers.history._resolve_history_workspace", lambda p: p)
+    monkeypatch.setattr(
+        "core.web.routers.history._resolve_history_workspace", lambda p: p
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -191,7 +193,9 @@ async def test_continue_session_unknown_engine(two_project_history, monkeypatch)
     monkeypatch.setattr(
         "core.web.routers.launch.launch_in_terminal", lambda cmd, cwd=None: "x"
     )
-    monkeypatch.setattr("core.web.routers.history._resolve_history_workspace", lambda p: p)
+    monkeypatch.setattr(
+        "core.web.routers.history._resolve_history_workspace", lambda p: p
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -207,7 +211,9 @@ async def test_continue_session_unknown_engine(two_project_history, monkeypatch)
 @pytest.mark.asyncio
 async def test_continue_session_not_found(two_project_history, monkeypatch):
     monkeypatch.setattr("core.web.routers.launch.launch_in_terminal", lambda cmd: cmd)
-    monkeypatch.setattr("core.web.routers.history._resolve_history_workspace", lambda p: p)
+    monkeypatch.setattr(
+        "core.web.routers.history._resolve_history_workspace", lambda p: p
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -403,8 +409,12 @@ async def test_delete_opencode_session(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_convert_session_success(two_project_history, monkeypatch):
-    monkeypatch.setattr("core.web.routers.history._resolve_history_workspace", lambda p: p)
-    monkeypatch.setattr("core.session_history.writers.write_session", lambda s, e: "new-id-123")
+    monkeypatch.setattr(
+        "core.web.routers.history._resolve_history_workspace", lambda p: p
+    )
+    monkeypatch.setattr(
+        "core.session_history.writers.write_session", lambda s, e: "new-id-123"
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -426,7 +436,9 @@ async def test_convert_session_success(two_project_history, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_convert_session_not_found(two_project_history, monkeypatch):
-    monkeypatch.setattr("core.web.routers.history._resolve_history_workspace", lambda p: p)
+    monkeypatch.setattr(
+        "core.web.routers.history._resolve_history_workspace", lambda p: p
+    )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
@@ -463,9 +475,15 @@ async def test_convert_session_unregistered_workspace(two_project_history, tmp_p
 
 @pytest.mark.asyncio
 async def test_convert_and_launch_success(two_project_history, monkeypatch):
-    monkeypatch.setattr("core.web.routers.history._resolve_history_workspace", lambda p: p)
-    monkeypatch.setattr("core.session_history.writers.write_session", lambda s, e: "new-id-456")
-    monkeypatch.setattr("core.web.routers.launch.launch_in_terminal", lambda cmd, cwd=None: "terminal-x")
+    monkeypatch.setattr(
+        "core.web.routers.history._resolve_history_workspace", lambda p: p
+    )
+    monkeypatch.setattr(
+        "core.session_history.writers.write_session", lambda s, e: "new-id-456"
+    )
+    monkeypatch.setattr(
+        "core.web.routers.launch.launch_in_terminal", lambda cmd, cwd=None: "terminal-x"
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -486,8 +504,12 @@ async def test_convert_and_launch_success(two_project_history, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_convert_and_launch_launch_failure(two_project_history, monkeypatch):
-    monkeypatch.setattr("core.web.routers.history._resolve_history_workspace", lambda p: p)
-    monkeypatch.setattr("core.session_history.writers.write_session", lambda s, e: "new-id-789")
+    monkeypatch.setattr(
+        "core.web.routers.history._resolve_history_workspace", lambda p: p
+    )
+    monkeypatch.setattr(
+        "core.session_history.writers.write_session", lambda s, e: "new-id-789"
+    )
 
     def fail_launch(cmd, cwd=None):
         raise RuntimeError("no terminal")

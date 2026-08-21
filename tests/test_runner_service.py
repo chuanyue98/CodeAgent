@@ -83,9 +83,7 @@ def test_task_runner_kill_all(tmp_path):
 
     runner = TaskRunner(tmp_path)
     # Use a cross-platform sleep via Python instead of the POSIX-only `sleep` binary.
-    dummy_proc = subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(10)"]
-    )
+    dummy_proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(10)"])
     runner.active_runs["dummy"] = MagicMock(pid=dummy_proc.pid, status="running")
     runner._processes["dummy"] = dummy_proc
 
@@ -102,9 +100,7 @@ def test_task_runner_kill_all_missing_from_active_runs(tmp_path):
     from core.services.runner_service import TaskRunner
 
     runner = TaskRunner(tmp_path)
-    dummy_proc = subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(10)"]
-    )
+    dummy_proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(10)"])
     # Do NOT put it in active_runs
     runner._processes["dummy"] = dummy_proc
 

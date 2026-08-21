@@ -299,7 +299,9 @@ def _resolve_history_workspace(project_path: str) -> str:
     from fastapi import HTTPException
 
     try:
-        ws = resolve_registered_workspace(ConfigService(get_config_path()), project_path)
+        ws = resolve_registered_workspace(
+            ConfigService(get_config_path()), project_path
+        )
         return ws.path
     except WorkspaceConfigError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -415,7 +417,9 @@ async def continue_session(
     if engine not in ENGINES:
         raise HTTPException(status_code=400, detail=f"Unknown engine: {engine}")
 
-    session = await asyncio.to_thread(find_session_by_id, session_id, engine, validated_project)
+    session = await asyncio.to_thread(
+        find_session_by_id, session_id, engine, validated_project
+    )
     if not session:
         raise HTTPException(
             status_code=404,

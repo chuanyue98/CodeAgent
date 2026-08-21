@@ -38,6 +38,7 @@ def init_cli_runtime() -> None:
     configure_console_encoding()
     configure_root_logging()
 
+
 FALLBACK_ENGINE = "gemini"
 
 
@@ -89,7 +90,9 @@ def load_config() -> dict:
         return default_config
     # Shallow merge for top-level, deep-merge for known nested dicts
     merged = {**default_config, **config}
-    if isinstance(default_config.get("proxy"), dict) and isinstance(config.get("proxy"), dict):
+    if isinstance(default_config.get("proxy"), dict) and isinstance(
+        config.get("proxy"), dict
+    ):
         merged["proxy"] = {**default_config["proxy"], **config["proxy"]}
     return merged
 
@@ -123,7 +126,12 @@ def _extract_proxy_candidates(proxy_cfg: object) -> list[tuple[str, int]]:
         proxy_cfg = {}
     host = proxy_cfg.get("host", "127.0.0.1")  # type: ignore[union-attr]
     port = proxy_cfg.get("port")  # type: ignore[union-attr]
-    ports: list[int] = ([int(port)] if port is not None else []) + [3065, 3067, 3066, 1087]
+    ports: list[int] = ([int(port)] if port is not None else []) + [
+        3065,
+        3067,
+        3066,
+        1087,
+    ]
     return list(dict.fromkeys((host, p) for p in ports))  # type: ignore[arg-type]
 
 
@@ -190,7 +198,9 @@ def _ensure_project_registered(root: Path, config: dict) -> None:
         return
     is_new_group = False
     if choice == "n":
-        new_name = input(t("project.new_group_prompt")).strip().lower().replace(" ", "-")
+        new_name = (
+            input(t("project.new_group_prompt")).strip().lower().replace(" ", "-")
+        )
         if not new_name:
             print(t("project.no_group_name"))
             return

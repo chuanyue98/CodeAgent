@@ -158,7 +158,9 @@ def test_run_ui_command_starts_vite_server_when_available(capsys, monkeypatch):
                     "core.cli.ui._start_ui_dev_server", return_value=True
                 ) as mock_start:
                     with patch("core.cli.ui._open_browser", mock_open_browser):
-                        with patch("core.cli.helpers.is_tcp_port_open", return_value=True):
+                        with patch(
+                            "core.cli.helpers.is_tcp_port_open", return_value=True
+                        ):
                             assert ca_launcher.run_ui_command() == 0
                             assert _wait_for(lambda: mock_open_browser.called)
                     mock_start.assert_called_once()
@@ -191,7 +193,8 @@ def test_run_ui_command_falls_back_to_dist_when_vite_start_fails(capsys, monkeyp
                         ):
                             with patch("core.cli.ui._open_browser", mock_open_browser):
                                 with patch(
-                                    "core.cli.helpers.is_tcp_port_open", return_value=True
+                                    "core.cli.helpers.is_tcp_port_open",
+                                    return_value=True,
                                 ):
                                     assert ca_launcher.run_ui_command() == 0
                                     assert _wait_for(lambda: mock_open_browser.called)

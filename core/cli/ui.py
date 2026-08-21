@@ -37,7 +37,9 @@ def _frontend_dist_exists() -> bool:
 
 def _frontend_source_exists() -> bool:
     frontend_root = _frontend_root()
-    return (frontend_root / "package.json").exists() and (frontend_root / "src").exists()
+    return (frontend_root / "package.json").exists() and (
+        frontend_root / "src"
+    ).exists()
 
 
 def _ui_dev_server_command() -> list[str] | None:
@@ -71,7 +73,9 @@ def _ui_dev_server_command() -> list[str] | None:
     ]
 
 
-def _is_ui_dev_server_running(host: str = UI_DEV_SERVER_HOST, port: int = UI_DEV_SERVER_PORT) -> bool:
+def _is_ui_dev_server_running(
+    host: str = UI_DEV_SERVER_HOST, port: int = UI_DEV_SERVER_PORT
+) -> bool:
     return _helpers.is_tcp_port_open(host, port, timeout=0.2)
 
 
@@ -164,7 +168,9 @@ def run_ui_command() -> int:
         if _is_ui_dev_server_running():
             use_dev_server = True
         else:
-            print(t("ui.vite_starting", host=UI_DEV_SERVER_HOST, port=UI_DEV_SERVER_PORT))
+            print(
+                t("ui.vite_starting", host=UI_DEV_SERVER_HOST, port=UI_DEV_SERVER_PORT)
+            )
             use_dev_server = _start_ui_dev_server()
             if not use_dev_server:
                 if _frontend_dist_exists():
