@@ -53,7 +53,9 @@ test('replays a stored conversation when a session is resumed', async ({ page })
 });
 
 test('groups conversations by workspace across providers', async ({ page, baseURL }) => {
-  const projectsResponse = await fetch(`${baseURL}/api/projects`);
+  const projectsResponse = await fetch(`${baseURL}/api/projects`, {
+    headers: { 'X-CA-Token': 'codeagent-e2e-token' },
+  });
   const [firstProject] = await projectsResponse.json() as Array<{ path: string; group: string; available: boolean }>;
   const secondProject = { path: '/tmp/e2e-second-workspace', group: 'work', available: true };
   await page.route('**/api/projects', route => route.fulfill({
@@ -119,7 +121,9 @@ test('removes the selected local conversation without deleting provider history'
 });
 
 test('searches provider history and reveals additional pages on demand', async ({ page, baseURL }) => {
-  const projectsResponse = await fetch(`${baseURL}/api/projects`);
+  const projectsResponse = await fetch(`${baseURL}/api/projects`, {
+    headers: { 'X-CA-Token': 'codeagent-e2e-token' },
+  });
   const projects = await projectsResponse.json() as Array<{ path: string }>;
   const history = Array.from({ length: 45 }, (_, index) => ({
     session_id: `native-${index}`,
@@ -233,11 +237,13 @@ test('a fast double-submit on a brand-new conversation creates only one session'
 });
 
 test('restoring a conversation restores its workspace resource group', async ({ page, baseURL }) => {
-  const projectsResponse = await fetch(`${baseURL}/api/projects`);
+  const projectsResponse = await fetch(`${baseURL}/api/projects`, {
+    headers: { 'X-CA-Token': 'codeagent-e2e-token' },
+  });
   const projects = await projectsResponse.json() as Array<{ path: string }>;
   await fetch(`${baseURL}/api/projects`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CA-Token': 'codeagent-e2e-token' },
     body: JSON.stringify({ path: projects[0].path, group: 'work' }),
   });
 
