@@ -31,10 +31,11 @@ from pydantic import Field
 
 from core.constants import ENGINES
 from core.services.config_service import ConfigService
-from core.services.runner_service import TaskRunner
 from core.web.case_convert import ProtocolModel, wire
-from core.web.resource_paths import ROOT_DIR
 from core.web.routers.config import get_config_path
+from core.web.routers.tasks import (
+    _runner,  # noqa: F401 — shared singleton with tasks.py
+)
 
 
 def _require_legacy_fallback() -> None:
@@ -51,11 +52,6 @@ def _require_legacy_fallback() -> None:
 router = APIRouter(
     prefix="/api/chat", tags=["chat"], dependencies=[Depends(_require_legacy_fallback)]
 )
-
-# Separate singleton from tasks.py's — chat turns (.jsonl) and task runs
-# (.log) are distinct entities tracked under distinct id prefixes/log
-# extensions, so there's no need to share one instance's in-memory dicts.
-_runner = TaskRunner(ROOT_DIR)
 
 
 class StartChatTurnRequest(ProtocolModel):

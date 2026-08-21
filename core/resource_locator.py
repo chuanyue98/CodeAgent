@@ -57,6 +57,29 @@ def get_config_template_path(code_root: Path = CODE_ROOT) -> Path:
     return get_bundled_resource_root(code_root) / CONFIG_TEMPLATE_NAME
 
 
+def resolve_resource_root_from_config(
+    config: dict, code_root: Path = CODE_ROOT
+) -> Path | None:
+    """Resolve ``paths.resource_root`` from a loaded config dict.
+
+    Handles ``$CODEAGENT`` expansion, ``~`` expansion, and relative-
+    vs-absolute logic. Returns ``None`` if no valid directory is configured,
+    so callers can fall back to ``get_bundled_resource_root``.
+    """
+
+    raw = config.get("paths", {}).get("resource_root") if isinstance(config, dict) else None
+    if not raw:
+        return None
+    expanded = str(raw).replace("$CODEAGENT", code_root.as_posix())
+    resource_path = Path(expanded).expanduser()
+    resolved = (
+        resource_path if resource_path.is_absolute() else code_root / resource_path
+    ).resolve()
+    if resolved.is_dir():
+        return resolved
+    return None
+
+
 def seed_config_if_missing(code_root: Path = CODE_ROOT) -> Path | None:
     """Creates config.json from the tracked template when it does not exist.
 

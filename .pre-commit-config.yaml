@@ -18,3 +18,19 @@ repos:
         args: [ --fix ]
       # Run the formatter.
       - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (core/engines/ca_launcher)
+        entry: uv run mypy core engines ca_launcher.py
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: pytest-fast
+        name: pytest (fast, no coverage)
+        entry: uv run pytest -q --tb=line -x -k "not slow"
+        language: system
+        types: [python]
+        pass_filenames: false

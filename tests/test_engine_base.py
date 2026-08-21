@@ -242,14 +242,19 @@ def test_ensure_skills_link_preserves_unmanaged_links_and_regular_dirs(
 
     engine.ensure_skills_link(".gemini/skills")
 
-    assert (mounted_root / "old-skill").is_symlink()
+    # On Windows the link is a junction (mklink /j), not a symlink — is_symlink()
+    # is False but it must still exist as a directory/junction and not be removed.
+    assert (mounted_root / "old-skill").exists()
+    assert (mounted_root / "old-skill").is_dir() or (
+        mounted_root / "old-skill"
+    ).is_symlink()
     assert (mounted_root / "new-skill" / "SKILL.md").read_text(
         encoding="utf-8"
     ) == "new"
     assert (regular_dir / "keep.txt").read_text(encoding="utf-8") == "keep"
 
     engine.cleanup_skills_link(".gemini/skills")
-    assert (mounted_root / "old-skill").is_symlink()
+    assert (mounted_root / "old-skill").exists()
     assert not (mounted_root / "new-skill").exists()
 
 
