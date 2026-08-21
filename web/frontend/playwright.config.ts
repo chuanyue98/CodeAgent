@@ -7,22 +7,22 @@ const BASE_PORT = Number(process.env.CA_E2E_PORT || 8798);
 // can run concurrently instead of serializing through a single shared
 // backend whose /api/__e2e_reset would otherwise race between workers.
 // e2e/lib/test-base.ts maps each test to its worker's port via
-// testInfo.parallelIndex. 4 keeps resource usage predictable across both
-// a laptop and a CI runner without needing per-environment tuning.
-const WORKERS = 4;
+// testInfo.parallelIndex. 4 -> 2: 2 vCPU runners thrash with 4 uvicorn
+// + 4 chromium (see PR #118), 2 workers is ~40% faster on CI.
+const WORKERS = 2;
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 60_000,
-  expect: { timeout: 15_000 },
-  fullyParallel: false,
+  timeout: 30_000,
+  expect: { timeout: 10_000 },
+  fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   workers: WORKERS,
-  reporter: 'html',
+  reporter: 'dot',
   use: {
     screenshot: 'only-on-failure',
-    trace: 'retain-on-failure',
+    trace: 'off',
   },
   projects: [
     {
