@@ -171,11 +171,17 @@ jobs:
       - name: Build (tsc + Vite)
         run: bun run build
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/frontend/bun.lock') }}
+
       - name: Install Playwright browsers
         run: bunx playwright install --with-deps chromium
 
       - name: Run E2E suite
-        run: bunx playwright test
+        run: bunx playwright test --reporter=dot
 
       - name: Upload Playwright report
         if: failure()

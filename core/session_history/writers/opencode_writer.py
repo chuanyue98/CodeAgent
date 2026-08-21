@@ -149,7 +149,23 @@ def write_opencode_session(session: UnifiedSession) -> str:
                 "agent": "build",
                 "path": {"cwd": worktree, "root": worktree},
                 "cost": 0,
-                "tokens": {"total": 0, "input": 0, "output": 0, "reasoning": 0},
+                # OpenCode's SessionCompaction reads tokens.cache.{read,write}
+                # on every message; a bare tokens object (or a user message
+                # missing it) makes resume crash with
+                # "TypeError: undefined is not an object (evaluating
+                # 'e.tokens.cache.read')", so always emit cache and use null
+                # tokens for user turns exactly like OpenCode writes natively.
+                "tokens": (
+                    {
+                        "total": 0,
+                        "input": 0,
+                        "output": 0,
+                        "reasoning": 0,
+                        "cache": {"read": 0, "write": 0},
+                    }
+                    if msg.role == "assistant"
+                    else None
+                ),
                 "modelID": session.model or "unknown",
                 "providerID": "converted",
                 "time": {"created": msg_time, "completed": msg_time + 500},

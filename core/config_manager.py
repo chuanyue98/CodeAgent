@@ -34,19 +34,11 @@ class ConfigManager:
 
     def resolve_resource_root(self) -> Path:
         """Returns the resource root, respecting ``resource_root`` in config.json."""
-        resource_root = self.full_config.get("paths", {}).get("resource_root")
-        if resource_root:
-            expanded = str(resource_root).replace(
-                "$CODEAGENT", self.root_dir.as_posix()
-            )
-            resource_path = Path(expanded).expanduser()
-            resolved = (
-                resource_path
-                if resource_path.is_absolute()
-                else self.root_dir / resource_path
-            ).resolve()
-            if resolved.is_dir():
-                return resolved
+        resolved = __import__(
+            "core.resource_locator", fromlist=["resolve_resource_root_from_config"]
+        ).resolve_resource_root_from_config(self.full_config, self.root_dir)
+        if resolved is not None:
+            return resolved
         return get_bundled_resource_root(self.root_dir)
 
     def resolve_path_token(self, raw_path: str) -> Path:

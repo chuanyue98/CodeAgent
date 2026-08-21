@@ -40,7 +40,7 @@ def mock_config(tmp_path):
 def test_load_config_default(tmp_path, monkeypatch):
     # Test loading when config.json does not exist
     monkeypatch.chdir(tmp_path)
-    with patch("ca_launcher._project_root", return_value=tmp_path):
+    with patch("core.cli.helpers._project_root", return_value=tmp_path):
         config = ca_launcher.load_config()
         assert config["default_mode"] == "local"
         assert config["proxy"]["port"] == 1087
@@ -49,7 +49,7 @@ def test_load_config_default(tmp_path, monkeypatch):
 def test_load_config_custom(mock_config, monkeypatch):
     # Test loading custom config.json
     monkeypatch.chdir(mock_config.parent)
-    with patch("ca_launcher._project_root", return_value=mock_config.parent):
+    with patch("core.cli.helpers._project_root", return_value=mock_config.parent):
         config = ca_launcher.load_config()
         assert config["default_mode"] == "remote"
         assert config["proxy"]["host"] == "1.2.3.4"
@@ -77,7 +77,7 @@ def test_find_available_port():
 
 def test_build_proxy_env():
     config = {"proxy": {"host": "myproxy", "port": 3066}}
-    with patch("ca_launcher.is_tcp_port_open", return_value=True):
+    with patch("core.cli.helpers.is_tcp_port_open", return_value=True):
         env, host, port, scheme = ca_launcher.build_proxy_env(config)
         assert host == "myproxy"
         assert port == 3066
@@ -96,7 +96,7 @@ def test_project_root_prefers_current_workspace(tmp_path, monkeypatch):
     nested.mkdir(parents=True)
     monkeypatch.chdir(nested)
 
-    with patch("ca_launcher._installed_root", return_value=tmp_path / "installed"):
+    with patch("core.cli.helpers._installed_root", return_value=tmp_path / "installed"):
         assert ca_launcher._project_root() == workspace
 
 
@@ -110,7 +110,7 @@ def test_main_help(capsys, monkeypatch):
 
 def test_main_ui_command(monkeypatch):
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", "ui"])
-    with patch("ca_launcher.run_ui_command", return_value=0) as mock_ui:
+    with patch("core.cli.ui.run_ui_command", return_value=0) as mock_ui:
         assert ca_launcher.main() == 0
         mock_ui.assert_called_once()
 
@@ -126,10 +126,10 @@ def test_run_ui_command_uses_existing_vite_server(capsys, monkeypatch):
     }
 
     with patch.dict(sys.modules, fake_modules):
-        with patch("ca_launcher._frontend_source_exists", return_value=True):
-            with patch("ca_launcher._is_ui_dev_server_running", return_value=True):
-                with patch("ca_launcher._open_browser", mock_open_browser):
-                    with patch("ca_launcher.is_tcp_port_open", return_value=True):
+        with patch("core.cli.ui._frontend_source_exists", return_value=True):
+            with patch("core.cli.ui._is_ui_dev_server_running", return_value=True):
+                with patch("core.cli.ui._open_browser", mock_open_browser):
+                    with patch("core.cli.helpers.is_tcp_port_open", return_value=True):
                         assert ca_launcher.run_ui_command() == 0
                         assert _wait_for(lambda: mock_open_browser.called)
 
@@ -152,13 +152,15 @@ def test_run_ui_command_starts_vite_server_when_available(capsys, monkeypatch):
     }
 
     with patch.dict(sys.modules, fake_modules):
-        with patch("ca_launcher._frontend_source_exists", return_value=True):
-            with patch("ca_launcher._is_ui_dev_server_running", return_value=False):
+        with patch("core.cli.ui._frontend_source_exists", return_value=True):
+            with patch("core.cli.ui._is_ui_dev_server_running", return_value=False):
                 with patch(
-                    "ca_launcher._start_ui_dev_server", return_value=True
+                    "core.cli.ui._start_ui_dev_server", return_value=True
                 ) as mock_start:
-                    with patch("ca_launcher._open_browser", mock_open_browser):
-                        with patch("ca_launcher.is_tcp_port_open", return_value=True):
+                    with patch("core.cli.ui._open_browser", mock_open_browser):
+                        with patch(
+                            "core.cli.helpers.is_tcp_port_open", return_value=True
+                        ):
                             assert ca_launcher.run_ui_command() == 0
                             assert _wait_for(lambda: mock_open_browser.called)
                     mock_start.assert_called_once()
@@ -182,16 +184,17 @@ def test_run_ui_command_falls_back_to_dist_when_vite_start_fails(capsys, monkeyp
     }
 
     with patch.dict(sys.modules, fake_modules):
-        with patch("ca_launcher._frontend_source_exists", return_value=True):
-            with patch("ca_launcher._is_ui_dev_server_running", return_value=False):
-                with patch("ca_launcher._start_ui_dev_server", return_value=False):
-                    with patch("ca_launcher._frontend_dist_exists", return_value=True):
+        with patch("core.cli.ui._frontend_source_exists", return_value=True):
+            with patch("core.cli.ui._is_ui_dev_server_running", return_value=False):
+                with patch("core.cli.ui._start_ui_dev_server", return_value=False):
+                    with patch("core.cli.ui._frontend_dist_exists", return_value=True):
                         with patch(
-                            "ca_launcher.find_available_port", return_value=8123
+                            "core.cli.helpers.find_available_port", return_value=8123
                         ):
-                            with patch("ca_launcher._open_browser", mock_open_browser):
+                            with patch("core.cli.ui._open_browser", mock_open_browser):
                                 with patch(
-                                    "ca_launcher.is_tcp_port_open", return_value=True
+                                    "core.cli.helpers.is_tcp_port_open",
+                                    return_value=True,
                                 ):
                                     assert ca_launcher.run_ui_command() == 0
                                     assert _wait_for(lambda: mock_open_browser.called)
@@ -231,7 +234,7 @@ def test_main_default_engine_with_proxy(monkeypatch, capsys):
     # be recognized as a real flag -- see
     # test_proxy_word_after_prompt_is_not_treated_as_a_flag for the opposite.
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", "--proxy", "some task"])
-    with patch("ca_launcher.is_tcp_port_open", return_value=True):
+    with patch("core.cli.helpers.is_tcp_port_open", return_value=True):
         with patch("subprocess.run") as mock_run:
             ca_launcher.main()
             args, kwargs = mock_run.call_args
@@ -336,7 +339,7 @@ def test_yolo_flag_is_not_inverted(monkeypatch):
         captured["yolo"] = ctx.obj["yolo"]
         return original(ctx, args)
 
-    monkeypatch.setattr(ca_launcher, "_launch_engine", spy)
+    monkeypatch.setattr("core.cli.helpers._launch_engine", spy)
     with patch("subprocess.run"):
         ca_launcher.cli.main(["-y", "claude", "hi"], standalone_mode=False)
     assert captured["yolo"] is True
@@ -354,7 +357,7 @@ def test_project_root_survives_a_deleted_cwd(monkeypatch, tmp_path):
         raise OSError("No such file or directory")
 
     monkeypatch.setattr(ca_launcher.Path, "cwd", staticmethod(raise_oserror))
-    with patch("ca_launcher._installed_root", return_value=tmp_path / "installed"):
+    with patch("core.cli.helpers._installed_root", return_value=tmp_path / "installed"):
         assert ca_launcher._project_root() == tmp_path / "installed"
 
 
@@ -407,9 +410,9 @@ def test_batch_run_dry_run_lists_targets_without_starting_anything(
         ],
     )
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
-        patch("ca_launcher.load_config", return_value=config),
-        patch("ca_launcher._get_task_runner") as mock_get_runner,
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
+        patch("core.cli.helpers.load_config", return_value=config),
+        patch("core.cli.helpers._get_task_runner") as mock_get_runner,
     ):
         ca_launcher.main()
         mock_get_runner.assert_not_called()
@@ -469,9 +472,9 @@ def test_batch_run_starts_per_project_and_skips_already_running(
         ],
     )
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
-        patch("ca_launcher.load_config", return_value=config),
-        patch("ca_launcher._get_task_runner", return_value=fake_runner),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
+        patch("core.cli.helpers.load_config", return_value=config),
+        patch("core.cli.helpers._get_task_runner", return_value=fake_runner),
     ):
         ca_launcher.main()
 
@@ -497,8 +500,8 @@ def test_batch_run_rejects_unknown_task_name(tmp_path, monkeypatch):
         ["ca_launcher.py", "batch-run", "does-not-exist", "--engine", "claude"],
     )
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
-        patch("ca_launcher.load_config", return_value=config),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
+        patch("core.cli.helpers.load_config", return_value=config),
         pytest.raises(SystemExit) as exc_info,
     ):
         ca_launcher.main()
@@ -524,8 +527,8 @@ def test_batch_run_rejects_empty_group(tmp_path, monkeypatch):
         ],
     )
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
-        patch("ca_launcher.load_config", return_value=config),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
+        patch("core.cli.helpers.load_config", return_value=config),
         pytest.raises(SystemExit) as exc_info,
     ):
         ca_launcher.main()
@@ -542,7 +545,7 @@ def test_project_add_registers_non_interactively(tmp_path, monkeypatch, capsys):
         "sys.argv",
         ["ca_launcher.py", "project", "add", str(project_dir), "--group", "work"],
     )
-    with patch("ca_launcher._project_root", return_value=tmp_path):
+    with patch("core.cli.helpers._project_root", return_value=tmp_path):
         ca_launcher.main()
 
     assert "Registered" in capsys.readouterr().out
@@ -564,7 +567,7 @@ def test_project_add_warns_on_unknown_group_but_still_registers(
         "sys.argv",
         ["ca_launcher.py", "project", "add", str(project_dir), "--group", "ghost"],
     )
-    with patch("ca_launcher._project_root", return_value=tmp_path):
+    with patch("core.cli.helpers._project_root", return_value=tmp_path):
         ca_launcher.main()
 
     out = capsys.readouterr().out
@@ -579,7 +582,7 @@ def test_project_add_rejects_missing_directory(tmp_path, monkeypatch):
 
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", "project", "add", str(missing)])
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
         pytest.raises(SystemExit) as exc_info,
     ):
         ca_launcher.main()
@@ -600,7 +603,7 @@ def test_project_remove(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(
         "sys.argv", ["ca_launcher.py", "project", "remove", str(project_dir)]
     )
-    with patch("ca_launcher._project_root", return_value=tmp_path):
+    with patch("core.cli.helpers._project_root", return_value=tmp_path):
         ca_launcher.main()
 
     assert "Removed" in capsys.readouterr().out
@@ -618,7 +621,7 @@ def test_project_remove_unknown_path_exits_nonzero(tmp_path, monkeypatch):
         "sys.argv", ["ca_launcher.py", "project", "remove", str(project_dir)]
     )
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
         pytest.raises(SystemExit) as exc_info,
     ):
         ca_launcher.main()
@@ -632,8 +635,8 @@ def test_project_list(tmp_path, monkeypatch, capsys):
     }
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", "project", "list"])
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
-        patch("ca_launcher.load_config", return_value=config),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
+        patch("core.cli.helpers.load_config", return_value=config),
     ):
         ca_launcher.main()
 
@@ -646,8 +649,8 @@ def test_project_list_empty(tmp_path, monkeypatch, capsys):
     config = {"groups": {}, "project_registry": []}
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", "project", "list"])
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
-        patch("ca_launcher.load_config", return_value=config),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
+        patch("core.cli.helpers.load_config", return_value=config),
     ):
         ca_launcher.main()
 
@@ -670,8 +673,8 @@ def test_ensure_project_registered_hints_when_noninteractive(
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", "claude", "hi"])
     config = {"project_registry": [], "groups": {}}
     with (
-        patch("ca_launcher._project_root", return_value=root),
-        patch("ca_launcher.load_config", return_value=config),
+        patch("core.cli.helpers._project_root", return_value=root),
+        patch("core.cli.helpers.load_config", return_value=config),
         patch("subprocess.run"),
     ):
         ca_launcher.main()
@@ -694,8 +697,8 @@ def test_ensure_project_registered_silent_when_skip_env_set(
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", "claude", "hi"])
     config = {"project_registry": [], "groups": {}}
     with (
-        patch("ca_launcher._project_root", return_value=root),
-        patch("ca_launcher.load_config", return_value=config),
+        patch("core.cli.helpers._project_root", return_value=root),
+        patch("core.cli.helpers.load_config", return_value=config),
         patch("subprocess.run"),
     ):
         ca_launcher.main()
@@ -719,8 +722,8 @@ def test_ensure_project_registered_silent_when_already_registered(
         "groups": {},
     }
     with (
-        patch("ca_launcher._project_root", return_value=root),
-        patch("ca_launcher.load_config", return_value=config),
+        patch("core.cli.helpers._project_root", return_value=root),
+        patch("core.cli.helpers.load_config", return_value=config),
         patch("subprocess.run"),
     ):
         ca_launcher.main()
@@ -745,7 +748,7 @@ def test_mcp_sync_reports_each_engine_result(tmp_path, monkeypatch, capsys):
         ]
     )
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
         patch("core.services.mcp_service.sync_servers", fake),
     ):
         ca_launcher.main()
@@ -765,7 +768,7 @@ def test_mcp_sync_exits_nonzero_when_an_engine_fails(tmp_path, monkeypatch, caps
         ]
     )
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
         patch("core.services.mcp_service.sync_servers", fake),
         pytest.raises(SystemExit) as exc,
     ):
@@ -781,7 +784,7 @@ def test_mcp_sync_rejects_an_invalid_request(tmp_path, monkeypatch, capsys):
         "sys.argv", ["ca_launcher.py", "mcp", "sync", "claude", "--to", "claude"]
     )
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
         patch(
             "core.services.mcp_service.sync_servers",
             side_effect=ValueError("Cannot sync 'claude' onto itself"),
@@ -798,7 +801,7 @@ def test_mcp_list_covers_all_engines_by_default(tmp_path, monkeypatch, capsys):
     _mcp_config(tmp_path)
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", "mcp", "list"])
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
         patch("core.services.mcp_service.list_servers", return_value=[]),
     ):
         ca_launcher.main()
@@ -828,7 +831,7 @@ def test_mcp_add_passes_command_and_env(tmp_path, monkeypatch, capsys):
     )
     fake = MagicMock()
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
         patch("core.services.mcp_service.add_server", fake),
     ):
         ca_launcher.main()
@@ -851,7 +854,7 @@ def test_mcp_add_supports_a_url_server(tmp_path, monkeypatch):
     )
     fake = MagicMock()
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
         patch("core.services.mcp_service.add_server", fake),
     ):
         ca_launcher.main()
@@ -867,7 +870,7 @@ def test_mcp_add_rejects_malformed_env(tmp_path, monkeypatch, capsys):
         ["ca_launcher.py", "mcp", "add", "claude", "fs", "--env", "OOPS", "--", "x"],
     )
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
         patch("core.services.mcp_service.add_server") as fake,
         pytest.raises(SystemExit) as exc,
     ):
@@ -884,7 +887,7 @@ def test_mcp_add_surfaces_a_cli_failure(tmp_path, monkeypatch, capsys):
         "sys.argv", ["ca_launcher.py", "mcp", "add", "claude", "fs", "--", "x"]
     )
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
         patch(
             "core.services.mcp_service.add_server",
             side_effect=RuntimeError("'claude' CLI not found on PATH"),
@@ -901,7 +904,7 @@ def test_mcp_remove_reports_a_missing_server(tmp_path, monkeypatch, capsys):
     _mcp_config(tmp_path)
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", "mcp", "remove", "gemini", "no"])
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
         patch("core.services.mcp_service.remove_server", side_effect=KeyError("no")),
         pytest.raises(SystemExit) as exc,
     ):
@@ -916,7 +919,7 @@ def test_mcp_remove_succeeds(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", "mcp", "remove", "gemini", "fs"])
     fake = MagicMock()
     with (
-        patch("ca_launcher._project_root", return_value=tmp_path),
+        patch("core.cli.helpers._project_root", return_value=tmp_path),
         patch("core.services.mcp_service.remove_server", fake),
     ):
         ca_launcher.main()

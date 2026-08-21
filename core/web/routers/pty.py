@@ -113,7 +113,7 @@ class SpawnError(Exception):
 
 def _resize_fd(fd: int, cols: int, rows: int) -> None:
     with contextlib.suppress(OSError):
-        fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))  # type: ignore[attr-defined]
 
 
 class _PosixSession:
@@ -153,7 +153,7 @@ async def _spawn_posix(
 ) -> _PosixSession:
     import pty  # POSIX-only; imported lazily so the module still loads on Windows.
 
-    master_fd, slave_fd = pty.openpty()
+    master_fd, slave_fd = pty.openpty()  # type: ignore[attr-defined]
     _resize_fd(master_fd, cols=80, rows=24)
     env = {
         **os.environ,

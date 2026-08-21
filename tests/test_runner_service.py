@@ -75,15 +75,15 @@ def test_failed_task_start_is_still_queryable(tmp_path):
 
 
 def test_task_runner_kill_all(tmp_path):
+    import subprocess
+    import sys
     import time
 
     from core.services.runner_service import TaskRunner
 
     runner = TaskRunner(tmp_path)
-    # Start a dummy long-running command (like sleep 10)
-    import subprocess
-
-    dummy_proc = subprocess.Popen(["sleep", "10"])
+    # Use a cross-platform sleep via Python instead of the POSIX-only `sleep` binary.
+    dummy_proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(10)"])
     runner.active_runs["dummy"] = MagicMock(pid=dummy_proc.pid, status="running")
     runner._processes["dummy"] = dummy_proc
 
@@ -93,15 +93,14 @@ def test_task_runner_kill_all(tmp_path):
 
 
 def test_task_runner_kill_all_missing_from_active_runs(tmp_path):
+    import subprocess
+    import sys
     import time
 
     from core.services.runner_service import TaskRunner
 
     runner = TaskRunner(tmp_path)
-    # Start a dummy long-running command
-    import subprocess
-
-    dummy_proc = subprocess.Popen(["sleep", "10"])
+    dummy_proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(10)"])
     # Do NOT put it in active_runs
     runner._processes["dummy"] = dummy_proc
 

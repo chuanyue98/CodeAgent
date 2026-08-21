@@ -29,12 +29,19 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import field_validator
 
 from core.constants import ENGINES
+from core.services.config_service import ConfigService
+from core.services.workspace_service import (
+    WorkspaceConfigError,
+    WorkspaceResolutionError,
+    resolve_registered_workspace,
+)
 from core.session_history.audit import build_audit_events
 from core.session_history.session_finder import (
     find_all_sessions,
     find_session_by_id,
 )
 from core.web.case_convert import ProtocolModel, wire
+from core.web.routers.config import get_config_path
 
 # NOTE: list_sessions/get_audit_events/get_session_detail below intentionally
 # still return raw snake_case dicts. Their shapes (SessionSummary,
@@ -257,11 +264,12 @@ async def convert_session(req: ConvertRequest) -> dict:
     Returns:
         dict: {"status": "ok", "new_session_id": "...", "target_engine": "..."}
     """
+    validated_project = _resolve_history_workspace(req.project_path)
     # Import here to avoid circular dependencies and only load when needed
     from core.session_history.writers import write_session
 
     session = await asyncio.to_thread(
-        find_session_by_id, req.session_id, req.source_engine, req.project_path
+        find_session_by_id, req.session_id, req.source_engine, validated_project
     )
     if not session:
         raise HTTPException(
@@ -286,6 +294,53 @@ async def convert_session(req: ConvertRequest) -> dict:
         raise HTTPException(status_code=500, detail={"error": str(e)}) from e
 
 
+def _resolve_history_workspace(project_path: str) -> str:
+    """Validate *project_path* is a registered workspace, else raise 400/500."""
+    from fastapi import HTTPException
+
+    try:
+        ws = resolve_registered_workspace(
+            ConfigService(get_config_path()), project_path
+        )
+        return ws.path
+    except WorkspaceConfigError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except WorkspaceResolutionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _resume_launch_command(engine: str, session_id: str, project: Path) -> list[str]:
+    """Builds the raw engine CLI command that resumes a converted session.
+
+    Conversion writes the session into the target engine's native storage
+    (e.g. ``~/.local/share/opencode/opencode.db``), so resuming hands control
+    straight to that engine with the new session id -- no CodeAgent
+    prompt/skill/plugin injection, since the conversation is already
+    materialized. ``launch_in_terminal`` is engine-agnostic; on Windows the
+    ``cmd /k`` shim resolves the ``*.cmd`` entry points npm installs.
+
+    Args:
+        engine: Target engine name (``opencode``, ``claude``, ``codex``).
+        session_id: The converted session id in the target engine's format.
+        project: Project working directory the converted session belongs to.
+
+    Returns:
+        list[str]: argv for ``launch_in_terminal``.
+    """
+    if engine == "opencode":
+        return ["opencode", str(project), "-s", session_id]
+    if engine == "claude":
+        return ["claude", "--resume", session_id]
+    if engine == "codex":
+        return ["codex", "resume", session_id]
+    if engine == "gemini":
+        # Gemini resumes by its own session index, not by the converted UUID
+        # we minted, so a native-resume is not possible from here. Fall back
+        # to launching the engine normally in the project directory.
+        return ["gemini"]
+    raise ValueError(f"Unknown engine: {engine}")
+
+
 @router.post("/history/convert-and-launch")
 async def convert_and_launch(req: ConvertRequest) -> dict:
     """Converts a session and launches the target engine.
@@ -296,10 +351,11 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
     Returns:
         dict: Launch result with converted session info.
     """
+    validated_project = _resolve_history_workspace(req.project_path)
     from core.session_history.writers import write_session
 
     session = await asyncio.to_thread(
-        find_session_by_id, req.session_id, req.source_engine, req.project_path
+        find_session_by_id, req.session_id, req.source_engine, validated_project
     )
     if not session:
         raise HTTPException(
@@ -313,15 +369,12 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
             status_code=500, detail={"error": f"Conversion failed: {e}"}
         ) from e
 
-    # Launch the engine in a visible terminal (same mechanism as /api/launch).
-    import sys
+    from core.web.routers.launch import launch_in_terminal
 
-    from core.web.routers.launch import _CA_LAUNCHER, launch_in_terminal
-
-    cmd = [sys.executable, str(_CA_LAUNCHER), req.target_engine]
+    cmd = _resume_launch_command(req.target_engine, new_id, Path(validated_project))
 
     try:
-        terminal = launch_in_terminal(cmd, cwd=Path(req.project_path))
+        terminal = launch_in_terminal(cmd, cwd=Path(validated_project))
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except OSError as exc:
@@ -337,6 +390,65 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
             terminal=terminal,
         )
     )
+
+
+@router.post("/history/{engine}/{session_id}/continue")
+async def continue_session(
+    engine: str,
+    session_id: str,
+    project: str = Query(..., description="Project directory path"),
+) -> dict:
+    """Resumes a session in its native engine, in a visible terminal.
+
+    Nothing is converted — this hands the already-native session straight
+    back to its engine CLI (``opencode -s``, ``claude --resume``,
+    ``codex resume``...), again with no CodeAgent prompt/skill injection,
+    so a session browser can "Continue" any existing session directly.
+
+    Args:
+        engine: The engine that owns *session_id*.
+        session_id: The session ID to resume.
+        project: The project directory path the session belongs to.
+
+    Returns:
+        dict: Launch result including the terminal used.
+    """
+    validated_project = _resolve_history_workspace(project)
+    if engine not in ENGINES:
+        raise HTTPException(status_code=400, detail=f"Unknown engine: {engine}")
+
+    session = await asyncio.to_thread(
+        find_session_by_id, session_id, engine, validated_project
+    )
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Session not found",
+                "session_id": session_id,
+                "engine": engine,
+            },
+        )
+
+    from core.web.routers.launch import launch_in_terminal
+
+    cmd = _resume_launch_command(engine, session_id, Path(validated_project))
+
+    try:
+        terminal = launch_in_terminal(cmd, cwd=Path(validated_project))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to open terminal: {exc}"
+        ) from exc
+
+    return {
+        "status": "launched",
+        "engine": engine,
+        "session_id": session_id,
+        "terminal": terminal,
+    }
 
 
 @router.delete("/history/{engine}/{session_id}")

@@ -314,7 +314,7 @@ def check_proxy(section: Section, cfg: dict) -> None:
         section.add(INFO, t("doctor.proxy_label"), t("doctor.proxy_unset"))
         return
 
-    from ca_launcher import _extract_proxy_candidates, is_tcp_port_open
+    from core.cli.helpers import _extract_proxy_candidates, is_tcp_port_open
 
     candidates = _extract_proxy_candidates(proxy_cfg)
     reachable = [(h, p) for h, p in candidates if is_tcp_port_open(h, p)]
