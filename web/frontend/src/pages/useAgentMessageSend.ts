@@ -42,7 +42,11 @@ export default function useAgentMessageSend({
     // connect() ever sets `connecting` -- without it, a fast double-Enter
     // on a brand-new conversation races two createAgentSession calls and
     // ends up with two backend sessions for one message.
-    if (!text || state.activeTurnId || connecting || sendingRef.current) return;
+    if (!text || connecting || sendingRef.current) return;
+    if (state.activeTurnId) {
+      setError('上一轮仍在进行，点击 Cancel 或 New');
+      return;
+    }
     if (!workspace || !selectedProvider) {
       setError('Select a registered workspace and an available provider');
       return;

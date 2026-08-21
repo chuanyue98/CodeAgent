@@ -162,6 +162,10 @@ export function agentSessionReducer(
       reason: dataString(event.data, 'reason') || undefined,
       attempt: typeof event.data.attempt === 'number' ? event.data.attempt : 0,
     };
+    // The provider is gone, so any in-flight turn cannot complete.
+    // Clear activeTurnId so the composer unlocks and the user can send
+    // a new message after the provider reconnects.
+    next.activeTurnId = null;
   } else if (event.type === 'provider.connected') {
     next.provider = {
       connected: true,
@@ -180,6 +184,11 @@ export function agentSessionReducer(
         text: dataString(event.data, 'message') || 'The provider reported an error',
       },
     ];
+    // The busy-watchdog emits turn_stuck when a session has been BUSY
+    // beyond the timeout.  Clear activeTurnId so the composer unlocks.
+    if (dataString(event.data, 'code') === 'turn_stuck') {
+      next.activeTurnId = null;
+    }
   }
   return next;
 }
