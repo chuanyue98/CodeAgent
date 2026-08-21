@@ -52,6 +52,7 @@ class AgentGateway:
         reconnect_base_delay: float = 1.0,
         reconnect_max_delay: float = 60.0,
         healthy_run_seconds: float = 30.0,
+        busy_timeout: float = 300.0,
     ):
         self.store = store
         self.config_path = Path(config_path)
@@ -61,7 +62,9 @@ class AgentGateway:
         self.reconnect_base_delay = reconnect_base_delay
         self.reconnect_max_delay = reconnect_max_delay
         self.healthy_run_seconds = healthy_run_seconds
+        self.busy_timeout = busy_timeout
         self._adapter_tasks: list[asyncio.Task] = []
+        self._busy_watchdog: asyncio.Task | None = None
         self._subscribers: dict[str, set[asyncio.Queue[AgentEvent | None]]] = (
             defaultdict(set)
         )
@@ -89,11 +92,18 @@ class AgentGateway:
                     name=f"agent-supervisor-{adapter.provider_id}",
                 )
             )
+        self._busy_watchdog = asyncio.create_task(
+            self._busy_watchdog_loop(),
+            name="agent-busy-watchdog",
+        )
 
     async def stop(self) -> None:
         if not self._started:
             return
         self._started = False
+        if self._busy_watchdog is not None:
+            self._busy_watchdog.cancel()
+            self._busy_watchdog = None
         for queue_set in self._subscribers.values():
             for queue in queue_set:
                 if queue.full():
@@ -496,6 +506,53 @@ class AgentGateway:
         while len(cache) > 256:
             cache.popitem(last=False)
         return ack
+
+    async def _busy_watchdog_loop(self) -> None:
+        """Periodically recovers sessions stuck in BUSY state.
+
+        When an adapter hangs without crashing (turn never completes,
+        ``turn.completed`` never arrives), the session stays BUSY
+        forever. This watchdog checks every 30 s and transitions any
+        BUSY session whose ``updated_at`` exceeds ``busy_timeout`` to
+        DISCONNECTED, publishing an error event so the frontend clears
+        its ``activeTurnId``.
+        """
+        while self._started:
+            await asyncio.sleep(30)
+            if not self._started:
+                return
+            now = utc_now()
+            for session in self.store.list_sessions(limit=10_000):
+                if session.status != SessionStatus.BUSY:
+                    continue
+                age = (now - session.updated_at).total_seconds()
+                if age < self.busy_timeout:
+                    continue
+                logger.warning(
+                    "Session %s has been BUSY for %.0fs (timeout %.0fs) — "
+                    "forcing to DISCONNECTED",
+                    session.id,
+                    age,
+                    self.busy_timeout,
+                )
+                session.status = SessionStatus.DISCONNECTED
+                session.updated_at = now
+                self.store.upsert_session(session)
+                await self.publish(
+                    AgentEvent(
+                        type="error",
+                        session_id=session.id,
+                        data={
+                            "code": "turn_stuck",
+                            "message": (
+                                f"Turn has been active for {int(age)}s without "
+                                "completing. The session was reset to allow a "
+                                "new turn."
+                            ),
+                            "retryable": True,
+                        },
+                    )
+                )
 
     async def _try_start_adapter(self, adapter: AgentAdapter) -> bool:
         """Starts an adapter, reporting failure rather than raising.
