@@ -12,27 +12,27 @@ test.beforeEach(async ({ baseURL }) => {
   await resetBackend(baseURL!);
 });
 
-async function gotoAudit(page: Page): Promise<void> {
+async function gotoTimeline(page: Page): Promise<void> {
   await page.goto('/audit');
-  await waitForH2(page, 'Events');
+  await waitForH2(page, 'Timeline');
   await expect(page.getByText('Filters', { exact: true })).toBeVisible();
 }
 
 test('renders the filter panel and an empty event state', async ({ page }) => {
-  await gotoAudit(page);
+  await gotoTimeline(page);
   await expect(page.getByRole('button', { name: 'Message' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Tool Call' })).toBeVisible();
   await expect(page.locator('main')).toContainText('No events match your filters');
 });
 
 test('toggling an event-type filter does not error', async ({ page }) => {
-  await gotoAudit(page);
+  await gotoTimeline(page);
   await page.getByRole('button', { name: 'Message' }).click();
   await expect(page.locator('main')).toContainText('No events match your filters');
 });
 
 test('search and refresh work without error', async ({ page }) => {
-  await gotoAudit(page);
+  await gotoTimeline(page);
   await typeSearch(page, 'anything');
   await page.getByRole('button', { name: 'Refresh' }).click();
   await expect(page.locator('main')).toContainText('No events match your filters');

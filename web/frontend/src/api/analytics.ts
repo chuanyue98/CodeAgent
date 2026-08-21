@@ -81,8 +81,10 @@ export async function fetchMonthly(): Promise<MonthlyUsage[]> {
   return request('/api/analytics/monthly');
 }
 
-export async function fetchSessions(limit = 100): Promise<SessionUsage[]> {
-  return request(`/api/analytics/sessions?limit=${limit}`);
+export async function fetchSessions(limit = 100, project?: string): Promise<SessionUsage[]> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (project) query.set('project', project);
+  return request(`/api/analytics/sessions?${query}`);
 }
 
 export async function fetchEngines(): Promise<EngineSummary[]> {

@@ -10,10 +10,33 @@ interface SectionLayoutProps {
   label: string;
   description: string;
   tabs: SectionTab[];
+  /**
+   * Query params to carry from the current URL onto each tab link, so state
+   * shared by a section's tabs (Activity's filters) survives switching
+   * between them instead of resetting.
+   */
+  preserveParams?: string[];
 }
 
-export default function SectionLayout({ label, description, tabs }: SectionLayoutProps) {
-  const { pathname } = useLocation();
+export default function SectionLayout({
+  label,
+  description,
+  tabs,
+  preserveParams,
+}: SectionLayoutProps) {
+  const { pathname, search } = useLocation();
+
+  const carried = (() => {
+    if (!preserveParams?.length) return '';
+    const current = new URLSearchParams(search);
+    const next = new URLSearchParams();
+    for (const key of preserveParams) {
+      const value = current.get(key);
+      if (value) next.set(key, value);
+    }
+    const query = next.toString();
+    return query ? `?${query}` : '';
+  })();
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
@@ -32,7 +55,7 @@ export default function SectionLayout({ label, description, tabs }: SectionLayou
             return (
               <NavLink
                 key={tab.to}
-                to={tab.to}
+                to={`${tab.to}${carried}`}
                 aria-current={active ? 'page' : undefined}
                 className={`animate-fade-rise ${stagger} shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                   active

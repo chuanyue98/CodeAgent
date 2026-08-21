@@ -31,7 +31,35 @@ export interface FetchAuditEventsParams {
   limit?: number;
 }
 
+export interface SessionMessage {
+  role: string;
+  content: string;
+  timestamp: string;
+  model: string;
+  tool_calls: { name: string; args_preview: string; result_preview: string }[];
+}
+
+export interface SessionDetail {
+  session_id: string;
+  engine: string;
+  project_path: string;
+  title: string;
+  messages: SessionMessage[];
+}
+
 import request from '../utils/request';
+
+/** Full transcript of one session, including tool calls per message. */
+export async function fetchSessionDetail(
+  engine: string,
+  sessionId: string,
+  project: string,
+): Promise<SessionDetail> {
+  const query = new URLSearchParams({ project });
+  return request(
+    `/api/history/${encodeURIComponent(engine)}/${encodeURIComponent(sessionId)}?${query}`,
+  );
+}
 
 export async function fetchAuditEvents(
   params: FetchAuditEventsParams = {},

@@ -106,7 +106,7 @@ export default function CommandPalette() {
       hint: `${session.target} session · ${session.projectPath}`,
       section: 'Session',
       icon: MessageSquare,
-      run: () => navigate(`/activity/history?session=${encodeURIComponent(session.sessionId)}`),
+      run: () => navigate(`/activity/sessions?session=${encodeURIComponent(session.sessionId)}`),
     }));
     const taskItems: PaletteItem[] = tasks.map(task => ({
       id: `task:${task.name}`,

@@ -12,7 +12,7 @@ export const primaryNav: PrimaryNavItem[] = [
   { to: '/home', matchPrefix: '/home', label: 'Home', icon: Home },
   { to: '/agent/web', matchPrefix: '/agent', label: 'Agent', icon: Bot },
   { to: '/automations/tasks', matchPrefix: '/automations', label: 'Automations', icon: Clock3 },
-  { to: '/activity/history', matchPrefix: '/activity', label: 'Activity', icon: History },
+  { to: '/activity/sessions', matchPrefix: '/activity', label: 'Activity', icon: History },
   { to: '/settings/workspace', matchPrefix: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -21,17 +21,31 @@ export const AGENT_TABS: SectionTab[] = [
   { to: '/agent/terminal', label: 'Local Terminal' },
 ];
 
+// Logs lives here, not under Activity: these are the run logs of the tasks
+// on the Tasks tab, keyed by task id, and share no data or concepts with
+// Activity's session history. Reading one only makes sense next to the task
+// that produced it.
 export const AUTOMATION_TABS: SectionTab[] = [
   { to: '/automations/tasks', label: 'Tasks' },
   { to: '/automations/schedules', label: 'Schedules' },
+  { to: '/automations/logs', label: 'Logs' },
 ];
 
+// Three nouns that don't overlap: Sessions is a list of objects, Timeline is
+// a list of events, Usage is numbers. History/Events/Analytics all translated
+// to roughly "records" and gave no hint which one answered which question.
 export const ACTIVITY_TABS: SectionTab[] = [
-  { to: '/activity/history', label: 'History' },
-  { to: '/activity/events', label: 'Events' },
-  { to: '/activity/analytics', label: 'Analytics' },
-  { to: '/activity/logs', label: 'Logs' },
+  { to: '/activity/sessions', label: 'Sessions' },
+  { to: '/activity/timeline', label: 'Timeline' },
+  { to: '/activity/usage', label: 'Usage' },
 ];
+
+// Query params holding Activity's filter state (see useActivityFilters).
+// SectionLayout carries these across the Activity tabs so narrowing the view
+// on History and switching to Events keeps what you selected. Deep-link
+// params that identify one session are deliberately absent — those point at a
+// single row and shouldn't leak into a sibling tab's filters.
+export const ACTIVITY_FILTER_PARAMS = ['q', 'from', 'to', 'engines', 'types', 'project'];
 
 export const SETTINGS_TABS: SectionTab[] = [
   { to: '/settings/workspace', label: 'Workspace' },
@@ -59,10 +73,10 @@ export const PAGE_LABELS: Record<string, string> = {
   '/agent/terminal': 'Local Terminal',
   '/automations/tasks': 'Tasks',
   '/automations/schedules': 'Schedules',
-  '/activity/history': 'History',
-  '/activity/events': 'Events',
-  '/activity/analytics': 'Analytics',
-  '/activity/logs': 'Logs',
+  '/automations/logs': 'Logs',
+  '/activity/sessions': 'Sessions',
+  '/activity/timeline': 'Timeline',
+  '/activity/usage': 'Usage',
   '/settings/workspace': 'Workspace',
   '/settings/capabilities/skills': 'Skills',
   '/settings/capabilities/prompts': 'Prompts',

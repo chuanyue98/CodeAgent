@@ -8,6 +8,7 @@ import SystemPanel from './components/SystemPanel';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import { useProject } from './context/ProjectContext';
 import {
+  ACTIVITY_FILTER_PARAMS,
   ACTIVITY_TABS,
   AGENT_TABS,
   AUTOMATION_TABS,
@@ -50,6 +51,16 @@ function page(element: ReactNode) {
       <Suspense fallback={routeFallback}>{element}</Suspense>
     </ErrorBoundary>
   );
+}
+
+/**
+ * Redirect that carries the query string over. A bare `<Navigate to="/x">`
+ * drops it, which would silently strip Activity's filters and the params that
+ * open one session's detail from an old bookmark.
+ */
+function KeepQuery({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
 }
 
 function App() {
@@ -150,22 +161,22 @@ function App() {
 
               <Route
                 path="/automations"
-                element={<SectionLayout label="Automations" description="Run repeatable work and manage schedules." tabs={AUTOMATION_TABS} />}
+                element={<SectionLayout label="Automations" description="Run repeatable work, manage schedules, and read run logs." tabs={AUTOMATION_TABS} />}
               >
                 <Route index element={<Navigate to="tasks" replace />} />
                 <Route path="tasks" element={page(<TaskDashboard />)} />
                 <Route path="schedules" element={page(<CronPage />)} />
+                <Route path="logs" element={page(<LogViewer />)} />
               </Route>
 
               <Route
                 path="/activity"
-                element={<SectionLayout label="Activity" description="Conversation history, agent events, usage, and logs." tabs={ACTIVITY_TABS} />}
+                element={<SectionLayout label="Activity" description="Past sessions, their event timeline, and usage." tabs={ACTIVITY_TABS} preserveParams={ACTIVITY_FILTER_PARAMS} />}
               >
-                <Route index element={<Navigate to="history" replace />} />
-                <Route path="history" element={page(<SessionsPage />)} />
-                <Route path="events" element={page(<AuditTrail />)} />
-                <Route path="analytics" element={page(<Analytics />)} />
-                <Route path="logs" element={page(<LogViewer />)} />
+                <Route index element={<Navigate to="sessions" replace />} />
+                <Route path="sessions" element={page(<SessionsPage />)} />
+                <Route path="timeline" element={page(<AuditTrail />)} />
+                <Route path="usage" element={page(<Analytics />)} />
               </Route>
 
               <Route
@@ -192,10 +203,19 @@ function App() {
               <Route path="/chat" element={<Navigate to="/agent/web" replace />} />
               <Route path="/dashboard" element={<Navigate to="/automations/tasks" replace />} />
               <Route path="/cron" element={<Navigate to="/automations/schedules" replace />} />
-              <Route path="/logs" element={<Navigate to="/activity/logs" replace />} />
-              <Route path="/analytics" element={<Navigate to="/activity/analytics" replace />} />
-              <Route path="/sessions" element={<Navigate to="/activity/history" replace />} />
-              <Route path="/audit" element={<Navigate to="/activity/events" replace />} />
+              <Route path="/logs" element={<Navigate to="/automations/logs" replace />} />
+              {/* Logs moved out of Activity into Automations, where the tasks
+                  that write them live. Keeps existing links working. */}
+              <Route path="/activity/logs" element={<Navigate to="/automations/logs" replace />} />
+              {/* Activity's tabs were renamed History/Events/Analytics ->
+                  Sessions/Timeline/Usage. These carry the query string so a
+                  saved filtered view or a session deep link still resolves. */}
+              <Route path="/activity/history" element={<KeepQuery to="/activity/sessions" />} />
+              <Route path="/activity/events" element={<KeepQuery to="/activity/timeline" />} />
+              <Route path="/activity/analytics" element={<KeepQuery to="/activity/usage" />} />
+              <Route path="/analytics" element={<KeepQuery to="/activity/usage" />} />
+              <Route path="/sessions" element={<KeepQuery to="/activity/sessions" />} />
+              <Route path="/audit" element={<KeepQuery to="/activity/timeline" />} />
               <Route path="/skills" element={<Navigate to="/settings/capabilities/skills" replace />} />
               <Route path="/prompts" element={<Navigate to="/settings/capabilities/prompts" replace />} />
               <Route path="/hooks" element={<Navigate to="/settings/capabilities/hooks" replace />} />
