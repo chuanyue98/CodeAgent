@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections import defaultdict
 from typing import Any
 
@@ -159,6 +160,23 @@ def _build_model_summary(entries: list[RawUsageEntry]) -> list[dict[str, Any]]:
     return result
 
 
+def _collect_and_cache() -> dict[str, Any]:
+    """Runs the collection pipeline and caches the result (caller holds lock)."""
+    entries = _collect_all()
+    data = aggregate(entries)
+    data["engines"] = _build_engine_summary(entries)
+    data["models"] = _build_model_summary(entries)
+    save_cache(data)
+    return data
+
+
+# The analytics routes run collection in worker threads (asyncio.to_thread),
+# and the Usage page fires all six endpoints at once — every cache miss would
+# otherwise run _collect_all concurrently, interleaving history-file writes
+# (append_history/save_history are plain file rewrites, not atomic RMWs).
+_collect_lock = threading.Lock()
+
+
 def get_analytics_data(force_refresh: bool = False) -> dict[str, Any]:
     """Retrieves analytics data, using cache if available and not forced to refresh.
 
@@ -175,12 +193,14 @@ def get_analytics_data(force_refresh: bool = False) -> dict[str, Any]:
         if cached is not None:
             return cached
 
-    entries = _collect_all()
-    data = aggregate(entries)
-    data["engines"] = _build_engine_summary(entries)
-    data["models"] = _build_model_summary(entries)
-    save_cache(data)
-    return data
+    with _collect_lock:
+        # Double-check after acquiring: a concurrent caller may have finished
+        # the collection we were both queued for.
+        if not force_refresh:
+            cached = load_cache()
+            if cached is not None:
+                return cached
+        return _collect_and_cache()
 
 
 def refresh_analytics_data() -> dict[str, Any]:
@@ -189,5 +209,6 @@ def refresh_analytics_data() -> dict[str, Any]:
     Returns:
         Dict[str, Any]: The freshly collected and aggregated analytics data.
     """
-    invalidate_cache()
-    return get_analytics_data(force_refresh=True)
+    with _collect_lock:
+        invalidate_cache()
+        return _collect_and_cache()

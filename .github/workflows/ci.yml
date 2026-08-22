@@ -168,8 +168,17 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build (tsc + Vite)
-        run: bun run build
+      # The frontend job already built and tested this exact dist; download
+      # it instead of rebuilding (tsc -b && vite build is ~1 minute of the
+      # e2e job's wall time for a byte-identical result).
+      - name: Replace committed UI with tested artifact
+        run: rm -rf web/frontend/dist
+        working-directory: .
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: web/frontend/dist
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
