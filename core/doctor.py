@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import subprocess
@@ -22,6 +21,7 @@ from core.link_manager import is_windows_link
 from core.plugin_scanner import get_plugins_to_mount
 from core.resource_locator import CODE_ROOT, seed_config_if_missing
 from core.services.config_service import ConfigService
+from core.settings_manager import SettingsFile
 
 # ── Status symbols ────────────────────────────────────────────────────────────
 
@@ -349,7 +349,15 @@ def _remove_probe_dir(path: Path) -> None:
     if not os.path.lexists(path):
         return
     if os.name == "nt":
-        subprocess.run(["cmd", "/c", "rmdir", str(path)], capture_output=True)
+        # Best effort cleanup; a hung rmdir must not hang all of `ca doctor`.
+        try:
+            subprocess.run(
+                ["cmd", "/c", "rmdir", str(path)],
+                capture_output=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            pass
     else:
         try:
             path.unlink()
@@ -401,6 +409,7 @@ def check_symlink_capability(section: Section, root: Path) -> None:
             ["cmd", "/c", "mklink", "/j", str(test_link), str(test_target)],
             capture_output=True,
             check=False,
+            timeout=30,
         )
         if result.returncode == 0:
             section.add(OK, t("doctor.junction_label"), t("doctor.junction_ok"))
@@ -566,17 +575,19 @@ def check_stale_injections(section: Section) -> list[Path]:
         cwd / ".gemini" / "settings.json",
         cwd / ".opencode" / "settings.json",
         cwd / ".codex" / "settings.json",
+        # Codex reads hooks from config.toml -- that is where start_codex
+        # injects and where a SIGKILLed run leaves its residue. settings.json
+        # stays in the list only to sweep up pre-TOML leftovers.
+        cwd / ".codex" / "config.toml",
     ]
     for path in candidates:
         if not path.exists():
             continue
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-            if data.get("_ca_injected"):
-                stale.append(path)
-        except Exception:
-            continue
+        # SettingsFile parses JSON and TOML; a crashed codex injection lives
+        # in config.toml, which json.load here used to silently skip.
+        data = SettingsFile(path).load()
+        if isinstance(data, dict) and data.get("_ca_injected"):
+            stale.append(path)
 
     if stale:
         names = ", ".join(p.name for p in stale)
@@ -594,9 +605,20 @@ def check_stale_injections(section: Section) -> list[Path]:
 # ── Fix routine ───────────────────────────────────────────────────────────────
 
 
+def _injection_backup_path(settings_path: Path) -> Path:
+    """Backup name matching SettingsFile.create_backup() for any suffix.
+
+    ``with_suffix(".json.bak")`` only produced the right name for .json
+    files; on config.toml it yielded config.json.bak and the real
+    config.toml.bak was never found, so --fix fell through to deleting a
+    file that had a restorable backup.
+    """
+    return settings_path.with_name(settings_path.name + ".bak")
+
+
 def fix_stale_injections(stale: list[Path]) -> None:
     for settings_path in stale:
-        backup = settings_path.with_suffix(".json.bak")
+        backup = _injection_backup_path(settings_path)
         if backup.exists():
             os.replace(str(backup), str(settings_path))
             print(t("doctor.restored", path=settings_path))
@@ -609,7 +631,7 @@ def fix_stale_injections(stale: list[Path]) -> None:
 def preview_stale_injections(stale: list[Path]) -> None:
     """Describe what fix_stale_injections() would do, without touching anything."""
     for settings_path in stale:
-        backup = settings_path.with_suffix(".json.bak")
+        backup = _injection_backup_path(settings_path)
         if backup.exists():
             print(t("doctor.would_restore", path=settings_path))
         else:

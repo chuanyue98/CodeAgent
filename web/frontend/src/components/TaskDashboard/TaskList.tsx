@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { Activity, ChevronRight, FileText, Layers, Plus, Search, Sparkles } from 'lucide-react';
 import { classifyStageStatus, type RunStatus, type Stage, type Task } from './types';
 
@@ -15,7 +15,52 @@ function StageProgress({ stages }: { stages: Stage[] }) {
   );
 }
 
-export default function TaskList({
+/**
+ * One task row. Memoized so the surrounding 5s list poll re-renders only the
+ * cards whose task or running-state actually changed, not the whole grid.
+ */
+const TaskCard = memo(function TaskCard({
+  task,
+  activeRun,
+  onSelect,
+}: {
+  task: Task;
+  activeRun: RunStatus | undefined;
+  onSelect: (name: string) => void;
+}) {
+  return (
+    <button
+      onClick={() => onSelect(task.name)}
+      className="glass-card p-6 text-left hover:bg-slate-50/50 border-slate-100 transition-all group flex items-start gap-4"
+    >
+      <div className="p-2.5 bg-slate-100 rounded-xl group-hover:bg-primary/10 transition-colors flex-shrink-0 mt-0.5">
+        {task.hasStages
+          ? <Layers className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
+          : <FileText className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <h2 className="font-semibold text-slate-900 truncate">{task.title}</h2>
+            {activeRun && (
+              <span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider border border-emerald-100 animate-pulse">
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                Running on {activeRun.engine}
+              </span>
+            )}
+          </div>
+          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-primary flex-shrink-0 transition-colors" />
+        </div>
+        {task.description && (
+          <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">{task.description}</p>
+        )}
+        {task.hasStages && <StageProgress stages={task.stages} />}
+      </div>
+    </button>
+  );
+});
+
+export default memo(function TaskList({
   tasks,
   runs,
   onSelect,
@@ -121,40 +166,16 @@ export default function TaskList({
       <div className="grid gap-4">
         {filteredTasks.map(task => {
           const activeRun = runs.find(r => r.task_id.startsWith(task.name) && r.status === 'running');
-
           return (
-            <button
+            <TaskCard
               key={task.name}
-              onClick={() => onSelect(task.name)}
-              className="glass-card p-6 text-left hover:bg-slate-50/50 border-slate-100 transition-all group flex items-start gap-4"
-            >
-              <div className="p-2.5 bg-slate-100 rounded-xl group-hover:bg-primary/10 transition-colors flex-shrink-0 mt-0.5">
-                {task.hasStages
-                  ? <Layers className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
-                  : <FileText className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <h2 className="font-semibold text-slate-900 truncate">{task.title}</h2>
-                    {activeRun && (
-                      <span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider border border-emerald-100 animate-pulse">
-                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                        Running on {activeRun.engine}
-                      </span>
-                    )}
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-primary flex-shrink-0 transition-colors" />
-                </div>
-                {task.description && (
-                  <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">{task.description}</p>
-                )}
-                {task.hasStages && <StageProgress stages={task.stages} />}
-              </div>
-            </button>
+              task={task}
+              activeRun={activeRun}
+              onSelect={onSelect}
+            />
           );
         })}
       </div>
     </div>
   );
-}
+});

@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -127,9 +128,22 @@ def e2e_reset(request: Request) -> dict:
 def _seed_analytics_history() -> None:
     history_path = Path.home() / ".ca_analytics_history.jsonl"
     history_path.parent.mkdir(parents=True, exist_ok=True)
+    # Timestamps are relative to "now": the Usage page defaults to a 30-day
+    # range, so the original hardcoded July dates silently fell out of that
+    # window once August arrived — every analytics spec then met an empty
+    # range, lost its Model Breakdown section, and burned its full expect
+    # timeout (plus a retry) on CI.
+    now = datetime.now()
+
+    def stamp(days_ago: int, hour: int, minute: int) -> str:
+        moment = now - timedelta(days=days_ago)
+        return moment.replace(
+            hour=hour, minute=minute, second=0, microsecond=0
+        ).isoformat()
+
     entries = [
         {
-            "timestamp": "2026-07-01T10:00:00",
+            "timestamp": stamp(1, 10, 0),
             "session_id": "e2e-session-claude",
             "model": "claude-3-5-sonnet",
             "input_tokens": 1200,
@@ -141,7 +155,7 @@ def _seed_analytics_history() -> None:
             "target": "claude",
         },
         {
-            "timestamp": "2026-07-02T14:30:00",
+            "timestamp": stamp(2, 14, 30),
             "session_id": "e2e-session-gemini",
             "model": "gemini-1.5-pro",
             "input_tokens": 500,

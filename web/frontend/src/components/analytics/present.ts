@@ -1,0 +1,35 @@
+import { format } from 'date-fns';
+
+// ── Engine palette ───────────────────────────────────────────────────────────
+const ENGINE_COLORS: Record<string, string> = {
+  claude: '#f97316',
+  gemini: '#3b82f6',
+  codex: '#10b981',
+  opencode: '#8b5cf6',
+};
+const ENGINE_BADGE: Record<string, string> = {
+  claude: 'bg-orange-100 text-orange-700',
+  gemini: 'bg-blue-100 text-blue-700',
+  codex: 'bg-emerald-100 text-emerald-700',
+  opencode: 'bg-violet-100 text-violet-700',
+};
+
+export function ec(t: string) { return ENGINE_COLORS[t] ?? '#94a3b8'; }
+export function eb(t: string) { return ENGINE_BADGE[t] ?? 'bg-slate-100 text-slate-600'; }
+
+// ── Tiny format helpers ──────────────────────────────────────────────────────
+export function formatDate(s: string) {
+  try { return format(new Date(s), 'MMM dd'); } catch { return s.slice(5); }
+}
+export function formatMonth(s: string) {
+  try { return format(new Date(`${s}-01`), 'MMM yyyy'); } catch { return s; }
+}
+export function timeAgo(iso: string) {
+  if (!iso) return '—';
+  const ms = Date.now() - new Date(iso).getTime();
+  const days = Math.floor(ms / 86400000);
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 30) return `${days}d ago`;
+  return iso.slice(0, 10);
+}

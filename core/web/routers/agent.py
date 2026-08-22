@@ -14,6 +14,7 @@ from fastapi import (
 )
 from pydantic import ValidationError
 
+from core.logging_config import get_logger
 from core.services.agent_gateway import AgentGateway, AgentGatewayError
 from core.services.agent_protocol import (
     AgentCommand,
@@ -26,7 +27,22 @@ from core.services.agent_protocol import (
 from core.session_history.session_finder import find_session_by_id
 from core.web.security import verify_websocket
 
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/api/agent", tags=["agent"])
+
+# Unexpected provider/adapter failures can embed local paths, command lines,
+# or environment details in str(exc); clients get this instead, the server
+# log keeps the full context.
+_INTERNAL_ERROR_MESSAGE = "Agent provider failed unexpectedly; see server logs"
+
+
+def _internal_error(exc: Exception) -> HTTPException:
+    logger.warning("Agent gateway internal error: %s", exc, exc_info=True)
+    return HTTPException(
+        status_code=502,
+        detail={"code": "internal_error", "message": _INTERNAL_ERROR_MESSAGE},
+    )
 
 
 def _gateway(source: Request | WebSocket) -> AgentGateway:
@@ -108,7 +124,7 @@ async def create_agent_session(
     except AgentGatewayError as exc:
         raise _http_error(exc) from exc
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise _internal_error(exc) from exc
 
 
 @router.post("/sessions/import", status_code=201)
@@ -182,7 +198,7 @@ async def import_agent_session(
     except AgentGatewayError as exc:
         raise _http_error(exc) from exc
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise _internal_error(exc) from exc
 
 
 @router.get("/sessions/{session_id}")
@@ -229,7 +245,7 @@ async def resume_agent_session(session_id: str, request: Request) -> dict:
     except AgentGatewayError as exc:
         raise _http_error(exc) from exc
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise _internal_error(exc) from exc
 
 
 @router.delete("/sessions/{session_id}")
@@ -325,6 +341,12 @@ async def agent_session_events(
                     )
                 )
             except Exception as exc:
+                logger.warning(
+                    "Agent command %s failed: %s",
+                    raw.get("type") if isinstance(raw, dict) else None,
+                    exc,
+                    exc_info=True,
+                )
                 await send(
                     wire(
                         AgentError(
@@ -333,7 +355,7 @@ async def agent_session_events(
                             ),
                             session_id=session_id,
                             code="provider_error",
-                            message=str(exc),
+                            message=_INTERNAL_ERROR_MESSAGE,
                             retryable=True,
                         )
                     )

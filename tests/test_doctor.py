@@ -93,6 +93,56 @@ def test_check_stale_injections_detects_opencode_and_codex(tmp_path, monkeypatch
     assert section.checks[0].status == doctor.WARN
 
 
+def test_check_stale_injections_detects_codex_config_toml(tmp_path, monkeypatch):
+    """Codex hooks live in config.toml; a SIGKILLed run leaves the marker there.
+
+    The old json.load-based check silently skipped TOML, so this residue was
+    invisible to `ca doctor` forever.
+    """
+    monkeypatch.chdir(tmp_path)
+    codex_config = tmp_path / ".codex" / "config.toml"
+    codex_config.parent.mkdir(parents=True)
+    codex_config.write_text(
+        'model = "gpt-5"\n\n_ca_injected = true\n\n[hooks]\n',
+        encoding="utf-8",
+    )
+
+    section = doctor.Section("Stale")
+    stale = doctor.check_stale_injections(section)
+
+    assert stale == [codex_config]
+    assert section.checks[0].status == doctor.WARN
+
+
+def test_check_stale_injections_ignores_clean_codex_config_toml(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    codex_config = tmp_path / ".codex" / "config.toml"
+    codex_config.parent.mkdir(parents=True)
+    codex_config.write_text('model = "gpt-5"\n', encoding="utf-8")
+
+    section = doctor.Section("Stale")
+    assert doctor.check_stale_injections(section) == []
+    assert section.checks[0].status == doctor.OK
+
+
+def test_fix_stale_injections_restores_toml_from_its_own_backup(tmp_path):
+    """--fix must look for config.toml.bak, not with_suffix(".json.bak").
+
+    The old name computation turned config.toml into config.json.bak, missed
+    the real backup, and fell through to deleting a user file that had a
+    restorable original.
+    """
+    codex_config = tmp_path / "config.toml"
+    codex_config.write_text("_ca_injected = true\n", encoding="utf-8")
+    backup = tmp_path / "config.toml.bak"
+    backup.write_text('model = "gpt-5"\n', encoding="utf-8")
+
+    doctor.fix_stale_injections([codex_config])
+
+    assert codex_config.read_text(encoding="utf-8") == 'model = "gpt-5"\n'
+    assert not backup.exists()
+
+
 def test_get_doctor_sections_returns_sections():
     sections = doctor.get_doctor_sections(fix=False)
     assert len(sections) > 0

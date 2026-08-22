@@ -188,3 +188,39 @@ def test_claude_usage_prefers_exact_cwd_for_hyphenated_project(tmp_path):
 
     assert len(entries) == 1
     assert entries[0].project_path == "/home/user/my-project"
+
+
+def test_concurrent_cache_misses_collect_once(monkeypatch, tmp_path):
+    """Six parallel endpoint hits on a cold cache must not run the collection
+    pipeline six times over the same history files — the to_thread analytics
+    routes made that the common case on the Usage page."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    import core.analytics.service as service
+
+    calls = {"collect": 0}
+    lock = threading.Lock()
+
+    def fake_collect():
+        with lock:
+            calls["collect"] += 1
+        return []
+
+    monkeypatch.setattr(service, "_collect_all", fake_collect)
+    monkeypatch.setattr(service, "_build_engine_summary", lambda entries: [])
+    monkeypatch.setattr(service, "_build_model_summary", lambda entries: [])
+    # Real roundtrip semantics: save persists, load reads it back — the
+    # double-check inside the lock only collapses concurrent misses if the
+    # cache actually answers after the first collector finishes.
+    cache: dict = {}
+    monkeypatch.setattr(
+        service, "save_cache", lambda data: cache.__setitem__("data", data)
+    )
+    monkeypatch.setattr(service, "load_cache", lambda *a, **k: cache.get("data"))
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(lambda _: service.get_analytics_data(), range(6)))
+
+    assert len(results) == 6
+    assert calls["collect"] == 1

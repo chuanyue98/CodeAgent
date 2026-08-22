@@ -216,3 +216,18 @@ def test_resource_snapshot_defaults_to_empty_lists():
     assert snapshot.prompts == []
     assert snapshot.hooks == []
     assert snapshot.plugins == []
+    assert snapshot.digest is None
+
+
+def test_resource_snapshot_digest_survives_wire_roundtrip():
+    # digest=None is the "configured but NOT applied" marker; a receipt must
+    # survive both wire encodings so clients can render the honest state.
+    applied = ResourceSnapshot(group="web", skills=["base/review"], digest="abc123")
+    payload = wire(applied)
+    assert payload["digest"] == "abc123"
+    restored = ResourceSnapshot.model_validate(payload)
+    assert restored.digest == "abc123"
+
+    declared = ResourceSnapshot(group="web", skills=["base/review"])
+    assert wire(declared)["digest"] is None
+    assert ResourceSnapshot.model_validate(wire(declared)).digest is None

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from core.services.agent_protocol import AgentEvent, AgentSession, wire
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class AgentStore:
@@ -63,10 +63,13 @@ class AgentStore:
                         sequence INTEGER NOT NULL,
                         event_json TEXT NOT NULL,
                         created_at TEXT NOT NULL,
+                        event_type TEXT,
                         PRIMARY KEY(session_id, sequence),
                         FOREIGN KEY(session_id) REFERENCES agent_sessions(id)
                             ON DELETE CASCADE
                     );
+                    CREATE INDEX agent_events_type_idx
+                        ON agent_events(session_id, event_type);
                     """
                 )
                 if row:
@@ -103,9 +106,27 @@ class AgentStore:
                     )
                     """
                 )
+                self._connection.execute("UPDATE schema_version SET version = ?", (3,))
+                version = 3
+            if version < 4:
+                # Matching the event type against the serialized JSON with
+                # LIKE was both slow (full scan per call) and fragile: any
+                # change to json.dumps separators or key order would
+                # silently break every lookup. A real indexed column makes
+                # has_event_of_type exact.
                 self._connection.execute(
-                    "UPDATE schema_version SET version = ?", (SCHEMA_VERSION,)
+                    "ALTER TABLE agent_events ADD COLUMN event_type TEXT"
                 )
+                self._connection.execute(
+                    "UPDATE agent_events "
+                    "SET event_type = json_extract(event_json, '$.type')"
+                )
+                self._connection.execute(
+                    "CREATE INDEX agent_events_type_idx "
+                    "ON agent_events(session_id, event_type)"
+                )
+                self._connection.execute("UPDATE schema_version SET version = ?", (4,))
+                version = 4
 
     def close(self) -> None:
         with self._lock:
@@ -216,6 +237,25 @@ class AgentStore:
             ).fetchall()
         return [self._session_from_row(row) for row in rows]
 
+    def list_sessions_by_status(self, *statuses: str) -> list[AgentSession]:
+        """Sessions currently in one of the given lifecycle states.
+
+        The busy watchdog and shutdown path need every BUSY/READY session,
+        which used to mean ``list_sessions(limit=10_000)`` plus a Python-side
+        filter -- deserializing the whole table, snapshots included, every
+        30 seconds. ``SessionStatus`` values are plain strings, so they bind
+        directly.
+        """
+        if not statuses:
+            return []
+        placeholders = ",".join("?" for _ in statuses)
+        with self._lock:
+            rows = self._connection.execute(
+                f"SELECT * FROM agent_sessions WHERE status IN ({placeholders})",
+                statuses,
+            ).fetchall()
+        return [self._session_from_row(row) for row in rows]
+
     def delete_session(self, session_id: str) -> bool:
         with self._lock, self._connection:
             cursor = self._connection.execute(
@@ -246,13 +286,15 @@ class AgentStore:
             event.sequence = last_sequence + 1
             payload = wire(event)
             self._connection.execute(
-                "INSERT INTO agent_events(session_id, sequence, event_json, created_at) "
-                "VALUES (?, ?, ?, ?)",
+                "INSERT INTO agent_events("
+                "session_id, sequence, event_json, created_at, event_type) "
+                "VALUES (?, ?, ?, ?, ?)",
                 (
                     event.session_id,
                     event.sequence,
                     json.dumps(payload, ensure_ascii=False),
                     payload["timestamp"],
+                    payload["type"],
                 ),
             )
             self._connection.execute(
@@ -273,6 +315,20 @@ class AgentStore:
                 (session_id, after_sequence, limit),
             ).fetchall()
         return [AgentEvent.model_validate_json(row["event_json"]) for row in rows]
+
+    def has_event_of_type(self, session_id: str, event_type: str) -> bool:
+        """True if the session log contains at least one such event.
+
+        Backed by the indexed ``event_type`` column rather than a LIKE scan
+        of the serialized envelope.
+        """
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT 1 FROM agent_events "
+                "WHERE session_id = ? AND event_type = ? LIMIT 1",
+                (session_id, event_type),
+            ).fetchone()
+        return row is not None
 
     def list_recent_events(
         self, session_id: str, before_sequence: int | None = None, limit: int = 100

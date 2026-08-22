@@ -22,9 +22,9 @@ const PAGES: { path: string; label: string; screenshotSlug: string; emptyStateHi
   { path: '/dashboard', label: 'Tasks', screenshotSlug: 'dashboard' },
   { path: '/cron', label: 'Schedules', screenshotSlug: 'cron' },
   { path: '/logs', label: 'Logs', screenshotSlug: 'logs' },
-  { path: '/analytics', label: 'Analytics', screenshotSlug: 'analytics' },
-  { path: '/sessions', label: 'History', screenshotSlug: 'sessions' },
-  { path: '/audit', label: 'Events', screenshotSlug: 'audit-trail' },
+  { path: '/analytics', label: 'Usage', screenshotSlug: 'analytics' },
+  { path: '/sessions', label: 'Sessions', screenshotSlug: 'sessions' },
+  { path: '/audit', label: 'Timeline', screenshotSlug: 'audit-trail' },
   { path: '/system', label: 'System', screenshotSlug: 'system' },
 ];
 

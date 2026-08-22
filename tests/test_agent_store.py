@@ -70,6 +70,23 @@ def test_store_delete_cascades_events(tmp_path):
     store.close()
 
 
+def test_has_event_of_type_matches_envelope_not_payload(tmp_path):
+    store = AgentStore(tmp_path / "agent.sqlite3")
+    store.upsert_session(_session())
+    store.append_event(
+        AgentEvent(
+            type="message.delta",
+            session_id="agent_test",
+            data={"delta": 'pretend text about "type": "prompt.injected"'},
+        )
+    )
+    assert store.has_event_of_type("agent_test", "message.delta") is True
+    # The receipt type appears only inside a data payload, never as an
+    # envelope type -- must not count.
+    assert store.has_event_of_type("agent_test", "prompt.injected") is False
+    store.close()
+
+
 def test_store_never_reuses_an_event_sequence_after_stale_session_upsert(tmp_path):
     store = AgentStore(tmp_path / "agent.sqlite3")
     store.upsert_session(_session())
@@ -254,4 +271,82 @@ def test_trim_events_rejects_a_non_positive_keep(tmp_path):
     store.upsert_session(_session())
     with pytest.raises(ValueError):
         store.trim_events("agent_test", keep=0)
+    store.close()
+
+
+def test_store_migrates_a_v3_database_and_backfills_event_type(tmp_path):
+    """A v3 database (pre event_type column) must backfill the column from
+    the stored JSON so has_event_of_type keeps working without rescanning
+    the serialized envelopes."""
+    path = tmp_path / "agent.sqlite3"
+    raw = sqlite3.connect(path)
+    raw.executescript(
+        "CREATE TABLE schema_version (version INTEGER NOT NULL);"
+        "INSERT INTO schema_version(version) VALUES (3);"
+        + _V1_SESSIONS_TABLE.replace(
+            "UNIQUE(provider, provider_session_id)",
+            "resource_snapshot TEXT NOT NULL DEFAULT '{}',"
+            "UNIQUE(provider, provider_session_id)",
+        )
+    )
+    raw.execute(
+        "INSERT INTO agent_sessions (id, provider, provider_session_id, "
+        "project_id, cwd, permission_mode, created_at, updated_at, status, "
+        "last_sequence, capability_snapshot) VALUES "
+        "('agent_test', 'fake', 'provider_test', '/tmp/p', '/tmp/p', "
+        "'workspace-write', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', "
+        '\'ready\', 1, \'{"providerId": "fake", "displayName": "Fake"}\')'
+    )
+    raw.execute(
+        "INSERT INTO agent_events(session_id, sequence, event_json, created_at) "
+        "VALUES ('agent_test', 1, "
+        '\'{"type": "prompt.injected", "sessionId": "agent_test"}\', '
+        "'2024-01-01T00:00:00Z')"
+    )
+    raw.commit()
+    raw.close()
+
+    store = AgentStore(path)
+    assert store.has_event_of_type("agent_test", "prompt.injected") is True
+    assert store.has_event_of_type("agent_test", "error") is False
+    version = store._connection.execute(
+        "SELECT version FROM schema_version"
+    ).fetchone()["version"]
+    assert version == SCHEMA_VERSION
+
+    # Events written after the migration populate the column directly.
+    store.append_event(AgentEvent(type="error", session_id="agent_test"))
+    assert store.has_event_of_type("agent_test", "error") is True
+    store.close()
+
+
+def test_store_lists_sessions_by_status(tmp_path):
+    """The busy watchdog needs only sessions in given states; querying them
+    must not deserialize the whole table the way the old
+    list_sessions(limit=10_000) + Python filter did."""
+    store = AgentStore(tmp_path / "agent.sqlite3")
+    busy = _session()
+    busy.status = SessionStatus.BUSY
+    ready = _session()
+    ready.id = "agent_ready"
+    ready.provider_session_id = "provider_ready"
+    ready.status = SessionStatus.READY
+    closed = _session()
+    closed.id = "agent_closed"
+    closed.provider_session_id = "provider_closed"
+    closed.status = SessionStatus.CLOSED
+    for session in (busy, ready, closed):
+        store.upsert_session(session)
+
+    assert [s.id for s in store.list_sessions_by_status(SessionStatus.BUSY)] == [
+        "agent_test"
+    ]
+    assert {
+        s.id
+        for s in store.list_sessions_by_status(SessionStatus.BUSY, SessionStatus.READY)
+    } == {
+        "agent_test",
+        "agent_ready",
+    }
+    assert store.list_sessions_by_status() == []
     store.close()

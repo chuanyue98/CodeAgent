@@ -20,11 +20,18 @@ from core.services.agent_protocol import (
 class FakeAgentAdapter:
     provider_id = "fake"
 
-    def __init__(self, queue_size: int = 128):
+    def __init__(
+        self, queue_size: int = 128, *, supports_resource_injection: bool = False
+    ):
         self._events: asyncio.Queue[AdapterEvent | None] = asyncio.Queue(queue_size)
         self._started = False
+        self.supports_resource_injection = supports_resource_injection
         self.approvals: list[tuple[str, ApprovalDecision]] = []
         self.cancelled: list[tuple[str, str]] = []
+        # Recorded so tests can assert what the Gateway asked the provider
+        # to start with (notably CreateSessionOptions.system_prompt).
+        self.create_options: list[CreateSessionOptions] = []
+        self.resume_options: list[ResumeOptions] = []
 
     async def start(self) -> None:
         # A restarted adapter gets a fresh stream, mirroring the real ones
@@ -52,6 +59,7 @@ class FakeAgentAdapter:
             supports_approvals=True,
             supports_file_diff=True,
             supports_tool_events=True,
+            supports_resource_injection=self.supports_resource_injection,
         )
 
     def _require_started(self) -> None:
@@ -60,12 +68,14 @@ class FakeAgentAdapter:
 
     async def create_session(self, options: CreateSessionOptions) -> ProviderSession:
         self._require_started()
+        self.create_options.append(options)
         return ProviderSession(id=f"fake-thread-{uuid4().hex}", model=options.model)
 
     async def resume_session(
         self, provider_session_id: str, options: ResumeOptions
     ) -> ProviderSession:
         self._require_started()
+        self.resume_options.append(options)
         return ProviderSession(id=provider_session_id, model=options.model)
 
     async def start_turn(self, provider_session_id: str, turn: TurnInput) -> str:

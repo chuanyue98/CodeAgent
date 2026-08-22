@@ -45,6 +45,10 @@ export interface ResourceSnapshot {
   prompts?: string[];
   hooks?: string[];
   plugins?: string[];
+  /** sha256 receipt of content actually injected; null = configured but NOT applied */
+  digest?: string | null;
+  /** Which kinds the receipt covers (e.g. ["prompts"]). Empty = nothing applied. */
+  appliedKinds?: string[];
 }
 
 export interface NativeAgentSession {

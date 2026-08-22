@@ -24,7 +24,7 @@ import {
 } from '../utils/agentWorkspaceHelpers';
 import type { ConversationListItem } from '../utils/agentWorkspaceHelpers';
 import type { UnavailableWorkspaceGroup } from '../pages/useAgentWorkspaceSessions';
-import { buildEventsLink } from '../utils/sessionLink';
+import { buildTimelineLink } from '../utils/sessionLink';
 
 const PAGE_SIZE = SESSION_PAGE_SIZE;
 
@@ -277,7 +277,7 @@ export default function AgentWorkspaceSidebar({
                           </span>
                         </button>
                         <Link
-                          to={buildEventsLink(item.session.engine, item.session.session_id, item.session.project_path)}
+                          to={buildTimelineLink(item.session.engine, item.session.session_id, item.session.project_path)}
                           title="View in Events"
                           aria-label="View in Events"
                           className="mr-1 hidden rounded-md p-1.5 text-slate-400 hover:bg-white hover:text-primary group-hover:block focus:block"
@@ -398,7 +398,7 @@ export default function AgentWorkspaceSidebar({
                         </button>
                       )}
                       <Link
-                        to={buildEventsLink(latestSession.engine, latestSession.session_id, latestSession.project_path)}
+                        to={buildTimelineLink(latestSession.engine, latestSession.session_id, latestSession.project_path)}
                         className="inline-block text-[10px] font-semibold text-primary hover:underline"
                       >
                         View in Events

@@ -19,13 +19,13 @@ const QUICK_ACTIONS = [
   {
     to: '/automations/tasks',
     title: 'Automations',
-    description: 'Run tasks and manage schedules from one workspace.',
+    description: 'Run tasks, manage schedules, and read run logs.',
     icon: Clock,
   },
   {
-    to: '/activity/history',
+    to: '/activity/sessions',
     title: 'Activity',
-    description: 'Review conversations, events, logs, and usage.',
+    description: 'Review past sessions, their event timeline, and usage.',
     icon: History,
   },
   {
@@ -143,7 +143,7 @@ export default function HomePage() {
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">recent activity</span>
                 <Link
-                  to="/activity/history"
+                  to="/activity/sessions"
                   className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary transition-colors hover:text-primary/80"
                 >
                   View all <ArrowUpRight className="h-3 w-3" />

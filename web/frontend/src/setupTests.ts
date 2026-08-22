@@ -78,3 +78,30 @@ globalThis.fetch = vi.fn().mockImplementation((url: string) => {
   }
   return Promise.reject(new Error(`Unhandled fetch to ${url}`));
 });
+
+// Node 26's experimental `localStorage` global is disabled without
+// --localstorage-file and surfaces as `undefined`; jsdom's own storage is
+// likewise unavailable on its default opaque origin. Components read the
+// bare `localStorage` global, so give tests an in-memory implementation.
+if (typeof globalThis.localStorage === 'undefined' || globalThis.localStorage === null) {
+  const memory = new Map<string, string>();
+  const storage: Storage = {
+    get length() {
+      return memory.size;
+    },
+    clear: () => memory.clear(),
+    getItem: key => (memory.has(key) ? memory.get(key)! : null),
+    key: index => Array.from(memory.keys())[index] ?? null,
+    removeItem: key => {
+      memory.delete(key);
+    },
+    setItem: (key, value) => {
+      memory.set(key, String(value));
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: storage,
+    configurable: true,
+    writable: true,
+  });
+}

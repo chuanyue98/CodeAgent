@@ -9,9 +9,9 @@ test.beforeEach(async ({ baseURL }) => {
 test('laptop layout keeps session controls inside their panels and metrics out of the content', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto('/sessions');
-  await waitForH2(page, 'History');
+  await waitForH2(page, 'Sessions');
 
-  const filters = page.getByTestId('session-filters');
+  const filters = page.getByTestId('activity-filters');
   const list = page.getByTestId('session-list');
   await expect(filters).toBeVisible();
   await expect(list).toBeVisible();
@@ -32,10 +32,10 @@ test('laptop layout keeps session controls inside their panels and metrics out o
 test('compact layout stacks session filters above results', async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 768 });
   await page.goto('/sessions');
-  await waitForH2(page, 'History');
+  await waitForH2(page, 'Sessions');
 
   const navBox = await page.locator('aside').first().boundingBox();
-  const filtersBox = await page.getByTestId('session-filters').boundingBox();
+  const filtersBox = await page.getByTestId('activity-filters').boundingBox();
   const listBox = await page.getByTestId('session-list').boundingBox();
   expect(navBox).not.toBeNull();
   expect(filtersBox).not.toBeNull();
@@ -48,7 +48,7 @@ test('nested workspace routes avoid page-level overflow at supported widths', as
   const routes = [
     { path: '/agent/web', label: 'Web Agent' },
     { path: '/automations/tasks', label: 'Tasks' },
-    { path: '/activity/history', label: 'History' },
+    { path: '/activity/sessions', label: 'Sessions' },
     { path: '/settings/capabilities/plugins', label: 'Plugins' },
     { path: '/settings/system', label: 'System' },
   ];

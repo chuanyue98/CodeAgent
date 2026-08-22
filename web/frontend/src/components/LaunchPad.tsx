@@ -49,8 +49,8 @@ export default function LaunchPad() {
 
   if (activeSession) {
     return (
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
+      <div className="flex h-full min-h-0 flex-col gap-2">
+        <div className="flex shrink-0 items-center justify-between">
           <div className="text-sm font-medium text-slate-700">
             {ENGINES.find(engine => engine.id === activeSession.engine)?.name} · {activeSession.cwd}
           </div>

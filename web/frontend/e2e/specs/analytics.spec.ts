@@ -6,28 +6,41 @@ test.beforeEach(async ({ baseURL }) => {
   await resetBackend(baseURL!);
 });
 
-async function gotoAnalytics(page: Page): Promise<void> {
+async function gotoUsage(page: Page): Promise<void> {
   await page.goto('/analytics');
-  await waitForH2(page, 'Analytics');
+  await waitForH2(page, 'Usage');
   await expect(page.getByText('Model Breakdown')).toBeVisible();
 }
 
-test('the four tabs each render distinct content', async ({ page }) => {
-  await gotoAnalytics(page);
-  await page.getByRole('button', { name: 'Daily', exact: true }).click();
-  await expect(page.locator('main')).toContainText('Daily Cost by Engine');
-  await page.getByRole('button', { name: 'Monthly', exact: true }).click();
-  await expect(page.locator('main')).toContainText('Monthly Cost by Engine');
-  await page.getByRole('button', { name: 'Sessions', exact: true }).click();
-  await expect(page.locator('main')).toContainText('e2e-claude-project');
-  await page.getByRole('button', { name: 'Overview', exact: true }).click();
-  await expect(page.locator('main')).toContainText('Model Breakdown');
+test('every section renders on one page instead of behind sub-tabs', async ({ page }) => {
+  await gotoUsage(page);
+  const main = page.locator('main');
+  await expect(main).toContainText('Total Cost');
+  await expect(main).toContainText('Cost by engine');
+  await expect(main).toContainText('Tokens by engine');
+  await expect(main).toContainText('Model Breakdown');
+});
+
+test('the range control rescopes the page', async ({ page }) => {
+  await gotoUsage(page);
+  const range = page.getByRole('group', { name: 'Time range' });
+  await expect(range.getByRole('button', { name: '30 days' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+
+  // All time rolls the series up by month; the narrow ranges go by day.
+  await range.getByRole('button', { name: 'All time' }).click();
+  await expect(page.locator('main')).toContainText('per month');
+
+  await range.getByRole('button', { name: '7 days' }).click();
+  await expect(page.locator('main')).toContainText('last 7 days');
 });
 
 test('selecting a model in the breakdown opens and closes its detail', async ({
   page,
 }) => {
-  await gotoAnalytics(page);
+  await gotoUsage(page);
   const firstModel = page
     .locator('div.glass-card', { hasText: 'Model Breakdown' })
     .getByRole('button')
@@ -39,7 +52,7 @@ test('selecting a model in the breakdown opens and closes its detail', async ({
 });
 
 test('charts render as SVG and Refresh reloads without error', async ({ page }) => {
-  await gotoAnalytics(page);
+  await gotoUsage(page);
   await expect(page.locator('svg.recharts-surface').first()).toBeVisible();
   await page.getByRole('button', { name: 'Refresh' }).click();
   await expect(page.getByText('Model Breakdown')).toBeVisible();
