@@ -7,7 +7,11 @@ test.beforeEach(async ({ baseURL }) => {
 });
 
 async function gotoSessions(page: Page): Promise<void> {
-  await page.goto('/sessions');
+  // Pin "all projects": the e2e baseline config registers the scratch $HOME
+  // as the only workspace and the page follows the workspace switcher by
+  // default, which would exact-match the seeded /tmp/e2e-* sessions out of
+  // the list (0 sessions) instead of showing them.
+  await page.goto('/sessions?project=all');
   await waitForH2(page, 'Sessions');
   await expect(page.getByText(/sessions?$/)).toBeVisible();
 }
