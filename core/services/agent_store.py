@@ -106,9 +106,7 @@ class AgentStore:
                     )
                     """
                 )
-                self._connection.execute(
-                    "UPDATE schema_version SET version = ?", (3,)
-                )
+                self._connection.execute("UPDATE schema_version SET version = ?", (3,))
                 version = 3
             if version < 4:
                 # Matching the event type against the serialized JSON with
@@ -127,9 +125,7 @@ class AgentStore:
                     "CREATE INDEX agent_events_type_idx "
                     "ON agent_events(session_id, event_type)"
                 )
-                self._connection.execute(
-                    "UPDATE schema_version SET version = ?", (4,)
-                )
+                self._connection.execute("UPDATE schema_version SET version = ?", (4,))
                 version = 4
 
     def close(self) -> None:

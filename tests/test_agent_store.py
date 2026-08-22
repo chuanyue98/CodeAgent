@@ -295,12 +295,12 @@ def test_store_migrates_a_v3_database_and_backfills_event_type(tmp_path):
         "last_sequence, capability_snapshot) VALUES "
         "('agent_test', 'fake', 'provider_test', '/tmp/p', '/tmp/p', "
         "'workspace-write', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z', "
-        "'ready', 1, '{\"providerId\": \"fake\", \"displayName\": \"Fake\"}')"
+        '\'ready\', 1, \'{"providerId": "fake", "displayName": "Fake"}\')'
     )
     raw.execute(
         "INSERT INTO agent_events(session_id, sequence, event_json, created_at) "
         "VALUES ('agent_test', 1, "
-        "'{\"type\": \"prompt.injected\", \"sessionId\": \"agent_test\"}', "
+        '\'{"type": "prompt.injected", "sessionId": "agent_test"}\', '
         "'2024-01-01T00:00:00Z')"
     )
     raw.commit()
@@ -341,7 +341,10 @@ def test_store_lists_sessions_by_status(tmp_path):
     assert [s.id for s in store.list_sessions_by_status(SessionStatus.BUSY)] == [
         "agent_test"
     ]
-    assert {s.id for s in store.list_sessions_by_status(SessionStatus.BUSY, SessionStatus.READY)} == {
+    assert {
+        s.id
+        for s in store.list_sessions_by_status(SessionStatus.BUSY, SessionStatus.READY)
+    } == {
         "agent_test",
         "agent_ready",
     }

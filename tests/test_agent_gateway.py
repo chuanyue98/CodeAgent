@@ -44,9 +44,7 @@ def _injection_config(tmp_path, monkeypatch):
     config.write_text(
         json.dumps(
             {
-                "project_registry": [
-                    {"path": str(workspace), "group": "common"}
-                ],
+                "project_registry": [{"path": str(workspace), "group": "common"}],
                 "groups": {
                     "common": {
                         "skills": ["base/review"],
@@ -472,10 +470,15 @@ async def test_start_turn_warns_once_when_receipt_missing(tmp_path, monkeypatch)
     config.write_text(
         json.dumps(
             {
-                "project_registry": [
-                    {"path": str(workspace), "group": "common"}
-                ],
-                "groups": {"common": {"skills": [], "prompts": ["base"], "hooks": [], "plugins": []}},
+                "project_registry": [{"path": str(workspace), "group": "common"}],
+                "groups": {
+                    "common": {
+                        "skills": [],
+                        "prompts": ["base"],
+                        "hooks": [],
+                        "plugins": [],
+                    }
+                },
             }
         ),
         encoding="utf-8",

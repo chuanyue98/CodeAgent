@@ -360,9 +360,7 @@ class AgentGateway:
         resource_snapshot = self._resource_snapshot(cwd, config)
         injection: tuple[str, list[dict]] | None = None
         if capabilities.supports_resource_injection and resource_snapshot.prompts:
-            injection = self._assemble_system_prompt(
-                resource_snapshot.prompts, config
-            )
+            injection = self._assemble_system_prompt(resource_snapshot.prompts, config)
             if injection is None:
                 logger.warning(
                     "Prompt groups %s could not be resolved for %s; "
@@ -380,9 +378,7 @@ class AgentGateway:
             )
         )
         if injection:
-            resource_snapshot.digest = hashlib.sha256(
-                injection[0].encode()
-            ).hexdigest()
+            resource_snapshot.digest = hashlib.sha256(injection[0].encode()).hexdigest()
             resource_snapshot.applied_kinds = list(INJECTED_KINDS)
         session = AgentSession(
             id=f"agent_{uuid4().hex}",
@@ -599,9 +595,7 @@ class AgentGateway:
             )
         )
 
-    async def steer_turn(
-        self, session_id: str, turn_id: str, turn: TurnInput
-    ) -> None:
+    async def steer_turn(self, session_id: str, turn_id: str, turn: TurnInput) -> None:
         session = self.get_session(session_id)
         if not session.capability_snapshot.supports_steer:
             raise AgentGatewayError(
@@ -1016,9 +1010,7 @@ class AgentGateway:
         # adapter event including per-token message deltas, and each call
         # is a SQLite transaction. Fan-out to subscribers stays here -- it
         # only touches in-memory queues.
-        persisted = await asyncio.to_thread(
-            self._persist_event, event
-        )
+        persisted = await asyncio.to_thread(self._persist_event, event)
         stale: list[asyncio.Queue[AgentEvent | None]] = []
         for queue in self._subscribers.get(event.session_id, set()):
             if queue.full():

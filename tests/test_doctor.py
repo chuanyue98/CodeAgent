@@ -114,9 +114,7 @@ def test_check_stale_injections_detects_codex_config_toml(tmp_path, monkeypatch)
     assert section.checks[0].status == doctor.WARN
 
 
-def test_check_stale_injections_ignores_clean_codex_config_toml(
-    tmp_path, monkeypatch
-):
+def test_check_stale_injections_ignores_clean_codex_config_toml(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     codex_config = tmp_path / ".codex" / "config.toml"
     codex_config.parent.mkdir(parents=True)
