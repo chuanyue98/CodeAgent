@@ -123,6 +123,10 @@ jobs:
   container:
     name: Package — Docker image
     needs: [backend, frontend]
+    # Docker deployment is documented but not yet in use; building the image
+    # on every PR guards a path nobody ships. Keep it rot-free on main
+    # pushes only, and drop it from PR check lists entirely.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
