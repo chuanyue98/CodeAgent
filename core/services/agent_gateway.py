@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import os
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 from uuid import uuid4
 
 from core.logging_config import get_logger
+from core.resource_locator import (
+    CODE_ROOT,
+    get_bundled_resource_root,
+    resolve_resource_root_from_config,
+)
 from core.services.agent_adapters.base import AgentAdapter
 from core.services.agent_protocol import (
     AdapterEvent,
@@ -31,6 +38,13 @@ from core.services.config_service import ConfigService
 
 logger = get_logger(__name__)
 
+# Resource kinds a group can declare; "prompts" is the only kind the Gateway
+# currently injects (via adapters that declare supports_resource_injection).
+INJECTED_KINDS = ("prompts",)
+# Mirrors prompt_kit.EXCLUDED_PROMPT_FILES: non-standards docs that happen to
+# live in a prompt group directory.
+EXCLUDED_PROMPT_FILES = {"README.md", "IMPLEMENTATION_PLAN.md"}
+
 
 class AgentGatewayError(Exception):
     def __init__(self, code: str, message: str, *, status_code: int = 400):
@@ -53,9 +67,13 @@ class AgentGateway:
         reconnect_max_delay: float = 60.0,
         healthy_run_seconds: float = 30.0,
         busy_timeout: float = 300.0,
+        ack_cache_limit: int = 256,
     ):
         self.store = store
         self.config_path = Path(config_path)
+        # One shared reader: ConfigService caches by mtime, and per-call
+        # construction would re-stat the file on every session operation.
+        self._config_service = ConfigService(self.config_path)
         self.adapters = {adapter.provider_id: adapter for adapter in adapters}
         self.subscriber_queue_size = subscriber_queue_size
         self.event_retention = event_retention
@@ -63,14 +81,19 @@ class AgentGateway:
         self.reconnect_max_delay = reconnect_max_delay
         self.healthy_run_seconds = healthy_run_seconds
         self.busy_timeout = busy_timeout
+        self.ack_cache_limit = ack_cache_limit
         self._adapter_tasks: list[asyncio.Task] = []
         self._busy_watchdog: asyncio.Task | None = None
         self._subscribers: dict[str, set[asyncio.Queue[AgentEvent | None]]] = (
             defaultdict(set)
         )
         self._acks: dict[str, OrderedDict[str, AgentAck]] = defaultdict(OrderedDict)
+        # request_id -> future for commands still executing, so a duplicate
+        # retry waits for the original instead of running the command twice.
+        self._commands_in_flight: dict[tuple[str, str], asyncio.Future[AgentAck]] = {}
         self._reconnect_now: dict[str, asyncio.Event] = {}
         self._reconnect_attempts: dict[str, int] = {}
+        self._resources_warned: set[str] = set()
         self._started = False
 
     async def start(self) -> None:
@@ -133,12 +156,16 @@ class AgentGateway:
         self._adapter_tasks.clear()
         self._reconnect_now.clear()
         self._reconnect_attempts.clear()
-        for session in self.store.list_sessions(limit=10_000):
-            if session.status in {SessionStatus.BUSY, SessionStatus.READY}:
-                session.status = SessionStatus.DISCONNECTED
-                session.updated_at = utc_now()
-                self.store.upsert_session(session)
-        self.store.close()
+        self._resources_warned.clear()
+        for session in await asyncio.to_thread(
+            self.store.list_sessions_by_status,
+            SessionStatus.BUSY,
+            SessionStatus.READY,
+        ):
+            session.status = SessionStatus.DISCONNECTED
+            session.updated_at = utc_now()
+            await asyncio.to_thread(self.store.upsert_session, session)
+        await asyncio.to_thread(self.store.close)
 
     async def providers(self) -> list[ProviderCapabilities]:
         results: list[ProviderCapabilities] = []
@@ -167,9 +194,13 @@ class AgentGateway:
         ``identity`` as the session's project_id so it stays byte-equal to
         what ``GET /api/projects`` returns for the frontend to match on.
         """
-        config, warnings = ConfigService(self.config_path).get_config()
+        config, warnings = self._config_service.get_config()
         if warnings:
-            raise AgentGatewayError("config_error", warnings[0], status_code=500)
+            # A malformed config file degrades to whatever parsed (often
+            # nothing); failing the request with a 500 here used to take
+            # down session creation for an unrelated syntax error. The
+            # registry lookup below already gives an actionable error.
+            logger.warning("Config read failed: %s", warnings[0])
         requested = Path(project_id).expanduser().resolve()
         if not requested.is_dir():
             raise AgentGatewayError(
@@ -187,8 +218,17 @@ class AgentGateway:
             "Select a workspace registered in Settings before starting an agent",
         )
 
-    def _resource_snapshot(self, workspace: str) -> ResourceSnapshot:
-        config, _warnings = ConfigService(self.config_path).get_config()
+    def _resource_snapshot(
+        self, workspace: str, config: dict | None = None
+    ) -> ResourceSnapshot:
+        """Names the session's group configures, as a declaration.
+
+        When :meth:`_assemble_system_prompt` succeeds for this snapshot it
+        gains a ``digest`` receipt and ``applied_kinds``; otherwise clients
+        must show these resources as configured-but-inactive.
+        """
+        if config is None:
+            config, _warnings = self._config_service.get_config()
         requested = Path(workspace).expanduser().resolve()
         group_name: str | None = None
         for project in config.get("project_registry", []):
@@ -223,6 +263,66 @@ class AgentGateway:
             plugins=values("plugins"),
         )
 
+    @staticmethod
+    def _prompt_root(config: dict) -> Path:
+        """Same resolution order as core.web.resource_paths, without the web import."""
+        env_root = os.environ.get("CA_PROMPTS_ROOT")
+        if env_root:
+            return Path(env_root)
+        resolved = resolve_resource_root_from_config(config, CODE_ROOT)
+        base = (
+            resolved if resolved is not None else get_bundled_resource_root(CODE_ROOT)
+        )
+        return Path(base) / "prompt"
+
+    def _assemble_system_prompt(
+        self, prompt_groups: list[str], config: dict
+    ) -> tuple[str, list[dict]] | None:
+        """Reads every markdown file behind the group's prompt names.
+
+        Mirrors prompt_kit's per-group assembly (sorted ``*.md``, README and
+        IMPLEMENTATION_PLAN excluded) but returns per-file segments so the
+        receipt can name exactly which content entered the model, and omits
+        the task / waiting-mode tail -- a system prompt is standing
+        instruction, not a one-shot kickoff message.
+
+        Returns ``(text, segments)``, or None when nothing could be read;
+        None keeps the session honest (declared but not applied).
+        """
+        prompt_root = self._prompt_root(config)
+        segments: list[dict] = []
+        parts: list[str] = []
+        for group in prompt_groups:
+            group_dir = prompt_root / group
+            md_files = sorted(group_dir.glob("*.md")) if group_dir.is_dir() else []
+            contents: list[str] = []
+            for path in md_files:
+                if path.name in EXCLUDED_PROMPT_FILES:
+                    continue
+                try:
+                    content = path.read_text(encoding="utf-8").strip()
+                except OSError as exc:
+                    logger.warning("Skipping unreadable prompt %s: %s", path, exc)
+                    continue
+                if not content:
+                    continue
+                contents.append(content)
+                segments.append(
+                    {
+                        "kind": "prompts",
+                        "name": f"{group}/{path.stem}",
+                        "path": str(path),
+                        "sha256": hashlib.sha256(content.encode()).hexdigest(),
+                        "bytes": len(content.encode()),
+                    }
+                )
+            if contents:
+                parts.append(f"### {group.capitalize()} Standards ###")
+                parts.append("\n\n".join(contents))
+        if not segments:
+            return None
+        return "\n\n".join(parts).strip(), segments
+
     def get_session(self, session_id: str) -> AgentSession:
         session = self.store.get_session(session_id)
         if session is None:
@@ -256,15 +356,34 @@ class AgentGateway:
                 status_code=503,
             )
         cwd, project_identity = self._registered_workspace(project_id)
-        resource_snapshot = self._resource_snapshot(cwd)
+        config, _warnings = self._config_service.get_config()
+        resource_snapshot = self._resource_snapshot(cwd, config)
+        injection: tuple[str, list[dict]] | None = None
+        if capabilities.supports_resource_injection and resource_snapshot.prompts:
+            injection = self._assemble_system_prompt(
+                resource_snapshot.prompts, config
+            )
+            if injection is None:
+                logger.warning(
+                    "Prompt groups %s could not be resolved for %s; "
+                    "the session starts without them",
+                    resource_snapshot.prompts,
+                    project_identity,
+                )
         provider_session = await adapter.create_session(
             CreateSessionOptions(
                 project_id=project_identity,
                 cwd=cwd,
                 model=model,
                 permission_mode=permission_mode,
+                system_prompt=injection[0] if injection else None,
             )
         )
+        if injection:
+            resource_snapshot.digest = hashlib.sha256(
+                injection[0].encode()
+            ).hexdigest()
+            resource_snapshot.applied_kinds = list(INJECTED_KINDS)
         session = AgentSession(
             id=f"agent_{uuid4().hex}",
             provider=provider,
@@ -278,7 +397,28 @@ class AgentGateway:
             capability_snapshot=capabilities,
             resource_snapshot=resource_snapshot,
         )
+        # The receipt events reference the session row (foreign key), and
+        # sequence numbers come from it -- persist before logging.
         self.store.upsert_session(session)
+        if injection:
+            await self.publish(
+                AgentEvent(
+                    type="resources.resolved",
+                    session_id=session.id,
+                    data={"segments": injection[1]},
+                )
+            )
+            await self.publish(
+                AgentEvent(
+                    type="prompt.injected",
+                    session_id=session.id,
+                    data={
+                        "sha256": resource_snapshot.digest,
+                        "bytes": len(injection[0].encode()),
+                        "chars": len(injection[0]),
+                    },
+                )
+            )
         await self.publish(
             AgentEvent(
                 type="session.ready",
@@ -400,6 +540,7 @@ class AgentGateway:
     async def start_turn(self, session_id: str, turn: TurnInput) -> str:
         session = self.get_session(session_id)
         adapter = self._adapter_for(session)
+        await self._assert_resources_applied(session)
         session.status = SessionStatus.BUSY
         session.updated_at = utc_now()
         self.store.upsert_session(session)
@@ -419,7 +560,48 @@ class AgentGateway:
             self.store.upsert_session(session)
             raise
 
-    async def steer_turn(self, session_id: str, turn_id: str, turn: TurnInput) -> None:
+    async def _assert_resources_applied(self, session: AgentSession) -> None:
+        """Runtime invariant: model-visible means logged.
+
+        A session whose group declares prompts must carry a
+        ``prompt.injected`` receipt before its turns reach a provider that
+        supports injection. Gated on ``supports_resource_injection`` so
+        providers without an injection channel keep their honest gray state
+        instead of failing every turn. Warns once per session per process;
+        the warning is a persisted event, so replay shows it too.
+        """
+        if not session.capability_snapshot.supports_resource_injection:
+            return
+        snapshot = session.resource_snapshot
+        if not snapshot.prompts:
+            return
+        if "prompts" in snapshot.applied_kinds and snapshot.digest:
+            return
+        if self.store.has_event_of_type(session.id, "prompt.injected"):
+            return
+        if session.id in self._resources_warned:
+            return
+        self._resources_warned.add(session.id)
+        await self.publish(
+            AgentEvent(
+                type="error",
+                session_id=session.id,
+                data={
+                    "code": "resources_not_applied",
+                    "message": (
+                        "This session's group declares prompts "
+                        f"({', '.join(snapshot.prompts)}) but no "
+                        "prompt.injected receipt exists -- the model runs "
+                        "without them. Recreate the session to load them."
+                    ),
+                    "retryable": False,
+                },
+            )
+        )
+
+    async def steer_turn(
+        self, session_id: str, turn_id: str, turn: TurnInput
+    ) -> None:
         session = self.get_session(session_id)
         if not session.capability_snapshot.supports_steer:
             raise AgentGatewayError(
@@ -460,9 +642,36 @@ class AgentGateway:
     async def execute_command(self, command: AgentCommand) -> AgentAck:
         if command.session_id != command.session_id.strip():
             raise AgentGatewayError("invalid_command", "Invalid session id")
+        if command.request_id != command.request_id.strip():
+            raise AgentGatewayError("invalid_command", "Invalid request id")
         cached = self._acks[command.session_id].get(command.request_id)
         if cached:
             return cached
+        # A client retry while the original command is still executing must
+        # join the running command rather than run it a second time; the
+        # completed-ack cache alone only deduplicates after the fact.
+        key = (command.session_id, command.request_id)
+        in_flight = self._commands_in_flight.get(key)
+        if in_flight is not None:
+            return await asyncio.shield(in_flight)
+        future: asyncio.Future[AgentAck] = asyncio.get_running_loop().create_future()
+        self._commands_in_flight[key] = future
+        try:
+            ack = await self._run_command(command)
+        except BaseException as exc:
+            if not future.done():
+                future.set_exception(exc)
+                # Mark retrieved so an unobserved failure doesn't warn at GC;
+                # joined waiters still see the exception when they await.
+                future.exception()
+            raise
+        finally:
+            self._commands_in_flight.pop(key, None)
+        if not future.done():
+            future.set_result(ack)
+        return ack
+
+    async def _run_command(self, command: AgentCommand) -> AgentAck:
         result: dict = {}
         if command.type == "session.resume":
             result = {"session": wire(await self.resume_session(command.session_id))}
@@ -503,7 +712,7 @@ class AgentGateway:
         cache = self._acks[command.session_id]
         cache[command.request_id] = ack
         cache.move_to_end(command.request_id)
-        while len(cache) > 256:
+        while len(cache) > self.ack_cache_limit:
             cache.popitem(last=False)
         return ack
 
@@ -522,9 +731,9 @@ class AgentGateway:
             if not self._started:
                 return
             now = utc_now()
-            for session in self.store.list_sessions(limit=10_000):
-                if session.status != SessionStatus.BUSY:
-                    continue
+            for session in await asyncio.to_thread(
+                self.store.list_sessions_by_status, SessionStatus.BUSY
+            ):
                 age = (now - session.updated_at).total_seconds()
                 if age < self.busy_timeout:
                     continue
@@ -537,7 +746,7 @@ class AgentGateway:
                 )
                 session.status = SessionStatus.DISCONNECTED
                 session.updated_at = now
-                self.store.upsert_session(session)
+                await asyncio.to_thread(self.store.upsert_session, session)
                 await self.publish(
                     AgentEvent(
                         type="error",
@@ -711,12 +920,14 @@ class AgentGateway:
     async def _mark_provider_disconnected(
         self, adapter: AgentAdapter, reason: str
     ) -> None:
-        for session in self.store.list_sessions_by_provider(adapter.provider_id):
+        for session in await asyncio.to_thread(
+            self.store.list_sessions_by_provider, adapter.provider_id
+        ):
             if session.status in {SessionStatus.CLOSED, SessionStatus.DISCONNECTED}:
                 continue
             session.status = SessionStatus.DISCONNECTED
             session.updated_at = utc_now()
-            self.store.upsert_session(session)
+            await asyncio.to_thread(self.store.upsert_session, session)
             await self.publish(
                 AgentEvent(
                     type="error",
@@ -746,7 +957,10 @@ class AgentGateway:
         }
         if reason:
             payload["reason"] = reason
-        for session in self.store.list_sessions_by_provider(adapter.provider_id):
+        sessions = await asyncio.to_thread(
+            self.store.list_sessions_by_provider, adapter.provider_id
+        )
+        for session in sessions:
             await self.publish(
                 AgentEvent(
                     type="provider.connected" if connected else "provider.disconnected",
@@ -759,10 +973,13 @@ class AgentGateway:
         self, provider: str, adapter_event: AdapterEvent
     ) -> None:
         if adapter_event.type == "error" and not adapter_event.provider_session_id:
-            for failed_session in self.store.list_sessions_by_provider(provider):
+            failed_sessions = await asyncio.to_thread(
+                self.store.list_sessions_by_provider, provider
+            )
+            for failed_session in failed_sessions:
                 failed_session.status = SessionStatus.ERROR
                 failed_session.updated_at = utc_now()
-                self.store.upsert_session(failed_session)
+                await asyncio.to_thread(self.store.upsert_session, failed_session)
                 await self.publish(
                     AgentEvent(
                         type="error",
@@ -771,8 +988,10 @@ class AgentGateway:
                     )
                 )
             return
-        session = self.store.find_by_provider_session(
-            provider, adapter_event.provider_session_id
+        session = await asyncio.to_thread(
+            self.store.find_by_provider_session,
+            provider,
+            adapter_event.provider_session_id,
         )
         if session is None:
             return
@@ -781,7 +1000,7 @@ class AgentGateway:
         elif adapter_event.type == "turn.completed":
             session.status = SessionStatus.READY
         session.updated_at = utc_now()
-        self.store.upsert_session(session)
+        await asyncio.to_thread(self.store.upsert_session, session)
         await self.publish(
             AgentEvent(
                 type=adapter_event.type,
@@ -793,8 +1012,13 @@ class AgentGateway:
         )
 
     async def publish(self, event: AgentEvent) -> AgentEvent:
-        persisted = self.store.append_event(event)
-        self.store.trim_events(event.session_id, keep=self.event_retention)
+        # Persist (and trim) off the event loop: this runs for every
+        # adapter event including per-token message deltas, and each call
+        # is a SQLite transaction. Fan-out to subscribers stays here -- it
+        # only touches in-memory queues.
+        persisted = await asyncio.to_thread(
+            self._persist_event, event
+        )
         stale: list[asyncio.Queue[AgentEvent | None]] = []
         for queue in self._subscribers.get(event.session_id, set()):
             if queue.full():
@@ -805,6 +1029,11 @@ class AgentGateway:
                 queue.put_nowait(persisted.model_copy(deep=True))
         for queue in stale:
             self._subscribers[event.session_id].discard(queue)
+        return persisted
+
+    def _persist_event(self, event: AgentEvent) -> AgentEvent:
+        persisted = self.store.append_event(event)
+        self.store.trim_events(event.session_id, keep=self.event_retention)
         return persisted
 
     def subscribe(

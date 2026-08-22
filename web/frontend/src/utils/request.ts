@@ -11,6 +11,15 @@ async function request<T = unknown>(url: string, config: RequestConfig = {}): Pr
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
+  // A caller-provided signal (e.g. a hook aborting a superseded request)
+  // must be able to cancel the fetch even though the timeout owns the
+  // controller that fetch listens to.
+  const externalSignal = restConfig.signal;
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+  }
 
   try {
     const response = await fetch(url, {
@@ -54,6 +63,10 @@ async function request<T = unknown>(url: string, config: RequestConfig = {}): Pr
     return JSON.parse(text) as T;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
+      // A caller-initiated abort is deliberate (request superseded or the
+      // component unmounted); only the internal timeout deserves the
+      // "Request timeout" message.
+      if (externalSignal?.aborted) throw error;
       throw new Error('Request timeout', { cause: error });
     }
     if (error instanceof SyntaxError) {
@@ -61,6 +74,9 @@ async function request<T = unknown>(url: string, config: RequestConfig = {}): Pr
     }
     console.error('Request error:', error);
     throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', onExternalAbort);
   }
 }
 

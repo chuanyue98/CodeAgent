@@ -39,7 +39,11 @@ const TaskDashboard: React.FC = () => {
 
   const fetchTasks = useCallback(async () => {
     try {
-      setTasks(await request<Task[]>('/api/tasks'));
+      const next = await request<Task[]>('/api/tasks');
+      // The 5s poll replaces this array wholesale; keeping the previous
+      // identity when nothing changed stops every task card below from
+      // re-rendering (and memo comparisons from busting) on each tick.
+      setTasks(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error');
@@ -50,7 +54,8 @@ const TaskDashboard: React.FC = () => {
 
   const fetchRuns = useCallback(async () => {
     try {
-      setRuns(await request<RunStatus[]>('/api/tasks/runs'));
+      const next = await request<RunStatus[]>('/api/tasks/runs');
+      setRuns(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     } catch (e) {
       console.error('Failed to fetch runs', e);
     }

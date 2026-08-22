@@ -68,6 +68,12 @@ export default function useAgentSessionConnection({
   const socketRef = useRef<WebSocket | null>(null);
   const selectionRequestRef = useRef(0);
   const intentionalClose = useRef(false);
+  // Auto-reconnect bookkeeping: the highest event sequence seen on the wire
+  // (so a reconnect resumes from the exact gap) and the retry state.
+  const lastSequenceRef = useRef(0);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const scheduleReconnectRef = useRef<() => void>(() => {});
   const [connecting, setConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
   const [selectingKey, setSelectingKey] = useState<string | null>(null);
@@ -78,10 +84,19 @@ export default function useAgentSessionConnection({
     stateRef.current = state;
   }, [state]);
 
+  const clearReconnect = useCallback(() => {
+    if (reconnectTimerRef.current !== null) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    reconnectAttemptsRef.current = 0;
+  }, []);
+
   useEffect(() => () => {
     intentionalClose.current = true;
+    clearReconnect();
     socketRef.current?.close();
-  }, []);
+  }, [clearReconnect]);
 
   const connect = useCallback((session: AgentSession, afterSequence = 0, reset = true) => {
     intentionalClose.current = true;
@@ -101,6 +116,7 @@ export default function useAgentSessionConnection({
     setConnecting(true);
     setConnected(false);
     setError(null);
+    lastSequenceRef.current = afterSequence;
 
     return new Promise<WebSocket>((resolve, reject) => {
       const socket = new WebSocket(agentEventsUrl(session.id, afterSequence));
@@ -113,6 +129,7 @@ export default function useAgentSessionConnection({
       }, 10_000);
       socket.onopen = () => {
         window.clearTimeout(timer);
+        reconnectAttemptsRef.current = 0;
         setConnecting(false);
         setConnected(true);
         resolve(socket);
@@ -124,6 +141,10 @@ export default function useAgentSessionConnection({
           if (message.type === 'error' && !('sequence' in message)) {
             setError(message.message);
             return;
+          }
+          const sequence = (message as AgentEvent).sequence;
+          if (typeof sequence === 'number' && sequence > lastSequenceRef.current) {
+            lastSequenceRef.current = sequence;
           }
           dispatch({ type: 'event', event: message as AgentEvent });
         } catch {
@@ -142,12 +163,46 @@ export default function useAgentSessionConnection({
         setConnecting(false);
         setConnected(false);
         if (!intentionalClose.current) {
-          setError('Agent connection closed. Reconnect to continue from the last event.');
+          scheduleReconnectRef.current();
         }
         reject(new Error('Agent connection closed'));
       };
     });
   }, [setError]);
+
+  const connectRef = useRef(connect);
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
+
+  // An unexpected close (network blip, server restart) used to leave the
+  // session silently dead until the user re-selected it. Reconnect with
+  // exponential backoff instead, resuming from the last event sequence the
+  // socket delivered so no history replays and nothing is skipped.
+  const scheduleReconnect = useCallback(() => {
+    const session = stateRef.current.session;
+    if (!session) return;
+    const attempts = reconnectAttemptsRef.current;
+    reconnectAttemptsRef.current += 1;
+    const delay = Math.min(1000 * 2 ** attempts, 15_000);
+    setError(`Agent connection lost. Reconnecting automatically (attempt ${attempts + 1})…`);
+    if (reconnectTimerRef.current !== null) {
+      window.clearTimeout(reconnectTimerRef.current);
+    }
+    reconnectTimerRef.current = window.setTimeout(() => {
+      reconnectTimerRef.current = null;
+      // reset=false: the conversation is already in the reducer; the
+      // afterSequence resume fills only the gap.
+      connectRef.current(session, lastSequenceRef.current, false).catch(() => {
+        // connect() reported the failure and its onclose scheduled the
+        // next attempt; nothing to do with the rejection here.
+      });
+    }, delay);
+  }, [setError]);
+
+  useEffect(() => {
+    scheduleReconnectRef.current = scheduleReconnect;
+  }, [scheduleReconnect]);
 
   const loadInitialHistory = useCallback(async (session: AgentSession, selectionId: number) => {
     const page = await fetchAgentHistory(session.id);
@@ -286,6 +341,7 @@ export default function useAgentSessionConnection({
   const newSession = useCallback(() => {
     selectionRequestRef.current += 1;
     intentionalClose.current = true;
+    clearReconnect();
     if (socketRef.current) {
       socketRef.current.onopen = null;
       socketRef.current.onmessage = null;
@@ -301,7 +357,7 @@ export default function useAgentSessionConnection({
     hasOlderHistoryRef.current = false;
     setHasOlderMessages(false);
     composerRef.current?.focus();
-  }, [composerRef, historyCursorRef, hasOlderHistoryRef, setError]);
+  }, [clearReconnect, composerRef, historyCursorRef, hasOlderHistoryRef, setError]);
 
   const cancel = useCallback(() => {
     const socket = socketRef.current;

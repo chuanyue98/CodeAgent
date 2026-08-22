@@ -74,16 +74,26 @@ class ProviderCapabilities(ProtocolModel):
     supports_tool_events: bool = False
     supports_attachments: bool = False
     supports_model_switch: bool = False
+    supports_resource_injection: bool = False
 
 
 class ResourceSnapshot(ProtocolModel):
-    """Resources configured for a Gateway session at creation time."""
+    """Resources configured for a Gateway session at creation time.
+
+    ``digest`` is the injection receipt: a sha256 over the content actually
+    sent to the provider, and ``applied_kinds`` names which resource kinds
+    that receipt covers. ``digest=None`` means the names below are a
+    declaration only -- nothing was injected -- and clients must render them
+    as configured-but-inactive rather than loaded.
+    """
 
     group: str | None = None
     skills: list[str] = Field(default_factory=list)
     prompts: list[str] = Field(default_factory=list)
     hooks: list[str] = Field(default_factory=list)
     plugins: list[str] = Field(default_factory=list)
+    digest: str | None = None
+    applied_kinds: list[str] = Field(default_factory=list)
 
 
 class AgentSession(ProtocolModel):
@@ -113,6 +123,9 @@ class CreateSessionOptions(ProtocolModel):
     cwd: str
     model: str | None = None
     permission_mode: PermissionMode = PermissionMode.WORKSPACE_WRITE
+    # Only set when the adapter declares supports_resource_injection; the
+    # Gateway logs a prompt.injected receipt whenever it passes content here.
+    system_prompt: str | None = None
 
 
 class ResumeOptions(ProtocolModel):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 
 import pytest
@@ -26,6 +27,39 @@ def _config(tmp_path):
         json.dumps({"project_registry": [{"path": str(workspace), "group": "common"}]}),
         encoding="utf-8",
     )
+    return config, workspace
+
+
+def _injection_config(tmp_path, monkeypatch):
+    """Workspace whose group declares the 'base' prompt group, backed by a
+    CA_PROMPTS_ROOT the gateway can actually read."""
+    config, workspace = _config(tmp_path)
+    prompt_root = tmp_path / "prompts"
+    (prompt_root / "base").mkdir(parents=True)
+    (prompt_root / "base" / "standards.md").write_text(
+        "# Standard A\nbe tidy", encoding="utf-8"
+    )
+    # Non-standards docs must never reach the model.
+    (prompt_root / "base" / "README.md").write_text("internal doc", encoding="utf-8")
+    config.write_text(
+        json.dumps(
+            {
+                "project_registry": [
+                    {"path": str(workspace), "group": "common"}
+                ],
+                "groups": {
+                    "common": {
+                        "skills": ["base/review"],
+                        "prompts": ["base"],
+                        "hooks": [],
+                        "plugins": [],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CA_PROMPTS_ROOT", str(prompt_root))
     return config, workspace
 
 
@@ -129,6 +163,10 @@ async def test_gateway_persists_resource_snapshot(tmp_path):
     assert session.resource_snapshot.group == "web"
     assert session.resource_snapshot.skills == ["base/review"]
     assert gateway.get_session(session.id).resource_snapshot.plugins == ["base/tools"]
+    # The Gateway has no injection channel yet: the snapshot is a declaration
+    # only, and digest must stay None so clients render it as not applied.
+    assert session.resource_snapshot.digest is None
+    assert gateway.get_session(session.id).resource_snapshot.digest is None
     await gateway.stop()
 
 
@@ -342,4 +380,219 @@ async def test_gateway_reports_a_silently_ended_event_stream(tmp_path):
     assert await _wait_for(
         lambda: gateway.get_session(session.id).status == SessionStatus.DISCONNECTED
     )
+    await gateway.stop()
+
+
+@pytest.mark.asyncio
+async def test_create_session_injects_prompt_and_records_receipt(tmp_path, monkeypatch):
+    """Model-visible means logged: content sent to the provider must appear
+    as a resources.resolved + prompt.injected receipt pair, and the snapshot
+    must carry the digest so clients can render it as applied."""
+    config, workspace = _injection_config(tmp_path, monkeypatch)
+    adapter = FakeAgentAdapter(supports_resource_injection=True)
+    gateway = AgentGateway(AgentStore(tmp_path / "agent.sqlite3"), config, [adapter])
+    await gateway.start()
+
+    session = await gateway.create_session(provider="fake", project_id=str(workspace))
+
+    sent = adapter.create_options[-1].system_prompt
+    assert sent is not None
+    assert "# Standard A" in sent
+    assert "internal doc" not in sent  # README never reaches the model
+
+    assert session.resource_snapshot.digest == hashlib.sha256(sent.encode()).hexdigest()
+    assert session.resource_snapshot.applied_kinds == ["prompts"]
+
+    events = gateway.store.list_events(session.id)
+    by_type = {event.type: event for event in events}
+    resolved = by_type["resources.resolved"]
+    segments = resolved.data["segments"]
+    assert len(segments) == 1
+    assert segments[0]["name"] == "base/standards"
+    assert segments[0]["kind"] == "prompts"
+    assert segments[0]["sha256"] == hashlib.sha256(b"# Standard A\nbe tidy").hexdigest()
+    receipt = by_type["prompt.injected"]
+    assert receipt.data["sha256"] == session.resource_snapshot.digest
+    assert receipt.data["bytes"] == len(sent.encode())
+    # Receipts precede the ready announcement.
+    assert resolved.sequence < receipt.sequence < by_type["session.ready"].sequence
+    await gateway.stop()
+
+
+@pytest.mark.asyncio
+async def test_create_session_without_capability_stays_declaration_only(
+    tmp_path, monkeypatch
+):
+    config, workspace = _injection_config(tmp_path, monkeypatch)
+    adapter = FakeAgentAdapter()
+    gateway = AgentGateway(AgentStore(tmp_path / "agent.sqlite3"), config, [adapter])
+    await gateway.start()
+
+    session = await gateway.create_session(provider="fake", project_id=str(workspace))
+
+    assert adapter.create_options[-1].system_prompt is None
+    assert session.resource_snapshot.digest is None
+    assert session.resource_snapshot.applied_kinds == []
+    types = [event.type for event in gateway.store.list_events(session.id)]
+    assert "prompt.injected" not in types
+    assert "resources.resolved" not in types
+    await gateway.stop()
+
+
+@pytest.mark.asyncio
+async def test_import_session_does_not_reinject(tmp_path, monkeypatch):
+    """Importing wraps a thread that already has history; injecting would
+    pollute it, so imports stay declaration-only."""
+    config, workspace = _injection_config(tmp_path, monkeypatch)
+    adapter = FakeAgentAdapter(supports_resource_injection=True)
+    gateway = AgentGateway(AgentStore(tmp_path / "agent.sqlite3"), config, [adapter])
+    await gateway.start()
+
+    session = await gateway.import_session(
+        provider="fake",
+        provider_session_id="fake-existing-session",
+        project_id=str(workspace),
+    )
+
+    # Nothing was created -- only resumed -- so no injection channel ran.
+    assert adapter.create_options == []
+    assert session.resource_snapshot.digest is None
+    await gateway.stop()
+
+
+@pytest.mark.asyncio
+async def test_start_turn_warns_once_when_receipt_missing(tmp_path, monkeypatch):
+    """The invariant: prompts declared + injection-capable provider but no
+    receipt => a persisted resources_not_applied error on turn start,
+    exactly once per session."""
+    config, workspace = _config(tmp_path)
+    prompt_root = tmp_path / "empty-prompts" / "base"
+    prompt_root.mkdir(parents=True)  # group declared, files unresolvable
+    monkeypatch.setenv("CA_PROMPTS_ROOT", str(prompt_root.parent))
+    config.write_text(
+        json.dumps(
+            {
+                "project_registry": [
+                    {"path": str(workspace), "group": "common"}
+                ],
+                "groups": {"common": {"skills": [], "prompts": ["base"], "hooks": [], "plugins": []}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    adapter = FakeAgentAdapter(supports_resource_injection=True)
+    gateway = AgentGateway(AgentStore(tmp_path / "agent.sqlite3"), config, [adapter])
+    await gateway.start()
+    session = await gateway.create_session(provider="fake", project_id=str(workspace))
+    assert session.resource_snapshot.digest is None
+
+    command = AgentCommand(
+        type="turn.start",
+        request_id="r1",
+        session_id=session.id,
+        input=[AgentInput(text="hello")],
+    )
+    await gateway.execute_command(command)
+    await gateway.execute_command(command)
+
+    warnings = [
+        event.data.get("code")
+        for event in gateway.store.list_events(session.id)
+        if event.type == "error"
+    ]
+    assert warnings.count("resources_not_applied") == 1
+    await gateway.stop()
+
+
+@pytest.mark.asyncio
+async def test_start_turn_quiet_when_receipt_exists(tmp_path, monkeypatch):
+    config, workspace = _injection_config(tmp_path, monkeypatch)
+    adapter = FakeAgentAdapter(supports_resource_injection=True)
+    gateway = AgentGateway(AgentStore(tmp_path / "agent.sqlite3"), config, [adapter])
+    await gateway.start()
+    session = await gateway.create_session(provider="fake", project_id=str(workspace))
+
+    command = AgentCommand(
+        type="turn.start",
+        request_id="r1",
+        session_id=session.id,
+        input=[AgentInput(text="hello")],
+    )
+    await gateway.execute_command(command)
+
+    errors = [
+        event
+        for event in gateway.store.list_events(session.id)
+        if event.type == "error"
+    ]
+    assert errors == []
+    await gateway.stop()
+
+
+@pytest.mark.asyncio
+async def test_execute_command_joins_duplicate_in_flight_request(tmp_path):
+    """A client retry arriving while the original command still executes must
+    wait for the same result, not run the command twice -- the completed-ack
+    cache alone only deduplicates after the fact."""
+    config, workspace = _config(tmp_path)
+    adapter = FakeAgentAdapter()
+    starts: list[str] = []
+    original_start_turn = adapter.start_turn
+
+    async def slow_start_turn(provider_session_id, turn):
+        starts.append(provider_session_id)
+        await asyncio.sleep(0.05)
+        return await original_start_turn(provider_session_id, turn)
+
+    adapter.start_turn = slow_start_turn
+    gateway = AgentGateway(AgentStore(tmp_path / "agent.sqlite3"), config, [adapter])
+    await gateway.start()
+    session = await gateway.create_session(provider="fake", project_id=str(workspace))
+    command = AgentCommand(
+        type="turn.start",
+        request_id="dup-1",
+        session_id=session.id,
+        input=[AgentInput(text="hello")],
+    )
+    first_ack, second_ack = await asyncio.gather(
+        gateway.execute_command(command),
+        gateway.execute_command(command.model_copy(deep=True)),
+    )
+    assert len(starts) == 1
+    assert first_ack.result == second_ack.result
+    # A third arrival after completion is served by the ack cache.
+    third_ack = await gateway.execute_command(command.model_copy(deep=True))
+    assert third_ack.result == first_ack.result
+    await gateway.stop()
+
+
+@pytest.mark.asyncio
+async def test_execute_command_failure_is_not_cached_and_unblocks_waiters(tmp_path):
+    config, workspace = _config(tmp_path)
+    adapter = FakeAgentAdapter()
+
+    async def failing_steer(provider_session_id, provider_turn_id, turn):
+        raise RuntimeError("provider exploded")
+
+    adapter.steer_turn = failing_steer
+    gateway = AgentGateway(AgentStore(tmp_path / "agent.sqlite3"), config, [adapter])
+    await gateway.start()
+    session = await gateway.create_session(provider="fake", project_id=str(workspace))
+    command = AgentCommand(
+        type="turn.steer",
+        request_id="failing-1",
+        session_id=session.id,
+        turn_id="missing-turn",
+        input=[AgentInput(text="hello")],
+    )
+    results = await asyncio.gather(
+        gateway.execute_command(command),
+        gateway.execute_command(command.model_copy(deep=True)),
+        return_exceptions=True,
+    )
+    # The executor and the joined duplicate both see the failure.
+    assert all(isinstance(value, RuntimeError) for value in results)
+    # The failed attempt left nothing behind: the same request id can retry.
+    assert not gateway._commands_in_flight
+    assert not gateway._acks[session.id]
     await gateway.stop()

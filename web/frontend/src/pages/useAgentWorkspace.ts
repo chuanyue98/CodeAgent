@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useProject } from '../context/ProjectContext';
 import type { ConversationListItem } from '../utils/agentWorkspaceHelpers';
 import { SESSION_PAGE_SIZE } from '../utils/agentWorkspaceHelpers';
-import type { AgentGatewayStatus, AgentSession, NativeAgentSession, ProviderCapabilities, ApprovalDecision, PermissionMode } from '../types/agent';
+import type { AgentGatewayStatus, AgentSession, NativeAgentSession, ProviderCapabilities, ApprovalDecision, PermissionMode, ResourceSnapshot } from '../types/agent';
 import type { AgentSessionState } from '../state/agentSessionReducer';
 import useNativeAgentSessions from './useNativeAgentSessions';
 import useAgentWorkspaceSessions from './useAgentWorkspaceSessions';
@@ -67,7 +67,7 @@ export type UseAgentWorkspaceReturn = {
   /** True only when `workspace` names a currently registered, reachable project. */
   workspaceIsUsable: boolean;
   composerPlaceholder: string;
-  sessionResourceSnapshot: { skills?: string[]; prompts?: string[]; hooks?: string[]; plugins?: string[] } | undefined;
+  sessionResourceSnapshot: ResourceSnapshot | undefined;
   sessionResourceGroup: string;
   resourceCount: number;
   onNewSession: () => void;

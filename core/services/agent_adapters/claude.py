@@ -61,6 +61,12 @@ class ClaudeAdapter:
         self._client_tasks: dict[str, asyncio.Task] = {}
         self._active_turns: dict[str, str] = {}
         self._session_cwds: dict[str, str] = {}
+        # Standards injected at session creation. Kept per session so a
+        # same-process reconnect (resume after client drop) re-applies them;
+        # a resume across a Gateway restart intentionally does not -- the
+        # thread already carries its history, and re-injecting would pollute
+        # it (see Gateway: injection happens on create_session only).
+        self._session_system_prompts: dict[str, str] = {}
         self._pending_approvals: dict[
             str,
             tuple[
@@ -108,6 +114,7 @@ class ClaudeAdapter:
         self._clients.clear()
         self._active_turns.clear()
         self._session_cwds.clear()
+        self._session_system_prompts.clear()
         self._current_message_ids.clear()
         self._started_tools.clear()
 
@@ -127,11 +134,14 @@ class ClaudeAdapter:
             supports_tool_events=True,
             supports_attachments=False,
             supports_model_switch=True,
+            supports_resource_injection=True,
         )
 
     async def create_session(self, options: CreateSessionOptions) -> ProviderSession:
         self._require_started()
         session_id = str(uuid4())
+        if options.system_prompt:
+            self._session_system_prompts[session_id] = options.system_prompt
         client = await self._connect_client(
             session_id,
             cwd=options.cwd,
@@ -322,6 +332,7 @@ class ClaudeAdapter:
             include_partial_messages=True,
             include_hook_events=True,
             setting_sources=["user", "project", "local"],
+            system_prompt=self._session_system_prompts.get(session_id),
             resume=session_id if resume else None,
             session_id=None if resume else session_id,
             stderr=lambda _line: None,

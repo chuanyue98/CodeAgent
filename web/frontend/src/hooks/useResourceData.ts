@@ -8,10 +8,18 @@ interface ResourceDataResult<T> {
   refetch: () => void;
 }
 
+function isAbort(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 /**
  * Shared hook for fetching resource data (skills, plugins, hooks, prompts).
  * Provides loading/error states and a refetch callback for error recovery
  * without page reload.
+ *
+ * In-flight requests are aborted on unmount and whenever `endpoint` changes
+ * or `refetch` fires, so a slow response for an old endpoint can never
+ * overwrite the data of the one now on screen.
  */
 function useResourceData<T>(endpoint: string): ResourceDataResult<T> {
   const [data, setData] = useState<T | null>(null);
@@ -24,28 +32,28 @@ function useResourceData<T>(endpoint: string): ResourceDataResult<T> {
   }, []);
 
   useEffect(() => {
-    let mounted = true;
+    const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
 
-    request<T>(endpoint)
+    request<T>(endpoint, { signal: controller.signal })
       .then((result) => {
-        if (!mounted) return;
+        if (controller.signal.aborted) return;
         setData(result);
       })
       .catch((err: unknown) => {
-        if (!mounted) return;
+        if (controller.signal.aborted || isAbort(err)) return;
         setError(err instanceof Error ? err.message : 'Failed to fetch data');
       })
       .finally(() => {
-        if (!mounted) return;
+        // A superseded request must not clear the spinner its successor
+        // just turned on.
+        if (controller.signal.aborted) return;
         setLoading(false);
       });
 
-    return () => {
-      mounted = false;
-    };
+    return () => controller.abort();
   }, [endpoint, nonce]);
 
   return { data, loading, error, refetch };

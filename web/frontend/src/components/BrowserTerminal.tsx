@@ -97,7 +97,7 @@ export default function BrowserTerminal({ engine, cwd, onExit }: BrowserTerminal
   }, [engine, cwd]);
 
   return (
-    <div className="space-y-2">
+    <div className="flex h-full min-h-0 flex-col space-y-2">
       {message && (
         <div
           role="status"
@@ -110,9 +110,11 @@ export default function BrowserTerminal({ engine, cwd, onExit }: BrowserTerminal
           {message}
         </div>
       )}
+      {/* Fills the page's remaining height instead of a fixed vh slice -- the
+          FitAddon + ResizeObserver below re-fit whenever this box resizes. */}
       <div
         ref={containerRef}
-        className="h-[60vh] w-full overflow-hidden rounded-xl border border-slate-200 bg-[#0f172a] p-2"
+        className="min-h-56 w-full flex-1 overflow-hidden rounded-xl border border-slate-200 bg-[#0f172a] p-2"
       />
     </div>
   );

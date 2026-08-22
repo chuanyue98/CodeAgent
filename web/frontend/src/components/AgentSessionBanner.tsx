@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Loader2, Trash2, WifiOff } from 'lucide-react';
 import { reconnectAgentProvider } from '../api/agent';
-import type { AgentSession } from '../types/agent';
+import type { AgentSession, ResourceSnapshot } from '../types/agent';
 import type { ProviderConnectivity } from '../state/agentSessionReducer';
 import { relativeTime, workspaceLabel } from '../utils/agentWorkspaceHelpers';
 
@@ -11,7 +11,7 @@ type Props = {
   connecting: boolean;
   stateActiveTurnId: string | null;
   provider: ProviderConnectivity | null;
-  sessionResourceSnapshot: { skills?: string[]; prompts?: string[]; hooks?: string[]; plugins?: string[] } | undefined;
+  sessionResourceSnapshot: ResourceSnapshot | undefined;
   sessionResourceGroup: string;
   resourceCount: number;
   onConnect: () => void;
@@ -79,6 +79,18 @@ export default function AgentSessionBanner({
   onRemoveSession,
 }: Props) {
   const canAct = !connected && !connecting && !stateActiveTurnId;
+  // appliedKinds is the per-kind injection receipt: a kind absent from it
+  // was never sent to the provider, so presenting it as loaded would be a lie.
+  const applied = new Set(sessionResourceSnapshot?.appliedKinds ?? []);
+  const kinds: { label: string; names?: string[]; isApplied: boolean }[] = [
+    { label: 'Skills', names: sessionResourceSnapshot?.skills, isApplied: applied.has('skills') },
+    { label: 'Prompts', names: sessionResourceSnapshot?.prompts, isApplied: applied.has('prompts') },
+    { label: 'Hooks', names: sessionResourceSnapshot?.hooks, isApplied: applied.has('hooks') },
+    { label: 'Plugins', names: sessionResourceSnapshot?.plugins, isApplied: applied.has('plugins') },
+  ];
+  const anyConfigured = resourceCount > 0;
+  const allApplied = kinds.filter(k => (k.names?.length ?? 0) > 0).every(k => k.isApplied);
+  const showNotApplied = anyConfigured && !allApplied;
 
   return (
     <>
@@ -97,27 +109,33 @@ export default function AgentSessionBanner({
         <details className="mt-1 text-[10px] text-slate-500">
           <summary className="cursor-pointer font-medium text-primary hover:underline">
             Configured resources · {sessionResourceGroup} ({resourceCount})
+            {showNotApplied && (
+              <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 font-semibold text-amber-800">
+                not applied
+              </span>
+            )}
+            {anyConfigured && allApplied && (
+              <span className="ml-1.5 rounded bg-emerald-100 px-1 py-0.5 font-semibold text-emerald-800">
+                applied
+              </span>
+            )}
           </summary>
           <div className="mt-1 space-y-0.5 rounded-md border border-slate-200 bg-white px-2 py-1.5">
-            <p>
-              <span className="font-semibold">Skills:</span>{' '}
-              {sessionResourceSnapshot?.skills?.join(', ') || 'Unknown'}
-            </p>
-            <p>
-              <span className="font-semibold">Prompts:</span>{' '}
-              {sessionResourceSnapshot?.prompts?.join(', ') || 'Unknown'}
-            </p>
-            <p>
-              <span className="font-semibold">Hooks:</span>{' '}
-              {sessionResourceSnapshot?.hooks?.join(', ') || 'Unknown'}
-            </p>
-            <p>
-              <span className="font-semibold">Plugins:</span>{' '}
-              {sessionResourceSnapshot?.plugins?.join(', ') || 'Unknown'}
-            </p>
+            {kinds.map(({ label, names, isApplied }) => (
+              <p key={label}>
+                <span className="font-semibold">{label}:</span>{' '}
+                {names?.join(', ') || 'Unknown'}
+                {anyConfigured && (names?.length ?? 0) > 0 && !isApplied && (
+                  <span className="ml-1.5 rounded bg-amber-50 px-1 font-medium text-amber-800">
+                    not injected
+                  </span>
+                )}
+              </p>
+            ))}
             <p className="pt-0.5 italic">
-              Snapshot captured at session creation; provider-native discovery
-              may differ.
+              {showNotApplied
+                ? 'Amber kinds are configured for the group but were NOT injected into this session — the agent runs without them.'
+                : 'Snapshot captured at session creation; provider-native discovery may differ.'}
             </p>
           </div>
         </details>
