@@ -9,7 +9,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoHooks(page: Page): Promise<void> {
   await page.goto('/hooks');
-  await waitForH2(page, '钩子');
+  await waitForH2(page, 'Hooks');
   await expect(cardByText(page, HOOKS.pre.name)).toBeVisible();
 }
 

@@ -9,45 +9,45 @@ test.beforeEach(async ({ baseURL }) => {
 async function gotoAgent(page: Page): Promise<void> {
   await page.goto('/agent/web');
   await waitForH2(page, 'Web Agent');
-  await expect(page.getByPlaceholder(/发消息/)).toBeVisible();
-  await expect(page.getByLabel('工作区', { exact: true })).not.toHaveValue('');
-  await expect(page.getByLabel('引擎')).toHaveValue('fake');
+  await expect(page.getByPlaceholder(/Message/)).toBeVisible();
+  await expect(page.getByLabel('Workspace', { exact: true })).not.toHaveValue('');
+  await expect(page.getByLabel('Engine')).toHaveValue('fake');
 }
 
 test('creates a structured session and streams provider-neutral events', async ({ page }) => {
   await gotoAgent(page);
-  const composer = page.getByPlaceholder(/发消息/);
+  const composer = page.getByPlaceholder(/Message/);
   await composer.fill('hello gateway');
   await composer.press('Enter');
 
   await expect(page.locator('main')).toContainText('Echo: hello gateway');
-  await expect(page.locator('main')).toContainText('已连接');
-  await expect(page.getByLabel('工作区', { exact: true })).toBeDisabled();
-  await expect(page.getByLabel('引擎')).toBeDisabled();
+  await expect(page.locator('main')).toContainText('Connected');
+  await expect(page.getByLabel('Workspace', { exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Engine')).toBeDisabled();
 });
 
 test('activity drawer keeps protocol details out of the conversation by default', async ({ page }) => {
   await gotoAgent(page);
-  const composer = page.getByPlaceholder(/发消息/);
+  const composer = page.getByPlaceholder(/Message/);
   await composer.fill('show activity');
   await composer.press('Enter');
   await expect(page.locator('main')).toContainText('Echo: show activity');
 
-  await page.getByRole('button', { name: '查看回合事件' }).click();
-  await expect(page.getByRole('main').getByText('回合事件', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Open activity' }).click();
+  await expect(page.getByRole('main').getByText('Activity', { exact: true })).toBeVisible();
   await expect(page.getByText(/message\.delta/)).toBeVisible();
-  await page.getByRole('button', { name: '关闭回合事件' }).click();
-  await expect(page.getByText('工具、diff、用量和协议事件')).not.toBeVisible();
+  await page.getByRole('button', { name: 'Close activity' }).click();
+  await expect(page.getByText('Tools, diffs, usage, and protocol events')).not.toBeVisible();
 });
 
 test('replays a stored conversation when a session is resumed', async ({ page }) => {
   await gotoAgent(page);
-  const composer = page.getByPlaceholder(/发消息/);
+  const composer = page.getByPlaceholder(/Message/);
   await composer.fill('persist me');
   await composer.press('Enter');
   await expect(page.locator('main')).toContainText('Echo: persist me');
 
-  await page.getByRole('button', { name: '新建', exact: true }).click();
+  await page.getByRole('button', { name: 'New', exact: true }).click();
   await page.getByRole('button', { name: /persist me/i }).click();
   await expect(page.locator('main')).toContainText('Echo: persist me');
 });
@@ -88,7 +88,7 @@ test('groups conversations by workspace across providers', async ({ page, baseUR
   await gotoAgent(page);
   // Scoped to the sidebar: the header's workspace switcher carries the same
   // path in its title attribute, so an unscoped getByTitle matches both.
-  const sidebar = page.getByRole('complementary', { name: '会话列表' });
+  const sidebar = page.getByRole('complementary', { name: 'Sessions list' });
   const firstWorkspace = sidebar.getByTitle(firstProject.path);
   const secondWorkspace = sidebar.getByTitle(secondProject.path);
   await expect(firstWorkspace).toHaveAttribute('aria-expanded', 'true');
@@ -96,7 +96,7 @@ test('groups conversations by workspace across providers', async ({ page, baseUR
   await expect(secondWorkspace).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByText('Codex in second workspace', { exact: true })).not.toBeVisible();
 
-  await page.getByLabel('引擎').selectOption('codex');
+  await page.getByLabel('Engine').selectOption('codex');
   await expect(firstWorkspace).toBeVisible();
   await secondWorkspace.click();
   await expect(page.getByText('Codex in second workspace', { exact: true })).toBeVisible();
@@ -104,10 +104,10 @@ test('groups conversations by workspace across providers', async ({ page, baseUR
 
 test('removes the selected local conversation without deleting provider history', async ({ page }) => {
   await gotoAgent(page);
-  const composer = page.getByPlaceholder(/发消息/);
+  const composer = page.getByPlaceholder(/Message/);
   await composer.fill('remove local mapping');
   await composer.press('Enter');
-  await expect(page.getByRole('button', { name: '移除当前会话' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove current conversation' })).toBeVisible();
   // Wait for the turn to actually finish before removing. The banner (and an
   // enabled Remove button) appear as soon as the session exists, which is
   // before turn.start arrives over the socket — clicking inside that window
@@ -116,10 +116,10 @@ test('removes the selected local conversation without deleting provider history'
   // it is not what this test is about.
   await expect(page.locator('main')).toContainText('Echo: remove local mapping');
 
-  await page.getByRole('button', { name: '移除当前会话' }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: '移除' }).click();
+  await page.getByRole('button', { name: 'Remove current conversation' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Remove' }).click();
 
-  await expect(page.getByRole('button', { name: '移除当前会话' })).not.toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove current conversation' })).not.toBeVisible();
   await expect(page.locator('main')).not.toContainText('Echo: remove local mapping');
 });
 
@@ -144,15 +144,15 @@ test('searches provider history and reveals additional pages on demand', async (
   }));
 
   await gotoAgent(page);
-  await expect(page.getByRole('button', { name: '加载更多历史记录（25）' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load more history (25)' })).toBeVisible();
   await expect(page.getByText('Provider conversation 19', { exact: true })).toBeVisible();
   await expect(page.getByText('Provider conversation 20', { exact: true })).not.toBeVisible();
 
-  await page.getByRole('button', { name: '加载更多历史记录（25）' }).click();
+  await page.getByRole('button', { name: 'Load more history (25)' }).click();
   await expect(page.getByText('Provider conversation 39', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '加载更多历史记录（5）' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load more history (5)' })).toBeVisible();
 
-  await page.getByPlaceholder('搜索会话').fill('conversation 44');
+  await page.getByPlaceholder('Search conversations').fill('conversation 44');
   await expect(page.getByText('Provider conversation 44', { exact: true })).toBeVisible();
 });
 
@@ -175,13 +175,13 @@ test('keeps unavailable workspace history collapsed until requested', async ({ p
   }));
 
   await gotoAgent(page);
-  const unavailable = page.getByRole('button', { name: '不可用工作区（1）' });
+  const unavailable = page.getByRole('button', { name: 'Unavailable workspaces (1)' });
   await expect(unavailable).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByText('not-registered', { exact: true })).not.toBeVisible();
 
   await unavailable.click();
   await expect(page.getByText('not-registered', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '注册' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Register' })).toBeVisible();
 });
 
 test('shows a retry action when provider history fails', async ({ page }) => {
@@ -198,7 +198,7 @@ test('shows a retry action when provider history fails', async ({ page }) => {
   await expect(page.getByText('Provider history could not be loaded.')).toBeVisible();
 
   shouldFail = false;
-  await page.getByRole('button', { name: '重试' }).click();
+  await page.getByRole('button', { name: 'Retry' }).click();
   await expect(page.getByText('Provider history could not be loaded.')).not.toBeVisible();
 });
 
@@ -220,7 +220,7 @@ test('a fast double-submit on a brand-new conversation creates only one session'
   });
 
   await gotoAgent(page);
-  const composer = page.getByPlaceholder(/发消息/);
+  const composer = page.getByPlaceholder(/Message/);
   // Two distinct messages submitted back to back, before the first
   // createAgentSession() round trip can possibly resolve and populate
   // state.session -- both see state.session === null and, without the
@@ -251,16 +251,16 @@ test('restoring a conversation restores its workspace resource group', async ({ 
   });
 
   await gotoAgent(page);
-  await expect(page.getByRole('button', { name: '资源组：work' })).toBeVisible();
-  const composer = page.getByPlaceholder(/发消息/);
+  await expect(page.getByRole('button', { name: 'Resource group: work' })).toBeVisible();
+  const composer = page.getByPlaceholder(/Message/);
   await composer.fill('group aware session');
   await composer.press('Enter');
   await expect(page.locator('main')).toContainText('Echo: group aware session');
 
-  await page.getByRole('button', { name: '资源组：work' }).click();
+  await page.getByRole('button', { name: 'Resource group: work' }).click();
   await page.getByRole('option', { name: 'codeagent', exact: true }).click();
-  await page.getByRole('button', { name: '新建', exact: true }).click();
+  await page.getByRole('button', { name: 'New', exact: true }).click();
   await page.getByRole('button', { name: /group aware session/i }).click();
 
-  await expect(page.getByRole('button', { name: '资源组：work' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Resource group: work' })).toBeVisible();
 });

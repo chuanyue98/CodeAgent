@@ -14,26 +14,26 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoTimeline(page: Page): Promise<void> {
   await page.goto('/audit');
-  await waitForH2(page, '时间线');
-  await expect(page.getByText('筛选', { exact: true })).toBeVisible();
+  await waitForH2(page, 'Timeline');
+  await expect(page.getByText('Filters', { exact: true })).toBeVisible();
 }
 
 test('renders the filter panel and an empty event state', async ({ page }) => {
   await gotoTimeline(page);
-  await expect(page.getByRole('button', { name: '消息' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '工具调用' })).toBeVisible();
-  await expect(page.locator('main')).toContainText('没有符合筛选条件的事件');
+  await expect(page.getByRole('button', { name: 'Message' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Tool Call' })).toBeVisible();
+  await expect(page.locator('main')).toContainText('No events match your filters');
 });
 
 test('toggling an event-type filter does not error', async ({ page }) => {
   await gotoTimeline(page);
-  await page.getByRole('button', { name: '消息' }).click();
-  await expect(page.locator('main')).toContainText('没有符合筛选条件的事件');
+  await page.getByRole('button', { name: 'Message' }).click();
+  await expect(page.locator('main')).toContainText('No events match your filters');
 });
 
 test('search and refresh work without error', async ({ page }) => {
   await gotoTimeline(page);
   await typeSearch(page, 'anything');
-  await page.getByRole('button', { name: '刷新' }).click();
-  await expect(page.locator('main')).toContainText('没有符合筛选条件的事件');
+  await page.getByRole('button', { name: 'Refresh' }).click();
+  await expect(page.locator('main')).toContainText('No events match your filters');
 });

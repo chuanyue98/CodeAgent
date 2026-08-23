@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import Modal from './Modal';
+import { useT } from '../../i18n/context';
 
 interface ConfirmDialogProps {
   title: string;
@@ -21,12 +22,13 @@ interface ConfirmDialogProps {
 export default function ConfirmDialog({
   title,
   description,
-  confirmLabel = '删除',
-  cancelLabel = '取消',
+  confirmLabel,
+  cancelLabel,
   destructive = true,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const t = useT();
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export default function ConfirmDialog({
           onClick={onCancel}
           className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors"
         >
-          {cancelLabel}
+          {cancelLabel ?? t('common.cancel')}
         </button>
         <button
           ref={confirmRef}
@@ -76,7 +78,7 @@ export default function ConfirmDialog({
             destructive ? 'bg-red-500 hover:bg-red-600' : 'bg-primary hover:opacity-90'
           }`}
         >
-          {confirmLabel}
+          {confirmLabel ?? t('common.delete')}
         </button>
       </div>
     </Modal>

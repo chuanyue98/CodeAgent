@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import type { Translate } from '../../i18n/context';
 
 // ── Engine palette ───────────────────────────────────────────────────────────
 const ENGINE_COLORS: Record<string, string> = {
@@ -24,12 +25,13 @@ export function formatDate(s: string) {
 export function formatMonth(s: string) {
   try { return format(new Date(`${s}-01`), 'MMM yyyy'); } catch { return s; }
 }
-export function timeAgo(iso: string) {
+/** Takes `t` rather than calling a hook: this is a pure helper, not a component. */
+export function timeAgo(iso: string, t: Translate) {
   if (!iso) return '—';
   const ms = Date.now() - new Date(iso).getTime();
   const days = Math.floor(ms / 86400000);
-  if (days === 0) return '今天';
-  if (days === 1) return '昨天';
-  if (days < 30) return `${days} 天前`;
+  if (days === 0) return t('time.today');
+  if (days === 1) return t('time.yesterday');
+  if (days < 30) return t('time.daysAgo', { days });
   return iso.slice(0, 10);
 }

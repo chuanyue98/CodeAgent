@@ -1,14 +1,16 @@
 import { NavLink, Outlet, useLocation } from 'react-router';
+import { useT } from '../i18n/context';
+import type { TranslationKey } from '../i18n/locales/en';
 
 export interface SectionTab {
   to: string;
-  label: string;
+  labelKey: TranslationKey;
   matchPrefix?: string;
 }
 
 interface SectionLayoutProps {
-  label: string;
-  description: string;
+  labelKey: TranslationKey;
+  descriptionKey: TranslationKey;
   tabs: SectionTab[];
   /**
    * Query params to carry from the current URL onto each tab link, so state
@@ -19,12 +21,14 @@ interface SectionLayoutProps {
 }
 
 export default function SectionLayout({
-  label,
-  description,
+  labelKey,
+  descriptionKey,
   tabs,
   preserveParams,
 }: SectionLayoutProps) {
   const { pathname, search } = useLocation();
+  const t = useT();
+  const description = t(descriptionKey);
 
   const carried = (() => {
     if (!preserveParams?.length) return '';
@@ -45,7 +49,7 @@ export default function SectionLayout({
           Shown from lg up, where there is room beside the tabs. */}
       <div className="animate-fade-rise stagger-1 flex flex-wrap items-center justify-between gap-x-4 border-b border-slate-200 px-1 pb-2">
         <span className="sr-only">{description}</span>
-        <nav aria-label={`${label}分区`} className="custom-scrollbar flex max-w-full gap-1 overflow-x-auto">
+        <nav aria-label={t('section.nav', { label: t(labelKey) })} className="custom-scrollbar flex max-w-full gap-1 overflow-x-auto">
           {tabs.map((tab, i) => {
             const active = tab.matchPrefix
               ? pathname === tab.matchPrefix || pathname.startsWith(`${tab.matchPrefix}/`)
@@ -63,7 +67,7 @@ export default function SectionLayout({
                     : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
                 }`}
               >
-                {tab.label}
+                {t(tab.labelKey)}
               </NavLink>
             );
           })}

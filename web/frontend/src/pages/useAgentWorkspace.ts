@@ -1,6 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { useProject } from '../context/ProjectContext';
+import { useT } from '../i18n/context';
 import type { ConversationListItem } from '../utils/agentWorkspaceHelpers';
+import type { AgentErrorAction } from '../types/agent';
 import { SESSION_PAGE_SIZE } from '../utils/agentWorkspaceHelpers';
 import type { AgentGatewayStatus, AgentSession, NativeAgentSession, ProviderCapabilities, ApprovalDecision, PermissionMode, ResourceSnapshot } from '../types/agent';
 import type { AgentSessionState } from '../state/agentSessionReducer';
@@ -37,6 +39,12 @@ export type UseAgentWorkspaceReturn = {
   connected: boolean;
   selectingKey: string | null;
   error: string | null;
+  /**
+   * What the UI can offer alongside the message. Carried as a value rather
+   * than sniffed from the text, which stopped working the moment the text
+   * became translatable.
+   */
+  errorAction: AgentErrorAction;
   onDismissError: () => void;
   showActivity: boolean;
   input: string;
@@ -109,6 +117,7 @@ export type UseAgentWorkspaceReturn = {
  * registration. Returns the same flat shape AgentWorkspace.tsx consumes.
  */
 export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
+  const t = useT();
   const {
     projects,
     currentGroup,
@@ -125,8 +134,13 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const [showUnavailableHistory, setShowUnavailableHistory] = useState(false);
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('workspace-write');
   const [showActivity, setShowActivity] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const onDismissError = useCallback(() => setError(null), []);
+  const [error, setErrorMessage] = useState<string | null>(null);
+  const [errorAction, setErrorAction] = useState<AgentErrorAction>(null);
+  const setError = useCallback((message: string | null, action: AgentErrorAction = null) => {
+    setErrorMessage(message);
+    setErrorAction(message ? action : null);
+  }, []);
+  const onDismissError = useCallback(() => setError(null), [setError]);
 
   // Shared across the connection + composer-UI hooks -- lifted here instead
   // of owned by either one, since onScroll (composer-UI) reads refs that
@@ -253,12 +267,12 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const availableProviders = providers.filter(provider => provider.available);
   const noGatewayProvider = !loading && gatewayStatus.enabled && availableProviders.length === 0;
   const connectionLabel = connecting
-    ? '连接中'
+    ? t('agent.connecting')
     : connected
-      ? '已连接'
+      ? t('agent.connected')
       : state.session
-        ? '已断开'
-        : '可以开始';
+        ? t('agent.disconnectedShort')
+        : t('agent.readyToStart');
   // The shared workspace is restored from localStorage, so it can name a
   // path that is no longer registered (or not registered yet, before
   // /api/projects resolves). Compose only against one that actually resolves,
@@ -266,14 +280,16 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const workspaceIsUsable = validProjects.some(project => project.path === workspace);
   const canCompose = Boolean(workspaceIsUsable && selectedProvider && selectedCapabilities?.available && !noGatewayProvider);
   const composerPlaceholder = !workspaceIsUsable
-    ? '先选择一个工作区'
+    ? t('agent.pickWorkspace')
     : !selectedProvider
-      ? '先选择一个引擎'
+      ? t('agent.pickProvider')
       : noGatewayProvider
-        ? '没有可用的交互引擎'
-        : `给 ${selectedCapabilities?.displayName || '智能体'} 发消息…（Enter 发送，Shift+Enter 换行）`;
+        ? t('agent.noInteractiveProvider')
+        : t('agent.composerPlaceholder', {
+      provider: selectedCapabilities?.displayName || t('agent.theAgent'),
+    });
   const sessionResourceSnapshot = state.session?.resourceSnapshot;
-  const sessionResourceGroup = sessionResourceSnapshot?.group || '未知';
+  const sessionResourceGroup = sessionResourceSnapshot?.group || t('common.unknown');
   const resourceCount = (sessionResourceSnapshot?.skills?.length ?? 0)
     + (sessionResourceSnapshot?.prompts?.length ?? 0)
     + (sessionResourceSnapshot?.hooks?.length ?? 0)
@@ -302,6 +318,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     connected,
     selectingKey,
     error,
+    errorAction,
     onDismissError,
     showActivity,
     input,

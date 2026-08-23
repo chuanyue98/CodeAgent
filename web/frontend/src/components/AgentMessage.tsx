@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
+import { useT } from '../i18n/context';
 import MarkdownMessage from './MarkdownMessage';
 
 type Props = {
@@ -16,6 +17,7 @@ type Props = {
  * by hand across a scrolling container.
  */
 export default function AgentMessage({ role, text }: Props) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -51,8 +53,8 @@ export default function AgentMessage({ role, text }: Props) {
         <button
           type="button"
           onClick={copy}
-          aria-label={copied ? '已复制' : '复制消息'}
-          title={copied ? '已复制' : '复制消息'}
+          aria-label={copied ? t('agent.copied') : t('agent.copyMessage')}
+          title={copied ? t('agent.copied') : t('agent.copyMessage')}
           // Always reachable by keyboard (focus:opacity-100); revealed on
           // hover for pointer users so it never competes with the text.
           className="absolute right-1.5 top-1.5 rounded-md border border-slate-200 bg-white p-1.5 text-slate-400 opacity-0 shadow-sm transition-opacity hover:text-slate-700 focus:opacity-100 group-hover:opacity-100"

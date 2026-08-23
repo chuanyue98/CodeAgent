@@ -1,5 +1,6 @@
 import { memo, useMemo, useState } from 'react';
 import { Activity, ChevronRight, FileText, Layers, Plus, Search, Sparkles } from 'lucide-react';
+import { useT } from '../../i18n/context';
 import { classifyStageStatus, type RunStatus, type Stage, type Task } from './types';
 
 function StageProgress({ stages }: { stages: Stage[] }) {
@@ -28,6 +29,7 @@ const TaskCard = memo(function TaskCard({
   activeRun: RunStatus | undefined;
   onSelect: (name: string) => void;
 }) {
+  const t = useT();
   return (
     <button
       onClick={() => onSelect(task.name)}
@@ -45,7 +47,7 @@ const TaskCard = memo(function TaskCard({
             {activeRun && (
               <span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider border border-emerald-100 animate-pulse">
                 <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                在 {activeRun.engine} 上运行中</span>
+                {t('tasks.runningOn', { engine: activeRun.engine })}</span>
             )}
           </div>
           <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-primary flex-shrink-0 transition-colors" />
@@ -72,6 +74,7 @@ export default memo(function TaskList({
   onGenerateClick: () => void;
   onManualCreateClick: () => void;
 }) {
+  const t = useT();
   const [search, setSearch] = useState('');
 
   const filteredTasks = useMemo(() => {
@@ -91,7 +94,9 @@ export default memo(function TaskList({
       <div className="flex flex-wrap justify-between items-center gap-3 pb-1">
         <div className="min-w-0">
           <p className="text-sm text-slate-500">
-            共 {tasks.length} 个任务 · 可在任意引擎上运行或加入定时计划的复用提示词
+            {tasks.length === 1
+            ? t('tasks.countOne', { count: tasks.length })
+            : t('tasks.count', { count: tasks.length })}
           </p>
         </div>
         {/* Hidden while the list is empty: the empty state below carries its
@@ -101,16 +106,16 @@ export default memo(function TaskList({
           <div className="flex items-center gap-2">
             <button
               onClick={onManualCreateClick}
-              title="手动编写任务文件"
+              title={t('tasks.manualTitle')}
               className="flex items-center gap-2 px-3 py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all font-semibold text-sm"
             >
-              <Plus className="w-4 h-4" /> 手动创建
+              <Plus className="w-4 h-4" /> {t('tasks.manual')}
             </button>
             <button
               onClick={onGenerateClick}
               className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:opacity-90 transition-all font-semibold shadow-lg shadow-primary/20 active:scale-95 text-sm"
             >
-              <Sparkles className="w-4 h-4" /> AI 生成
+              <Sparkles className="w-4 h-4" /> {t('tasks.generate')}
             </button>
           </div>
         )}
@@ -118,14 +123,14 @@ export default memo(function TaskList({
 
       {tasks.length > 5 && (
         <div className="relative max-w-sm">
-          <label htmlFor="task-search" className="sr-only">搜索任务</label>
+          <label htmlFor="task-search" className="sr-only">{t('tasks.searchLabel')}</label>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
           <input
             id="task-search"
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="搜索任务…"
+            placeholder={t('tasks.searchPlaceholder')}
             className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-primary"
           />
         </div>
@@ -137,10 +142,9 @@ export default memo(function TaskList({
             <Activity className="w-6 h-6" />
           </div>
           <div className="max-w-md space-y-1.5">
-            <p className="text-sm font-semibold text-slate-800">还没有任务</p>
+            <p className="text-sm font-semibold text-slate-800">{t('tasks.emptyTitle')}</p>
             <p className="text-xs leading-5 text-slate-500">
-              任务是一个描述你重复执行的工作的 Markdown 文件——比如一轮代码审查、一份更新日志、一次依赖审计。
-              创建后可以在任意已注册的工作区中针对任意引擎运行，也可以加入 cron 定时计划。
+              {t('tasks.emptyBody')}
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
@@ -148,13 +152,13 @@ export default memo(function TaskList({
               onClick={onGenerateClick}
               className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:opacity-90 transition-all font-semibold shadow-lg shadow-primary/20 active:scale-95 text-sm"
             >
-              <Sparkles className="w-4 h-4" /> 描述需求，让 AI 来写
+              <Sparkles className="w-4 h-4" /> {t('tasks.describeIt')}
             </button>
             <button
               onClick={onManualCreateClick}
               className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all font-semibold text-sm"
             >
-              <Plus className="w-4 h-4" /> 我自己写
+              <Plus className="w-4 h-4" /> {t('tasks.writeItMyself')}
             </button>
           </div>
         </div>
@@ -162,7 +166,7 @@ export default memo(function TaskList({
 
       {tasks.length > 0 && filteredTasks.length === 0 && (
         <div className="glass-card text-center py-12 text-sm text-slate-400">
-          没有匹配的任务。
+          {t('tasks.noSearchMatch')}
         </div>
       )}
 

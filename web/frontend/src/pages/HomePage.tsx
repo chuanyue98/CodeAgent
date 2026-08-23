@@ -16,6 +16,7 @@ import { fetchSessions, type SessionUsage } from '../api/analytics';
 import request from '../utils/request';
 import { useSystemMetrics } from '../context/SystemMetricsContext';
 import { buildSessionLink } from '../utils/sessionLink';
+import { useT } from '../i18n/context';
 
 const EQ_BARS = [0.4, 0.7, 1, 0.55, 0.85, 0.35, 0.65, 0.5, 0.9, 0.3, 0.75, 0.45];
 
@@ -65,6 +66,7 @@ interface RunStatus {
  * doing" instead of "where is the nav" (the sidebar already answers that).
  */
 export default function HomePage() {
+  const t = useT();
   const recentEvents = useRecentActivity(RECENT_ACTIVITY_LIMIT);
   const recentSessions = useRecentSessions(RECENT_SESSIONS_LIMIT);
   const runs = useRunningTasks();
@@ -93,10 +95,10 @@ export default function HomePage() {
                 <span className="animate-pulse-ring absolute inline-flex h-full w-full rounded-full bg-primary" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
               </span>
-              CodeAgent 工作台
+              {t('home.eyebrow')}
             </div>
             <h2 id="hero-heading" className="max-w-xl text-3xl font-bold leading-[1.05] text-slate-900 sm:text-4xl">
-              从你想做的<span className="font-display italic text-primary">工作</span>开始。
+              {t('home.headingPrefix')}<span className="font-display italic text-primary">{t('home.headingAccent')}</span>{t('home.headingSuffix')}
             </h2>
             {/* Quick actions stay one compact row — the sidebar owns
                 navigation; these are just the two most common starts. */}
@@ -105,13 +107,13 @@ export default function HomePage() {
                 to="/agent/web"
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-all hover:opacity-90"
               >
-                <Bot className="h-3.5 w-3.5" /> 新建对话
+                <Bot className="h-3.5 w-3.5" /> {t('home.newConversation')}
               </Link>
               <Link
                 to="/agent/terminal"
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-4 py-2 text-xs font-semibold text-slate-600 transition-colors hover:border-primary/30 hover:text-primary"
               >
-                <Terminal className="h-3.5 w-3.5" /> 打开终端
+                <Terminal className="h-3.5 w-3.5" /> {t('home.openTerminal')}
               </Link>
             </div>
           </div>
@@ -129,19 +131,19 @@ export default function HomePage() {
 
             <div className="rounded-2xl border border-slate-200/70 bg-white/60 p-3 backdrop-blur-sm">
               <div className="mb-2 flex items-center justify-between">
-                <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">最近事件</span>
+                <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">{t('home.recentActivity')}</span>
                 <Link
                   to="/activity/timeline"
                   className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary transition-colors hover:text-primary/80"
                 >
-                  查看全部 <ArrowUpRight className="h-3 w-3" />
+                  {t('home.viewAll')} <ArrowUpRight className="h-3 w-3" />
                 </Link>
               </div>
               <ul className="space-y-1.5">
                 {recentEvents === null ? (
-                  <li className="font-mono text-xs text-slate-400">加载中…</li>
+                  <li className="font-mono text-xs text-slate-400">{t('common.loading')}</li>
                 ) : recentEvents.length === 0 ? (
-                  <li className="font-mono text-xs text-slate-400">还没有动态——开始一次会话后就会显示在这里。</li>
+                  <li className="font-mono text-xs text-slate-400">{t('home.noActivity')}</li>
                 ) : (
                   recentEvents.map(event => {
                     const tone = toneForEvent(event);
@@ -171,21 +173,21 @@ export default function HomePage() {
         <section className="animate-fade-rise stagger-2 glass-card flex flex-col p-5">
           <div className="flex items-center justify-between">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Cpu className="h-4 w-4 text-primary" /> 系统
+              <Cpu className="h-4 w-4 text-primary" /> {t('home.system')}
             </h3>
             <Link to="/settings/system" className="text-[11px] font-semibold text-primary hover:underline">
-              详情
+              {t('home.details')}
             </Link>
           </div>
           <div className="mt-4 flex-1 space-y-3">
             {metrics ? (
               <>
                 <MetricRow icon={<Cpu className="h-3.5 w-3.5" />} label="CPU" value={metrics.cpu_percent} />
-                <MetricRow icon={<MemoryStick className="h-3.5 w-3.5" />} label="内存" value={metrics.memory_percent} extra={`${metrics.memory_used_gb.toFixed(1)} / ${metrics.memory_total_gb.toFixed(1)} GB`} />
-                <MetricRow icon={<HardDrive className="h-3.5 w-3.5" />} label="磁盘" value={metrics.disk_percent} extra={`${metrics.disk_used_gb.toFixed(0)} / ${metrics.disk_total_gb.toFixed(0)} GB`} />
+                <MetricRow icon={<MemoryStick className="h-3.5 w-3.5" />} label={t('system.memory')} value={metrics.memory_percent} extra={`${metrics.memory_used_gb.toFixed(1)} / ${metrics.memory_total_gb.toFixed(1)} GB`} />
+                <MetricRow icon={<HardDrive className="h-3.5 w-3.5" />} label={t('system.disk')} value={metrics.disk_percent} extra={`${metrics.disk_used_gb.toFixed(0)} / ${metrics.disk_total_gb.toFixed(0)} GB`} />
               </>
             ) : (
-              <p className="text-xs text-slate-400">加载指标中…</p>
+              <p className="text-xs text-slate-400">{t('system.loadingMetrics')}</p>
             )}
           </div>
         </section>
@@ -194,18 +196,18 @@ export default function HomePage() {
         <section className="animate-fade-rise stagger-3 glass-card flex flex-col p-5 sm:col-span-2">
           <div className="flex items-center justify-between">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Activity className="h-4 w-4 text-primary" /> 接着上次继续
+              <Activity className="h-4 w-4 text-primary" /> {t('home.continueTitle')}
             </h3>
             <Link to="/activity/sessions" className="text-[11px] font-semibold text-primary hover:underline">
-              全部会话
+              {t('home.allSessions')}
             </Link>
           </div>
           <ul className="mt-3 flex-1 divide-y divide-slate-100">
             {recentSessions === null ? (
-              <li className="py-6 text-center text-xs text-slate-400">加载会话中…</li>
+              <li className="py-6 text-center text-xs text-slate-400">{t('home.loadingSessions')}</li>
             ) : recentSessions.length === 0 ? (
               <li className="py-6 text-center text-xs text-slate-400">
-                还没有会话——开始一次对话或运行一个任务吧。
+                {t('home.noSessions')}
               </li>
             ) : (
               recentSessions.map(session => (
@@ -219,7 +221,7 @@ export default function HomePage() {
                         {session.target}
                       </span>
                     <span className="min-w-0 truncate text-xs font-medium text-slate-700 group-hover:text-primary">
-                      {workspaceLabel(session.projectPath || '') || '未知工作区'}
+                      {workspaceLabel(session.projectPath || '') || t('home.unknownWorkspace')}
                     </span>
                     </span>
                     <span className="flex shrink-0 items-center gap-2 text-[10px] text-slate-400">
@@ -237,23 +239,23 @@ export default function HomePage() {
         <section className="animate-fade-rise stagger-4 glass-card flex flex-col p-5">
           <div className="flex items-center justify-between">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Clock3 className="h-4 w-4 text-primary" /> 自动化
+              <Clock3 className="h-4 w-4 text-primary" /> {t('home.automations')}
             </h3>
             <Link to="/automations/tasks" className="text-[11px] font-semibold text-primary hover:underline">
-              打开
+              {t('home.open')}
             </Link>
           </div>
           <div className="mt-4 flex-1">
             {runs === null ? (
-              <p className="text-xs text-slate-400">检查运行状态中…</p>
+              <p className="text-xs text-slate-400">{t('home.checkingRuns')}</p>
             ) : runs.length === 0 ? (
               <div className="space-y-2">
-                <p className="text-xs text-slate-500">当前没有运行中的任务。</p>
+                <p className="text-xs text-slate-500">{t('home.nothingRunning')}</p>
                 <Link
                   to="/automations/tasks"
                   className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
                 >
-                  运行任务 <ArrowRight className="h-3 w-3" />
+                  {t('home.runTask')} <ArrowRight className="h-3 w-3" />
                 </Link>
               </div>
             ) : (

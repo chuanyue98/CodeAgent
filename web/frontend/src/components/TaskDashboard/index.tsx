@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Activity, AlertCircle } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
+import { useT } from '../../i18n/context';
 import request from '../../utils/request';
 import usePolling from '../../hooks/usePolling';
 import GenerateTaskModal from './GenerateTaskModal';
@@ -11,6 +12,7 @@ import TaskList from './TaskList';
 import type { Engine, RunPollResponse, RunStatus, Task } from './types';
 
 const TaskDashboard: React.FC = () => {
+  const t = useT();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [runs, setRuns] = useState<RunStatus[]>([]);
   const [engines, setEngines] = useState<Engine[]>([]);
@@ -46,11 +48,11 @@ const TaskDashboard: React.FC = () => {
       setTasks(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '错误');
+      setError(e instanceof Error ? e.message : t('tasks.error'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const fetchRuns = useCallback(async () => {
     try {
@@ -81,9 +83,9 @@ const TaskDashboard: React.FC = () => {
       if (active) setActiveRunId(active.task_id);
       else setActiveRunId(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '错误');
+      setError(e instanceof Error ? e.message : t('tasks.error'));
     }
-  }, [currentGroup, runs]);
+  }, [currentGroup, runs, t]);
 
   // Deep link from the command palette: `?task=<name>` opens that task's
   // detail once the task list has loaded, then clears the param so it
@@ -105,7 +107,7 @@ const TaskDashboard: React.FC = () => {
 
   const runTask = async (engine: string) => {
     if (!selected || !workspace) {
-      setError('运行任务前请先选择工作区');
+      setError(t('tasks.selectWorkspaceFirst'));
       return;
     }
     try {
@@ -117,7 +119,7 @@ const TaskDashboard: React.FC = () => {
       setActiveRunId(status.task_id);
       void fetchRuns();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '运行任务失败');
+      setError(e instanceof Error ? e.message : t('tasks.runFailed'));
     }
   };
 

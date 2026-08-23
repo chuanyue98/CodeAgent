@@ -90,7 +90,7 @@ function auditParams(url: string) {
 describe('AuditTrail engine filtering', () => {
   test('no engine selected fetches once, without an engine param', async () => {
     renderAuditTrail();
-    await screen.findByText('4 条事件');
+    await screen.findByText('4 events');
 
     expect(auditUrls).toHaveLength(1);
     expect(auditParams(auditUrls[0]).get('engine')).toBeNull();
@@ -98,14 +98,14 @@ describe('AuditTrail engine filtering', () => {
 
   test('selecting several engines issues one request per engine', async () => {
     renderAuditTrail();
-    await screen.findByText('4 条事件');
+    await screen.findByText('4 events');
     auditUrls.length = 0;
 
     fireEvent.click(screen.getByRole('button', { name: 'claude' }));
-    await screen.findByText('1 条事件');
+    await screen.findByText('1 event');
 
     fireEvent.click(screen.getByRole('button', { name: 'codex' }));
-    await screen.findByText('2 条事件');
+    await screen.findByText('2 events');
 
     // One request per selected engine — the previous implementation fetched
     // unfiltered and narrowed client-side, so events from deselected engines
@@ -118,12 +118,12 @@ describe('AuditTrail engine filtering', () => {
 
   test('merged multi-engine results stay in newest-first order', async () => {
     renderAuditTrail();
-    await screen.findByText('4 条事件');
+    await screen.findByText('4 events');
 
     fireEvent.click(screen.getByRole('button', { name: 'claude' }));
-    await screen.findByText('1 条事件');
+    await screen.findByText('1 event');
     fireEvent.click(screen.getByRole('button', { name: 'codex' }));
-    await screen.findByText('2 条事件');
+    await screen.findByText('2 events');
 
     const rendered = screen.getAllByText(/^user: hello from /).map(node => node.textContent);
     // codex is 12:00Z, claude is 10:00Z
@@ -135,17 +135,17 @@ describe('AuditTrail engine filtering', () => {
 describe('AuditTrail date range', () => {
   test('sends the instants the local calendar day actually spans', async () => {
     renderAuditTrail();
-    await screen.findByText('4 条事件');
+    await screen.findByText('4 events');
     auditUrls.length = 0;
 
-    fireEvent.change(screen.getByLabelText('日期范围起点'), { target: { value: '2026-08-21' } });
+    fireEvent.change(screen.getByLabelText('Date range start'), { target: { value: '2026-08-21' } });
 
     await waitFor(() => expect(auditUrls).toHaveLength(1));
     const since = auditParams(auditUrls[0]).get('since')!;
     expect(new Date(since).getHours()).toBe(0);
     expect(new Date(since).getDate()).toBe(21);
 
-    fireEvent.change(screen.getByLabelText('日期范围终点'), { target: { value: '2026-08-21' } });
+    fireEvent.change(screen.getByLabelText('Date range end'), { target: { value: '2026-08-21' } });
 
     await waitFor(() => expect(auditUrls.length).toBeGreaterThan(1));
     const until = auditParams(auditUrls.at(-1)!).get('until')!;
@@ -157,23 +157,23 @@ describe('AuditTrail date range', () => {
 describe('AuditTrail project filter', () => {
   test('sends the project param when one is pinned in the URL', async () => {
     renderAuditTrail('/activity/timeline?project=%2Fworkspace%2Fproject-a');
-    await screen.findByText('4 条事件');
+    await screen.findByText('4 events');
 
     expect(auditParams(auditUrls[0]).get('project')).toBe('/workspace/project-a');
   });
 
   test('omits the project param for the all-projects choice', async () => {
     renderAuditTrail('/activity/timeline?project=all');
-    await screen.findByText('4 条事件');
+    await screen.findByText('4 events');
 
     expect(auditParams(auditUrls[0]).get('project')).toBeNull();
   });
 
   test('reads search, dates and engines back out of the URL', async () => {
     renderAuditTrail('/activity/timeline?q=codex&engines=codex&from=2026-08-21');
-    await screen.findByText('1 条事件');
+    await screen.findByText('1 event');
 
-    expect(screen.getByPlaceholderText('项目、会话、内容…')).toHaveValue('codex');
+    expect(screen.getByPlaceholderText('Project, session, content...')).toHaveValue('codex');
     expect(screen.getByRole('button', { name: 'codex', pressed: true })).toBeVisible();
     expect(auditParams(auditUrls[0]).get('engine')).toBe('codex');
   });
@@ -184,14 +184,14 @@ describe('AuditTrail project filter', () => {
     renderAuditTrail(
       '/activity/timeline?session=session-a&sessionEngine=claude&sessionProject=%2Felsewhere%2Fproject-z',
     );
-    await screen.findByText('4 条事件');
+    await screen.findByText('4 events');
 
     expect(auditParams(auditUrls[0]).get('project')).toBe('/workspace/project-a');
   });
 
   test('follows the workspace when no project is pinned', async () => {
     renderAuditTrail();
-    await screen.findByText('4 条事件');
+    await screen.findByText('4 events');
 
     // ProjectProvider auto-selects the first valid workspace, and Activity
     // now follows it like the rest of the app rather than ignoring it.
@@ -200,7 +200,7 @@ describe('AuditTrail project filter', () => {
 
   test('issues exactly one request while the workspace resolves', async () => {
     renderAuditTrail();
-    await screen.findByText('4 条事件');
+    await screen.findByText('4 events');
 
     expect(auditUrls).toHaveLength(1);
   });
@@ -211,11 +211,11 @@ describe('AuditTrail error handling', () => {
     failNext = true;
     renderAuditTrail();
 
-    await screen.findByText('加载事件失败');
+    await screen.findByText('Failed to load audit events');
     failNext = false;
 
-    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
-    await screen.findByText('4 条事件');
+    await screen.findByText('4 events');
   });
 });

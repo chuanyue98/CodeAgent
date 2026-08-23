@@ -1,4 +1,5 @@
 import { fmtCost, fmtTokens } from '../../api/analytics';
+import { useT } from '../../i18n/context';
 import { eb, ec } from './present';
 import { SectionTitle } from './ChartCards';
 import type { RangeModelStat } from './rangeStats';
@@ -16,12 +17,13 @@ export default function ModelBreakdown({
   onSelectModel,
   totalCost,
 }: ModelBreakdownProps) {
+  const t = useT();
   if (rangeModels.length === 0) return null;
   const activeModel = rangeModels.find(m => m.model === selectedModel) ?? null;
 
   return (
     <div className="animate-fade-rise stagger-6 glass-card p-5">
-      <SectionTitle>模型明细</SectionTitle>
+      <SectionTitle>{t('model.breakdown')}</SectionTitle>
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 space-y-1.5 min-w-0">
           {rangeModels.map(m => {
@@ -69,15 +71,15 @@ export default function ModelBreakdown({
           const ioRatio = m.outputTokens > 0 ? m.inputTokens / m.outputTokens : 0;
           const ioLabel = ioRatio < 0.1 ? '0:1' : ioRatio > 10 ? '1:0' : `${ioRatio.toFixed(1)}:1`;
           const ioText = ioRatio < 0.3
-            ? '输出多于输入，以生成为主的工作负载。'
+            ? t('model.generationHeavy')
             : ioRatio > 3
-            ? '输入多于输出，以上下文为主的工作负载。'
-            : '输入/输出比例均衡。';
+            ? t('model.contextHeavy')
+            : t('model.balanced');
           const rows = [
-            { label: '输入',       cost: m.inputCost,      tokens: m.inputTokens },
-            { label: '输出',      cost: m.outputCost,     tokens: m.outputTokens },
-            { label: '缓存写入', cost: m.cacheWriteCost, tokens: m.cacheCreationTokens },
-            { label: '缓存读取',  cost: m.cacheReadCost,  tokens: m.cacheReadTokens },
+            { label: t('analytics.input'), cost: m.inputCost, tokens: m.inputTokens },
+            { label: t('analytics.output'), cost: m.outputCost, tokens: m.outputTokens },
+            { label: t('model.cacheWrite'), cost: m.cacheWriteCost, tokens: m.cacheCreationTokens },
+            { label: t('model.cacheRead'), cost: m.cacheReadCost, tokens: m.cacheReadTokens },
           ];
           return (
             <div className="w-full lg:w-72 shrink-0 rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-4">
@@ -85,7 +87,7 @@ export default function ModelBreakdown({
                 <p className="text-sm font-bold text-slate-800 truncate">{m.model}</p>
                 <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
                   <span className="font-semibold text-slate-700">{pct.toFixed(1)}%</span>
-                  <span>用量</span>
+                  <span>{t('model.usage')}</span>
                   <span className="text-slate-300">•</span>
                   <span className="font-semibold text-slate-700">{ioLabel}</span>
                   <span>I/O</span>
@@ -95,17 +97,17 @@ export default function ModelBreakdown({
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-lg bg-white border border-slate-200 p-2.5">
                   <p className="text-base font-bold text-slate-800">{fmtCost(m.cost)}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">总成本</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{t('model.totalCost')}</p>
                 </div>
                 <div className="rounded-lg bg-white border border-slate-200 p-2.5">
                   <p className="text-base font-bold text-slate-800">{fmtTokens(totalTok)}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">全部 Token</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{t('model.allTokens')}</p>
                 </div>
               </div>
 
               <div>
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
-                  Token 明细
+                  {t('model.tokenBreakdown')}
                 </p>
                 <div className="space-y-1">
                   {rows.map(({ label, cost, tokens }) => (
@@ -120,7 +122,7 @@ export default function ModelBreakdown({
 
               <div className="rounded-lg bg-white border border-slate-200 p-2.5">
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">
-                  输入/输出比例
+                  {t('model.ioRatio')}
                 </p>
                 <p className="text-xs text-slate-600">{ioText}</p>
               </div>

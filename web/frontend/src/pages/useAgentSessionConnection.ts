@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { RefObject } from 'react';
+import type { AgentErrorAction } from '../types/agent';
+import { useT } from '../i18n/context';
 import {
   agentEventsUrl,
   fetchAgentHistory,
@@ -25,7 +27,7 @@ export interface UseAgentSessionConnectionArgs {
   setNativeSessionLimit: (value: number) => void;
   setUnavailableSessionLimit: (value: number) => void;
   setShowUnavailableHistory: (value: boolean) => void;
-  setError: (message: string | null) => void;
+  setError: (message: string | null, action?: AgentErrorAction) => void;
   scrollRef: RefObject<HTMLDivElement | null>;
   composerRef: RefObject<HTMLTextAreaElement | null>;
   historyCursorRef: RefObject<number | null>;
@@ -63,6 +65,7 @@ export default function useAgentSessionConnection({
   loadingOlderHistoryRef,
   loadOlderHistoryRef,
 }: UseAgentSessionConnectionArgs) {
+  const t = useT();
   const [state, dispatch] = useReducer(agentSessionReducer, initialAgentSessionState);
   const stateRef = useRef(state);
   const socketRef = useRef<WebSocket | null>(null);
@@ -148,11 +151,11 @@ export default function useAgentSessionConnection({
           }
           dispatch({ type: 'event', event: message as AgentEvent });
         } catch {
-          setError('Received an invalid Gateway event');
+          setError(t('agentPage.invalidEvent'));
         }
       };
       socket.onerror = () => {
-        setError('Agent connection failed');
+        setError(t('agentPage.connectionFailed'));
         // A no-op if onopen already resolved -- only settles the promise
         // for a connection that failed before ever opening, instead of
         // leaving callers (e.g. selectSession's spinner) blocked on this
@@ -168,7 +171,7 @@ export default function useAgentSessionConnection({
         reject(new Error('Agent connection closed'));
       };
     });
-  }, [setError]);
+  }, [setError, t]);
 
   const connectRef = useRef(connect);
   useEffect(() => {
@@ -185,7 +188,7 @@ export default function useAgentSessionConnection({
     const attempts = reconnectAttemptsRef.current;
     reconnectAttemptsRef.current += 1;
     const delay = Math.min(1000 * 2 ** attempts, 15_000);
-    setError(`Agent connection lost. Reconnecting automatically (attempt ${attempts + 1})…`);
+    setError(t('agentPage.connectionLost', { attempt: attempts + 1 }));
     if (reconnectTimerRef.current !== null) {
       window.clearTimeout(reconnectTimerRef.current);
     }
@@ -198,7 +201,7 @@ export default function useAgentSessionConnection({
         // next attempt; nothing to do with the rejection here.
       });
     }, delay);
-  }, [setError]);
+  }, [setError, t]);
 
   useEffect(() => {
     scheduleReconnectRef.current = scheduleReconnect;
@@ -237,12 +240,12 @@ export default function useAgentSessionConnection({
         if (element) element.scrollTop += element.scrollHeight - previousHeight;
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to load earlier messages');
+      setError(caught instanceof Error ? caught.message : t('agentPage.loadEarlierFailed'));
     } finally {
       loadingOlderHistoryRef.current = false;
       setLoadingOlderMessages(false);
     }
-  }, [historyCursorRef, hasOlderHistoryRef, loadingOlderHistoryRef, scrollRef, setError]);
+  }, [historyCursorRef, hasOlderHistoryRef, loadingOlderHistoryRef, scrollRef, setError, t]);
 
   useEffect(() => {
     loadOlderHistoryRef.current = () => { void loadOlderHistory(); };
@@ -272,7 +275,7 @@ export default function useAgentSessionConnection({
         setWorkspace(previousSelection.workspace);
         setSelectedProvider(previousSelection.provider);
         setPermissionMode(previousSelection.permissionMode);
-        setError(caught instanceof Error ? caught.message : 'Failed to resume session');
+        setError(caught instanceof Error ? caught.message : t('agentPage.resumeFailed'));
       }
     } finally {
       if (selectionId === selectionRequestRef.current) setSelectingKey(null);
@@ -281,14 +284,14 @@ export default function useAgentSessionConnection({
     state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects,
     setCurrentGroup, setWorkspace, setSelectedProvider, setPermissionMode,
     setNativeSessionLimit, setUnavailableSessionLimit, setShowUnavailableHistory,
-    connect, loadInitialHistory, setError,
+    connect, loadInitialHistory, setError, t,
   ]);
 
   const selectNativeSession = useCallback(async (native: NativeAgentSession) => {
     if (state.activeTurnId) return;
     const registered = validProjects.some(project => project.path === native.project_path);
     if (!registered) {
-      setError(`恢复会话前请先注册该工作区：${native.project_path}`);
+      setError(t('agent.registerBeforeResume', { path: native.project_path }), 'register-workspace');
       return;
     }
     const selectionId = ++selectionRequestRef.current;
@@ -335,7 +338,7 @@ export default function useAgentSessionConnection({
     state.activeTurnId, workspace, selectedProvider, permissionMode, validProjects,
     setCurrentGroup, setWorkspace, setSelectedProvider, setPermissionMode,
     setNativeSessionLimit, setUnavailableSessionLimit, setShowUnavailableHistory,
-    connect, loadInitialHistory, removeNativeSession, addSession, setError,
+    connect, loadInitialHistory, removeNativeSession, addSession, setError, t,
   ]);
 
   const newSession = useCallback(() => {

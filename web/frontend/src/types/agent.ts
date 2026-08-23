@@ -110,3 +110,9 @@ export interface ApprovalRequest {
   reason?: string | null;
   grantRoot?: string | null;
 }
+
+/**
+ * A follow-up the error banner can offer. Set alongside the message so the UI
+ * never has to match on translated text to decide what to show.
+ */
+export type AgentErrorAction = 'register-workspace' | null;

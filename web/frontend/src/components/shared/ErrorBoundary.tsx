@@ -1,5 +1,6 @@
 import React, { Component, type ReactNode } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import { LanguageContext, translateDefault, type LanguageContextValue } from '../../i18n/context';
 
 interface Props {
   children: ReactNode;
@@ -48,15 +49,25 @@ class ErrorBoundary extends Component<Props, State> {
     }));
   };
 
+  /**
+   * A class component can't call useT, and the app-wide instance of this
+   * boundary deliberately sits *outside* LanguageProvider so it can catch the
+   * provider itself failing. Reading the context directly covers both: the
+   * per-route boundaries translate, the outermost one falls back to English.
+   */
+  static contextType = LanguageContext;
+  declare context: LanguageContextValue | undefined;
+
   render(): ReactNode {
+    const t = this.context?.t ?? translateDefault;
     if (this.state.hasError) {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen gap-6 p-8">
           <div className="flex flex-col items-center gap-3 text-center">
             <AlertCircle className="w-12 h-12 text-red-400" />
-            <h2 className="text-xl font-semibold text-slate-900">出错了</h2>
+            <h2 className="text-xl font-semibold text-slate-900">{t('error.title')}</h2>
             <p className="text-sm text-slate-500 max-w-md">
-              {this.state.error?.message || '发生意外错误，请尝试重新加载。'}
+              {this.state.error?.message || t('error.unexpected')}
             </p>
           </div>
           <div className="flex gap-3">
@@ -65,13 +76,13 @@ class ErrorBoundary extends Component<Props, State> {
               className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors text-sm font-medium"
             >
               <RefreshCw className="w-4 h-4" />
-              重试
+              {t('error.tryAgain')}
             </button>
             <button
               onClick={() => window.location.reload()}
               className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors text-sm font-medium"
             >
-              重新加载页面
+              {t('error.reloadPage')}
             </button>
           </div>
         </div>

@@ -16,7 +16,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoPlugins(page: Page): Promise<void> {
   await page.goto('/plugins');
-  await waitForH2(page, '插件');
+  await waitForH2(page, 'Plugins');
   // Categories render in API order; explicitly select "base".
   await page.getByRole('button', { name: /^base/i }).click();
   await expect(cardByText(page, PLUGINS.base)).toBeVisible();
@@ -45,8 +45,8 @@ test('card and detail toggles flip active state', async ({ page }) => {
   await expect(card).not.toHaveClass(/bg-slate-50\/60/);
 
   await openCard(page, PLUGINS.base);
-  await expect(page.locator('main')).toContainText('插件详情');
-  const detailToggle = page.locator('div', { hasText: '中启用' }).last().locator('button');
+  await expect(page.locator('main')).toContainText('Plugin Detail');
+  const detailToggle = page.locator('div', { hasText: 'Active in' }).last().locator('button');
   await expect(detailToggle).toHaveClass(/bg-primary/);
   await backFromDetail(page);
   await expect(cardByText(page, PLUGINS.base)).toBeVisible();

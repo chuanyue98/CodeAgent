@@ -15,7 +15,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoPrompts(page: Page): Promise<void> {
   await page.goto('/prompts');
-  await waitForH2(page, '提示词');
+  await waitForH2(page, 'Prompts');
   await expect(cardByText(page, PROMPT_GROUPS.review)).toBeVisible();
 }
 
@@ -37,11 +37,11 @@ test('card opens detail with its file list and a working toggle', async ({
 }) => {
   await gotoPrompts(page);
   await openCard(page, PROMPT_GROUPS.review);
-  await expect(page.locator('main')).toContainText('提示词组详情');
-  await expect(page.locator('main')).toContainText('组内文件');
+  await expect(page.locator('main')).toContainText('Prompt Group');
+  await expect(page.locator('main')).toContainText('Files in Group');
   await expect(page.getByText('review-detailed.md')).toBeVisible();
 
-  const detailToggle = page.locator('div', { hasText: '中启用' }).last().locator('button');
+  const detailToggle = page.locator('div', { hasText: 'Active in' }).last().locator('button');
   await expect(detailToggle).toHaveClass(/bg-slate-200/);
   await detailToggle.click();
   await expect(detailToggle).toHaveClass(/bg-primary/);

@@ -8,13 +8,13 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoDashboard(page: Page): Promise<void> {
   await page.goto('/dashboard');
-  await waitForH2(page, '任务');
-  await expect(page.getByText(/个任务/)).toBeVisible();
+  await waitForH2(page, 'Tasks');
+  await expect(page.getByText(/tasks available/i)).toBeVisible();
 }
 
 test('lists the seeded tasks', async ({ page }) => {
   await gotoDashboard(page);
-  await expect(page.locator('main')).toContainText(/个任务/);
+  await expect(page.locator('main')).toContainText(/tasks available/);
   await expect(page.getByText('DB Migrate')).toBeVisible();
 });
 
@@ -23,9 +23,9 @@ test('clicking a task opens its detail view, back returns to list', async ({
 }) => {
   await gotoDashboard(page);
   await page.locator('main button', { hasText: /DB Migrate/i }).first().click();
-  await expect(page.getByRole('button', { name: '运行任务' })).toBeVisible();
-  await page.getByRole('button', { name: '返回' }).click();
-  await expect(page.getByText(/个任务/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Run Task' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByText(/tasks available/i)).toBeVisible();
 });
 
 test('running a task shows execution logs and a Stop control', async ({
@@ -33,9 +33,9 @@ test('running a task shows execution logs and a Stop control', async ({
 }) => {
   await gotoDashboard(page);
   await page.locator('main button', { hasText: /DB Migrate/i }).first().click();
-  await page.getByRole('button', { name: '运行任务' }).click();
-  await expect(page.getByText('执行日志')).toBeVisible({ timeout: 15000 });
-  await expect(page.locator('button').filter({ hasText: '停止执行' })).toBeVisible();
-  await page.locator('button').filter({ hasText: '停止执行' }).click();
-  await expect(page.getByRole('button', { name: '运行任务' })).toBeVisible();
+  await page.getByRole('button', { name: 'Run Task' }).click();
+  await expect(page.getByText('Execution Logs')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('button').filter({ hasText: 'Stop Execution' })).toBeVisible();
+  await page.locator('button').filter({ hasText: 'Stop Execution' }).click();
+  await expect(page.getByRole('button', { name: 'Run Task' })).toBeVisible();
 });

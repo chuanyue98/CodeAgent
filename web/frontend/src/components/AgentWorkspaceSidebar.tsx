@@ -25,6 +25,7 @@ import {
 import type { ConversationListItem } from '../utils/agentWorkspaceHelpers';
 import type { UnavailableWorkspaceGroup } from '../pages/useAgentWorkspaceSessions';
 import { buildTimelineLink } from '../utils/sessionLink';
+import { useLanguageCode, useT } from '../i18n/context';
 
 const PAGE_SIZE = SESSION_PAGE_SIZE;
 
@@ -125,6 +126,8 @@ export default function AgentWorkspaceSidebar({
   onToggleCollapsedWorkspace,
   onShowUnavailableHistoryChange,
 }: Props) {
+  const t = useT();
+  const language = useLanguageCode();
   const selectedCapabilities = providers.find(provider => provider.providerId === selectedProvider);
   const nativeSessionsLoading = nativeLoadingProviders.has(selectedProvider);
   const nativeSessionsError = nativeSessionErrors[selectedProvider] || null;
@@ -132,21 +135,21 @@ export default function AgentWorkspaceSidebar({
     showUnavailableHistory || Boolean(normalizedSessionSearch);
 
   return (
-    <aside aria-label="会话列表" className="glass-card flex w-60 shrink-0 flex-col p-3">
+    <aside aria-label={t('agent.sidebarLabel')} className="glass-card flex w-60 shrink-0 flex-col p-3">
       <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
         <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-          <Search className="h-4 w-4" /> 会话
+          <Search className="h-4 w-4" /> {t('agent.conversations')}
         </span>
         <button
           onClick={onNewSession}
           disabled={Boolean(state.activeTurnId)}
           className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-40"
         >
-          <Plus className="h-3.5 w-3.5" /> 新建
+          <Plus className="h-3.5 w-3.5" /> {t('agent.new')}
         </button>
       </div>
       <label className="relative mb-2 block">
-        <span className="sr-only">搜索会话</span>
+        <span className="sr-only">{t('agent.searchConversations')}</span>
         <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
         <input
           type="search"
@@ -157,22 +160,22 @@ export default function AgentWorkspaceSidebar({
             onNativeLimitChange(PAGE_SIZE);
             onUnavailableLimitChange(PAGE_SIZE);
           }}
-          placeholder="搜索会话"
+          placeholder={t('agent.searchConversations')}
           className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-2 text-xs outline-none focus:border-primary"
         />
       </label>
       <div className="custom-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto">
         {loading && (
-          <p className="px-2 text-xs text-slate-400">正在加载会话…</p>
+          <p className="px-2 text-xs text-slate-400">{t('agent.loadingSessions')}</p>
         )}
         <p className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-          工作区
+          {t('agent.workspaces')}
         </p>
         {!loading && workspaceConversations.length === 0 && (
           <p className="px-2 text-xs italic text-slate-400">
             {normalizedSessionSearch
-              ? '没有匹配的会话。'
-              : '已注册的工作区中还没有会话'}
+              ? t('agent.noMatch')
+              : t('agent.noneInRegistered')}
           </p>
         )}
         {workspaceConversations.map(group => {
@@ -209,7 +212,7 @@ export default function AgentWorkspaceSidebar({
                 <div className="ml-3 border-l border-slate-100 pl-1">
                   {group.conversations.length === 0 ? (
                     <p className="px-2 py-1.5 text-[11px] italic text-slate-400">
-                      还没有会话
+                      {t('agent.noneYet')}
                     </p>
                   ) : group.conversations.map(item =>
                     item.source === 'gateway' ? (
@@ -226,12 +229,12 @@ export default function AgentWorkspaceSidebar({
                         <button
                           onClick={() => void onSelectSession(item.session)}
                           disabled={Boolean(state.activeTurnId) || Boolean(selectingKey)}
-                          title={`${item.session.cwd} · ${relativeTime(item.session.updatedAt)}`}
+                          title={`${item.session.cwd} · ${relativeTime(item.session.updatedAt, language)}`}
                           className="min-w-0 flex-1 rounded-lg px-2 py-2 text-left text-xs disabled:opacity-40"
                         >
                           <span className="flex items-center gap-1.5">
                             <span className="block min-w-0 flex-1 truncate font-medium">
-                              {item.session.title || '未命名会话'}
+                              {item.session.title || t('agent.untitled')}
                             </span>
                             {selectingKey === item.key && (
                               <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
@@ -239,15 +242,15 @@ export default function AgentWorkspaceSidebar({
                           </span>
                           <span className="mt-0.5 block truncate text-[10px] opacity-70">
                             {item.session.provider} ·{' '}
-                            {relativeTime(item.session.updatedAt)} ·{' '}
-                            {sessionStatusLabel(item.session.status)}
+                            {relativeTime(item.session.updatedAt, language)} ·{' '}
+                            {sessionStatusLabel(item.session.status, t)}
                           </span>
                         </button>
                         <button
                           onClick={() => void onRemoveSession(item.session)}
                           disabled={Boolean(state.activeTurnId) || Boolean(selectingKey)}
-                          aria-label={`移除会话 ${item.session.title || item.session.id}`}
-                          title="移除本地会话"
+                          aria-label={t('agent.removeConversation', { name: item.session.title || item.session.id })}
+                          title={t('agent.removeLocal')}
                           className="mr-1 hidden rounded-md p-1.5 text-slate-400 hover:bg-white hover:text-red-600 disabled:opacity-40 group-hover:block focus:block"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -265,14 +268,14 @@ export default function AgentWorkspaceSidebar({
                         >
                           <span className="flex items-center gap-1.5">
                             <span className="block min-w-0 flex-1 truncate font-medium">
-                              {item.session.title || '未命名会话'}
+                              {item.session.title || t('agent.untitled')}
                             </span>
                             {selectingKey === item.key && (
                               <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
                             )}
                           </span>
                           <span className="mt-0.5 block truncate text-[10px] opacity-60">
-                            {item.session.engine} · {item.session.message_count} 条消息 ·{' '}
+                            {item.session.engine} · {t('agent.messageCount', { count: item.session.message_count })} ·{' '}
                             {relativeTime(
                               item.session.ended_at || item.session.started_at,
                             )}
@@ -280,8 +283,8 @@ export default function AgentWorkspaceSidebar({
                         </button>
                         <Link
                           to={buildTimelineLink(item.session.engine, item.session.session_id, item.session.project_path)}
-                          title="在时间线中查看"
-                          aria-label="在时间线中查看"
+                          title={t('agent.viewInTimeline')}
+                          aria-label={t('agent.viewInTimeline')}
                           className="mr-1 hidden rounded-md p-1.5 text-slate-400 hover:bg-white hover:text-primary group-hover:block focus:block"
                         >
                           <History className="h-3.5 w-3.5" />
@@ -299,13 +302,13 @@ export default function AgentWorkspaceSidebar({
             onClick={() => onGatewayLimitChange(gatewaySessionLimit + PAGE_SIZE)}
             className="w-full rounded-lg px-2 py-1.5 text-center text-[11px] font-medium text-primary hover:bg-primary/5"
           >
-            加载更多会话（
-            {filteredGatewaySessions.length - recentSessions.length}）
+            {t('agent.loadMoreConversations')} (
+            {filteredGatewaySessions.length - recentSessions.length})
           </button>
         )}
         {nativeSessionsLoading && (
           <p className="px-2 pt-1 text-xs text-slate-400">
-            正在加载 {selectedCapabilities?.displayName || selectedProvider} 历史记录…
+            {t('agent.loadingHistory', { provider: selectedCapabilities?.displayName || selectedProvider })}
           </p>
         )}
         {!nativeSessionsLoading && nativeSessionsError && (
@@ -321,7 +324,7 @@ export default function AgentWorkspaceSidebar({
               onClick={onRetryNativeSessions}
               className="mt-1 flex items-center gap-1 font-semibold underline"
             >
-              <RefreshCw className="h-3 w-3" /> 重试
+              <RefreshCw className="h-3 w-3" /> {t('common.retry')}
             </button>
           </div>
         )}
@@ -331,8 +334,8 @@ export default function AgentWorkspaceSidebar({
               onClick={() => onNativeLimitChange(nativeSessionLimit + PAGE_SIZE)}
               className="w-full rounded-lg px-2 py-1.5 text-center text-[11px] font-medium text-primary hover:bg-primary/5"
             >
-              加载更多历史记录（
-              {resumableNativeSessions.length - visibleNativeSessions.length}）
+              {t('agent.loadMoreHistory')} (
+              {resumableNativeSessions.length - visibleNativeSessions.length})
             </button>
           )}
         {!nativeSessionsLoading && unavailableSessionCount > 0 && (
@@ -346,7 +349,7 @@ export default function AgentWorkspaceSidebar({
                 className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-700"
               >
                 <span className="truncate">
-                  不可用工作区（{unavailableWorkspaceGroups.length}）
+                  {t('agent.unavailableWorkspaces', { count: unavailableWorkspaceGroups.length })}
                 </span>
                 <ChevronDown
                   className={`h-3.5 w-3.5 shrink-0 transition-transform ${
@@ -359,10 +362,10 @@ export default function AgentWorkspaceSidebar({
               {unavailableWorkspaceGroups.length > 1 && (
                 <button
                   onClick={onHideAllUnavailable}
-                  title="忽略此列表中的所有不可用工作区"
+                  title={t('agent.dismissAllUnavailable')}
                   className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                 >
-                  全部隐藏
+                  {t('agent.hideAll')}
                 </button>
               )}
             </div>
@@ -379,10 +382,12 @@ export default function AgentWorkspaceSidebar({
                       {workspaceLabel(group.path)}
                     </span>
                     <span className="mt-0.5 block truncate text-[10px] opacity-70">
-                      {group.sessions.length} 个会话 ·{' '}
-                      {latestSession.engine} · 上次活动 {relativeTime(
-                        latestSession.ended_at || latestSession.started_at,
-                      )}
+                      {group.sessions.length === 1
+                        ? t('agent.sessionCountOne', { count: group.sessions.length })
+                        : t('agent.sessionCount', { count: group.sessions.length })} ·{' '}
+                      {latestSession.engine} · {t('agent.lastActive', {
+                        time: relativeTime(latestSession.ended_at || latestSession.started_at, language),
+                      })}
                     </span>
                     <span className="mt-1 flex items-center gap-2">
                       <button
@@ -395,28 +400,28 @@ export default function AgentWorkspaceSidebar({
                         ) : (
                           <UserPlus className="h-3 w-3" />
                         )}
-                        注册
+                        {t('agent.register')}
                       </button>
                       {isHidden ? (
                         <button
                           onClick={() => onUnhideWorkspace(group.path)}
                           className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline"
                         >
-                          <EyeOff className="h-3 w-3" /> 取消隐藏
+                          <EyeOff className="h-3 w-3" /> {t('agent.unhide')}
                         </button>
                       ) : (
                         <button
                           onClick={() => onHideWorkspace(group.path)}
                           className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400 hover:text-slate-700 hover:underline"
                         >
-                          <EyeOff className="h-3 w-3" /> 隐藏
+                          <EyeOff className="h-3 w-3" /> {t('agent.hide')}
                         </button>
                       )}
                       <Link
                         to={buildTimelineLink(latestSession.engine, latestSession.session_id, latestSession.project_path)}
                         className="inline-block text-[10px] font-semibold text-primary hover:underline"
                       >
-                        在时间线中查看
+                        {t('agent.viewInTimeline')}
                       </Link>
                     </span>
                   </div>
@@ -431,7 +436,7 @@ export default function AgentWorkspaceSidebar({
                   }
                   className="w-full rounded-lg px-2 py-1.5 text-center text-[11px] font-medium text-primary hover:bg-primary/5"
                 >
-                  加载更多不可用项（
+                  {t('agent.loadMoreUnavailable')} (
                   {unavailableWorkspaceGroups.length -
                     visibleUnavailableWorkspaceGroups.length}）
                 </button>
@@ -442,8 +447,10 @@ export default function AgentWorkspaceSidebar({
                 className="w-full rounded-lg px-2 py-1.5 text-center text-[11px] font-medium text-slate-400 hover:bg-slate-50 hover:text-slate-700"
               >
                 {showHiddenWorkspaces
-                  ? '再次隐藏已忽略的工作区'
-                  : `显示 ${hiddenWorkspaceCount} 个已隐藏的工作区`}
+                  ? t('agent.hideDismissedAgain')
+                  : hiddenWorkspaceCount === 1
+                    ? t('agent.showHiddenOne', { count: hiddenWorkspaceCount })
+                    : t('agent.showHidden', { count: hiddenWorkspaceCount })}
               </button>
             )}
           </>

@@ -11,21 +11,21 @@ import AxeBuilder from '@axe-core/playwright';
 // is present catches the class of bug where a component renders nothing at
 // all for an empty array, rather than a real empty-state message.
 const PAGES: { path: string; label: string; screenshotSlug: string; emptyStateHint?: RegExp }[] = [
-  { path: '/launch', label: '本地终端', screenshotSlug: 'launch' },
+  { path: '/launch', label: 'Local Terminal', screenshotSlug: 'launch' },
   { path: '/chat', label: 'Web Agent', screenshotSlug: 'chat' },
-  { path: '/skills', label: '技能', screenshotSlug: 'skills' },
-  { path: '/prompts', label: '提示词', screenshotSlug: 'prompts' },
-  { path: '/hooks', label: '钩子', screenshotSlug: 'hooks' },
-  { path: '/plugins', label: '插件', screenshotSlug: 'plugins' },
+  { path: '/skills', label: 'Skills', screenshotSlug: 'skills' },
+  { path: '/prompts', label: 'Prompts', screenshotSlug: 'prompts' },
+  { path: '/hooks', label: 'Hooks', screenshotSlug: 'hooks' },
+  { path: '/plugins', label: 'Plugins', screenshotSlug: 'plugins' },
   { path: '/mcp', label: 'MCP', screenshotSlug: 'mcp-servers' },
-  { path: '/config', label: '工作区', screenshotSlug: 'configuration' },
-  { path: '/dashboard', label: '任务', screenshotSlug: 'dashboard' },
-  { path: '/cron', label: '定时任务', screenshotSlug: 'cron' },
-  { path: '/logs', label: '日志', screenshotSlug: 'logs' },
-  { path: '/analytics', label: '用量', screenshotSlug: 'analytics' },
-  { path: '/sessions', label: '会话', screenshotSlug: 'sessions' },
-  { path: '/audit', label: '时间线', screenshotSlug: 'audit-trail' },
-  { path: '/system', label: '系统', screenshotSlug: 'system' },
+  { path: '/config', label: 'Workspace', screenshotSlug: 'configuration' },
+  { path: '/dashboard', label: 'Tasks', screenshotSlug: 'dashboard' },
+  { path: '/cron', label: 'Schedules', screenshotSlug: 'cron' },
+  { path: '/logs', label: 'Logs', screenshotSlug: 'logs' },
+  { path: '/analytics', label: 'Usage', screenshotSlug: 'analytics' },
+  { path: '/sessions', label: 'Sessions', screenshotSlug: 'sessions' },
+  { path: '/audit', label: 'Timeline', screenshotSlug: 'audit-trail' },
+  { path: '/system', label: 'System', screenshotSlug: 'system' },
 ];
 
 for (const { path, label, screenshotSlug, emptyStateHint } of PAGES) {

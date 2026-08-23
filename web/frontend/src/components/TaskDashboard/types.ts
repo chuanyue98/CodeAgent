@@ -51,6 +51,10 @@ export type StageState = 'done' | 'wip' | 'todo';
 // whitelist means a stage still shows correctly when it's written as "已完成
 // ✅", "Done", "Blocked — waiting on review", etc. rather than only the
 // handful of exact phrases a previous run happened to produce.
+//
+// The Chinese here is data, not UI copy: these match what is written *inside a
+// user's task file*, so they stay put regardless of the interface language —
+// translating them would stop the parser recognizing existing files.
 const NOT_STARTED_PATTERN = /(未开始|not\s*started|^todo$)/i;
 const DONE_PATTERN = /(已完成|完成|done|complete|无需修改|closed|merged)/i;
 const WIP_PATTERN = /(进行中|in[\s_-]?progress|等待|pending|blocked|阻塞|review|审核)/i;

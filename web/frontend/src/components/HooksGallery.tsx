@@ -1,6 +1,7 @@
 import { Anchor, Terminal } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import ResourceGallery, { type ResourceData, type ResourceGalleryLabels, type ResourceItem } from './ResourceGallery';
+import type { Translate } from '../i18n/context';
 
 interface HookRaw {
   id: string;
@@ -16,15 +17,16 @@ interface HookMeta {
 }
 
 const labels: ResourceGalleryLabels = {
-  sidebar: '资源库',
-  detailHeading: '钩子详情',
-  backLabel: '返回钩子列表',
-  searchLabel: '搜索钩子',
-  searchPlaceholder: '搜索钩子…',
+  sidebar: 'gallery.sidebar',
+  detailHeading: 'hooks.detailHeading',
+  backLabel: 'hooks.back',
+  searchLabel: 'hooks.searchLabel',
+  searchPlaceholder: 'hooks.searchPlaceholder',
   searchId: 'hook-search',
-  emptyCategory: '该分类下没有钩子。',
-  emptySidebar: '未找到钩子。',
-  itemSingular: 'hook',
+  emptyCategory: 'hooks.emptyCategory',
+  emptySidebar: 'hooks.emptySidebar',
+  itemSingular: 'noun.hook',
+  itemPlural: 'noun.hooks',
 };
 
 /**
@@ -34,7 +36,7 @@ const labels: ResourceGalleryLabels = {
  * without a backend change, giving Hooks the same sidebar grouping as
  * Skills/Plugins instead of a single flat bucket.
  */
-function transformHooks(raw: unknown): ResourceData<HookMeta> {
+function transformHooks(raw: unknown, t: Translate): ResourceData<HookMeta> {
   const list: HookRaw[] = Array.isArray(raw) ? raw : (raw as { hooks?: HookRaw[] })?.hooks ?? [];
 
   const grouped: ResourceData<HookMeta> = {};
@@ -44,7 +46,7 @@ function transformHooks(raw: unknown): ResourceData<HookMeta> {
       id: hook.id,
       name: hook.name,
       description: hook.description,
-      readme: hook.description || '_暂无描述。_',
+      readme: hook.description || t('gallery.noDescription'),
       meta: { event: hook.event, path: hook.path },
     });
   }

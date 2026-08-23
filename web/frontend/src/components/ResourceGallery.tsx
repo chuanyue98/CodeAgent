@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { Search, BookOpen, Layers, Terminal, Globe, Cpu, ChevronRight, type LucideIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useProject, type GroupDefinition } from '../context/ProjectContext';
+import { useT, type Translate } from '../i18n/context';
+import type { TranslationKey } from '../i18n/locales/en';
 import Toggle from './shared/Toggle';
 import ErrorState from './shared/ErrorState';
 import LoadingState from './shared/LoadingState';
@@ -38,23 +40,25 @@ export type ResourceData<M = unknown> = Record<string, ResourceItem<M>[]>;
  */
 export interface ResourceGalleryLabels {
   /** Sidebar heading, e.g. "Library" / "Registry" */
-  sidebar: string;
+  sidebar: TranslationKey;
   /** Detail-view eyebrow heading, e.g. "Skill Detail" / "Plugin Detail" */
-  detailHeading: string;
+  detailHeading: TranslationKey;
   /** aria-label for the back button, e.g. "Back to skill list" */
-  backLabel: string;
+  backLabel: TranslationKey;
   /** sr-only label for the search input, e.g. "Search skills" */
-  searchLabel: string;
+  searchLabel: TranslationKey;
   /** Placeholder text for the search input, e.g. "Search skills..." */
-  searchPlaceholder: string;
-  /** id used for the search input + its sr-only label */
+  searchPlaceholder: TranslationKey;
+  /** id used for the search input + its sr-only label (not user-visible) */
   searchId: string;
   /** Empty-state message when a category has no matching items */
-  emptyCategory: string;
+  emptyCategory: TranslationKey;
   /** Optional empty-state shown in the sidebar when there is no data at all */
-  emptySidebar?: string;
-  /** Lowercase singular noun used in activate/deactivate aria-labels */
-  itemSingular: string;
+  emptySidebar?: TranslationKey;
+  /** Singular noun used in activate/deactivate aria-labels */
+  itemSingular: TranslationKey;
+  /** Plural noun used in the batch bar's count and select-all label */
+  itemPlural: TranslationKey;
 }
 
 export interface ResourceGalleryProps<M = unknown> {
@@ -69,7 +73,7 @@ export interface ResourceGalleryProps<M = unknown> {
    * reshape the raw response before it reaches the rest of the component —
    * everything past this point stays kind-agnostic either way.
    */
-  transformData?: (raw: unknown) => ResourceData<M>;
+  transformData?: (raw: unknown, t: Translate) => ResourceData<M>;
   /** Icon rendered on each resource card */
   itemIcon: LucideIcon;
   /** UI labels that differ between resource kinds */
@@ -79,13 +83,13 @@ export interface ResourceGalleryProps<M = unknown> {
    * description and under the detail-view header (e.g. a hook's
    * event/path/status, a prompt group's file-count and tags).
    */
-  renderMeta?: (item: ResourceItem<M>) => ReactNode;
+  renderMeta?: (item: ResourceItem<M>, t: Translate) => ReactNode;
   /**
    * Optional secondary panel alongside the detail view's markdown body
    * (e.g. a prompt group's "Files in Group" list). When omitted the detail
    * view is a single column.
    */
-  renderDetailAside?: (item: ResourceItem<M>) => ReactNode;
+  renderDetailAside?: (item: ResourceItem<M>, t: Translate) => ReactNode;
   /**
    * Optional extra text pulled from an item's kind-specific `meta` (e.g. a
    * hook's trigger event) that the search box should also match against,
@@ -101,16 +105,6 @@ const getCategoryIcon = (category: string) => {
     case 'devops': return <Terminal className="w-4 h-4" />;
     default: return <Layers className="w-4 h-4" />;
   }
-};
-
-// Chinese nouns for visible text and aria-labels, keyed by the English
-// `itemSingular` prop values the gallery wrappers pass (kept English as
-// stable prop values per the localization glossary).
-const ITEM_NOUNS_ZH: Record<string, string> = {
-  skill: '技能',
-  'prompt group': '提示词组',
-  hook: '钩子',
-  plugin: '插件',
 };
 
 /**
@@ -139,11 +133,12 @@ function ResourceGallery<M = unknown>({
   getSearchableMeta,
 }: ResourceGalleryProps<M>) {
   const { currentGroup, groups } = useProject();
-  const itemNoun = ITEM_NOUNS_ZH[labels.itemSingular] ?? labels.itemSingular;
+  const t = useT();
+  const itemNoun = t(labels.itemSingular);
   const { data: rawData, loading, error, refetch } = useResourceData<unknown>(apiEndpoint);
   const resourceData = useMemo(
-    () => (rawData ? (transformData ? transformData(rawData) : (rawData as ResourceData<M>)) : null),
-    [rawData, transformData]
+    () => (rawData ? (transformData ? transformData(rawData, t) : (rawData as ResourceData<M>)) : null),
+    [rawData, transformData, t]
   );
   const { toggleResource, toggleResources, toggleError, dismissToggleError } = useResourceToggle();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -231,7 +226,7 @@ function ResourceGallery<M = unknown>({
         <div className="p-6 border-b border-slate-100">
           <h2 className="text-sm font-semibold flex items-center gap-2 uppercase tracking-widest text-slate-400">
             <BookOpen className="w-4 h-4 text-primary" />
-            {labels.sidebar}
+            {t(labels.sidebar)}
           </h2>
         </div>
         <div className="custom-scrollbar flex-1 overflow-y-auto p-4 space-y-1">
@@ -258,7 +253,7 @@ function ResourceGallery<M = unknown>({
             </button>
           ))}
           {(!resourceData || Object.keys(resourceData).length === 0) && labels.emptySidebar && (
-            <div className="p-4 text-xs text-slate-400 italic">{labels.emptySidebar}</div>
+            <div className="p-4 text-xs text-slate-400 italic">{t(labels.emptySidebar)}</div>
           )}
         </div>
       </div>
@@ -271,33 +266,37 @@ function ResourceGallery<M = unknown>({
             <div className="p-6 border-b border-slate-200 flex items-center gap-4 bg-white">
               <button
                 onClick={() => setSelectedItem(null)}
-                aria-label={labels.backLabel}
+                aria-label={t(labels.backLabel)}
                 className="p-2 hover:bg-slate-100 rounded-xl transition-all border border-slate-200"
               >
                 <ChevronRight className="w-5 h-5 rotate-180" />
               </button>
               <div className="flex-1">
-                <span className="text-[10px] uppercase tracking-widest text-primary font-bold">{labels.detailHeading}</span>
+                <span className="text-[10px] uppercase tracking-widest text-primary font-bold">{t(labels.detailHeading)}</span>
                 <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{selectedItem.name}</h1>
               </div>
               <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-xl border border-slate-200">
-                <span className="text-xs font-semibold text-slate-600">在 {currentGroup} 中启用</span>
+                <span className="text-xs font-semibold text-slate-600">{t('gallery.activeIn', { group: currentGroup })}</span>
                 <Toggle
                   checked={isItemActive(selectedItem.id)}
                   onChange={(e) => toggleResource(resourceType, selectedItem.id, e)}
-                  aria-label={isItemActive(selectedItem.id) ? `停用${itemNoun}` : `启用${itemNoun}`}
+                  aria-label={
+                    isItemActive(selectedItem.id)
+                      ? t('gallery.deactivate', { item: itemNoun })
+                      : t('gallery.activate', { item: itemNoun })
+                  }
                 />
               </div>
             </div>
             {renderMeta && (
               <div className="px-8 py-4 border-b border-slate-100 bg-slate-50/50">
-                {renderMeta(selectedItem)}
+                {renderMeta(selectedItem, t)}
               </div>
             )}
             <div className={`flex-1 min-h-0 overflow-hidden ${renderDetailAside ? 'grid grid-cols-1 lg:grid-cols-[280px_1fr]' : 'flex flex-col'}`}>
               {renderDetailAside && (
                 <div className="border-r border-slate-200 bg-slate-50 p-6 overflow-y-auto">
-                  {renderDetailAside(selectedItem)}
+                  {renderDetailAside(selectedItem, t)}
                 </div>
               )}
               <div className="flex-1 overflow-y-auto p-8 bg-white prose prose-slate max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-li:text-slate-700 prose-strong:text-slate-900">
@@ -336,19 +335,25 @@ function ResourceGallery<M = unknown>({
                 cost ~100px of vertical space above the fold on every visit. */}
             <div className="animate-fade-rise stagger-2 flex flex-wrap items-center justify-between gap-3">
               <div className="relative w-full max-w-md">
-                <label htmlFor={labels.searchId} className="sr-only">{labels.searchLabel}</label>
+                <label htmlFor={labels.searchId} className="sr-only">{t(labels.searchLabel)}</label>
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   id={labels.searchId}
                   type="text"
-                  placeholder={labels.searchPlaceholder}
+                  placeholder={t(labels.searchPlaceholder)}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary/30 transition-all text-sm placeholder:text-slate-400"
                 />
               </div>
+              {/* Split around the group name rather than interpolated into one
+                  string: the name is styled, so it has to stay its own node.
+                  Both halves are separate keys so each language can put the
+                  name where its grammar wants it. */}
               <p className="text-xs text-slate-400">
-                打开开关，将{itemNoun}挂载到 <span className="font-semibold text-slate-500">{currentGroup}</span> 资源组
+                {t('gallery.mountHintPrefix', { item: itemNoun })}{' '}
+                <span className="font-semibold text-slate-500">{currentGroup}</span>{' '}
+                {t('gallery.mountHintSuffix')}
               </p>
             </div>
             <BatchActionBar
@@ -359,6 +364,7 @@ function ResourceGallery<M = unknown>({
               onActivateSelected={handleActivateSelected}
               onDeactivateSelected={handleDeactivateSelected}
               onClearSelection={() => setSelectedIds(new Set())}
+              itemsLabel={t(labels.itemPlural)}
             />
             <div className="custom-scrollbar flex-1 overflow-y-auto pr-2">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -383,7 +389,7 @@ function ResourceGallery<M = unknown>({
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
-                          aria-label={`选择 ${item.name}`}
+                          aria-label={t('gallery.select', { name: item.name })}
                           checked={selectedIds.has(item.id)}
                           onClick={e => e.stopPropagation()}
                           onChange={() => toggleItemSelected(item.id)}
@@ -397,7 +403,7 @@ function ResourceGallery<M = unknown>({
                       <Toggle
                         checked={isItemActive(item.id)}
                         onChange={(e) => toggleResource(resourceType, item.id, e)}
-                        aria-label={`切换 ${item.name} 的启用状态`}
+                        aria-label={t('gallery.toggleActive', { name: item.name })}
                       />
                     </div>
 
@@ -407,9 +413,9 @@ function ResourceGallery<M = unknown>({
                     <p className="text-sm text-slate-500 line-clamp-3 font-medium leading-relaxed">
                       {item.description}
                     </p>
-                    {renderMeta && <div className="mt-4">{renderMeta(item)}</div>}
+                    {renderMeta && <div className="mt-4">{renderMeta(item, t)}</div>}
                     <div className="mt-6 flex items-center text-[11px] font-semibold uppercase tracking-wider text-primary/60 group-hover:text-primary transition-all group-hover:translate-x-1">
-                      查看详情 <ChevronRight className="w-3 h-3 ml-1" />
+                      {t('gallery.viewDetails')} <ChevronRight className="w-3 h-3 ml-1" />
                     </div>
 
                     <div className={`absolute top-0 right-0 w-1 h-full transition-all ${
@@ -420,7 +426,7 @@ function ResourceGallery<M = unknown>({
               </div>
               {filteredItems.length === 0 && (
                 <div className="text-center py-20 text-slate-400 glass-card">
-                  {labels.emptyCategory}
+                  {t(labels.emptyCategory)}
                 </div>
               )}
             </div>

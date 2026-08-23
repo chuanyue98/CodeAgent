@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useProject } from '../context/ProjectContext';
+import { useT } from '../i18n/context';
 import { Layers, ChevronDown } from 'lucide-react';
 
 export default function ProjectSwitcher() {
+  const t = useT();
   const { currentGroup, setCurrentGroup, availableGroups, groups } = useProject();
   const [open, setOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
@@ -97,24 +99,25 @@ export default function ProjectSwitcher() {
       <button
         onClick={() => setOpen(!open)}
         onKeyDown={handleKeyDown}
+        data-testid="group-switcher"
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`资源组：${currentGroup}`}
-        title={`资源组：${currentGroup}`}
+        aria-label={t('groupSwitcher.label', { group: currentGroup })}
+        title={t('groupSwitcher.label', { group: currentGroup })}
         className="flex max-w-64 items-center gap-2 px-3 md:px-4 py-2 bg-white/50 backdrop-blur-md border border-slate-100 rounded-xl hover:bg-white transition-colors shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       >
         <Layers size={16} className="text-primary shrink-0" />
-        {/* The "资源组 · " prefix used to eat the budget and truncate the one
-            part that matters ("资源组 · codea…"). The name wins; the label
+        {/* The "Group · " prefix used to eat the budget and truncate the one
+            part that matters ("Group · codea…"). The name wins; the label
             drops out first on narrow headers. */}
         <span className="truncate text-sm font-semibold">
-          <span className="hidden text-slate-400 lg:inline">资源组 · </span>{currentGroup}
+          <span className="hidden text-slate-400 lg:inline">{t('groupSwitcher.prefix')}</span>{currentGroup}
         </span>
         <ChevronDown size={14} className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-56 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-slate-100 bg-white shadow-xl">
-          <div className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">资源组</div>
+          <div className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{t('groupSwitcher.heading')}</div>
           <div role="listbox" ref={listboxRef} className="p-2 pt-1 max-h-64 overflow-y-auto" onKeyDown={handleKeyDown}>
             {availableGroups.map((group, index) => (
               <button
@@ -136,7 +139,7 @@ export default function ProjectSwitcher() {
             ))}
           </div>
           <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-2 text-[11px] text-slate-500">
-            已配置 {resourceCount} 项资源
+            {t('groupSwitcher.resourceCount', { count: resourceCount })}
           </div>
         </div>
       )}

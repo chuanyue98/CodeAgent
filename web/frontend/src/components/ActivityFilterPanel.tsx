@@ -1,5 +1,6 @@
 import { Filter, FolderGit2, Search, X } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import { useT } from '../i18n/context';
 import { ALL_PROJECTS, type ActivityFilters } from '../hooks/useActivityFilters';
 
 /** Last path segment, for a label that fits the 14rem sidebar. */
@@ -29,6 +30,7 @@ export default function ActivityFilterPanel({
   showEventTypes = false,
 }: ActivityFilterPanelProps) {
   const { validProjects, selectedWorkspace } = useProject();
+  const t = useT();
 
   // The switcher's workspace always belongs in the list even if it isn't a
   // registered project, otherwise the active filter has no visible option.
@@ -47,21 +49,21 @@ export default function ActivityFilterPanel({
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-          <Filter className="w-4 h-4" /> 筛选
+          <Filter className="w-4 h-4" /> {t('filters.title')}
         </div>
         {filters.isFiltered && (
           <button
             onClick={filters.clearAll}
             className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600"
           >
-            <X className="w-3 h-3" /> 清除
+            <X className="w-3 h-3" /> {t('common.clear')}
           </button>
         )}
       </div>
 
       <div>
         <label className="text-xs text-slate-400 font-medium block mb-1" htmlFor="activity-search">
-          搜索
+          {t('filters.searchLabel')}
         </label>
         <div className="relative">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
@@ -78,7 +80,7 @@ export default function ActivityFilterPanel({
 
       <div>
         <label className="text-xs text-slate-400 font-medium block mb-1" htmlFor="activity-project">
-          工作区
+          {t('filters.workspace')}
         </label>
         <div className="relative">
           <FolderGit2 className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -88,7 +90,7 @@ export default function ActivityFilterPanel({
             onChange={e => filters.setProject(e.target.value)}
             className="w-full appearance-none pl-7 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
           >
-            <option value={ALL_PROJECTS}>全部工作区</option>
+            <option value={ALL_PROJECTS}>{t('filters.allWorkspaces')}</option>
             {projectPaths.map(path => (
               <option key={path} value={path} title={path}>
                 {projectLabel(path)}
@@ -98,24 +100,24 @@ export default function ActivityFilterPanel({
         </div>
         {filters.followsWorkspace && selectedWorkspace && (
           <p className="mt-1 text-[10px] leading-4 text-slate-400">
-            跟随共享的工作区选择。
+            {t('filters.followingWorkspace')}
           </p>
         )}
       </div>
 
       <div>
-        <span className="text-xs text-slate-400 font-medium block mb-1">日期范围</span>
+        <span className="text-xs text-slate-400 font-medium block mb-1">{t('filters.dateRange')}</span>
         <div className="grid grid-cols-1 gap-2">
           <input
             type="date"
-            aria-label="日期范围起点"
+            aria-label={t('filters.dateStart')}
             value={filters.dateStart}
             onChange={e => filters.setDateStart(e.target.value)}
             className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
           />
           <input
             type="date"
-            aria-label="日期范围终点"
+            aria-label={t('filters.dateEnd')}
             value={filters.dateEnd}
             onChange={e => filters.setDateEnd(e.target.value)}
             className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
@@ -125,12 +127,12 @@ export default function ActivityFilterPanel({
 
       {showEventTypes && (
         <div>
-          <span className="text-xs text-slate-400 font-medium block mb-1">事件类型</span>
+          <span className="text-xs text-slate-400 font-medium block mb-1">{t('filters.eventType')}</span>
           <div className="space-y-1">
             {[
-              { value: 'message', label: '消息' },
-              { value: 'tool_call', label: '工具调用' },
-            ].map(({ value, label }) => (
+              { value: 'message', labelKey: 'filters.eventMessage' as const },
+              { value: 'tool_call', labelKey: 'filters.eventToolCall' as const },
+            ].map(({ value, labelKey }) => (
               <button
                 key={value}
                 aria-pressed={filters.types.includes(value)}
@@ -141,7 +143,7 @@ export default function ActivityFilterPanel({
                     : 'text-slate-500 hover:bg-slate-50'
                 }`}
               >
-                {label}
+                {t(labelKey)}
               </button>
             ))}
           </div>
@@ -149,7 +151,7 @@ export default function ActivityFilterPanel({
       )}
 
       <div>
-        <span className="text-xs text-slate-400 font-medium block mb-1">引擎</span>
+        <span className="text-xs text-slate-400 font-medium block mb-1">{t('filters.engine')}</span>
         <div className="space-y-1">
           {engineOptions.map(engine => (
             <button
@@ -166,7 +168,7 @@ export default function ActivityFilterPanel({
             </button>
           ))}
           {engineOptions.length === 0 && (
-            <p className="px-2 text-xs text-slate-400">暂无引擎记录</p>
+            <p className="px-2 text-xs text-slate-400">{t('filters.noEngines')}</p>
           )}
         </div>
       </div>

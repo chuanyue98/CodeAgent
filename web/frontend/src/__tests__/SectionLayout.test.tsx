@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, test } from 'vitest';
 import SectionLayout from '../components/SectionLayout';
+import { en } from '../i18n/locales/en';
 import { ACTIVITY_FILTER_PARAMS, ACTIVITY_TABS } from '../navigation';
 
 function renderActivityTabs(initialPath: string) {
@@ -12,8 +13,8 @@ function renderActivityTabs(initialPath: string) {
           path="/activity"
           element={
             <SectionLayout
-              label="Activity"
-              description="Conversation history, agent events, usage, and logs."
+              labelKey="nav.activity"
+              descriptionKey="section.activity.description"
               tabs={ACTIVITY_TABS}
               preserveParams={ACTIVITY_FILTER_PARAMS}
             />
@@ -37,7 +38,7 @@ describe('SectionLayout preserveParams', () => {
     // Timeline threw the filters away.
     renderActivityTabs('/activity/sessions?q=deploy&engines=claude%2Ccodex&project=%2Fwork%2Fapp');
 
-    for (const label of ACTIVITY_TABS.map(tab => tab.label)) {
+    for (const label of ACTIVITY_TABS.map(tab => en[tab.labelKey])) {
       const target = new URL(href(label), 'http://localhost');
       expect(target.searchParams.get('q')).toBe('deploy');
       expect(target.searchParams.get('engines')).toBe('claude,codex');
@@ -52,7 +53,7 @@ describe('SectionLayout preserveParams', () => {
       '/activity/timeline?q=deploy&session=s-1&sessionEngine=claude&sessionProject=%2Fwork%2Fapp',
     );
 
-    const target = new URL(href('会话'), 'http://localhost');
+    const target = new URL(href('Sessions'), 'http://localhost');
     expect(target.searchParams.get('q')).toBe('deploy');
     expect(target.searchParams.get('session')).toBeNull();
     expect(target.searchParams.get('sessionEngine')).toBeNull();
@@ -62,6 +63,6 @@ describe('SectionLayout preserveParams', () => {
   test('links stay bare when nothing is filtered', () => {
     renderActivityTabs('/activity/sessions');
 
-    expect(href('时间线')).toBe('/activity/timeline');
+    expect(href('Timeline')).toBe('/activity/timeline');
   });
 });

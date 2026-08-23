@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pencil, Plus, Search, Server, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { useProject } from '../context/ProjectContext';
+import { useT } from '../i18n/context';
 import request from '../utils/request';
 import ConfirmDialog from './shared/ConfirmDialog';
 import ErrorState from './shared/ErrorState';
@@ -52,6 +53,7 @@ const EMPTY_DRAFT: ServerDraft = { name: '', kind: 'local', command: '', url: ''
  */
 export default function McpPage() {
   const { currentGroup, projects, selectedWorkspace } = useProject();
+  const t = useT();
   const [engines, setEngines] = useState<Engine[]>([]);
   const [selectedEngine, setSelectedEngine] = useState('');
   const [projectPath, setProjectPath] = useState('');
@@ -101,9 +103,9 @@ export default function McpPage() {
       })
       .catch(() => {
         if (!mountedRef.current) return;
-        setError('加载引擎失败');
+        setError(t('mcp.loadEnginesFailed'));
       });
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (projectPath || groupProjects.length === 0) return;
@@ -128,9 +130,9 @@ export default function McpPage() {
       })
       .catch(e => {
         if (!mountedRef.current) return;
-        setError(e instanceof Error ? e.message : '加载 MCP 服务器失败');
+        setError(e instanceof Error ? e.message : t('mcp.loadServersFailed'));
       });
-  }, [selectedEngine, projectPath]);
+  }, [selectedEngine, projectPath, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -199,9 +201,10 @@ export default function McpPage() {
           await addMcpServer(selectedEngine, payload);
         } catch (addErr) {
           setError(
-            `已移除 "${editName}"，但保存新配置失败：` +
-            `${addErr instanceof Error ? addErr.message : '未知错误'}。` +
-            '该服务器已被移除——请手动重新添加。',
+            t('mcp.removedButSaveFailed', {
+              name: editName,
+              error: addErr instanceof Error ? addErr.message : t('mcp.unknownError'),
+            }),
           );
           closeModal();
           loadServers();
@@ -216,7 +219,7 @@ export default function McpPage() {
       setError(
         e instanceof Error
           ? e.message
-          : `${editName ? '更新' : '添加'} MCP 服务器失败`,
+          : editName ? t('mcp.updateFailed') : t('mcp.addFailed'),
       );
     } finally {
       setSubmitting(false);
@@ -231,7 +234,7 @@ export default function McpPage() {
       await removeMcpServer(selectedEngine, serverName, projectPath);
       loadServers();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '移除 MCP 服务器失败');
+      setError(e instanceof Error ? e.message : t('mcp.removeFailed'));
     }
   };
 
@@ -242,7 +245,7 @@ export default function McpPage() {
         <div className="p-6 border-b border-slate-100">
           <h2 className="text-sm font-semibold flex items-center gap-2 uppercase tracking-widest text-slate-400">
             <Server className="w-4 h-4 text-primary" />
-            引擎
+            {t('mcp.engines')}
           </h2>
         </div>
         <div className="custom-scrollbar flex-1 overflow-y-auto p-4 space-y-1">
@@ -271,9 +274,9 @@ export default function McpPage() {
       <div className="flex-1 flex flex-col min-w-0 gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-xs text-slate-400 font-medium shrink-0">
-            工作区
+            {t('filters.workspace')}
             <select
-              aria-label="工作区"
+              aria-label={t('filters.workspace')}
               value={projectPath}
               onChange={e => setProjectPath(e.target.value)}
               disabled={groupProjects.length === 0}
@@ -287,14 +290,14 @@ export default function McpPage() {
             </select>
           </label>
           <div className="relative min-w-0 flex-1 max-w-72">
-            <label htmlFor="mcp-server-search" className="sr-only">搜索服务器</label>
+            <label htmlFor="mcp-server-search" className="sr-only">{t('mcp.searchLabel')}</label>
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
               id="mcp-server-search"
               type="text"
               value={serverSearch}
               onChange={e => setServerSearch(e.target.value)}
-              placeholder="搜索服务器…"
+              placeholder={t('mcp.searchPlaceholder')}
               disabled={servers.length === 0}
               className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary disabled:opacity-50"
             />
@@ -302,26 +305,25 @@ export default function McpPage() {
           <button
             onClick={openAdd}
             disabled={groupProjects.length === 0}
-            title={groupProjects.length === 0 ? '请先在该资源组中注册一个工作区' : '添加 MCP 服务器'}
+            title={groupProjects.length === 0 ? t('mcp.registerWorkspaceFirst') : t('mcp.addServerTitle')}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:opacity-90 transition-all font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Plus className="w-4 h-4" /> 添加服务器
+            <Plus className="w-4 h-4" /> {t('mcp.addServer')}
           </button>
         </div>
 
         {groupProjects.length === 0 && (
           <div className="glass-card p-6 text-sm text-slate-500 text-center">
-            资源组 "{currentGroup}" 尚未注册任何工作区——{' '}
+            {t('mcp.noWorkspaceForGroup', { group: currentGroup })}{' '}
             <Link to="/settings/workspace" className="font-semibold text-primary hover:underline">
-              请在工作区设置中注册
+              {t('mcp.registerInSettings')}
             </Link>。
           </div>
         )}
 
         {GLOBAL_SCOPE_ENGINES.has(selectedEngine) && (
           <div className="flex items-center gap-2 px-3 py-2 bg-amber-50/60 border border-amber-100 rounded-lg text-xs text-amber-700">
-            {selectedEngine === 'codex' ? 'Codex' : 'OpenCode'} 将 MCP 服务器存储在单一全局配置文件中，
-            不区分项目——这里添加的服务器对该引擎在任何地方都生效，与上方选择的工作区无关。
+            {t('mcp.globalScopeNotice', { engine: selectedEngine === 'codex' ? 'Codex' : 'OpenCode' })}
           </div>
         )}
 
@@ -330,11 +332,11 @@ export default function McpPage() {
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
           {servers.length === 0 ? (
             <div className="glass-card p-10 text-center">
-              <p className="text-sm text-slate-400">该引擎尚未配置 MCP 服务器。</p>
+              <p className="text-sm text-slate-400">{t('mcp.noServers')}</p>
             </div>
           ) : filteredServers.length === 0 ? (
             <div className="glass-card p-10 text-center text-sm text-slate-400">
-              没有匹配的服务器。
+              {t('mcp.noSearchMatch')}
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 pb-2">
@@ -355,16 +357,16 @@ export default function McpPage() {
                     <div className="flex items-center gap-1 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                       <button
                         onClick={() => openEdit(server)}
-                        aria-label={`编辑 ${server.name}`}
-                        title="编辑"
+                        aria-label={t('mcp.editServer', { name: server.name })}
+                        title={t('common.edit')}
                         className="p-1.5 text-slate-400 hover:text-primary transition-colors"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setPendingRemoveServer(server.name)}
-                        aria-label={`移除 ${server.name}`}
-                        title="移除"
+                        aria-label={t('mcp.removeServer', { name: server.name })}
+                        title={t('common.remove')}
                         className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -383,7 +385,7 @@ export default function McpPage() {
                     </span>
                     {server.env && Object.keys(server.env).length > 0 && (
                       <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">
-                        {Object.keys(server.env).length} 个环境变量
+                        {t('mcp.envCount', { count: Object.keys(server.env).length })}
                       </span>
                     )}
                   </div>
@@ -397,11 +399,11 @@ export default function McpPage() {
       {draft && (
         <Modal onClose={closeModal} ariaLabelledBy="mcp-modal-title">
           <h3 id="mcp-modal-title" className="text-lg font-semibold text-slate-800">
-            {editName ? `编辑 "${editName}"` : '添加 MCP 服务器'}
+            {editName ? t('mcp.editTitle', { name: editName }) : t('mcp.addTitle')}
           </h3>
           <div className="space-y-3">
             <div>
-              <label htmlFor="mcp-name" className="text-xs text-slate-400 font-medium block mb-1">名称</label>
+              <label htmlFor="mcp-name" className="text-xs text-slate-400 font-medium block mb-1">{t('mcp.name')}</label>
               <input
                 id="mcp-name"
                 type="text"
@@ -418,7 +420,7 @@ export default function McpPage() {
                   draft.kind === 'local' ? 'bg-primary/10 text-primary' : 'text-slate-500 hover:bg-slate-50'
                 }`}
               >
-                本地 (stdio)
+                {t('mcp.localStdio')}
               </button>
               <button
                 onClick={() => setDraft({ ...draft, kind: 'remote' })}
@@ -426,12 +428,12 @@ export default function McpPage() {
                   draft.kind === 'remote' ? 'bg-primary/10 text-primary' : 'text-slate-500 hover:bg-slate-50'
                 }`}
               >
-                远程 (URL)
+                {t('mcp.remoteUrl')}
               </button>
             </div>
             {draft.kind === 'local' ? (
               <div>
-                <label htmlFor="mcp-command" className="text-xs text-slate-400 font-medium block mb-1">命令</label>
+                <label htmlFor="mcp-command" className="text-xs text-slate-400 font-medium block mb-1">{t('mcp.command')}</label>
                 <input
                   id="mcp-command"
                   type="text"
@@ -456,7 +458,7 @@ export default function McpPage() {
             )}
             <div>
               <label htmlFor="mcp-env" className="text-xs text-slate-400 font-medium block mb-1">
-                环境变量（每行一个 KEY=VALUE）
+                {t('mcp.environment')}
               </label>
               <textarea
                 id="mcp-env"
@@ -473,7 +475,7 @@ export default function McpPage() {
               onClick={closeModal}
               className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors font-medium text-sm"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               onClick={() => void handleSubmit()}
@@ -486,8 +488,8 @@ export default function McpPage() {
               className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-all"
             >
               {editName
-                ? (submitting ? '保存中…' : '保存修改')
-                : <><Plus className="w-4 h-4" /> {submitting ? '添加中…' : '添加服务器'}</>}
+                ? (submitting ? t('mcp.saving') : t('mcp.saveChanges'))
+                : <><Plus className="w-4 h-4" /> {submitting ? t('mcp.adding') : t('mcp.addServer')}</>}
             </button>
           </div>
         </Modal>
@@ -495,9 +497,9 @@ export default function McpPage() {
 
       {pendingRemoveServer && (
         <ConfirmDialog
-          title="移除这个 MCP 服务器？"
-          description={`"${pendingRemoveServer}" 将从 ${selectedEngine} 的配置中移除，此操作不可撤销。`}
-          confirmLabel="移除"
+          title={t('mcp.confirmRemoveTitle')}
+          description={t('mcp.confirmRemoveDescription', { name: pendingRemoveServer, engine: selectedEngine })}
+          confirmLabel={t('common.remove')}
           onConfirm={() => void confirmRemove()}
           onCancel={() => setPendingRemoveServer(null)}
         />
