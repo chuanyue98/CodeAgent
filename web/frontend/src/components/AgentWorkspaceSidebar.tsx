@@ -132,7 +132,7 @@ export default function AgentWorkspaceSidebar({
     showUnavailableHistory || Boolean(normalizedSessionSearch);
 
   return (
-    <aside className="glass-card flex w-60 shrink-0 flex-col p-3">
+    <aside aria-label="会话列表" className="glass-card flex w-60 shrink-0 flex-col p-3">
       <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
         <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
           <Search className="h-4 w-4" /> 会话

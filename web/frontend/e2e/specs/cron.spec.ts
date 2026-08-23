@@ -9,7 +9,7 @@ test.beforeEach(async ({ baseURL }) => {
 async function gotoCron(page: Page): Promise<void> {
   await page.goto('/cron');
   await waitForH2(page, '定时任务');
-  await expect(page.getByLabel('工作区')).not.toHaveValue('');
+  await expect(page.getByLabel('工作区', { exact: true })).not.toHaveValue('');
   await expect(page.getByText('还没有定时计划')).toBeVisible();
 }
 

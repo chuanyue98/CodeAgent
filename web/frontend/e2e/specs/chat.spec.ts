@@ -9,7 +9,7 @@ test.beforeEach(async ({ baseURL }) => {
 async function gotoChat(page: Page): Promise<void> {
   await page.goto('/chat');
   await waitForH2(page, 'Web Agent');
-  await expect(page.getByLabel('工作区')).not.toHaveValue('');
+  await expect(page.getByLabel('工作区', { exact: true })).not.toHaveValue('');
 }
 
 const input = (page: Page) => page.locator('textarea');
@@ -55,11 +55,11 @@ test('an active session locks workspace and provider selection until New is clic
     timeout: 20000,
   });
 
-  await expect(page.getByLabel('工作区')).toBeDisabled();
+  await expect(page.getByLabel('工作区', { exact: true })).toBeDisabled();
   await expect(page.getByLabel('引擎')).toBeDisabled();
 
   await page.getByRole('button', { name: '新建', exact: true }).click();
-  await expect(page.getByLabel('工作区')).toBeEnabled();
+  await expect(page.getByLabel('工作区', { exact: true })).toBeEnabled();
   await expect(page.getByLabel('引擎')).toBeEnabled();
 });
 

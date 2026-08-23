@@ -10,7 +10,7 @@ async function gotoAgent(page: Page): Promise<void> {
   await page.goto('/agent/web');
   await waitForH2(page, 'Web Agent');
   await expect(page.getByPlaceholder(/发消息/)).toBeVisible();
-  await expect(page.getByLabel('工作区')).not.toHaveValue('');
+  await expect(page.getByLabel('工作区', { exact: true })).not.toHaveValue('');
   await expect(page.getByLabel('引擎')).toHaveValue('fake');
 }
 
@@ -22,7 +22,7 @@ test('creates a structured session and streams provider-neutral events', async (
 
   await expect(page.locator('main')).toContainText('Echo: hello gateway');
   await expect(page.locator('main')).toContainText('已连接');
-  await expect(page.getByLabel('工作区')).toBeDisabled();
+  await expect(page.getByLabel('工作区', { exact: true })).toBeDisabled();
   await expect(page.getByLabel('引擎')).toBeDisabled();
 });
 
@@ -86,8 +86,11 @@ test('groups conversations by workspace across providers', async ({ page, baseUR
   });
 
   await gotoAgent(page);
-  const firstWorkspace = page.getByTitle(firstProject.path);
-  const secondWorkspace = page.getByTitle(secondProject.path);
+  // Scoped to the sidebar: the header's workspace switcher carries the same
+  // path in its title attribute, so an unscoped getByTitle matches both.
+  const sidebar = page.getByRole('complementary', { name: '会话列表' });
+  const firstWorkspace = sidebar.getByTitle(firstProject.path);
+  const secondWorkspace = sidebar.getByTitle(secondProject.path);
   await expect(firstWorkspace).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByText('Fake in first workspace', { exact: true })).toBeVisible();
   await expect(secondWorkspace).toHaveAttribute('aria-expanded', 'false');
