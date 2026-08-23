@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Activity, Cpu, HardDrive, Clock, FileText } from 'lucide-react';
 import type { SystemMetrics } from '../api/system';
 import { useSystemMetrics } from '../context/SystemMetricsContext';
+import { useT } from '../i18n/context';
 
 function colorFor(value: number, thresholds: [number, number]): string {
   if (value > thresholds[1]) return 'text-red-600 bg-red-50';
@@ -22,6 +23,7 @@ export default function SystemPanel() {
   const { metrics, error, refresh } = useSystemMetrics();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const t = useT();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,8 +48,8 @@ export default function SystemPanel() {
         onClick={() => setOpen(!open)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label="系统状态"
-        title="系统状态"
+        aria-label={t('system.status')}
+        title={t('system.status')}
         className="relative flex items-center gap-1.5 rounded-xl border border-slate-100 bg-white/50 px-3 py-2 text-slate-500 shadow-sm backdrop-blur-md transition-colors hover:bg-white hover:text-slate-800"
       >
         <Activity size={16} />
@@ -61,16 +63,16 @@ export default function SystemPanel() {
         <div
           data-testid="system-metrics"
           role="dialog"
-          aria-label="系统指标"
+          aria-label={t('system.metrics')}
           className="glass-card absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] overflow-hidden p-3"
         >
           {error ? (
             <div role="alert" className="flex items-center justify-between gap-2 text-xs text-red-600">
               <span>{error}</span>
-              <button onClick={handleRetry} className="shrink-0 hover:underline">重试</button>
+              <button onClick={handleRetry} className="shrink-0 hover:underline">{t('common.retry')}</button>
             </div>
           ) : !metrics ? (
-            <p className="text-xs text-slate-400">加载指标中…</p>
+            <p className="text-xs text-slate-400">{t('system.loadingMetrics')}</p>
           ) : (
             <>
               <div className="flex items-center justify-between gap-2">
@@ -85,7 +87,7 @@ export default function SystemPanel() {
                     <HardDrive className="h-3 w-3" />{metrics.disk_percent.toFixed(0)}%
                   </span>
                   <span className="flex items-center gap-1 text-slate-400">
-                    <FileText className="h-3 w-3" />{metrics.log_file_count} 个日志
+                    <FileText className="h-3 w-3" />{t('system.logCount', { count: metrics.log_file_count })}
                   </span>
                 </div>
                 <button
@@ -93,26 +95,26 @@ export default function SystemPanel() {
                   aria-expanded={expanded}
                   className="shrink-0 text-xs text-slate-500 hover:text-slate-800"
                 >
-                  {expanded ? '收起' : '详情'}
+                  {expanded ? t('system.hide') : t('system.details')}
                 </button>
               </div>
 
               {expanded && (
                 <div className="mt-2 grid grid-cols-2 gap-3 border-t border-slate-100 pt-2 text-xs">
                   <div>
-                    <span className="text-slate-400">内存</span>
+                    <span className="text-slate-400">{t('system.memory')}</span>
                     <p className="font-medium text-slate-700">{metrics.memory_used_gb} / {metrics.memory_total_gb} GB</p>
                   </div>
                   <div>
-                    <span className="text-slate-400">磁盘</span>
+                    <span className="text-slate-400">{t('system.disk')}</span>
                     <p className="font-medium text-slate-700">{metrics.disk_used_gb} / {metrics.disk_total_gb} GB</p>
                   </div>
                   <div>
-                    <span className="text-slate-400">运行时长</span>
-                    <p className="font-medium text-slate-700">{Math.floor(metrics.uptime_seconds / 3600)} 小时</p>
+                    <span className="text-slate-400">{t('system.uptime')}</span>
+                    <p className="font-medium text-slate-700">{t('system.uptimeHours', { hours: Math.floor(metrics.uptime_seconds / 3600) })}</p>
                   </div>
                   <div>
-                    <span className="text-slate-400">历史数据库</span>
+                    <span className="text-slate-400">{t('system.historyDb')}</span>
                     <p className="font-medium text-slate-700">{metrics.history_file_size_mb} MB</p>
                   </div>
                 </div>

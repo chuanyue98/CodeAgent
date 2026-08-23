@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock, Plus, Trash2, Play, PauseCircle, PlayCircle, Pencil, X, Search } from 'lucide-react';
 import cronstrue from 'cronstrue';
 import { useProject } from '../context/ProjectContext';
+import { useT } from '../i18n/context';
 import usePolling from '../hooks/usePolling';
 import request from '../utils/request';
 import ConfirmDialog from './shared/ConfirmDialog';
@@ -38,6 +39,7 @@ export default function CronPage() {
     selectedWorkspace: workspace,
     setSelectedWorkspace: setWorkspace,
   } = useProject();
+  const t = useT();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -107,9 +109,9 @@ export default function CronPage() {
       })
       .catch(() => {
         if (!mountedRef.current) return;
-        setError('加载定时计划失败');
+        setError(t('cron.loadSchedulesFailed'));
       });
-  }, []);
+  }, [t]);
 
   const retrySchedules = useCallback(() => {
     setError(null);
@@ -125,7 +127,7 @@ export default function CronPage() {
       })
       .catch(() => {
         if (!mountedRef.current) return;
-        setError('加载任务失败');
+        setError(t('cron.loadTasksFailed'));
       });
 
     request<Engine[]>('/api/engines')
@@ -136,9 +138,9 @@ export default function CronPage() {
       })
       .catch(() => {
         if (!mountedRef.current) return;
-        setError('加载引擎失败');
+        setError(t('cron.loadEnginesFailed'));
       });
-  }, []);
+  }, [t]);
 
   usePolling(loadSchedules, POLL_INTERVAL_MS);
 
@@ -167,8 +169,8 @@ export default function CronPage() {
         e instanceof Error
           ? e.message
           : editingScheduleId
-            ? '更新定时计划失败'
-            : '创建定时计划失败',
+            ? t('cron.updateFailed')
+            : t('cron.createFailed'),
       );
     } finally {
       setSubmitting(false);
@@ -193,7 +195,7 @@ export default function CronPage() {
       await updateSchedule(schedule.id, { enabled: !schedule.enabled });
       loadSchedules();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '更新定时计划失败');
+      setError(e instanceof Error ? e.message : t('cron.updateFailed'));
     }
   };
 
@@ -208,7 +210,7 @@ export default function CronPage() {
       if (editingScheduleId === id) setEditingScheduleId(null);
       loadSchedules();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '删除定时计划失败');
+      setError(e instanceof Error ? e.message : t('cron.deleteFailed'));
     }
   };
 
@@ -230,7 +232,7 @@ export default function CronPage() {
       await runScheduleNow(id);
       loadSchedules();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '运行定时计划失败');
+      setError(e instanceof Error ? e.message : t('cron.runFailed'));
     }
   };
 
@@ -238,18 +240,18 @@ export default function CronPage() {
     <div className="flex flex-col lg:flex-row gap-4 min-h-full lg:h-full">
       <section className="w-full lg:w-80 shrink-0 glass-card p-5 space-y-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-          <Clock className="w-4 h-4" /> {editingScheduleId ? '编辑定时计划' : '新建定时计划'}
+          <Clock className="w-4 h-4" /> {editingScheduleId ? t('cron.editTitle') : t('cron.newTitle')}
         </div>
 
         <div>
-          <label className="text-xs text-slate-400 font-medium block mb-1">工作区</label>
+          <label className="text-xs text-slate-400 font-medium block mb-1">{t('filters.workspace')}</label>
           <select
-            aria-label="工作区"
+            aria-label={t('filters.workspace')}
             value={workspace}
             onChange={e => setWorkspace(e.target.value)}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
           >
-            <option value="" disabled>选择工作区</option>
+            <option value="" disabled>{t('cron.selectWorkspace')}</option>
             {projects.filter(project => project.available !== false).map(project => (
               <option key={project.path} value={project.path}>{project.path}</option>
             ))}
@@ -257,9 +259,9 @@ export default function CronPage() {
         </div>
 
         <div>
-          <label className="text-xs text-slate-400 font-medium block mb-1">任务</label>
+          <label className="text-xs text-slate-400 font-medium block mb-1">{t('cron.task')}</label>
           <select
-            aria-label="任务"
+            aria-label={t('cron.task')}
             value={taskName}
             onChange={e => setTaskName(e.target.value)}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
@@ -273,9 +275,9 @@ export default function CronPage() {
         </div>
 
         <div>
-          <label className="text-xs text-slate-400 font-medium block mb-1">引擎</label>
+          <label className="text-xs text-slate-400 font-medium block mb-1">{t('filters.engine')}</label>
           <select
-            aria-label="引擎"
+            aria-label={t('filters.engine')}
             value={engine}
             onChange={e => setEngine(e.target.value)}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
@@ -290,7 +292,7 @@ export default function CronPage() {
 
         <div>
           <label className="text-xs text-slate-400 font-medium block mb-1">
-            cron 表达式
+            {t('cron.expression')}
           </label>
           <input
             type="text"
@@ -300,7 +302,7 @@ export default function CronPage() {
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white font-mono focus:outline-none focus:border-primary"
           />
           <p className="text-[10px] text-slate-400 mt-1">
-            标准 5 段 cron 语法（分 时 日 月 周）。
+            {t('cron.syntaxHint')}
           </p>
           {cronExpr.trim() && (
             <div className="mt-1.5 rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2 text-xs">
@@ -309,12 +311,12 @@ export default function CronPage() {
                   <p className="font-medium text-slate-600">{cronDescription}</p>
                   {cronPreview.nextRuns.length > 0 && (
                     <p className="mt-1 text-[11px] text-slate-400">
-                      下次：{formatTimestamp(cronPreview.nextRuns[0])}
+                      {t('cron.next', { time: formatTimestamp(cronPreview.nextRuns[0]) })}
                     </p>
                   )}
                 </>
               ) : (
-                <p className="text-red-500">无效的 cron 表达式——请检查语法。</p>
+                <p className="text-red-500">{t('cron.invalid')}</p>
               )}
             </div>
           )}
@@ -326,14 +328,14 @@ export default function CronPage() {
           className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-95 transition-all"
         >
           {editingScheduleId ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {editingScheduleId ? '保存定时计划' : '创建定时计划'}
+          {editingScheduleId ? t('cron.save') : t('cron.create')}
         </button>
         {editingScheduleId && (
           <button
             onClick={() => setEditingScheduleId(null)}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50"
           >
-            <X className="w-4 h-4" /> 取消编辑
+            <X className="w-4 h-4" /> {t('cron.cancelEditing')}
           </button>
         )}
       </section>
@@ -341,21 +343,21 @@ export default function CronPage() {
       <div className="flex-1 min-w-0 glass-card p-5 flex flex-col">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-            <Clock className="w-4 h-4" /> 定时计划
+            <Clock className="w-4 h-4" /> {t('cron.listTitle')}
             <span className="text-xs font-normal text-slate-400">
               ({filteredSchedules.length}{scheduleSearch ? ` / ${schedules.length}` : ''})
             </span>
           </div>
           {schedules.length > 0 && (
             <div className="relative w-full max-w-56">
-              <label htmlFor="schedule-search" className="sr-only">搜索定时计划</label>
+              <label htmlFor="schedule-search" className="sr-only">{t('cron.searchLabel')}</label>
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
                 id="schedule-search"
                 type="text"
                 value={scheduleSearch}
                 onChange={e => setScheduleSearch(e.target.value)}
-                placeholder="搜索定时计划…"
+                placeholder={t('cron.searchPlaceholder')}
                 className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
               />
             </div>
@@ -371,11 +373,11 @@ export default function CronPage() {
         <div className="flex-1 overflow-y-auto space-y-2">
           {schedules.length === 0 && (
             <p className="text-sm text-slate-500 text-center py-8">
-              还没有定时计划。创建一个即可自动运行任务。
+              {t('cron.empty')}
             </p>
           )}
           {schedules.length > 0 && filteredSchedules.length === 0 && (
-            <p className="text-sm text-slate-400 text-center py-8">没有匹配的定时计划。</p>
+            <p className="text-sm text-slate-400 text-center py-8">{t('cron.noSearchMatch')}</p>
           )}
           {filteredSchedules.map(schedule => (
             <div
@@ -386,7 +388,7 @@ export default function CronPage() {
             >
               <button
                 onClick={() => void toggleEnabled(schedule)}
-                title={schedule.enabled ? '停用' : '启用'}
+                title={schedule.enabled ? t('cron.disable') : t('cron.enable')}
                 className="shrink-0 text-slate-400 hover:text-primary transition-colors"
               >
                 {schedule.enabled ? (
@@ -408,14 +410,14 @@ export default function CronPage() {
                     {schedule.cronExpr}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 bg-primary/5 text-primary rounded truncate max-w-56">
-                    {schedule.workspace || '需要工作区'}
+                    {schedule.workspace || t('cron.workspaceRequired')}
                   </span>
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-3">
-                  <span>下次：{formatTimestamp(schedule.nextRunAt)}</span>
+                  <span>{t('cron.next', { time: formatTimestamp(schedule.nextRunAt) })}</span>
                   {schedule.lastRunStatus && (
                     <span>
-                      上次：{schedule.lastRunStatus} ({formatTimestamp(schedule.lastRunAt)})
+                      {t('cron.last', { status: schedule.lastRunStatus, time: formatTimestamp(schedule.lastRunAt) })}
                     </span>
                   )}
                 </div>
@@ -423,21 +425,21 @@ export default function CronPage() {
 
               <button
                 onClick={() => handleEdit(schedule)}
-                title="编辑"
+                title={t('common.edit')}
                 className="shrink-0 p-1.5 text-slate-400 hover:text-primary transition-colors"
               >
                 <Pencil className="w-4 h-4" />
               </button>
               <button
                 onClick={() => void handleRunNow(schedule.id)}
-                title="立即运行"
+                title={t('cron.runNow')}
                 className="shrink-0 p-1.5 text-slate-400 hover:text-primary transition-colors"
               >
                 <Play className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setPendingDeleteId(schedule.id)}
-                title="删除"
+                title={t('common.delete')}
                 className="shrink-0 p-1.5 text-slate-400 hover:text-red-500 transition-colors"
               >
                 <Trash2 className="w-4 h-4" />
@@ -449,9 +451,12 @@ export default function CronPage() {
 
       {pendingDeleteSchedule && (
         <ConfirmDialog
-          title="删除这个定时计划？"
-          description={`"${pendingDeleteSchedule.taskName}"（${pendingDeleteSchedule.cronExpr}）将停止运行。此操作不可撤销。`}
-          confirmLabel="删除"
+          title={t('cron.confirmDeleteTitle')}
+          description={t('cron.confirmDeleteDescription', {
+            task: pendingDeleteSchedule.taskName,
+            expr: pendingDeleteSchedule.cronExpr,
+          })}
+          confirmLabel={t('common.delete')}
           onConfirm={() => void confirmDelete()}
           onCancel={() => setPendingDeleteId(null)}
         />

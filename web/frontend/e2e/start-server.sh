@@ -34,6 +34,18 @@ trap cleanup EXIT INT TERM
 export HOME="$SCRATCH/home"
 mkdir -p "$HOME"
 
+# Windows: Python's Path.home() reads USERPROFILE (then HOMEDRIVE+HOMEPATH) and
+# never HOME, so the analytics collectors -- which resolve ~/.claude, ~/.codex,
+# ~/.gemini themselves -- kept reading the developer's real history despite the
+# scratch HOME above, and the seeded-fixture assertions saw hundreds of real
+# sessions. cygpath exists only on Windows/Cygwin shells, so this is a no-op
+# everywhere else (CI included).
+if command -v cygpath >/dev/null 2>&1; then
+  export USERPROFILE="$(cygpath -w "$HOME")"
+  export HOMEDRIVE="${USERPROFILE%%:*}:"
+  export HOMEPATH="${USERPROFILE#*:}"
+fi
+
 export CA_CONFIG_PATH="$SCRATCH/config.json"
 export CA_TASKS_ROOT="$SCRATCH/tasks"
 export CA_SKILLS_ROOT="$SCRATCH/skills"

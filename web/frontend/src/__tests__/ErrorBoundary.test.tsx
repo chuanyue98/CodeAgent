@@ -40,17 +40,17 @@ afterEach(() => {
 });
 
 describe('ErrorBoundary retry', () => {
-  test('"重试" remounts children so a transient failure gets a genuine second attempt', async () => {
+  test('"Try Again" remounts children so a transient failure gets a genuine second attempt', async () => {
     render(
       <ErrorBoundary>
         <Flaky />
       </ErrorBoundary>,
     );
 
-    await screen.findByText('出错了');
+    await screen.findByText('Something went wrong');
     expect(fetchAttempts).toBe(1);
 
-    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
 
     await screen.findByText('Recovered after 2 attempt(s)');
     expect(fetchAttempts).toBe(2);
@@ -66,12 +66,12 @@ describe('ErrorBoundary retry', () => {
         <AlwaysThrows />
       </ErrorBoundary>,
     );
-    expect(screen.getByText('出错了')).toBeVisible();
+    expect(screen.getByText('Something went wrong')).toBeVisible();
 
-    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
 
     // Still broken (this component can never succeed) -- but it must show
     // the error UI again, not a blank screen or stale content.
-    expect(screen.getByText('出错了')).toBeVisible();
+    expect(screen.getByText('Something went wrong')).toBeVisible();
   });
 });

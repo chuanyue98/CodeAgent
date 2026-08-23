@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useT } from '../../i18n/context';
 import {
   type DailyUsage,
   type EngineSummary,
@@ -34,6 +35,7 @@ export interface AnalyticsData {
  * read as pure transforms of this data.
  */
 export default function useAnalyticsData(): AnalyticsData {
+  const t = useT();
   const [engines, setEngines] = useState<EngineSummary[]>([]);
   const [daily, setDaily] = useState<DailyUsage[]>([]);
   const [monthly, setMonthly] = useState<MonthlyUsage[]>([]);
@@ -65,11 +67,11 @@ export default function useAnalyticsData(): AnalyticsData {
       setError(null);
     } catch (e) {
       if (!mountedRef.current) return;
-      setError(e instanceof Error ? e.message : '加载分析数据失败');
+      setError(e instanceof Error ? e.message : t('analytics.loadFailed'));
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadAll(); }, [loadAll]);

@@ -16,7 +16,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoSkills(page: Page): Promise<void> {
   await page.goto('/skills');
-  await waitForH2(page, '技能');
+  await waitForH2(page, 'Skills');
   // Categories render in API order; the first selected is not deterministic,
   // so explicitly select "base" (which holds the skills we assert on).
   await page.getByRole('button', { name: /^base/i }).click();
@@ -50,7 +50,7 @@ test('search filters the current category', async ({ page }) => {
 test('search with no match shows the empty state', async ({ page }) => {
   await gotoSkills(page);
   await typeSearch(page, 'zzzz-nope');
-  await expect(page.locator('main')).toContainText('该分类下没有技能。');
+  await expect(page.locator('main')).toContainText('No skills found');
 });
 
 test('clicking a card opens the detail view, back returns to list', async ({
@@ -58,7 +58,7 @@ test('clicking a card opens the detail view, back returns to list', async ({
 }) => {
   await gotoSkills(page);
   await openCard(page, SKILLS.base[0]);
-  await expect(page.locator('main')).toContainText('技能详情');
+  await expect(page.locator('main')).toContainText('Skill Detail');
   await expect(page.getByRole('heading', { level: 1, name: SKILLS.base[0] })).toBeVisible();
   await backFromDetail(page);
   await expect(cardByText(page, SKILLS.base[0])).toBeVisible();

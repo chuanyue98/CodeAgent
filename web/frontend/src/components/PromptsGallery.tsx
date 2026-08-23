@@ -1,4 +1,5 @@
 import { BookMarked, Files } from 'lucide-react';
+import type { Translate } from '../i18n/context';
 import ResourceGallery, { type ResourceData, type ResourceGalleryLabels, type ResourceItem } from './ResourceGallery';
 
 interface PromptFile {
@@ -19,15 +20,16 @@ interface PromptMeta {
 }
 
 const labels: ResourceGalleryLabels = {
-  sidebar: '资源库',
-  detailHeading: '提示词组详情',
-  backLabel: '返回提示词组列表',
-  searchLabel: '搜索提示词组',
-  searchPlaceholder: '搜索提示词组…',
+  sidebar: 'gallery.sidebar',
+  detailHeading: 'prompts.detailHeading',
+  backLabel: 'prompts.back',
+  searchLabel: 'prompts.searchLabel',
+  searchPlaceholder: 'prompts.searchPlaceholder',
   searchId: 'prompt-search',
-  emptyCategory: '该分类下没有提示词组。',
-  emptySidebar: '未找到提示词组。',
-  itemSingular: 'prompt group',
+  emptyCategory: 'prompts.emptyCategory',
+  emptySidebar: 'prompts.emptySidebar',
+  itemSingular: 'noun.promptGroup',
+  itemPlural: 'noun.promptGroups',
 };
 
 /**
@@ -54,12 +56,12 @@ function transformPrompts(raw: unknown): ResourceData<PromptMeta> {
   };
 }
 
-function renderMeta(item: ResourceItem<PromptMeta>) {
+function renderMeta(item: ResourceItem<PromptMeta>, t: Translate) {
   const files = item.meta?.files ?? [];
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="mr-1 text-[11px] font-bold uppercase tracking-widest text-slate-500">
-        {files.length} 个文件
+        {files.length === 1 ? t('prompts.fileCountOne') : t('prompts.fileCount', { count: files.length })}
       </span>
       {files.slice(0, 4).map(file => (
         <span key={file.path} className="rounded-full border border-slate-100 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-600">
@@ -75,13 +77,13 @@ function renderMeta(item: ResourceItem<PromptMeta>) {
   );
 }
 
-function renderDetailAside(item: ResourceItem<PromptMeta>) {
+function renderDetailAside(item: ResourceItem<PromptMeta>, t: Translate) {
   const files = item.meta?.files ?? [];
   return (
     <>
       <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
         <Files className="h-4 w-4 text-primary" />
-        组内文件
+        {t('prompts.filesInGroup')}
       </div>
       <div className="space-y-2">
         {files.map(file => (

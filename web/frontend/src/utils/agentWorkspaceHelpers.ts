@@ -1,6 +1,12 @@
 import { formatDistanceToNow } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
+import { enUS, zhCN } from 'date-fns/locale';
+import type { Translate } from '../i18n/context';
+import type { Language } from '../i18n/language';
 import type { AgentSession, NativeAgentSession } from '../types/agent';
+
+// date-fns carries its own translations; map ours onto them so "3 hours ago"
+// follows the UI language instead of being permanently zh-CN.
+const DATE_LOCALES = { en: enUS, zh: zhCN };
 
 export function requestId(): string {
   return crypto.randomUUID();
@@ -17,20 +23,22 @@ export function workspaceLabel(path: string): string {
   return normalized.split('/').filter(Boolean).at(-1) || path;
 }
 
-export function relativeTime(value: string | null | undefined): string {
+export function relativeTime(value: string | null | undefined, language: Language = 'en'): string {
   if (!value) return '';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '' : formatDistanceToNow(date, { addSuffix: true, locale: zhCN });
+  if (Number.isNaN(date.getTime())) return '';
+  return formatDistanceToNow(date, { addSuffix: true, locale: DATE_LOCALES[language] });
 }
 
-export function sessionStatusLabel(status: AgentSession['status']): string {
+/** Pure helper, so the caller hands it `t` rather than it reaching for a hook. */
+export function sessionStatusLabel(status: AgentSession['status'], t: Translate): string {
   switch (status) {
-    case 'error': return '需要关注';
-    case 'disconnected': return '重新连接';
-    case 'busy': return '运行中';
-    case 'starting': return '启动中';
-    case 'closed': return '已关闭';
-    default: return '就绪';
+    case 'error': return t('agent.status.error');
+    case 'disconnected': return t('agent.status.disconnected');
+    case 'busy': return t('agent.status.busy');
+    case 'starting': return t('agent.status.starting');
+    case 'closed': return t('agent.status.closed');
+    default: return t('agent.status.ready');
   }
 }
 

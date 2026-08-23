@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 import type { TooltipPayloadEntry } from 'recharts';
 import { fmtCost, fmtTokens } from '../../api/analytics';
+import { useT } from '../../i18n/context';
 import { ec, formatDate, formatMonth } from './present';
 import type { TimeSeries } from './rangeStats';
 
@@ -87,11 +88,14 @@ interface TrendCardsProps {
 }
 
 export function CostTrendCard({ series, granularity, rangeLabel }: TrendCardsProps) {
+  const t = useT();
   const formatAxis = granularity === 'month' ? formatMonth : formatDate;
   return (
     <div className="animate-fade-rise stagger-2 glass-card p-5">
       <SectionTitle>
-        按引擎成本 — {granularity === 'month' ? '按月' : `最近 ${rangeLabel}`}
+        {t('charts.costByEngine', {
+          period: granularity === 'month' ? t('charts.perMonth') : t('charts.lastRange', { range: rangeLabel }),
+        })}
       </SectionTitle>
       <ResponsiveContainer width="100%" height={240}>
         <AreaChart data={series.cost} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
@@ -136,10 +140,13 @@ export function CostTrendCard({ series, granularity, rangeLabel }: TrendCardsPro
 }
 
 export function TokensTrendCard({ series, granularity, rangeLabel }: TrendCardsProps) {
+  const t = useT();
   return (
     <div className="animate-fade-rise stagger-3 glass-card p-5">
       <SectionTitle>
-        按引擎 Token — {granularity === 'month' ? '按月' : `最近 ${rangeLabel}`}
+        {t('charts.tokensByEngine', {
+          period: granularity === 'month' ? t('charts.perMonth') : t('charts.lastRange', { range: rangeLabel }),
+        })}
       </SectionTitle>
       <ResponsiveContainer width="100%" height={200}>
         {granularity === 'month' ? (
@@ -204,10 +211,11 @@ export interface PieDatum {
 }
 
 export function CostDistributionCard({ pieData }: { pieData: PieDatum[] }) {
+  const t = useT();
   if (pieData.length === 0) return null;
   return (
     <div className="glass-card p-4">
-      <SectionTitle>成本分布</SectionTitle>
+      <SectionTitle>{t('charts.costDistribution')}</SectionTitle>
       <ResponsiveContainer width="100%" height={180}>
         <PieChart>
           <Pie

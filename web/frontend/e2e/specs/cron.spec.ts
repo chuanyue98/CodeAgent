@@ -8,40 +8,40 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoCron(page: Page): Promise<void> {
   await page.goto('/cron');
-  await waitForH2(page, '定时任务');
-  await expect(page.getByLabel('工作区', { exact: true })).not.toHaveValue('');
-  await expect(page.getByText('还没有定时计划')).toBeVisible();
+  await waitForH2(page, 'Schedules');
+  await expect(page.getByLabel('Workspace', { exact: true })).not.toHaveValue('');
+  await expect(page.getByText('No schedules yet.')).toBeVisible();
 }
 
 test('creating a schedule adds it to the list', async ({ page }) => {
   await gotoCron(page);
-  await page.getByLabel('任务').selectOption('db-migrate');
-  await page.getByLabel('引擎').selectOption('claude');
+  await page.getByLabel('Task').selectOption('db-migrate');
+  await page.getByLabel('Engine').selectOption('claude');
   await page.getByPlaceholder('0 9 * * *').fill('0 0 * * *');
-  await page.getByRole('button', { name: '创建定时计划' }).click();
+  await page.getByRole('button', { name: 'Create Schedule' }).click();
   await expect(page.locator('main')).toContainText('db-migrate');
-  await expect(page.locator('main')).toContainText('下次：');
+  await expect(page.locator('main')).toContainText('Next:');
 });
 
 test('toggling a schedule disables then re-enables it', async ({ page }) => {
   await gotoCron(page);
-  await page.getByLabel('任务').selectOption('db-migrate');
-  await page.getByLabel('引擎').selectOption('claude');
+  await page.getByLabel('Task').selectOption('db-migrate');
+  await page.getByLabel('Engine').selectOption('claude');
   await page.getByPlaceholder('0 9 * * *').fill('0 0 * * *');
-  await page.getByRole('button', { name: '创建定时计划' }).click();
-  await page.getByTitle('停用').click();
-  await expect(page.getByTitle('启用')).toBeVisible();
-  await page.getByTitle('启用').click();
-  await expect(page.getByTitle('停用')).toBeVisible();
+  await page.getByRole('button', { name: 'Create Schedule' }).click();
+  await page.getByTitle('Disable').click();
+  await expect(page.getByTitle('Enable')).toBeVisible();
+  await page.getByTitle('Enable').click();
+  await expect(page.getByTitle('Disable')).toBeVisible();
 });
 
 test('deleting a schedule returns to the empty state', async ({ page }) => {
   await gotoCron(page);
-  await page.getByLabel('任务').selectOption('db-migrate');
-  await page.getByLabel('引擎').selectOption('claude');
+  await page.getByLabel('Task').selectOption('db-migrate');
+  await page.getByLabel('Engine').selectOption('claude');
   await page.getByPlaceholder('0 9 * * *').fill('0 0 * * *');
-  await page.getByRole('button', { name: '创建定时计划' }).click();
-  await page.getByTitle('删除').click();
-  await page.getByRole('alertdialog').getByRole('button', { name: '删除' }).click();
-  await expect(page.getByText('还没有定时计划')).toBeVisible();
+  await page.getByRole('button', { name: 'Create Schedule' }).click();
+  await page.getByTitle('Delete').click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+  await expect(page.getByText('No schedules yet.')).toBeVisible();
 });

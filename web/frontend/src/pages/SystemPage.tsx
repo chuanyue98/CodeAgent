@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
 import { fetchSystemHealth, type SystemHealth } from '../api/system';
 import { useSystemMetrics } from '../context/SystemMetricsContext';
+import { useT } from '../i18n/context';
 
 function StatusIcon({ status }: { status: string }) {
   if (status === '[OK]') return <CheckCircle className="w-4 h-4 text-green-600" />;
@@ -26,6 +27,7 @@ function MetricBar({ label, value, max, unit, color }: { label: string; value: n
 }
 
 export default function SystemPage() {
+  const t = useT();
   // Metrics come from the same shared poller SystemPanel (the header
   // popover) reads from, so the two views never show different numbers for
   // the same instant. Health checks are this page's own concern -- they're
@@ -35,20 +37,22 @@ export default function SystemPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
+  // useCallback because it now closes over `t`: without a stable identity the
+  // mount effect below would re-run on every render.
+  const load = useCallback(async () => {
     try {
       const h = await fetchSystemHealth();
       setHealth(h);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '加载失败');
+      setError(e instanceof Error ? e.message : t('systemPage.loadFailed'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [load]);
 
   const handleRefresh = () => {
     void load();
@@ -56,7 +60,7 @@ export default function SystemPage() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64 text-sm text-slate-400">加载系统信息中…</div>;
+    return <div className="flex items-center justify-center h-64 text-sm text-slate-400">{t('systemPage.loading')}</div>;
   }
   if (error) {
     return <div className="p-8 text-red-600 text-sm">{error}</div>;
@@ -67,9 +71,9 @@ export default function SystemPage() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-slate-800">系统健康</h2>
+        <h2 className="text-lg font-bold text-slate-800">{t('systemPage.health')}</h2>
         <button onClick={handleRefresh} className="flex items-center gap-2 px-3 py-1.5 text-sm border border-slate-200 rounded-xl hover:border-primary/30">
-          <RefreshCw className="w-3.5 h-3.5" /> 刷新
+          <RefreshCw className="w-3.5 h-3.5" /> {t('common.refresh')}
         </button>
       </div>
 
@@ -81,22 +85,22 @@ export default function SystemPage() {
       )}
       {metrics && (
         <div className="glass-card p-5 space-y-4">
-          <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">指标</p>
+          <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">{t('systemPage.metrics')}</p>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <MetricBar label="CPU" value={metrics.cpu_percent} max={100} unit="%" color={metrics.cpu_percent > 80 ? '#ef4444' : '#3b82f6'} />
-            <MetricBar label="内存" value={metrics.memory_percent} max={100} unit="%" color={metrics.memory_percent > 80 ? '#ef4444' : '#10b981'} />
-            <MetricBar label="磁盘" value={metrics.disk_percent} max={100} unit="%" color={metrics.disk_percent > 90 ? '#ef4444' : '#f59e0b'} />
+            <MetricBar label={t('system.memory')} value={metrics.memory_percent} max={100} unit="%" color={metrics.memory_percent > 80 ? '#ef4444' : '#10b981'} />
+            <MetricBar label={t('system.disk')} value={metrics.disk_percent} max={100} unit="%" color={metrics.disk_percent > 90 ? '#ef4444' : '#f59e0b'} />
             <div className="space-y-1">
               <div className="flex justify-between text-xs">
-                <span className="text-slate-500">运行时长</span>
+                <span className="text-slate-500">{t('system.uptime')}</span>
                 <span className="text-slate-700 font-medium">{uptimeHours}h</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-slate-500">历史数据库</span>
+                <span className="text-slate-500">{t('systemPage.historyFile')}</span>
                 <span className="text-slate-700">{metrics.history_file_size_mb} MB</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-slate-500">日志文件</span>
+                <span className="text-slate-500">{t('systemPage.logFiles')}</span>
                 <span className="text-slate-700">{metrics.log_file_count}</span>
               </div>
             </div>

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router';
 import { ChevronDown, ChevronUp, Clock, Wrench, MessageSquare, AlertCircle, RefreshCw } from 'lucide-react';
 import { fetchAuditEvents, type AuditEvent, type FetchAuditEventsParams } from '../api/audit';
 import useActivityFilters from '../hooks/useActivityFilters';
+import { useT } from '../i18n/context';
 import { localDayEndISO, localDayStartISO } from '../utils/dateRange';
 import { ALL_ENGINES } from '../utils/engines';
 import ActivityFilterPanel from './ActivityFilterPanel';
@@ -25,6 +26,7 @@ export default function AuditTrail() {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const t = useT();
   const filters = useActivityFilters();
   const {
     search,
@@ -106,13 +108,13 @@ export default function AuditTrail() {
       .catch(() => {
         if (!mounted) return;
         setLoading(false);
-        setError('加载事件失败');
+        setError(t('timeline.loadFailed'));
       });
 
     return () => {
       mounted = false;
     };
-  }, [engineKey, dateStart, dateEnd, project, ready, reloadNonce]);
+  }, [engineKey, dateStart, dateEnd, project, ready, reloadNonce, t]);
 
   // Escape-key support for the session detail drawer (previously only
   // closable by clicking the backdrop or the X button).
@@ -145,7 +147,7 @@ export default function AuditTrail() {
   }, [events, search, selectedTypes]);
 
   if (loading) {
-    return <FilterListSkeleton label="加载事件中" />;
+    return <FilterListSkeleton label={t('timeline.loading')} />;
   }
 
   if (error) {
@@ -157,30 +159,32 @@ export default function AuditTrail() {
       <ActivityFilterPanel
         filters={filters}
         engineOptions={ALL_ENGINES}
-        searchPlaceholder="项目、会话、内容…"
+        searchPlaceholder={t('timeline.searchPlaceholder')}
         showEventTypes
       />
 
       <div className="flex-1 min-w-0 glass-card p-5 flex flex-col">
         <div className="flex items-center justify-between mb-2">
           <p className="text-xs text-slate-400 font-medium">
-            {filtered.length} 条事件
+            {filtered.length === 1
+              ? t('timeline.countOne', { count: filtered.length })
+              : t('timeline.count', { count: filtered.length })}
           </p>
           <button
             onClick={load}
             className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
           >
-            <RefreshCw className="w-3 h-3" /> 刷新
+            <RefreshCw className="w-3 h-3" /> {t('common.refresh')}
           </button>
         </div>
         <p className="text-[11px] text-slate-400 mb-4">
-          跨会话与引擎的全部消息和工具调用，按时间倒序——在这里搜索某件事发生在哪个会话。这不是审批或权限日志。
+          {t('timeline.blurb')}
         </p>
 
         {truncated && (
           <div className="flex items-center gap-2 mb-4 px-3 py-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            每个引擎仅显示最近 {EVENT_LIMIT.toLocaleString()} 条事件。有更多结果匹配你的筛选——缩小日期范围以查看。
+            {t('timeline.truncated', { limit: EVENT_LIMIT.toLocaleString() })}
           </div>
         )}
 
@@ -231,7 +235,7 @@ export default function AuditTrail() {
                 {isExpanded && (
                   <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-600 space-y-2">
                     {event.event_type === 'message' ? (
-                      <p className="whitespace-pre-wrap break-words">{event.content_preview || '（空）'}</p>
+                      <p className="whitespace-pre-wrap break-words">{event.content_preview || t('timeline.emptyContent')}</p>
                     ) : (
                       <>
                         <div><span className="text-slate-400">args: </span><span className="font-mono break-words">{event.args_preview || '—'}</span></div>
@@ -242,7 +246,7 @@ export default function AuditTrail() {
                       onClick={() => setDrawerSession({ engine: event.engine, sessionId: event.session_id, project: event.project_path })}
                       className="text-primary text-xs font-medium hover:underline"
                     >
-                      查看完整会话 →
+                        {t('timeline.viewFullSession')}
                     </button>
                   </div>
                 )}
@@ -250,7 +254,7 @@ export default function AuditTrail() {
             );
           })}
           {filtered.length === 0 && (
-            <p className="text-sm text-slate-400 text-center py-8">没有符合筛选条件的事件</p>
+            <p className="text-sm text-slate-400 text-center py-8">{t('timeline.empty')}</p>
           )}
         </div>
       </div>

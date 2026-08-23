@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import { ArrowUpRight as LinkArrow, Clock, Terminal } from 'lucide-react';
 import { fmtCost, fmtTokens, type EngineSummary, type SessionUsage } from '../../api/analytics';
+import { useT } from '../../i18n/context';
 import { eb, ec, timeAgo } from './present';
 import { SectionTitle } from './ChartCards';
 import { CostDistributionCard, type PieDatum } from './ChartCards';
@@ -23,6 +24,7 @@ export default function EnginePanel({
   totalLabel,
   recentSessions,
 }: EnginePanelProps) {
+  const t = useT();
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -35,13 +37,13 @@ export default function EnginePanel({
               <span className={`text-[11px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${eb(eng.target)}`}>
                 {eng.target}
               </span>
-              <span className="text-xs text-slate-400">{eng.sessionCount} 个会话</span>
+              <span className="text-xs text-slate-400">{t('engine.sessionCount', { count: eng.sessionCount })}</span>
             </div>
             <div className="space-y-1.5 text-xs">
               {[
-                { label: '输入', value: fmtTokens(eng.inputTokens) },
-                { label: '输出', value: fmtTokens(eng.outputTokens) },
-                { label: '缓存', value: fmtTokens(eng.cacheCreationTokens + eng.cacheReadTokens) },
+                { label: t('analytics.input'), value: fmtTokens(eng.inputTokens) },
+                { label: t('analytics.output'), value: fmtTokens(eng.outputTokens) },
+                { label: t('analytics.cache'), value: fmtTokens(eng.cacheCreationTokens + eng.cacheReadTokens) },
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between">
                   <span className="text-slate-400">{label}</span>
@@ -49,19 +51,19 @@ export default function EnginePanel({
                 </div>
               ))}
               <div className="flex justify-between pt-1.5 border-t border-slate-100">
-                <span className="text-slate-500 font-medium">预估成本</span>
+                <span className="text-slate-500 font-medium">{t('engine.estCost')}</span>
                 <span className="font-bold" style={{ color: ec(eng.target) }}>
                   {fmtCost(eng.cost)}
                 </span>
               </div>
             </div>
             <div className="mt-2 text-[10px] text-slate-300 truncate">
-              {eng.models.slice(0, 2).join(', ')}{eng.models.length > 2 && ` +${eng.models.length - 2} 个`}
+              {eng.models.slice(0, 2).join(', ')}{eng.models.length > 2 && ` ${t('engine.moreModels', { count: eng.models.length - 2 })}`}
             </div>
           </div>
         ))}
         {rangeEngines.length === 0 && (
-          <p className="text-xs text-slate-400">该时间范围内没有引擎用量。</p>
+          <p className="text-xs text-slate-400">{t('engine.noUsage')}</p>
         )}
       </div>
 
@@ -75,11 +77,11 @@ export default function EnginePanel({
                 to="/activity/sessions"
                 className="flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline"
               >
-                全部会话 <LinkArrow className="h-3 w-3" />
+                {t('engine.allSessions')} <LinkArrow className="h-3 w-3" />
               </Link>
             }
           >
-            <span className="flex items-center gap-1.5"><Terminal className="w-3 h-3" /> 会话</span>
+            <span className="flex items-center gap-1.5"><Terminal className="w-3 h-3" /> {t('engine.sessions')}</span>
           </SectionTitle>
           <div className="grid grid-cols-2 gap-2 mb-3">
             <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-center">
@@ -90,12 +92,12 @@ export default function EnginePanel({
             </div>
             <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-center">
               <p className="text-lg font-bold text-green-700">{fmtCost(avgCostPerSession)}</p>
-              <p className="text-[9px] text-slate-600 uppercase tracking-wide">每会话平均</p>
+              <p className="text-[9px] text-slate-600 uppercase tracking-wide">{t('engine.avgPerSession')}</p>
             </div>
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium mb-1">
-              <Clock className="w-3 h-3" /> 最近动态
+              <Clock className="w-3 h-3" /> {t('engine.recentActivity')}
             </div>
             {recentSessions.map(s => (
               <div
@@ -111,7 +113,7 @@ export default function EnginePanel({
                       {s.target}
                     </span>
                   </div>
-                  <span className="text-[10px] text-slate-400">{timeAgo(s.lastActivity)}</span>
+                  <span className="text-[10px] text-slate-400">{timeAgo(s.lastActivity, t)}</span>
                 </div>
                 <div className="text-right shrink-0 ml-2">
                   <div className="font-mono text-[11px] font-semibold text-slate-700">
@@ -124,7 +126,7 @@ export default function EnginePanel({
               </div>
             ))}
             {recentSessions.length === 0 && (
-              <p className="text-[11px] text-slate-400">该时间范围内没有会话。</p>
+              <p className="text-[11px] text-slate-400">{t('engine.noSessions')}</p>
             )}
           </div>
         </div>

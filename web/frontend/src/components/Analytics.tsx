@@ -11,6 +11,7 @@ import {
 import ErrorState from './shared/ErrorState';
 import LoadingState from './shared/LoadingState';
 import { fmtCost, fmtTokens } from '../api/analytics';
+import { useT } from '../i18n/context';
 import useAnalyticsData from './analytics/useAnalyticsData';
 import { StatCard } from './analytics/ChartCards';
 import { CostTrendCard, TokensTrendCard } from './analytics/ChartCards';
@@ -19,7 +20,8 @@ import ModelBreakdown from './analytics/ModelBreakdown';
 import DetailTable from './analytics/DetailTable';
 import {
   RANGES,
-  activeRangeOf,
+  RANGE_DAYS,
+  RANGE_LABEL_KEYS,
   buildRangeEngines,
   buildRangeModels,
   buildSeries,
@@ -37,40 +39,45 @@ const Analytics: React.FC = () => {
     engines, daily, monthly, sessions, modelStats, totalSessions,
     loading, refreshing, error, retry, handleRefresh,
   } = useAnalyticsData();
+  const t = useT();
 
-  const activeRange = activeRangeOf(range);
-  const rangeLabel = activeRange.label.toLowerCase();
+  // Read from two separate maps rather than off one range object — see the
+  // note on RANGE_DAYS for why sharing the object costs the page its
+  // memoization.
+  const rangeDays = RANGE_DAYS[range];
 
   // Over a long window a per-day series is unreadable, so the all-time view
   // rolls up by month. This is what the old separate Monthly tab was for.
   const granularity: 'day' | 'month' = range === 'all' ? 'month' : 'day';
 
   const rangeDaily = useMemo(
-    () => filterDailyByRange(daily, activeRange.days),
-    [daily, activeRange.days],
+    () => filterDailyByRange(daily, rangeDays),
+    [daily, rangeDays],
   );
 
   const totals = useMemo(() => computeTotals(rangeDaily), [rangeDaily]);
 
   const rangeSessions = useMemo(
-    () => filterSessionsByRange(sessions, activeRange.days),
-    [sessions, activeRange.days],
+    () => filterSessionsByRange(sessions, rangeDays),
+    [sessions, rangeDays],
   );
 
   // `summary.session_count` is authoritative but all-time only; a narrowed
   // range has to count the fetched window instead.
-  const sessionCount = activeRange.days === null ? totalSessions : rangeSessions.length;
+  const sessionCount = rangeDays === null ? totalSessions : rangeSessions.length;
   const avgCostPerSession = sessionCount > 0 ? totals.cost / sessionCount : 0;
 
   const rangeEngines = useMemo(
-    () => buildRangeEngines(engines, rangeDaily, rangeSessions, activeRange.days),
-    [engines, rangeDaily, rangeSessions, activeRange.days],
+    () => buildRangeEngines(engines, rangeDaily, rangeSessions, rangeDays),
+    [engines, rangeDaily, rangeSessions, rangeDays],
   );
 
   const rangeModels = useMemo(
-    () => buildRangeModels(modelStats, rangeDaily, activeRange.days),
-    [modelStats, rangeDaily, activeRange.days],
+    () => buildRangeModels(modelStats, rangeDaily, rangeDays),
+    [modelStats, rangeDaily, rangeDays],
   );
+
+  const rangeLabel = t(RANGE_LABEL_KEYS[range]).toLowerCase();
 
   const series = useMemo(
     () => buildSeries(granularity, monthly, rangeDaily),
@@ -103,7 +110,7 @@ const Analytics: React.FC = () => {
         <div
           className="flex gap-1 bg-slate-100 p-1 rounded-xl"
           role="group"
-          aria-label="时间范围"
+          aria-label={t('analytics.timeRange')}
         >
           {RANGES.map(r => (
             <button
@@ -116,7 +123,7 @@ const Analytics: React.FC = () => {
                   : 'text-slate-600 hover:text-slate-800'
               }`}
             >
-              {r.label}
+              {t(r.labelKey)}
             </button>
           ))}
         </div>
@@ -128,7 +135,7 @@ const Analytics: React.FC = () => {
             hover:border-primary/30 transition-all disabled:opacity-50"
         >
           <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
-          刷新
+          {t('common.refresh')}
         </button>
       </div>
 
@@ -140,10 +147,9 @@ const Analytics: React.FC = () => {
           <div className="rounded-2xl bg-primary/10 p-3 text-primary">
             <TrendingUp className="h-6 w-6" />
           </div>
-          <p className="text-sm font-semibold text-slate-800">还没有用量记录</p>
+          <p className="text-sm font-semibold text-slate-800">{t('analytics.noUsageTitle')}</p>
           <p className="max-w-md text-xs leading-5 text-slate-500">
-            Token 数量和成本估算读取自各引擎 CLI 在本机写入的会话日志。运行一次代理会话或任务，
-            然后点击刷新——生成这些数字不会向任何地方发送数据。
+            {t('analytics.noUsageBody')}
           </p>
         </div>
       )}
@@ -152,9 +158,9 @@ const Analytics: React.FC = () => {
           7 days", which otherwise render as the same wall of zeros. */}
       {hasUsage && !hasRangeUsage && (
         <div className="glass-card flex flex-col items-center gap-1 px-6 py-8 text-center">
-          <p className="text-sm font-semibold text-slate-800">最近 {rangeLabel}内没有用量</p>
+          <p className="text-sm font-semibold text-slate-800">{t('analytics.emptyRangeTitle', { range: rangeLabel })}</p>
           <p className="text-xs text-slate-500">
-            选择更长的时间范围即可查看更早的记录。
+            {t('analytics.emptyRangeBody')}
           </p>
         </div>
       )}
@@ -162,29 +168,31 @@ const Analytics: React.FC = () => {
       {/* ── Stat cards ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatCard
-          label="总 Token"
+          label={t('analytics.totalTokens')}
           value={fmtTokens(totals.inputTokens + totals.outputTokens + totals.cacheTokens)}
           sub={`${fmtTokens(totals.inputTokens)} in / ${fmtTokens(totals.outputTokens)} out`}
           Icon={FileText} iconColor="text-blue-600" iconBg="bg-blue-100" stagger="stagger-2"
         />
         <StatCard
-          label="总成本" value={fmtCost(totals.cost)}
-          sub={`每会话 ~${fmtCost(avgCostPerSession)}`}
+          label={t('analytics.totalCost')} value={fmtCost(totals.cost)}
+          sub={t('analytics.perSession', { cost: fmtCost(avgCostPerSession) })}
           Icon={DollarSign} iconColor="text-green-600" iconBg="bg-green-100" stagger="stagger-3"
         />
         <StatCard
-          label="缓存 Token" value={fmtTokens(totals.cacheTokens)}
-          sub={`${rangeEngines.length} 个引擎`}
+          label={t('analytics.cacheTokens')} value={fmtTokens(totals.cacheTokens)}
+          sub={rangeEngines.length === 1
+            ? t('analytics.engineCountOne', { count: rangeEngines.length })
+            : t('analytics.engineCount', { count: rangeEngines.length })}
           Icon={Database} iconColor="text-cyan-600" iconBg="bg-cyan-100" stagger="stagger-4"
         />
         <StatCard
-          label="输入成本"
+          label={t('analytics.inputCost')}
           value={fmtCost(rangeModels.reduce((s, m) => s + m.inputCost, 0))}
           sub={`${fmtTokens(totals.inputTokens)} Token`}
           Icon={ArrowDownRight} iconColor="text-purple-600" iconBg="bg-purple-100" stagger="stagger-5"
         />
         <StatCard
-          label="输出成本"
+          label={t('analytics.outputCost')}
           value={fmtCost(rangeModels.reduce((s, m) => s + m.outputCost, 0))}
           sub={`${fmtTokens(totals.outputTokens)} Token`}
           Icon={ArrowUpRight} iconColor="text-orange-600" iconBg="bg-orange-100" stagger="stagger-6"
@@ -201,7 +209,7 @@ const Analytics: React.FC = () => {
         pieData={pieData}
         sessionCount={sessionCount}
         avgCostPerSession={avgCostPerSession}
-        totalLabel={activeRange.days === null ? '总计' : `最近 ${rangeLabel}`}
+        totalLabel={rangeDays === null ? t('analytics.total') : t('analytics.lastRange', { range: rangeLabel })}
         recentSessions={recentSessions}
       />
 

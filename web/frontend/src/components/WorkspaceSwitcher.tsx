@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FolderGit2, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router';
 import { useProject } from '../context/ProjectContext';
+import { useT } from '../i18n/context';
 import { workspaceLabel } from '../utils/agentWorkspaceHelpers';
 
 /**
@@ -11,6 +12,7 @@ import { workspaceLabel } from '../utils/agentWorkspaceHelpers';
  * am I on right now" — this surfaces it globally, next to the group chip.
  */
 export default function WorkspaceSwitcher() {
+  const t = useT();
   const { validProjects, selectedWorkspace, setSelectedWorkspace } = useProject();
   const [open, setOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
@@ -105,20 +107,22 @@ export default function WorkspaceSwitcher() {
         onKeyDown={handleKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`当前工作区：${current ? workspaceLabel(current.path) : '未选择'}`}
-        title={current?.path || '选择工作区'}
+        aria-label={t('workspaceSwitcher.current', {
+          name: current ? workspaceLabel(current.path) : t('workspaceSwitcher.none'),
+        })}
+        title={current?.path || t('workspaceSwitcher.pick')}
         className="flex max-w-56 items-center gap-2 px-3 md:px-4 py-2 bg-white/50 backdrop-blur-md border border-slate-100 rounded-xl hover:bg-white transition-colors shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       >
         <FolderGit2 size={16} className="text-primary shrink-0" />
         <span className="truncate text-sm font-semibold">
-          <span className="hidden text-slate-400 lg:inline">工作区 · </span>
-          {current ? workspaceLabel(current.path) : '未选择'}
+          <span className="hidden text-slate-400 lg:inline">{t('workspaceSwitcher.prefix')}</span>
+          {current ? workspaceLabel(current.path) : t('workspaceSwitcher.none')}
         </span>
         <ChevronDown size={14} className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-64 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-slate-100 bg-white shadow-xl">
-          <div className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">工作区</div>
+          <div className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{t('filters.workspace')}</div>
           <div role="listbox" ref={listboxRef} className="p-2 pt-1 max-h-64 overflow-y-auto" onKeyDown={handleKeyDown}>
             {validProjects.map((project, index) => (
               <button
@@ -142,8 +146,8 @@ export default function WorkspaceSwitcher() {
             ))}
           </div>
           <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-2 text-[11px] text-slate-500">
-            切换工作区会一并切换它所属的资源组（{current?.group ?? '—'}） ·{' '}
-            <Link to="/settings/workspace" className="text-primary hover:underline">管理</Link>
+            {t('workspaceSwitcher.groupNote', { group: current?.group ?? '—' })}{' '}
+            <Link to="/settings/workspace" className="text-primary hover:underline">{t('workspaceSwitcher.manage')}</Link>
           </div>
         </div>
       )}

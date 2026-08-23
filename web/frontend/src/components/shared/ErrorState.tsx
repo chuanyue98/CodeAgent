@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertCircle } from 'lucide-react';
+import { useT } from '../../i18n/context';
 
 interface ErrorStateProps {
   message: string;
@@ -10,7 +11,9 @@ interface ErrorStateProps {
  * Consistent error display with optional retry button.
  * Retry triggers a callback instead of page reload.
  */
-const ErrorState: React.FC<ErrorStateProps> = ({ message, onRetry }) => (
+const ErrorState: React.FC<ErrorStateProps> = ({ message, onRetry }) => {
+  const t = useT();
+  return (
   <div className="animate-fade-rise flex flex-col items-center justify-center h-96 gap-4">
     <div className="flex items-center gap-3 text-red-500">
       <AlertCircle className="w-6 h-6" />
@@ -21,10 +24,11 @@ const ErrorState: React.FC<ErrorStateProps> = ({ message, onRetry }) => (
         onClick={onRetry}
         className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_20px_-8px_hsl(192_82%_31%/0.4)] text-sm font-medium"
       >
-        重试
+        {t('common.retry')}
       </button>
     )}
   </div>
-);
+  );
+};
 
 export default ErrorState;

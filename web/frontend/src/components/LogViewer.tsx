@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Terminal, AlertCircle, Wifi, WifiOff } from 'lucide-react';
 import { fetchLogFiles, fetchLogFile, useLogStream, type LogFile } from '../api/logs';
 import usePolling from '../hooks/usePolling';
+import { useT } from '../i18n/context';
 
 // Rendering every line of a long-running task's log as its own DOM node gets
 // sluggish well before the 10,000-line cap in api/logs.ts is reached. Only
@@ -10,6 +11,7 @@ import usePolling from '../hooks/usePolling';
 const DEFAULT_VISIBLE_LINES = 1500;
 
 export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }) {
+  const t = useT();
   const [files, setFiles] = useState<LogFile[] | undefined>(undefined);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId ?? null);
   const [initialContent, setInitialContent] = useState<string>("");
@@ -26,9 +28,9 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
       await fetchLogFiles().then(setFiles);
       setFilesError(null);
     } catch (e) {
-      setFilesError(e instanceof Error ? e.message : '加载日志文件失败');
+      setFilesError(e instanceof Error ? e.message : t('logs.loadFailed'));
     }
-  }, []);
+  }, [t]);
 
   usePolling(loadFiles, 10000);
 
@@ -73,11 +75,11 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
       <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-b border-slate-100">
         <div className="flex flex-wrap items-center gap-2">
           <Terminal className="w-4 h-4 text-slate-500" />
-          <span className="text-sm font-semibold text-slate-700">日志</span>
+          <span className="text-sm font-semibold text-slate-700">{t('logs.title')}</span>
           {selectedTaskId && (
             <span className={`flex items-center gap-1 text-xs ${connected ? 'text-green-600' : 'text-red-500'}`}>
               {connected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {connected ? '实时' : '已断开'}
+              {connected ? t('logs.live') : t('logs.disconnected')}
             </span>
           )}
         </div>
@@ -85,7 +87,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
           onClick={() => setAutoScroll(!autoScroll)}
           className="text-xs text-slate-500 hover:text-slate-800"
         >
-          {autoScroll ? '自动滚动：开' : '自动滚动：关'}
+          {autoScroll ? t('logs.autoScrollOn') : t('logs.autoScrollOff')}
         </button>
       </div>
 
@@ -108,7 +110,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
             </button>
           ))}
           {files?.length === 0 && (
-            <p className="text-xs text-slate-400 px-2">暂无日志文件</p>
+            <p className="text-xs text-slate-400 px-2">{t('logs.noFiles')}</p>
           )}
         </div>
 
@@ -117,7 +119,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto p-3 font-mono text-xs leading-relaxed bg-slate-50/50"
         >
-          {loading && <p className="text-slate-400">加载中…</p>}
+          {loading && <p className="text-slate-400">{t('common.loading')}</p>}
           {error && (
             <div className="flex items-center gap-2 text-red-600 mb-2">
               <AlertCircle className="w-3 h-3" />
@@ -127,13 +129,16 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
           {truncated && (
             <div className="sticky top-0 z-10 mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
               <span>
-                正在显示全部 {allLines.length.toLocaleString()} 行中的最后 {DEFAULT_VISIBLE_LINES.toLocaleString()} 行
+                {t('logs.truncated', {
+            visible: DEFAULT_VISIBLE_LINES.toLocaleString(),
+            total: allLines.length.toLocaleString(),
+          })}
               </span>
               <button
                 onClick={() => setShowAllLines(true)}
                 className="font-semibold text-amber-900 underline hover:no-underline"
               >
-                显示全部
+                {t('logs.showAll')}
               </button>
             </div>
           )}

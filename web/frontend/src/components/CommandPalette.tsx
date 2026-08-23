@@ -3,7 +3,9 @@ import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent
 import { useNavigate } from 'react-router';
 import { Search, SquareStack, MessageSquare, ListChecks, FolderGit2, Pin, PinOff } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
-import { PAGE_LABELS } from '../navigation';
+import { useT } from '../i18n/context';
+import type { TranslationKey } from '../i18n/locales/en';
+import { PAGE_LABEL_KEYS } from '../navigation';
 import { fetchSessions, type SessionUsage } from '../api/analytics';
 import { buildSessionLink } from '../utils/sessionLink';
 import request from '../utils/request';
@@ -19,7 +21,8 @@ interface PaletteItem {
   id: string;
   label: string;
   hint: string;
-  section: '已固定' | '跳转' | '资源组' | '会话' | '任务' | '工作区';
+  /** Heading the item is grouped under, translated at render. */
+  section: Extract<TranslationKey, `palette.section.${string}`>;
   icon: typeof SquareStack;
   run: () => void;
   /**
@@ -54,6 +57,7 @@ export default function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { availableGroups, currentGroup, setCurrentGroup, projects, setSelectedWorkspace } = useProject();
+  const t = useT();
 
   // Sessions/tasks are only fetched once the palette is actually opened, and
   // only the first time -- there's no reason to hit these endpoints on every
@@ -71,19 +75,19 @@ export default function CommandPalette() {
   }, [open, dataLoaded]);
 
   const items = useMemo<PaletteItem[]>(() => {
-    const navItems: PaletteItem[] = Object.entries(PAGE_LABELS).map(([path, label]) => ({
+    const navItems: PaletteItem[] = Object.entries(PAGE_LABEL_KEYS).map(([path, labelKey]) => ({
       id: `nav:${path}`,
-      label,
+      label: t(labelKey),
       hint: path,
-      section: '跳转',
+      section: 'palette.section.navigate',
       icon: SquareStack,
       run: () => navigate(path),
     }));
     const groupItems: PaletteItem[] = availableGroups.map(group => ({
       id: `group:${group}`,
-      label: `切换到 ${group}`,
-      hint: group === currentGroup ? '当前资源组' : '资源组',
-      section: '资源组',
+      label: t('palette.switchTo', { group }),
+      hint: group === currentGroup ? t('palette.currentGroup') : t('palette.group'),
+      section: 'palette.section.group',
       icon: SquareStack,
       run: () => setCurrentGroup(group),
     }));
@@ -94,7 +98,7 @@ export default function CommandPalette() {
         pinKey: `workspace:${project.path}`,
         label: project.path.split(/[\\/]/).filter(Boolean).pop() || project.path,
         hint: project.path,
-        section: '工作区',
+        section: 'palette.section.workspace',
         icon: FolderGit2,
         run: () => {
           // Switching workspaces is a global scope change, not navigation:
@@ -106,8 +110,8 @@ export default function CommandPalette() {
     const sessionItems: PaletteItem[] = sessions.map(session => ({
       id: `session:${session.target}:${session.sessionId}`,
       label: session.projectPath.split(/[\\/]/).filter(Boolean).pop() || session.sessionId,
-      hint: `${session.target} 会话 · ${session.projectPath}`,
-      section: '会话',
+      hint: t('palette.sessionHint', { engine: session.target, path: session.projectPath }),
+      section: 'palette.section.session',
       icon: MessageSquare,
       run: () => navigate(buildSessionLink(session.target, session.sessionId, session.projectPath || '')),
     }));
@@ -115,8 +119,8 @@ export default function CommandPalette() {
       id: `task:${task.name}`,
       pinKey: `task:${task.name}`,
       label: task.title || task.name,
-      hint: task.description || `任务 · ${task.name}`,
-      section: '任务',
+      hint: task.description || t('palette.taskHint', { name: task.name }),
+      section: 'palette.section.task',
       icon: ListChecks,
       run: () => navigate(`/automations/tasks?task=${encodeURIComponent(task.name)}`),
     }));
@@ -126,9 +130,9 @@ export default function CommandPalette() {
     // `pinKey` so unpinning from either copy stays in sync.
     const pinnedItems: PaletteItem[] = [...workspaceItems, ...taskItems]
       .filter(item => item.pinKey && pinnedIds.has(item.pinKey))
-      .map(item => ({ ...item, id: `pinned:${item.id}`, section: '已固定' as const }));
+      .map(item => ({ ...item, id: `pinned:${item.id}`, section: 'palette.section.pinned' as const }));
     return [...pinnedItems, ...navItems, ...workspaceItems, ...sessionItems, ...taskItems, ...groupItems];
-  }, [navigate, availableGroups, currentGroup, setCurrentGroup, projects, setSelectedWorkspace, sessions, tasks, pinnedIds]);
+  }, [navigate, availableGroups, currentGroup, setCurrentGroup, projects, setSelectedWorkspace, sessions, tasks, pinnedIds, t]);
 
   const togglePinned = (pinKey: string, event: ReactMouseEvent) => {
     event.stopPropagation();
@@ -202,8 +206,8 @@ export default function CommandPalette() {
         type="button"
         data-testid="command-palette-trigger"
         onClick={() => setOpen(true)}
-        aria-label="打开命令面板"
-        title="搜索 (Ctrl/Cmd+K)"
+        aria-label={t('palette.open')}
+        title={t('palette.searchTitle')}
         className="flex items-center gap-1.5 rounded-xl border border-slate-100 bg-white/50 px-3 py-2 text-slate-500 shadow-sm backdrop-blur-md transition-colors hover:bg-white hover:text-slate-800"
       >
         <Search size={16} />
@@ -215,7 +219,7 @@ export default function CommandPalette() {
       {open && (
         <Modal
           onClose={() => setOpen(false)}
-          ariaLabel="命令面板"
+          ariaLabel={t('palette.title')}
           testId="command-palette"
           overlayClassName="pt-[15vh]"
           panelClassName="max-w-lg overflow-hidden"
@@ -227,17 +231,17 @@ export default function CommandPalette() {
               value={query}
               onChange={event => setQuery(event.target.value)}
               onKeyDown={handleInputKeyDown}
-              placeholder="跳转到页面、会话、任务、工作区…"
-              aria-label="命令面板搜索"
+              placeholder={t('palette.placeholder')}
+              aria-label={t('palette.searchLabel')}
               className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
             />
             <kbd className="hidden shrink-0 rounded border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-400 sm:inline">
               Esc
             </kbd>
           </div>
-          <ul className="max-h-80 overflow-y-auto py-2" role="listbox" aria-label="命令面板结果">
+          <ul className="max-h-80 overflow-y-auto py-2" role="listbox" aria-label={t('palette.results')}>
             {filtered.length === 0 && (
-              <li className="px-4 py-6 text-center text-sm text-slate-400">没有匹配项</li>
+              <li className="px-4 py-6 text-center text-sm text-slate-400">{t('palette.noMatches')}</li>
             )}
             {filtered.map((item, index) => {
               const pinned = !!item.pinKey && pinnedIds.has(item.pinKey);
@@ -259,7 +263,7 @@ export default function CommandPalette() {
                     <span className="flex min-w-0 items-center gap-2">
                       <item.icon size={14} className="shrink-0 opacity-60" />
                       <span className="truncate font-medium">{item.label}</span>
-                      <span className="shrink-0 text-[10px] uppercase tracking-wide text-slate-400">{item.section}</span>
+                      <span className="shrink-0 text-[10px] uppercase tracking-wide text-slate-400">{t(item.section)}</span>
                     </span>
                     <span className="shrink-0 truncate text-xs text-slate-400 max-w-[45%]">{item.hint}</span>
                   </button>
@@ -267,8 +271,12 @@ export default function CommandPalette() {
                     <button
                       type="button"
                       onClick={event => togglePinned(item.pinKey!, event)}
-                      aria-label={pinned ? `取消固定 ${item.label}` : `固定 ${item.label}`}
-                      title={pinned ? '取消固定' : '固定'}
+                      aria-label={
+                        pinned
+                          ? t('palette.unpinItem', { label: item.label })
+                          : t('palette.pinItem', { label: item.label })
+                      }
+                      title={pinned ? t('palette.unpin') : t('palette.pin')}
                       className={`shrink-0 p-2 mr-1 rounded-lg transition-colors ${
                         pinned ? 'text-primary hover:bg-primary/10' : 'text-slate-300 hover:text-slate-500 hover:bg-slate-50'
                       }`}

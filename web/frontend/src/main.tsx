@@ -5,6 +5,8 @@ import './index.css'
 import App from './App.tsx'
 import { ProjectProvider } from './context/ProjectContext.tsx'
 import { SystemMetricsProvider } from './context/SystemMetricsContext.tsx'
+import { LanguageProvider } from './i18n/LanguageProvider.tsx'
+import LanguageSync from './i18n/LanguageSync.tsx'
 import ErrorBoundary from './components/shared/ErrorBoundary.tsx'
 import { bootstrapToken } from './utils/token.ts'
 
@@ -22,9 +24,15 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <ErrorBoundary>
         <ProjectProvider>
-          <SystemMetricsProvider>
-            <App />
-          </SystemMetricsProvider>
+          <LanguageProvider>
+            {/* Reconciles the painted language with config.json's `language`
+                once it loads -- the provider's first guess comes from the
+                cache/browser so there is no flash of the wrong language. */}
+            <LanguageSync />
+            <SystemMetricsProvider>
+              <App />
+            </SystemMetricsProvider>
+          </LanguageProvider>
         </ProjectProvider>
       </ErrorBoundary>
     </BrowserRouter>

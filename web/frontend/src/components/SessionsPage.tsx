@@ -4,6 +4,7 @@ import { ChevronRight, Clock, DollarSign, FileText, AlertCircle, RefreshCw, Tras
 import { fetchSessions, type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
 import { deleteHistorySession } from '../api/audit';
 import useActivityFilters from '../hooks/useActivityFilters';
+import { useT } from '../i18n/context';
 import { isWithinLocalDayRange } from '../utils/dateRange';
 import ActivityFilterPanel from './ActivityFilterPanel';
 import SessionDetailPanel from './SessionDetailPanel';
@@ -27,6 +28,7 @@ function sessionKey(session: SessionUsage): string {
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<SessionUsage[]>([]);
   const [loading, setLoading] = useState(true);
+  const t = useT();
   const filters = useActivityFilters();
   const { search, dateStart, dateEnd, engines: selectedEngines, project, ready } = filters;
   const [sortKey, setSortKey] = useState<SortKey>('lastActivity');
@@ -68,9 +70,9 @@ export default function SessionsPage() {
       .catch(() => {
         if (!mountedRef.current) return;
         setLoading(false);
-        setError('加载会话失败');
+        setError(t('sessions.loadFailed'));
       });
-  }, [project, ready, reloadNonce]);
+  }, [project, ready, reloadNonce, t]);
 
   const reload = useCallback(() => setReloadNonce(n => n + 1), []);
 
@@ -207,13 +209,15 @@ export default function SessionsPage() {
     setConfirmingDelete(false);
     if (failedCount > 0) {
       setDeleteError(
-        `${selectedSessions.length} 个会话中有 ${failedCount} 个删除失败。`,
+        selectedSessions.length === 1
+          ? t('sessions.deleteFailedOne', { failed: failedCount, total: selectedSessions.length })
+          : t('sessions.deleteFailed', { failed: failedCount, total: selectedSessions.length }),
       );
     }
   };
 
   if (loading) {
-    return <FilterListSkeleton label="加载会话中" />;
+    return <FilterListSkeleton label={t('sessions.loading')} />;
   }
 
   if (error) {
@@ -225,37 +229,39 @@ export default function SessionsPage() {
       <ActivityFilterPanel
         filters={filters}
         engineOptions={engines}
-        searchPlaceholder="项目或会话…"
+        searchPlaceholder={t('sessions.searchPlaceholder')}
       />
 
-      <div data-testid="session-list" className="animate-fade-rise stagger-2 flex-1 min-w-0 glass-card p-5">
+      <div data-testid="session-list" className="animate-fade-rise stagger-2 flex-1 min-w-0 glass-card p-5 flex flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-xs text-slate-400 font-medium cursor-pointer select-none">
               <input
                 type="checkbox"
-                aria-label="选择当前筛选条件下的全部会话"
+                aria-label={t('sessions.selectAllFiltered')}
                 checked={allFilteredSelected}
                 onChange={toggleSelectAllFiltered}
                 disabled={filtered.length === 0}
                 className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
               />
-              {filtered.length} 个会话
+              {filtered.length === 1
+                ? t('sessions.countOne', { count: filtered.length })
+                : t('sessions.count', { count: filtered.length })}
             </label>
             {selectedKeys.size > 0 && (
               <span className="flex items-center gap-2 text-xs">
-                <span className="text-slate-500">已选择 {selectedKeys.size} 个</span>
+                <span className="text-slate-500">{t('sessions.selected', { count: selectedKeys.size })}</span>
                 <button
                   onClick={() => setConfirmingDelete(true)}
                   className="flex items-center gap-1 px-2 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50 transition-colors font-medium"
                 >
-                  <Trash2 className="w-3 h-3" /> 删除所选
+                  <Trash2 className="w-3 h-3" /> {t('sessions.deleteSelected')}
                 </button>
                 <button
                   onClick={() => setSelectedKeys(new Set())}
                   className="px-2 py-1 rounded-md text-slate-400 hover:text-slate-600 transition-colors"
                 >
-                  清除
+                  {t('common.clear')}
                 </button>
               </span>
             )}
@@ -271,7 +277,7 @@ export default function SessionsPage() {
                     : 'border-slate-200 text-slate-500 hover:bg-slate-50'
                 }`}
               >
-                {key === 'lastActivity' ? '日期' : key === 'cost' ? '成本' : 'Token 数'}
+                {key === 'lastActivity' ? t('sessions.sortDate') : key === 'cost' ? t('sessions.sortCost') : t('sessions.sortTokens')}
                 {sortKey === key && (sortDir === 'asc' ? ' ↑' : ' ↓')}
               </button>
             ))}
@@ -279,7 +285,7 @@ export default function SessionsPage() {
               onClick={reload}
               className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
             >
-              <RefreshCw className="w-3 h-3" /> 刷新
+              <RefreshCw className="w-3 h-3" /> {t('common.refresh')}
             </button>
           </div>
         </div>
@@ -291,7 +297,11 @@ export default function SessionsPage() {
           </div>
         )}
 
-        <div className="space-y-2">
+        {/* The parent pins this card to the viewport height at xl, so the rows
+            have to scroll inside it — without this they overflow a card whose
+            overflow is visible and paint outside its background. Timeline and
+            Schedules already do it this way. */}
+        <div className="space-y-2 flex-1 min-h-0 overflow-y-auto">
           {filtered.map((session, i) => {
             const key = sessionKey(session);
             const isSelected = selectedKey === key;
@@ -312,7 +322,7 @@ export default function SessionsPage() {
                   role="button"
                   tabIndex={0}
                   aria-pressed={isSelected}
-                  aria-label={`打开会话 ${session.sessionId}`}
+                  aria-label={t('sessions.open', { id: session.sessionId })}
                   className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer"
                   onClick={() => setSelectedKey(isSelected ? null : key)}
                   onKeyDown={event => {
@@ -325,7 +335,7 @@ export default function SessionsPage() {
                   <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1">
                     <input
                       type="checkbox"
-                      aria-label={`选择会话 ${session.sessionId}`}
+                      aria-label={t('sessions.select', { id: session.sessionId })}
                       checked={selectedKeys.has(key)}
                       onClick={event => event.stopPropagation()}
                       onChange={() => toggleSelected(key)}
@@ -363,7 +373,7 @@ export default function SessionsPage() {
             );
           })}
           {filtered.length === 0 && (
-            <p className="text-sm text-slate-400 text-center py-8">没有符合筛选条件的会话</p>
+            <p className="text-sm text-slate-400 text-center py-8">{t('sessions.empty')}</p>
           )}
         </div>
       </div>
@@ -387,9 +397,13 @@ export default function SessionsPage() {
 
       {confirmingDelete && (
         <ConfirmDialog
-          title={`删除 ${selectedSessions.length} 个会话？`}
-          description="这将永久删除所选会话对应的历史文件。此操作不可撤销。"
-          confirmLabel={deleting ? '删除中…' : '删除'}
+          title={
+            selectedSessions.length === 1
+              ? t('sessions.deleteTitleOne', { count: selectedSessions.length })
+              : t('sessions.deleteTitle', { count: selectedSessions.length })
+          }
+          description={t('sessions.deleteDescription')}
+          confirmLabel={deleting ? t('sessions.deleting') : t('common.delete')}
           onConfirm={() => { if (!deleting) void handleBulkDelete(); }}
           onCancel={() => { if (!deleting) setConfirmingDelete(false); }}
         />

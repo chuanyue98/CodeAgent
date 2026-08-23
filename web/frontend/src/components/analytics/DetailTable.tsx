@@ -1,4 +1,5 @@
 import { fmtCost, fmtTokens, type DailyUsage, type MonthlyUsage } from '../../api/analytics';
+import { useT } from '../../i18n/context';
 import { eb } from './present';
 import { SectionTitle } from './ChartCards';
 
@@ -13,23 +14,24 @@ export interface DetailTableProps {
 export default function DetailTable({
   granularity, monthly, rangeDaily, rangeLabel, hasRows,
 }: DetailTableProps) {
+  const t = useT();
   if (!hasRows) return null;
   return (
     <div className="animate-fade-rise stagger-6 glass-card p-5">
       <SectionTitle>
-        {granularity === 'month' ? '按月明细' : `明细 — 最近 ${rangeLabel}`}
+        {granularity === 'month' ? t('detail.byMonth') : t('detail.byRange', { range: rangeLabel })}
       </SectionTitle>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-slate-100 text-slate-400">
               <th className="text-left py-2 pr-4 font-medium">
-                {granularity === 'month' ? '月份' : '日期'}
+                {granularity === 'month' ? t('detail.month') : t('detail.date')}
               </th>
-              <th className="text-left py-2 pr-4 font-medium">引擎</th>
-              <th className="text-right py-2 pr-4 font-medium">输入</th>
-              <th className="text-right py-2 pr-4 font-medium">输出</th>
-              <th className="text-right py-2 font-medium">成本</th>
+              <th className="text-left py-2 pr-4 font-medium">{t('detail.engine')}</th>
+              <th className="text-right py-2 pr-4 font-medium">{t('analytics.input')}</th>
+              <th className="text-right py-2 pr-4 font-medium">{t('analytics.output')}</th>
+              <th className="text-right py-2 font-medium">{t('detail.cost')}</th>
             </tr>
           </thead>
           <tbody>

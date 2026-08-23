@@ -2,24 +2,30 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, TerminalSquare, X } from 'lucide-react';
 import { fetchPtyStatus } from '../api/pty';
 import { useProject } from '../context/ProjectContext';
+import { useT } from '../i18n/context';
+import type { TranslationKey } from '../i18n/locales/en';
 import BrowserTerminal from './BrowserTerminal';
 
 interface Engine {
   id: string;
   name: string;
-  description: string;
+  /** Brand blurb that stays as-is (product names), or a key when it is prose. */
+  description?: string;
+  descriptionKey?: TranslationKey;
   color: string;
 }
 
-// The UI language is Chinese; keep engine names (Claude/Gemini/...) as brands.
+// Engine names and their vendor blurbs are brands, so they are not translated;
+// only OpenCode's descriptive line is prose, and it carries a key instead.
 const ENGINES: Engine[] = [
   { id: 'claude',    name: 'Claude',    description: 'Anthropic · Claude Code CLI',      color: 'bg-orange-50 border-orange-200 text-orange-700' },
   { id: 'gemini',    name: 'Gemini',    description: 'Google · Gemini CLI',              color: 'bg-blue-50 border-blue-200 text-blue-700' },
-  { id: 'opencode',  name: 'OpenCode',  description: '本地 npm CLI，带完整 TUI',           color: 'bg-violet-50 border-violet-200 text-violet-700' },
+  { id: 'opencode',  name: 'OpenCode',  descriptionKey: 'launch.opencodeDescription', color: 'bg-violet-50 border-violet-200 text-violet-700' },
   { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',               color: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
 ];
 
 export default function LaunchPad() {
+  const t = useT();
   const {
     validProjects,
     selectedWorkspace,
@@ -38,9 +44,9 @@ export default function LaunchPad() {
       })
       .catch(err => {
         setAvailable(false);
-        setReason(err instanceof Error ? err.message : '检测浏览器终端支持失败');
+        setReason(err instanceof Error ? err.message : t('launch.detectFailed'));
       });
-  }, []);
+  }, [t]);
 
   const effectiveProject = validProjects.some(project => project.path === selectedWorkspace)
     ? selectedWorkspace
@@ -57,7 +63,7 @@ export default function LaunchPad() {
             onClick={() => setActiveSession(null)}
             className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
           >
-            <X size={14} /> 关闭终端
+            <X size={14} /> {t('launch.closeTerminal')}
           </button>
         </div>
         <BrowserTerminal
@@ -73,11 +79,10 @@ export default function LaunchPad() {
     <div className="space-y-6">
       <div className="space-y-2">
         <p className="text-sm text-slate-600">
-          在浏览器终端中打开引擎 CLI，运行在托管 CodeAgent 的本机上。
+          {t('launch.intro')}
         </p>
         <p className="text-xs text-slate-400">
-          相应 CLI 必须已在本机安装并登录。与 Web Agent 不同，终端展示的是引擎自己的界面——CodeAgent
-          只负责设置工作目录并注入你配置的资源。
+          {t('launch.introDetail')}
         </p>
       </div>
 
@@ -85,7 +90,7 @@ export default function LaunchPad() {
         <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <p className="font-semibold">浏览器终端不可用</p>
+            <p className="font-semibold">{t('launch.unavailable')}</p>
             <p className="mt-0.5 text-xs">{reason}</p>
           </div>
         </div>
@@ -93,11 +98,11 @@ export default function LaunchPad() {
 
       {validProjects.length === 0 ? (
         <div role="status" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          打开终端前请先在“设置”中注册一个工作区。
+          {t('launch.registerFirst')}
         </div>
       ) : (
         <div className="max-w-sm space-y-1">
-          <label htmlFor="launchpad-project" className="text-xs font-medium text-slate-500">工作区</label>
+          <label htmlFor="launchpad-project" className="text-xs font-medium text-slate-500">{t('filters.workspace')}</label>
           <select
             id="launchpad-project"
             value={effectiveProject}
@@ -119,7 +124,7 @@ export default function LaunchPad() {
           >
             <div className="space-y-1">
               <div className="font-semibold text-slate-800">{engine.name}</div>
-              <div className="text-xs text-slate-500">{engine.description}</div>
+              <div className="text-xs text-slate-500">{engine.descriptionKey ? t(engine.descriptionKey) : engine.description}</div>
             </div>
 
             <button
@@ -132,7 +137,7 @@ export default function LaunchPad() {
                 ${engine.color}`}
             >
               <TerminalSquare size={15} />
-              打开终端
+              {t('launch.openTerminal')}
             </button>
           </div>
         ))}

@@ -1,4 +1,5 @@
 import { localDayOffset } from '../../utils/dateRange';
+import type { TranslationKey } from '../../i18n/locales/en';
 import type {
   DailyUsage,
   EngineSummary,
@@ -14,21 +15,36 @@ import type {
 export type RangeId = '7d' | '30d' | '90d' | 'all';
 
 export interface RangeDefinition {
-  id: RangeId;
-  label: string;
-  days: number | null;
+  readonly id: RangeId;
+  readonly labelKey: TranslationKey;
+  readonly days: number | null;
 }
 
-export const RANGES: RangeDefinition[] = [
-  { id: '7d', label: '7 天', days: 7 },
-  { id: '30d', label: '30 天', days: 30 },
-  { id: '90d', label: '90 天', days: 90 },
-  { id: 'all', label: '全部', days: null },
+// Readonly all the way down: the range objects are constants, and the React
+// Compiler otherwise has to assume any function they are passed to could
+// mutate them, which makes it give up on memoizing the whole Usage page.
+export const RANGES: readonly RangeDefinition[] = [
+  { id: '7d', labelKey: 'range.7d', days: 7 },
+  { id: '30d', labelKey: 'range.30d', days: 30 },
+  { id: '90d', labelKey: 'range.90d', days: 90 },
+  { id: 'all', labelKey: 'range.all', days: null },
 ];
 
 export function activeRangeOf(id: RangeId): RangeDefinition {
   return RANGES.find(r => r.id === id) ?? RANGES[1];
 }
+
+// Split into two flat lookups on purpose. Reading `days` and `labelKey` off
+// the *same* object means the React Compiler has to assume the `t()` call the
+// label is passed to could also mutate `days`, so it stops memoizing the Usage
+// page. Independent maps keep the two values unaliased.
+export const RANGE_DAYS: Record<RangeId, number | null> = Object.fromEntries(
+  RANGES.map(r => [r.id, r.days]),
+) as Record<RangeId, number | null>;
+
+export const RANGE_LABEL_KEYS: Record<RangeId, TranslationKey> = Object.fromEntries(
+  RANGES.map(r => [r.id, r.labelKey]),
+) as Record<RangeId, TranslationKey>;
 
 /** Per-model totals for the selected range, rebuilt from daily breakdowns. */
 export interface RangeModelStat {

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Save, Loader2, Plus, Trash2, Folder, Layers, Globe, Zap, Check, X, AlertTriangle, CheckCircle2, ArrowRight, Eraser } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useProject, type Config, type GroupDefinition, type Project } from '../context/ProjectContext';
+import { useT } from '../i18n/context';
 import request from '../utils/request';
 import LoadingState from './shared/LoadingState';
 
@@ -32,6 +33,7 @@ const ConfigHub: React.FC = () => {
     availableGroups,
     setCurrentGroup
   } = useProject();
+  const t = useT();
   const navigate = useNavigate();
 
   const [localConfig, setLocalConfig] = useState<Config | null>(null);
@@ -119,11 +121,11 @@ const ConfigHub: React.FC = () => {
       group: group.trim(),
     }));
     if (normalizedProjects.some(project => !project.path || !project.group)) {
-      setError('工作区路径和资源组为必填项。请补全或删除空行。');
+      setError(t('config.pathsRequired'));
       return;
     }
     if (new Set(normalizedProjects.map(project => project.path)).size !== normalizedProjects.length) {
-      setError('每个工作区路径只能注册一次。');
+      setError(t('config.duplicatePath'));
       return;
     }
 
@@ -150,7 +152,7 @@ const ConfigHub: React.FC = () => {
       setIsDirty(false);
       setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '发生错误');
+      setError(err instanceof Error ? err.message : t('config.genericError'));
     } finally {
       setSaving(false);
     }
@@ -289,15 +291,17 @@ const ConfigHub: React.FC = () => {
   return (
     <div className="p-3 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6 lg:space-y-8 min-h-full pb-28">
       <div className="pb-4">
-        <p className="text-sm text-slate-500">在一个地方管理项目、资源组和系统设置</p>
+        <p className="text-sm text-slate-500">{t('config.subtitle')}</p>
         <p className="mt-1 text-xs text-slate-400">
-          此处的修改都是草稿——保存之前不会写入 <code className="bg-slate-100 px-1 rounded text-slate-600">config.json</code>。
+          {t('config.draftNoticePrefix')}{' '}
+          <code className="bg-slate-100 px-1 rounded text-slate-600">config.json</code>
+          {t('config.draftNoticeSuffix')}
         </p>
       </div>
 
       {error && (
         <div role="alert" className="p-4 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl text-sm font-medium">
-          错误：{error}
+          {t('config.error', { message: error })}
         </div>
       )}
 
@@ -308,18 +312,17 @@ const ConfigHub: React.FC = () => {
             <Zap size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-semibold tracking-tight">通用设置</h2>
-            <p className="text-xs text-slate-500">核心系统行为与环境</p>
+            <h2 className="text-lg font-semibold tracking-tight">{t('config.generalTitle')}</h2>
+            <p className="text-xs text-slate-500">{t('config.generalSubtitle')}</p>
           </div>
         </div>
         <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 text-sm text-slate-600">
-          CodeAgent 在本地运行。服务商权限、模型选择和回复语言由所选的引擎与资源组控制，
-          而不是由单独的全局模式开关控制。
+          {t('config.localOnlyNotice')}
         </div>
 
         <div className="space-y-2 pt-4">
           <label htmlFor="config-resource-root" className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-            <Folder size={12} className="text-primary" /> 私有资源根目录
+            <Folder size={12} className="text-primary" /> {t('config.privateRoot')}
           </label>
           <div className="flex gap-3">
             <input
@@ -331,12 +334,14 @@ const ConfigHub: React.FC = () => {
                 const newPaths = { ...(localConfig.paths || {}), resource_root: e.target.value };
                 setLocalConfig({ ...localConfig, paths: newPaths });
               }}
-              placeholder="$CODEAGENT（默认位于项目根目录下）"
+              placeholder={t('config.privateRootPlaceholder')}
               className="flex-1 p-3 border border-slate-100 rounded-xl bg-slate-50/50 text-sm font-mono focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
             />
           </div>
           <p className="text-[10px] text-slate-500">
-            提示词、技能、任务等资源的统一目录。项目根目录请使用 <code className="bg-slate-100 px-1 rounded text-slate-600">$CODEAGENT</code>。
+            {t('config.privateRootHintPrefix')}{' '}
+            <code className="bg-slate-100 px-1 rounded text-slate-600">$CODEAGENT</code>
+            {t('config.privateRootHintSuffix')}
           </p>
         </div>
       </section>
@@ -349,22 +354,26 @@ const ConfigHub: React.FC = () => {
               <Folder size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">工作区</h2>
-              <p className="text-xs text-slate-500">CodeAgent 可在其中工作的已注册目录，映射到资源组（最长前缀匹配）</p>
+              <h2 className="text-lg font-semibold tracking-tight">{t('config.workspacesTitle')}</h2>
+              <p className="text-xs text-slate-500">{t('config.workspacesSubtitle')}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {missingRowCount > 0 && (
               <button
                 onClick={removeMissingPaths}
-                title={`移除 ${missingRowCount} 个磁盘上已不存在的已注册路径`}
+                title={missingRowCount === 1
+                  ? t('config.removeMissingTitleOne', { count: missingRowCount })
+                  : t('config.removeMissingTitle', { count: missingRowCount })}
                 className="text-xs flex items-center gap-2 font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl hover:bg-amber-100 transition-all"
               >
-                <Eraser className="w-4 h-4" /> 移除 {missingRowCount} 个失效路径
+                <Eraser className="w-4 h-4" /> {missingRowCount === 1
+                  ? t('config.removeMissingOne', { count: missingRowCount })
+                  : t('config.removeMissing', { count: missingRowCount })}
               </button>
             )}
             <button onClick={addProject} className="text-xs flex items-center gap-2 font-semibold text-primary bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-all">
-              <Plus className="w-4 h-4" /> 添加工作区
+              <Plus className="w-4 h-4" /> {t('config.addWorkspace')}
             </button>
           </div>
         </div>
@@ -382,7 +391,7 @@ const ConfigHub: React.FC = () => {
                 <input
                   id={`project-path-${p.uiId}`}
                   type="text"
-                  aria-label={`工作区路径 ${i + 1}`}
+                  aria-label={t('config.workspacePath', { index: i + 1 })}
                   value={p.path}
                   onChange={(e) => updateProject(p.uiId, 'path', e.target.value)}
                   placeholder="/absolute/path/to/your/project"
@@ -393,20 +402,20 @@ const ConfigHub: React.FC = () => {
                 {missing && (
                   <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-700">
                     <AlertTriangle className="w-3 h-3 shrink-0" />
-                    该路径在磁盘上不存在，已从所有工作区选择器中隐藏。
+                    {t('config.pathMissing')}
                   </p>
                 )}
               </div>
               <select
                 id={`project-group-${p.uiId}`}
-                aria-label={`工作区 ${i + 1} 的资源组`}
+                aria-label={t('config.groupForWorkspace', { index: i + 1 })}
                 value={p.group}
                 onChange={(e) => updateProject(p.uiId, 'group', e.target.value)}
                 className="w-full sm:w-40 p-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/20"
               >
                 {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
-              <button aria-label={`移除工作区 ${p.path || i + 1}`} title="取消注册此工作区" onClick={() => removeProject(p.uiId)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
+              <button aria-label={t('config.removeWorkspace', { name: p.path || i + 1 })} title={t('config.unregisterWorkspace')} onClick={() => removeProject(p.uiId)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
                 <Trash2 size={18} />
               </button>
             </div>
@@ -414,14 +423,14 @@ const ConfigHub: React.FC = () => {
           })}
           {localProjects.length === 0 && (
             <div className="text-center py-8 space-y-2">
-              <p className="text-slate-500 text-sm">还没有注册的工作区。</p>
+              <p className="text-slate-500 text-sm">{t('config.noWorkspaces')}</p>
               <p className="text-xs text-slate-400">
-                添加你希望 CodeAgent 在其中工作的目录的绝对路径——例如
-                {' '}<code className="bg-slate-100 px-1 rounded text-slate-600 font-mono">/home/you/code/my-app</code>。
-                代理绝不会在已注册路径之外操作。
+                {t('config.noWorkspacesHint')}
+                {' '}<code className="bg-slate-100 px-1 rounded text-slate-600 font-mono">/home/you/code/my-app</code>
+                {' '}{t('config.noWorkspacesHint2')}
               </p>
               <button onClick={addProject} className="mt-1 inline-flex items-center gap-2 text-xs font-semibold text-primary bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-all">
-                <Plus className="w-4 h-4" /> 添加你的第一个工作区
+                <Plus className="w-4 h-4" /> {t('config.addFirstWorkspace')}
               </button>
             </div>
           )}
@@ -436,8 +445,8 @@ const ConfigHub: React.FC = () => {
               <Layers size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">资源组</h2>
-              <p className="text-xs text-slate-500">定义每个资源组包含哪些技能、提示词、钩子和插件</p>
+              <h2 className="text-lg font-semibold tracking-tight">{t('config.groupsTitle')}</h2>
+              <p className="text-xs text-slate-500">{t('config.groupsSubtitle')}</p>
             </div>
           </div>
           {addingGroup ? (
@@ -446,7 +455,7 @@ const ConfigHub: React.FC = () => {
                 ref={newGroupInputRef}
                 id="config-new-group"
                 type="text"
-                aria-label="新资源组名称"
+                aria-label={t('config.newGroupName')}
                 value={newGroupName}
                 onChange={(e) => setNewGroupName(e.target.value)}
                 onKeyDown={(e) => {
@@ -456,16 +465,16 @@ const ConfigHub: React.FC = () => {
                 placeholder="group-name"
                 className="text-sm px-3 py-1.5 border border-primary/30 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 w-36 font-mono"
               />
-              <button aria-label="确认新资源组" onClick={confirmAddGroup} className="p-1.5 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors">
+              <button aria-label={t('config.confirmNewGroup')} onClick={confirmAddGroup} className="p-1.5 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors">
                 <Check className="w-4 h-4" />
               </button>
-              <button aria-label="取消新资源组" onClick={cancelAddGroup} className="p-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-slate-200 transition-colors">
+              <button aria-label={t('config.cancelNewGroup')} onClick={cancelAddGroup} className="p-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-slate-200 transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
           ) : (
             <button onClick={startAddingGroup} className="text-xs flex items-center gap-2 font-semibold text-primary bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-all">
-              <Plus className="w-4 h-4" /> 新建资源组
+              <Plus className="w-4 h-4" /> {t('config.newGroup')}
             </button>
           )}
         </div>
@@ -476,7 +485,12 @@ const ConfigHub: React.FC = () => {
               <div className="flex flex-wrap items-center gap-3 min-w-0">
                 <span className="w-2 h-2 rounded-full bg-primary" />
                 <span className="font-semibold text-sm text-slate-800 uppercase tracking-tight">{name}</span>
-                <span className="text-xs text-slate-400">{def.skills?.length ?? 0} 技能 · {def.prompts?.length ?? 0} 提示词 · {def.hooks?.length ?? 0} 钩子 · {def.plugins?.length ?? 0} 插件</span>
+                <span className="text-xs text-slate-400">{t('config.groupCounts', {
+                      skills: def.skills?.length ?? 0,
+                      prompts: def.prompts?.length ?? 0,
+                      hooks: def.hooks?.length ?? 0,
+                      plugins: def.plugins?.length ?? 0,
+                    })}</span>
               </div>
               <div className="flex items-center gap-1">
                 {/* Group membership is edited in the capability galleries, one
@@ -491,11 +505,11 @@ const ConfigHub: React.FC = () => {
                     }}
                     className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
                   >
-                    管理成员 <ArrowRight className="w-3.5 h-3.5" />
+                    {t('config.manageMembers')} <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 )}
                 {name !== 'codeagent' && name !== 'common' && (
-                  <button aria-label={`移除资源组 ${name}`} onClick={() => removeGroup(name)} className="p-1.5 text-slate-500 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
+                  <button aria-label={t('config.removeGroup', { name })} onClick={() => removeGroup(name)} className="p-1.5 text-slate-500 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
                     <Trash2 size={15} />
                   </button>
                 )}
@@ -513,12 +527,12 @@ const ConfigHub: React.FC = () => {
               <Globe size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">代理网关</h2>
-              <p className="text-xs text-slate-500">网络设置</p>
+              <h2 className="text-lg font-semibold tracking-tight">{t('config.proxyTitle')}</h2>
+              <p className="text-xs text-slate-500">{t('config.proxySubtitle')}</p>
             </div>
           </div>
           <button onClick={addProxy} className="text-xs flex items-center gap-2 font-semibold text-primary bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-all">
-            <Plus className="w-4 h-4" /> 添加网关
+            <Plus className="w-4 h-4" /> {t('config.addGateway')}
           </button>
         </div>
         <div className="space-y-3">
@@ -527,7 +541,7 @@ const ConfigHub: React.FC = () => {
               <input
                 id={`proxy-host-${p.uiId}`}
                 type="text"
-                aria-label={`代理主机 ${i + 1}`}
+                aria-label={t('config.proxyHost', { index: i + 1 })}
                 value={p.host}
                 onChange={(e) => updateProxy(p.uiId, 'host', e.target.value)}
                 className="flex-1 p-2.5 bg-transparent border-b border-slate-100 focus:border-primary outline-none text-sm font-mono"
@@ -535,12 +549,12 @@ const ConfigHub: React.FC = () => {
               <input
                 id={`proxy-port-${p.uiId}`}
                 type="number"
-                aria-label={`代理端口 ${i + 1}`}
+                aria-label={t('config.proxyPort', { index: i + 1 })}
                 value={p.port}
                 onChange={(e) => updateProxy(p.uiId, 'port', parseInt(e.target.value) || 0)}
                 className="w-full sm:w-24 p-2.5 bg-transparent border-b border-slate-100 focus:border-primary outline-none text-sm font-mono"
               />
-              <button aria-label={`移除代理 ${p.host}:${p.port}`} onClick={() => removeProxy(p.uiId)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
+              <button aria-label={t('config.removeProxy', { name: `${p.host}:${p.port}` })} onClick={() => removeProxy(p.uiId)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
                 <Trash2 size={20} />
               </button>
             </div>
@@ -556,12 +570,12 @@ const ConfigHub: React.FC = () => {
           <p aria-live="polite" className="text-xs font-medium">
             {saved ? (
               <span className="flex items-center gap-1.5 text-emerald-600">
-                <CheckCircle2 className="w-3.5 h-3.5" /> 已保存到 config.json
+                <CheckCircle2 className="w-3.5 h-3.5" /> {t('config.savedToFile')}
               </span>
             ) : dirty ? (
-              <span className="text-amber-700">有未保存的修改</span>
+              <span className="text-amber-700">{t('config.unsavedChanges')}</span>
             ) : (
-              <span className="text-slate-400">所有修改已保存</span>
+              <span className="text-slate-400">{t('config.allSaved')}</span>
             )}
           </p>
           <div className="flex items-center gap-2">
@@ -571,7 +585,7 @@ const ConfigHub: React.FC = () => {
                 disabled={saving}
                 className="px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors font-medium text-sm"
               >
-                放弃修改
+                {t('config.discard')}
               </button>
             )}
             <button
@@ -580,7 +594,7 @@ const ConfigHub: React.FC = () => {
               className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold shadow-lg shadow-primary/20 active:scale-95 text-sm"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              保存全部修改
+              {t('config.saveAll')}
             </button>
           </div>
         </div>

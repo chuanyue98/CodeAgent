@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import type { RefObject } from 'react';
+import { useT } from '../i18n/context';
 import { createAgentSession, sendAgentCommand } from '../api/agent';
 import type { AgentSession, PermissionMode } from '../types/agent';
 import type { AgentSessionState } from '../state/agentSessionReducer';
@@ -32,6 +33,7 @@ export default function useAgentMessageSend({
   composerRef,
   setError,
 }: UseAgentMessageSendArgs) {
+  const t = useT();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
@@ -44,7 +46,7 @@ export default function useAgentMessageSend({
     // ends up with two backend sessions for one message.
     if (!text || connecting || sendingRef.current) return;
     if (state.activeTurnId) {
-      setError('上一轮仍在进行，点击 Cancel 或 New');
+      setError(t('agent.turnInProgress'));
       return;
     }
     if (!workspace || !selectedProvider) {
@@ -83,7 +85,7 @@ export default function useAgentMessageSend({
       sendingRef.current = false;
       setSending(false);
     }
-  }, [input, state.activeTurnId, state.session, connecting, workspace, selectedProvider, permissionMode, connect, socketRef, stateRef, addSession, composerRef, setError]);
+  }, [input, state.activeTurnId, state.session, connecting, workspace, selectedProvider, permissionMode, connect, socketRef, stateRef, addSession, composerRef, setError, t]);
 
   return { input, setInput, sending, send };
 }

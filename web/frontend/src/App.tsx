@@ -7,13 +7,15 @@ import SectionLayout from './components/SectionLayout';
 import SystemPanel from './components/SystemPanel';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import ErrorBoundary from './components/shared/ErrorBoundary';
+import LanguageSwitcher from './components/LanguageSwitcher';
 import { useProject } from './context/ProjectContext';
+import { useT } from './i18n/context';
 import {
   ACTIVITY_FILTER_PARAMS,
   ACTIVITY_TABS,
   AGENT_TABS,
   AUTOMATION_TABS,
-  PAGE_LABELS,
+  PAGE_LABEL_KEYS,
   primaryNav,
   SETTINGS_TABS,
 } from './navigation';
@@ -66,7 +68,9 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { pathname } = useLocation();
   const { error: ctxError } = useProject();
-  const pageLabel = PAGE_LABELS[pathname] ?? 'CodeAgent';
+  const t = useT();
+  const pageLabelKey = PAGE_LABEL_KEYS[pathname];
+  const pageLabel = pageLabelKey ? t(pageLabelKey) : 'CodeAgent';
 
   useEffect(() => {
     document.title = pageLabel === 'CodeAgent' ? pageLabel : `${pageLabel} - CodeAgent`;
@@ -86,8 +90,8 @@ function App() {
             )}
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              aria-label={isSidebarOpen ? '折叠导航' : '展开导航'}
-              title={isSidebarOpen ? '折叠导航' : '展开导航'}
+              aria-label={isSidebarOpen ? t('nav.collapse') : t('nav.expand')}
+              title={isSidebarOpen ? t('nav.collapse') : t('nav.expand')}
               className={`hidden rounded-xl border border-transparent p-2 text-slate-600 transition-colors hover:border-slate-100 hover:bg-slate-50 lg:block ${!isSidebarOpen && 'mx-auto'}`}
             >
               {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
@@ -95,7 +99,7 @@ function App() {
             <span className="text-xl font-black text-primary lg:hidden" aria-label="CodeAgent">CA</span>
           </div>
 
-          <nav aria-label="主导航" className="custom-scrollbar mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto p-2 lg:mt-4 lg:p-4">
+          <nav aria-label={t('nav.primary')} className="custom-scrollbar mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto p-2 lg:mt-4 lg:p-4">
             {primaryNav.map(item => {
               const active = pathname === item.matchPrefix
                 || pathname.startsWith(`${item.matchPrefix}/`);
@@ -103,9 +107,9 @@ function App() {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  aria-label={item.label}
+                  aria-label={t(item.labelKey)}
                   aria-current={active ? 'page' : undefined}
-                  title={item.label}
+                  title={t(item.labelKey)}
                   className={`flex w-full items-center justify-center gap-4 rounded-2xl p-3 transition-colors lg:justify-start lg:p-4 ${
                     active
                       ? 'bg-primary/10 font-semibold text-primary'
@@ -114,7 +118,7 @@ function App() {
                 >
                   <item.icon size={22} className={`shrink-0 ${active ? 'opacity-100' : 'opacity-70'}`} />
                   {isSidebarOpen && (
-                    <span className="hidden text-sm font-medium tracking-wide lg:inline">{item.label}</span>
+                    <span className="hidden text-sm font-medium tracking-wide lg:inline">{t(item.labelKey)}</span>
                   )}
                 </NavLink>
               );
@@ -133,6 +137,7 @@ function App() {
             <h1 className="min-w-0 truncate text-lg font-bold text-slate-800 md:text-xl">{pageLabel}</h1>
             <div className="flex shrink-0 items-center gap-2">
               <CommandPalette />
+              <LanguageSwitcher />
               <SystemPanel />
               <WorkspaceSwitcher />
               <ProjectSwitcher />
@@ -141,7 +146,7 @@ function App() {
           {ctxError && (
             <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600" role="alert">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>配置错误：{ctxError}</span>
+              <span>{t('app.configError', { message: ctxError })}</span>
             </div>
           )}
           <div className="animate-fade-in stagger-3 custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1 md:pr-2">
@@ -151,7 +156,7 @@ function App() {
 
               <Route
                 path="/agent"
-                element={<SectionLayout label="Agent" description="会话与本地引擎终端，同在一个工作区。" tabs={AGENT_TABS} />}
+                element={<SectionLayout labelKey="nav.agent" descriptionKey="section.agent.description" tabs={AGENT_TABS} />}
               >
                 <Route index element={<Navigate to="web" replace />} />
                 <Route path="web" element={page(<AgentWorkspace />)} />
@@ -160,7 +165,7 @@ function App() {
 
               <Route
                 path="/automations"
-                element={<SectionLayout label="自动化" description="运行可复用的任务、管理定时计划、查看运行日志。" tabs={AUTOMATION_TABS} />}
+                element={<SectionLayout labelKey="nav.automations" descriptionKey="section.automations.description" tabs={AUTOMATION_TABS} />}
               >
                 <Route index element={<Navigate to="tasks" replace />} />
                 <Route path="tasks" element={page(<TaskDashboard />)} />
@@ -170,7 +175,7 @@ function App() {
 
               <Route
                 path="/activity"
-                element={<SectionLayout label="动态" description="过往会话、事件时间线与用量。" tabs={ACTIVITY_TABS} preserveParams={ACTIVITY_FILTER_PARAMS} />}
+                element={<SectionLayout labelKey="nav.activity" descriptionKey="section.activity.description" tabs={ACTIVITY_TABS} preserveParams={ACTIVITY_FILTER_PARAMS} />}
               >
                 <Route index element={<Navigate to="sessions" replace />} />
                 <Route path="sessions" element={page(<SessionsPage />)} />
@@ -180,7 +185,7 @@ function App() {
 
               <Route
                 path="/settings"
-                element={<SectionLayout label="设置" description="工作区配置、能力资源与系统健康。" tabs={SETTINGS_TABS} />}
+                element={<SectionLayout labelKey="nav.settings" descriptionKey="section.settings.description" tabs={SETTINGS_TABS} />}
               >
                 <Route index element={<Navigate to="workspace" replace />} />
                 <Route path="workspace" element={page(<ConfigHub />)} />
