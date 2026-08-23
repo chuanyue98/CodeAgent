@@ -316,6 +316,9 @@ else:
         # chunk names, and a stale cached copy keeps serving the previous
         # build's chunks after a rebuild (they may still be in cache too),
         # which looks exactly like "the rebuild changed nothing".
-        return FileResponse(FRONTEND_DIST / "index.html", headers={
-            "Cache-Control": "no-cache",
-        })
+        return FileResponse(
+            FRONTEND_DIST / "index.html",
+            headers={
+                "Cache-Control": "no-cache",
+            },
+        )
