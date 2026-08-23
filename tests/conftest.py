@@ -3,7 +3,24 @@ from pathlib import Path
 
 import pytest
 
+from core import i18n
 from core.web.security import reset_token_cache
+
+
+@pytest.fixture(autouse=True)
+def pinned_language(monkeypatch):
+    """Pins CLI output to English for the whole suite.
+
+    Many tests assert on user-facing CLI strings. Language resolution reads
+    ``language`` from the developer's real config.json (see core/i18n.py), so
+    switching the Web UI to Chinese -- which writes that same field -- turned
+    a dozen unrelated tests red. CA_LANG is the highest-precedence source, so
+    setting it here makes those assertions independent of local config.
+    """
+    monkeypatch.setenv(i18n.ENV_VAR, "en")
+    monkeypatch.setattr(i18n, "_resolved", None, raising=False)
+    yield
+    monkeypatch.setattr(i18n, "_resolved", None, raising=False)
 
 
 @pytest.fixture(autouse=True)

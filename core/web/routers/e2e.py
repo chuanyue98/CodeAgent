@@ -45,10 +45,16 @@ FIXTURES_DIR = ROOT_DIR / "web" / "frontend" / "e2e" / "fixtures"
 def _baseline_config() -> dict:
     home = os.environ.get("HOME", "")
     registry = [{"path": home, "group": "codeagent"}] if home else []
+    empty_group = {"skills": [], "prompts": [], "hooks": [], "plugins": []}
     return {
         "project_registry": registry,
+        # Two groups, because the group switcher can only be exercised when
+        # there is somewhere to switch *to*. This used to work by accident:
+        # the frontend hardcoded four group names, so the picker was never
+        # empty regardless of what the config actually held.
         "groups": {
-            "codeagent": {"skills": [], "prompts": [], "hooks": [], "plugins": []},
+            "codeagent": dict(empty_group),
+            "common": dict(empty_group),
         },
     }
 

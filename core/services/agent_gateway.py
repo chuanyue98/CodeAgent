@@ -10,6 +10,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from core.logging_config import get_logger
+from core.project_groups import resolve_project_group
 from core.resource_locator import (
     CODE_ROOT,
     get_bundled_resource_root,
@@ -229,20 +230,12 @@ class AgentGateway:
         """
         if config is None:
             config, _warnings = self._config_service.get_config()
-        requested = Path(workspace).expanduser().resolve()
-        group_name: str | None = None
-        for project in config.get("project_registry", []):
-            if not isinstance(project, dict) or not isinstance(
-                project.get("path"), str
-            ):
-                continue
-            if Path(project["path"]).expanduser().resolve() == requested:
-                group_name = (
-                    project.get("group")
-                    if isinstance(project.get("group"), str)
-                    else None
-                )
-                break
+        # Longest-prefix, the same rule the CLI applies (core/project_groups).
+        # This used to compare for exact equality, so a workspace covered by a
+        # parent rule -- the whole point of registering `E:/demo -> web` once
+        # instead of every repository under it -- resolved to no group at all,
+        # and the session started with an empty resource set and no warning.
+        group_name = resolve_project_group(workspace, config.get("project_registry"))
         definition = config.get("groups", {}).get(group_name or "", {})
         if not isinstance(definition, dict):
             definition = {}

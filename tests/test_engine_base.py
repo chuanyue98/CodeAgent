@@ -116,6 +116,30 @@ def test_engine_get_current_project_group(mock_engine, tmp_path, monkeypatch):
     assert mock_engine.get_current_project_group() == "forced-group"
 
 
+def test_a_registry_rule_wins_over_the_codeagent_default(mock_engine, monkeypatch):
+    # Registering CodeAgent's own tree under another group used to be ignored:
+    # the "inside CodeAgent root -> codeagent" shortcut ran before the registry
+    # was even consulted, so an explicit rule lost to a hardcoded name.
+    mock_engine.config_manager.full_config.setdefault("project_registry", []).append(
+        {"path": str(mock_engine.root_dir), "group": "self-hosted"}
+    )
+    monkeypatch.chdir(mock_engine.root_dir)
+
+    assert mock_engine.get_current_project_group() == "self-hosted"
+
+
+def test_a_parent_rule_covers_a_nested_repository(mock_engine, tmp_path, monkeypatch):
+    parent = tmp_path / "demo"
+    nested = parent / "nested-repo"
+    nested.mkdir(parents=True)
+    mock_engine.config_manager.full_config.setdefault("project_registry", []).append(
+        {"path": str(parent), "group": "web-app"}
+    )
+    monkeypatch.chdir(nested)
+
+    assert mock_engine.get_current_project_group() == "web-app"
+
+
 def test_engine_temp_prompt_lifecycle(mock_engine):
     prompt_content = "Hello CodeAgent"
     instruction = mock_engine.write_temp_prompt(prompt_content)

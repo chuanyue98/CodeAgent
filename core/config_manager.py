@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from core.logging_config import get_logger
+from core.project_groups import resolve_project_group
 from core.resource_locator import get_bundled_resource_root, get_default_config_path
 from core.services.config_service import ConfigService
 
@@ -57,31 +58,22 @@ class ConfigManager:
             return explicit_group
 
         cwd = Path.cwd().resolve()
-        root = self.root_dir.resolve()
 
+        # The registry is consulted first: it is the only place the user says
+        # what they want. Registering CodeAgent's own tree under a different
+        # group used to be silently ignored by the fallback below, which meant
+        # an explicit rule lost to a hardcoded name.
+        matched = resolve_project_group(cwd, self.full_config.get("project_registry"))
+        if matched:
+            return matched
+
+        # Working inside CodeAgent's own checkout still resolves without the
+        # user having to register it -- a convenience, not an override.
+        root = self.root_dir.resolve()
         if cwd == root or root in cwd.parents:
             return "codeagent"
 
-        registry = self.full_config.get("project_registry", [])
-        best_match_group = None
-        max_match_len = -1
-
-        for item in registry:
-            raw_path = item.get("path")
-            if not raw_path:
-                continue
-
-            try:
-                mapping_path = Path(raw_path).resolve()
-                if cwd == mapping_path or mapping_path in cwd.parents:
-                    match_len = len(str(mapping_path.as_posix()))
-                    if match_len > max_match_len:
-                        max_match_len = match_len
-                        best_match_group = item.get("group")
-            except Exception:
-                continue
-
-        return best_match_group or self.full_config.get("default_group", "common")
+        return str(self.full_config.get("default_group", "common"))
 
     def get_skill_search_roots(self, resource_root: Path) -> list[Path]:
         """Identifies all root directories where skills should be searched."""

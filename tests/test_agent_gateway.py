@@ -169,6 +169,64 @@ async def test_gateway_persists_resource_snapshot(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_resource_snapshot_inherits_a_parent_registry_rule(tmp_path):
+    # Registering a parent once is the point of groups; the Gateway used to
+    # compare for exact equality, so a repository *inside* a registered
+    # directory resolved to no group and started with an empty resource set
+    # and no warning. The CLI already matched by longest prefix.
+    parent = tmp_path / "demo"
+    child = parent / "some-repo"
+    child.mkdir(parents=True)
+    config = tmp_path / "config.json"
+    config.write_text(
+        json.dumps(
+            {
+                "project_registry": [{"path": str(parent), "group": "web"}],
+                "groups": {"web": {"skills": ["base/review"], "prompts": ["base"]}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    gateway = AgentGateway(
+        AgentStore(tmp_path / "agent.sqlite3"), config, [FakeAgentAdapter()]
+    )
+
+    snapshot = gateway._resource_snapshot(str(child))
+
+    assert snapshot.group == "web"
+    assert snapshot.skills == ["base/review"]
+
+
+@pytest.mark.asyncio
+async def test_resource_snapshot_prefers_the_most_specific_rule(tmp_path):
+    parent = tmp_path / "demo"
+    child = parent / "CodeAgent"
+    child.mkdir(parents=True)
+    config = tmp_path / "config.json"
+    config.write_text(
+        json.dumps(
+            {
+                "project_registry": [
+                    {"path": str(parent), "group": "web"},
+                    {"path": str(child), "group": "codeagent"},
+                ],
+                "groups": {
+                    "web": {"skills": ["base/web"]},
+                    "codeagent": {"skills": ["base/self"]},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    gateway = AgentGateway(
+        AgentStore(tmp_path / "agent.sqlite3"), config, [FakeAgentAdapter()]
+    )
+
+    assert gateway._resource_snapshot(str(child)).group == "codeagent"
+    assert gateway._resource_snapshot(str(parent)).group == "web"
+
+
+@pytest.mark.asyncio
 async def test_gateway_replays_only_events_after_sequence(tmp_path):
     config, workspace = _config(tmp_path)
     gateway = AgentGateway(

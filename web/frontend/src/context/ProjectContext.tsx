@@ -86,7 +86,10 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [config, setConfig] = useState<Config | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [groups, setGroups] = useState<Record<string, GroupDefinition>>({});
-  const [availableGroups, setAvailableGroups] = useState<string[]>(['codeagent', 'common', 'work', 'web']);
+  // Derived from config, never seeded with a fixed list: hardcoding names here
+  // meant a group the user had deleted still showed in the switcher, and a
+  // fresh install advertised four presets that did not exist yet.
+  const [availableGroups, setAvailableGroups] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedWorkspace, setSelectedWorkspaceState] = useState<string>(readStoredWorkspace);
   const currentGroupRef = useRef(currentGroup);
@@ -111,16 +114,22 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       const groupsObj = groupsData && typeof groupsData === 'object' ? groupsData : {};
       setGroups(groupsObj);
 
-      const groupSet = new Set<string>(['codeagent', 'common', 'work', 'web']);
+      // Groups that actually exist: the ones defined in config, plus any a
+      // registry rule points at (a rule naming a group with no definition yet
+      // is still a group the user can be working under).
+      const groupSet = new Set<string>(Object.keys(groupsObj));
       projectsArr.forEach((p: Project) => {
         if (p && p.group) groupSet.add(p.group);
       });
-      Object.keys(groupsObj).forEach(g => groupSet.add(g));
 
-      setAvailableGroups(Array.from(groupSet));
+      const groupList = Array.from(groupSet).sort();
+      setAvailableGroups(groupList);
 
-      if (!groupSet.has(currentGroupRef.current)) {
-        setCurrentGroup('codeagent');
+      // Only re-point the selection when it no longer resolves. Falling back to
+      // the first real group rather than a hardcoded "codeagent", which is not
+      // guaranteed to exist.
+      if (groupList.length > 0 && !groupSet.has(currentGroupRef.current)) {
+        setCurrentGroup(groupList[0]);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load configuration';
