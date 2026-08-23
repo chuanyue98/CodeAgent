@@ -83,3 +83,56 @@ def test_sessions_tolerates_records_without_a_project_path():
 
     assert [s["sessionId"] for s in _get(sessions, project="/work/one").json()] == ["a"]
     assert {s["sessionId"] for s in _get(sessions).json()} == {"a", "b"}
+
+
+def test_sessions_match_across_windows_extended_length_spellings():
+    # codex records the working directory in Windows extended-length form,
+    # while opencode and claude write the plain path. Before these were
+    # canonicalized together, filtering Sessions by a workspace silently
+    # dropped every codex run for that same directory.
+    sessions = [
+        _session("opencode", "E:/demo/CodeAgent"),
+        _session("claude", r"E:\demo\CodeAgent"),
+        _session("codex", r"\\?\E:\demo\CodeAgent"),
+        _session("elsewhere", "E:/demo/other"),
+    ]
+
+    response = _get(sessions, project="E:/demo/CodeAgent")
+
+    assert {s["sessionId"] for s in response.json()} == {"opencode", "claude", "codex"}
+
+
+def test_sessions_match_when_the_filter_itself_is_extended_length():
+    # The same has to hold in reverse: a workspace registered from a codex
+    # session carries the prefix, and must still find the plain-path records.
+    sessions = [
+        _session("plain", "E:/demo/CodeAgent"),
+        _session("elsewhere", "E:/demo/other"),
+    ]
+
+    response = _get(sessions, project=r"\\?\E:\demo\CodeAgent")
+
+    assert [s["sessionId"] for s in response.json()] == ["plain"]
+
+
+def test_sessions_match_unc_paths_across_spellings():
+    sessions = [
+        _session("extended", r"\\?\UNC\wsl.localhost\Ubuntu\home\cy\app"),
+        _session("plain", "//wsl.localhost/Ubuntu/home/cy/app"),
+    ]
+
+    response = _get(sessions, project="//wsl.localhost/Ubuntu/home/cy/app")
+
+    assert {s["sessionId"] for s in response.json()} == {"extended", "plain"}
+
+
+def test_sessions_keep_distinct_projects_apart():
+    # Stripping the prefix must not collapse genuinely different paths.
+    sessions = [
+        _session("a", r"\\?\E:\demo\CodeAgent"),
+        _session("b", r"\\?\E:\demo\CodeAgentOther"),
+    ]
+
+    response = _get(sessions, project="E:/demo/CodeAgent")
+
+    assert [s["sessionId"] for s in response.json()] == ["a"]

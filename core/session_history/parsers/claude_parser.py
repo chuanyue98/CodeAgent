@@ -21,6 +21,7 @@ from core.session_history.models import (
     UnifiedMessage,
     UnifiedSession,
 )
+from core.session_history.paths import strip_extended_length_prefix
 
 
 def _decode_claude_project_path(dir_name: str) -> str:
@@ -117,7 +118,9 @@ def _claude_dir_matches(dir_name: str, target_path: str) -> bool:
     Returns:
         bool: True if the directory matches the target path.
     """
-    normalized_target = target_path.replace("\\", "/").rstrip("/")
+    normalized_target = strip_extended_length_prefix(
+        target_path.replace("\\", "/")
+    ).rstrip("/")
     if not normalized_target:
         return False
     return dir_name.lower() == _encode_claude_project_dir(normalized_target).lower()
@@ -319,9 +322,13 @@ def find_claude_sessions(
     if not base.exists():
         return []
 
-    # Normalize the project path for comparison
+    # Normalized for comparison, but also assigned back onto the parsed
+    # sessions below, so the case has to survive: only the extended-length
+    # prefix is resolved here, not the spelling.
     normalized_target = (
-        project_path.replace("\\", "/") if project_path is not None else None
+        strip_extended_length_prefix(project_path.replace("\\", "/"))
+        if project_path is not None
+        else None
     )
 
     sessions: list[UnifiedSession] = []

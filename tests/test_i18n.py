@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from core import i18n
+from core import i18n, resource_locator
 
 
 @pytest.fixture(autouse=True)
@@ -87,11 +87,23 @@ def test_falls_back_to_english(monkeypatch):
 def test_an_unreadable_config_does_not_raise(monkeypatch, tmp_path):
     bad = tmp_path / "config.json"
     bad.write_text("{not json", encoding="utf-8")
-    monkeypatch.setattr(
-        i18n, "get_default_config_path", lambda root: bad, raising=False
-    )
+    # Patched on resource_locator, not on i18n: _from_config imports the
+    # helper inside the function body, so patching the name on i18n (which
+    # never has it) silently did nothing and the test read whatever real
+    # config.json happened to sit in the repo root.
+    monkeypatch.setattr(resource_locator, "get_default_config_path", lambda root: bad)
 
     assert i18n._from_config() is None
+
+
+def test_a_configured_language_is_read_from_config(monkeypatch, tmp_path):
+    config = tmp_path / "config.json"
+    config.write_text('{"language": "zh"}', encoding="utf-8")
+    monkeypatch.setattr(
+        resource_locator, "get_default_config_path", lambda root: config
+    )
+
+    assert i18n._from_config() == "zh"
 
 
 def test_resolution_is_cached(monkeypatch):

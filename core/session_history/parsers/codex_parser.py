@@ -21,6 +21,7 @@ from core.session_history.models import (
     UnifiedMessage,
     UnifiedSession,
 )
+from core.session_history.paths import normalize_project_path
 
 
 def _ms_to_iso(timestamp: object) -> str:
@@ -269,9 +270,7 @@ def find_codex_sessions(
         return []
 
     normalized_target = (
-        project_path.replace("\\", "/").lower().rstrip("/")
-        if project_path is not None
-        else None
+        normalize_project_path(project_path) if project_path is not None else None
     )
     sessions: list[UnifiedSession] = []
 
@@ -279,9 +278,7 @@ def find_codex_sessions(
         session = parse_codex_session(jsonl_file)
         if session:
             if normalized_target is not None:
-                normalized_cwd = (
-                    (session.project_path or "").replace("\\", "/").lower().rstrip("/")
-                )
+                normalized_cwd = normalize_project_path(session.project_path or "")
                 if normalized_cwd != normalized_target:
                     continue
             sessions.append(session)

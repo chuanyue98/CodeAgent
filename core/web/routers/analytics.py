@@ -5,19 +5,9 @@ import asyncio
 from fastapi import APIRouter, Query
 
 from core.analytics.service import get_analytics_data, refresh_analytics_data
+from core.session_history.paths import normalize_project_path
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
-
-
-def _normalize_project(path: str) -> str:
-    """Canonicalizes a project path for comparison.
-
-    Mirrors the normalization the session parsers already use (see
-    codex_parser/opencode_parser): separators unified, case folded, trailing
-    separator dropped — so a workspace registered as ``E:\\demo\\App`` matches
-    session records written as ``e:/demo/app/``.
-    """
-    return path.replace("\\", "/").lower().rstrip("/")
 
 
 async def _data() -> dict:
@@ -62,11 +52,11 @@ async def get_sessions(
     data = await _data()
     sessions = data["sessions"]
     if project:
-        target = _normalize_project(project)
+        target = normalize_project_path(project)
         sessions = [
             s
             for s in sessions
-            if _normalize_project(s.get("projectPath") or "") == target
+            if normalize_project_path(s.get("projectPath") or "") == target
         ]
     return sessions[:limit]
 

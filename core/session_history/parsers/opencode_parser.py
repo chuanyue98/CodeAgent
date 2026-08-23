@@ -25,6 +25,7 @@ from core.session_history.models import (
     UnifiedMessage,
     UnifiedSession,
 )
+from core.session_history.paths import normalize_project_path
 
 
 def _ms_to_iso(ms: int) -> str:
@@ -270,9 +271,7 @@ def find_opencode_sessions(
         return []
 
     normalized_target = (
-        project_path.replace("\\", "/").lower().rstrip("/")
-        if project_path is not None
-        else None
+        normalize_project_path(project_path) if project_path is not None else None
     )
     sessions: list[UnifiedSession] = []
 
@@ -290,9 +289,7 @@ def find_opencode_sessions(
         # creating a new SQLite connection per session.
         for row in rows:
             if normalized_target is not None:
-                directory = (
-                    (row["directory"] or "").replace("\\", "/").lower().rstrip("/")
-                )
+                directory = normalize_project_path(row["directory"] or "")
                 if directory != normalized_target:
                     continue
 
