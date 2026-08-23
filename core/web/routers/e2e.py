@@ -45,7 +45,12 @@ FIXTURES_DIR = ROOT_DIR / "web" / "frontend" / "e2e" / "fixtures"
 def _baseline_config() -> dict:
     home = os.environ.get("HOME", "")
     registry = [{"path": home, "group": "codeagent"}] if home else []
-    empty_group = {"skills": [], "prompts": [], "hooks": [], "plugins": []}
+    empty_group: dict[str, list[str]] = {
+        "skills": [],
+        "prompts": [],
+        "hooks": [],
+        "plugins": [],
+    }
     return {
         "project_registry": registry,
         # Two groups, because the group switcher can only be exercised when
