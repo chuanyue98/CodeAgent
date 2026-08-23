@@ -13,7 +13,7 @@ async function gotoChat(page: Page): Promise<void> {
 }
 
 const input = (page: Page) => page.locator('textarea');
-const selectProvider = (page: Page, provider: string) => page.getByLabel('Provider').selectOption(provider);
+const selectProvider = (page: Page, provider: string) => page.getByLabel('Engine').selectOption(provider);
 
 test('selecting an engine shows an empty conversation list when none exist', async ({
   page,
@@ -56,11 +56,11 @@ test('an active session locks workspace and provider selection until New is clic
   });
 
   await expect(page.getByLabel('Workspace')).toBeDisabled();
-  await expect(page.getByLabel('Provider')).toBeDisabled();
+  await expect(page.getByLabel('Engine')).toBeDisabled();
 
   await page.getByRole('button', { name: 'New', exact: true }).click();
   await expect(page.getByLabel('Workspace')).toBeEnabled();
-  await expect(page.getByLabel('Provider')).toBeEnabled();
+  await expect(page.getByLabel('Engine')).toBeEnabled();
 });
 
 test('sessions from unregistered workspaces are listed but cannot be opened', async ({ page }) => {

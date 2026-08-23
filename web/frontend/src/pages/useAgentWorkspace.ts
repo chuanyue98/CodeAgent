@@ -58,6 +58,7 @@ export type UseAgentWorkspaceReturn = {
   showHiddenWorkspaces: boolean;
   onHideWorkspace: (path: string) => void;
   onUnhideWorkspace: (path: string) => void;
+  onHideAllUnavailableWorkspaces: (paths: string[]) => void;
   onToggleShowHiddenWorkspaces: () => void;
   onRegisterWorkspace: (path: string) => Promise<void>;
   registeringWorkspace: string | null;
@@ -164,6 +165,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     showHiddenWorkspaces,
     onHideWorkspace,
     onUnhideWorkspace,
+    onHideAllUnavailableWorkspaces,
     onToggleShowHiddenWorkspaces,
     workspaceConversations,
   } = useAgentWorkspaceSessions({
@@ -321,6 +323,7 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     showHiddenWorkspaces,
     onHideWorkspace,
     onUnhideWorkspace,
+    onHideAllUnavailableWorkspaces,
     onToggleShowHiddenWorkspaces,
     onRegisterWorkspace: registerWorkspace,
     registeringWorkspace,

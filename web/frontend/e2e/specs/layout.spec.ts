@@ -49,7 +49,7 @@ test('nested workspace routes avoid page-level overflow at supported widths', as
     { path: '/agent/web', label: 'Web Agent' },
     { path: '/automations/tasks', label: 'Tasks' },
     { path: '/activity/sessions', label: 'Sessions' },
-    { path: '/settings/capabilities/plugins', label: 'Plugins' },
+    { path: '/settings/plugins', label: 'Plugins' },
     { path: '/settings/system', label: 'System' },
   ];
 

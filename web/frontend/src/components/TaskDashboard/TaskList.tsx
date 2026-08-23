@@ -95,21 +95,26 @@ export default memo(function TaskList({
             {tasks.length} task{tasks.length === 1 ? '' : 's'} available · reusable prompts you can run on any engine or put on a schedule
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onManualCreateClick}
-            title="Write the task file by hand"
-            className="flex items-center gap-2 px-3 py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all font-semibold text-sm"
-          >
-            <Plus className="w-4 h-4" /> Manual
-          </button>
-          <button
-            onClick={onGenerateClick}
-            className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:opacity-90 transition-all font-semibold shadow-lg shadow-primary/20 active:scale-95 text-sm"
-          >
-            <Sparkles className="w-4 h-4" /> Generate with AI
-          </button>
-        </div>
+        {/* Hidden while the list is empty: the empty state below carries its
+            own (better-labeled) create buttons, and showing both pairs at
+            once duplicated the same two actions on one screen. */}
+        {tasks.length > 0 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onManualCreateClick}
+              title="Write the task file by hand"
+              className="flex items-center gap-2 px-3 py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all font-semibold text-sm"
+            >
+              <Plus className="w-4 h-4" /> Manual
+            </button>
+            <button
+              onClick={onGenerateClick}
+              className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:opacity-90 transition-all font-semibold shadow-lg shadow-primary/20 active:scale-95 text-sm"
+            >
+              <Sparkles className="w-4 h-4" /> Generate with AI
+            </button>
+          </div>
+        )}
       </div>
 
       {tasks.length > 5 && (

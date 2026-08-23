@@ -11,7 +11,7 @@ async function gotoAgent(page: Page): Promise<void> {
   await waitForH2(page, 'Web Agent');
   await expect(page.getByPlaceholder(/Message/)).toBeVisible();
   await expect(page.getByLabel('Workspace')).not.toHaveValue('');
-  await expect(page.getByLabel('Provider')).toHaveValue('fake');
+  await expect(page.getByLabel('Engine')).toHaveValue('fake');
 }
 
 test('creates a structured session and streams provider-neutral events', async ({ page }) => {
@@ -23,7 +23,7 @@ test('creates a structured session and streams provider-neutral events', async (
   await expect(page.locator('main')).toContainText('Echo: hello gateway');
   await expect(page.locator('main')).toContainText('Connected');
   await expect(page.getByLabel('Workspace')).toBeDisabled();
-  await expect(page.getByLabel('Provider')).toBeDisabled();
+  await expect(page.getByLabel('Engine')).toBeDisabled();
 });
 
 test('activity drawer keeps protocol details out of the conversation by default', async ({ page }) => {
@@ -93,7 +93,7 @@ test('groups conversations by workspace across providers', async ({ page, baseUR
   await expect(secondWorkspace).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByText('Codex in second workspace', { exact: true })).not.toBeVisible();
 
-  await page.getByLabel('Provider').selectOption('codex');
+  await page.getByLabel('Engine').selectOption('codex');
   await expect(firstWorkspace).toBeVisible();
   await secondWorkspace.click();
   await expect(page.getByText('Codex in second workspace', { exact: true })).toBeVisible();

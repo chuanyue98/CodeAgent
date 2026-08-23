@@ -47,22 +47,18 @@ export const ACTIVITY_TABS: SectionTab[] = [
 // single row and shouldn't leak into a sibling tab's filters.
 export const ACTIVITY_FILTER_PARAMS = ['q', 'from', 'to', 'engines', 'types', 'project'];
 
+// One flat row of Settings tabs. Capabilities used to be a nested second
+// SectionLayout (two stacked tab rows) whose only job was grouping the five
+// capability pages; folding them into this row costs no width and removes the
+// only three-level navigation in the app.
 export const SETTINGS_TABS: SectionTab[] = [
   { to: '/settings/workspace', label: 'Workspace' },
-  {
-    to: '/settings/capabilities/skills',
-    label: 'Capabilities',
-    matchPrefix: '/settings/capabilities',
-  },
+  { to: '/settings/skills', label: 'Skills' },
+  { to: '/settings/prompts', label: 'Prompts' },
+  { to: '/settings/hooks', label: 'Hooks' },
+  { to: '/settings/plugins', label: 'Plugins' },
+  { to: '/settings/mcp', label: 'MCP' },
   { to: '/settings/system', label: 'System' },
-];
-
-export const CAPABILITY_TABS: SectionTab[] = [
-  { to: '/settings/capabilities/skills', label: 'Skills' },
-  { to: '/settings/capabilities/prompts', label: 'Prompts' },
-  { to: '/settings/capabilities/hooks', label: 'Hooks' },
-  { to: '/settings/capabilities/plugins', label: 'Plugins' },
-  { to: '/settings/capabilities/mcp', label: 'MCP' },
 ];
 
 // Flat map of every leaf route to its display label. Also doubles as the
@@ -78,10 +74,10 @@ export const PAGE_LABELS: Record<string, string> = {
   '/activity/timeline': 'Timeline',
   '/activity/usage': 'Usage',
   '/settings/workspace': 'Workspace',
-  '/settings/capabilities/skills': 'Skills',
-  '/settings/capabilities/prompts': 'Prompts',
-  '/settings/capabilities/hooks': 'Hooks',
-  '/settings/capabilities/plugins': 'Plugins',
-  '/settings/capabilities/mcp': 'MCP',
+  '/settings/skills': 'Skills',
+  '/settings/prompts': 'Prompts',
+  '/settings/hooks': 'Hooks',
+  '/settings/plugins': 'Plugins',
+  '/settings/mcp': 'MCP',
   '/settings/system': 'System',
 };

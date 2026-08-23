@@ -75,9 +75,9 @@ export default function AgentToolbar({
         )}
       </label>
       <label className="w-40 text-[11px] font-medium text-slate-500">
-        Provider
+        Engine
         <select
-          aria-label="Provider"
+          aria-label="Engine"
           value={selectedProvider}
           disabled={disabled}
           onChange={event => {
@@ -85,7 +85,7 @@ export default function AgentToolbar({
           }}
           className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-primary disabled:opacity-60"
         >
-          <option value="">No provider</option>
+          <option value="">No engine</option>
           {providers.map(provider => (
             <option
               key={provider.providerId}

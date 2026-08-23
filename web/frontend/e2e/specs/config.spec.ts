@@ -22,8 +22,8 @@ test('describes the local runtime model', async ({ page }) => {
 
 test('adding a project then saving persists the row', async ({ page }) => {
   await gotoConfig(page);
-  await page.getByRole('button', { name: 'Add Project' }).click();
-  const registry = page.locator('section', { hasText: 'Project Registry' });
+  await page.getByRole('button', { name: 'Add Workspace' }).click();
+  const registry = page.locator('section', { hasText: 'Workspaces' });
   await registry.locator('input[placeholder="/absolute/path/to/your/project"]').last().fill('/tmp/e2e-project');
   await save(page);
   await page.reload();
@@ -37,9 +37,9 @@ test('adding a project then saving persists the row', async ({ page }) => {
 
 test('empty project rows cannot be saved', async ({ page }) => {
   await gotoConfig(page);
-  await page.getByRole('button', { name: 'Add Project' }).click();
+  await page.getByRole('button', { name: 'Add Workspace' }).click();
   await save(page);
-  await expect(page.getByText(/Project path and resource group are required/)).toBeVisible();
+  await expect(page.getByText(/Workspace path and resource group are required/)).toBeVisible();
 });
 
 test('New Group inline input: Enter confirms, Escape cancels', async ({ page }) => {

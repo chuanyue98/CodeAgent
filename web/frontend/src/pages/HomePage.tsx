@@ -1,44 +1,25 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, ArrowUpRight, Bot, Clock, History, Settings, Terminal } from 'lucide-react';
+import {
+  Activity,
+  ArrowRight,
+  ArrowUpRight,
+  Bot,
+  Clock3,
+  Cpu,
+  HardDrive,
+  MemoryStick,
+  Terminal,
+} from 'lucide-react';
 import { Link } from 'react-router';
 import { fetchAuditEvents, type AuditEvent } from '../api/audit';
-
-const QUICK_ACTIONS = [
-  {
-    to: '/agent/web',
-    title: 'Web Agent',
-    description: 'Start or continue a structured provider conversation.',
-    icon: Bot,
-  },
-  {
-    to: '/agent/terminal',
-    title: 'Local Terminal',
-    description: 'Open a provider CLI in an in-browser terminal, running on this machine.',
-    icon: Terminal,
-  },
-  {
-    to: '/automations/tasks',
-    title: 'Automations',
-    description: 'Run tasks, manage schedules, and read run logs.',
-    icon: Clock,
-  },
-  {
-    to: '/activity/sessions',
-    title: 'Activity',
-    description: 'Review past sessions, their event timeline, and usage.',
-    icon: History,
-  },
-  {
-    to: '/settings/capabilities/skills',
-    title: 'Capabilities',
-    description: 'Configure skills, prompts, hooks, plugins, and MCP.',
-    icon: Settings,
-  },
-] as const;
+import { fetchSessions, type SessionUsage } from '../api/analytics';
+import request from '../utils/request';
+import { useSystemMetrics } from '../context/SystemMetricsContext';
 
 const EQ_BARS = [0.4, 0.7, 1, 0.55, 0.85, 0.35, 0.65, 0.5, 0.9, 0.3, 0.75, 0.45];
 
 const RECENT_ACTIVITY_LIMIT = 6;
+const RECENT_SESSIONS_LIMIT = 5;
 
 /** Compact "2s"/"14m"/"3h"/"2d" — matches the hero's tight, terminal-ish style. */
 function formatCompactAgo(timestamp: string): string {
@@ -65,49 +46,44 @@ function toneForEvent(event: AuditEvent): 'live' | 'ok' | 'idle' {
   return event.role === 'user' ? 'live' : 'idle';
 }
 
-function useRecentActivity(limit: number): AuditEvent[] | null {
-  const [events, setEvents] = useState<AuditEvent[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchAuditEvents({ limit })
-      .then(res => { if (!cancelled) setEvents(res.events); })
-      .catch(() => { if (!cancelled) setEvents([]); });
-    return () => { cancelled = true; };
-  }, [limit]);
-
-  return events;
+/** Last path segment — the label form every other page uses for a workspace. */
+function workspaceLabel(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() || path;
 }
 
+interface RunStatus {
+  task_id: string;
+  engine: string;
+  status: string;
+}
+
+/**
+ * Home used to be five entry cards repeating the five primary-nav items one
+ * to one. It is now a dashboard of live data — recent sessions, what is
+ * running, system health — so the page answers "what's going on / what was I
+ * doing" instead of "where is the nav" (the sidebar already answers that).
+ */
 export default function HomePage() {
-  // The first two actions get the wide/tall bento slots; the rest fill in.
-  const [webAgent, localTerminal, automations, activity, capabilities] = QUICK_ACTIONS;
   const recentEvents = useRecentActivity(RECENT_ACTIVITY_LIMIT);
+  const recentSessions = useRecentSessions(RECENT_SESSIONS_LIMIT);
+  const runs = useRunningTasks();
+  const { metrics } = useSystemMetrics();
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-3 p-2 sm:space-y-4 sm:p-4 lg:p-6">
-      {/* Bento grid: asymmetric — hero spans 2x2 (rows 1-2), web-agent
-          spans 2-wide (row 1), local terminal + automations fill row 2
-          beside hero, then activity and capabilities close it out as two
-          full-width strips. Every row fills all 4 columns exactly — no
-          auto-placement gaps — so span changes here need re-checking against
-          that. */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
 
-        {/* ===== HERO ===== */}
+        {/* ===== HERO + live activity ===== */}
         <section
-          className="animate-fade-rise stagger-1 glass-card-feature group relative flex min-h-[20rem] flex-col justify-between overflow-hidden p-6 sm:p-8 lg:col-span-2 lg:row-span-2 lg:min-h-[26rem]"
+          className="animate-fade-rise stagger-1 glass-card-feature group relative flex min-h-[18rem] flex-col justify-between overflow-hidden p-6 sm:p-8 lg:col-span-2"
           aria-labelledby="hero-heading"
         >
-          {/* Decorative orbit halo behind the copy */}
           <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 opacity-60">
             <div className="animate-orbit absolute inset-0 rounded-full border border-primary/20" />
             <div className="animate-orbit absolute inset-6 rounded-full border border-primary/10" style={{ animationDuration: '32s' }} />
             <div className="animate-orbit absolute inset-12 rounded-full border border-primary/5" style={{ animationDuration: '40s' }} />
             <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/40 blur-[1px]" />
           </div>
-
-          {/* Spotlight gradient that follows the card surface */}
           <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent" />
 
           <div className="relative">
@@ -118,17 +94,28 @@ export default function HomePage() {
               </span>
               CodeAgent Workspace
             </div>
-            <h2 id="hero-heading" className="max-w-xl text-3xl font-bold leading-[1.05] text-slate-900 sm:text-4xl lg:text-5xl">
+            <h2 id="hero-heading" className="max-w-xl text-3xl font-bold leading-[1.05] text-slate-900 sm:text-4xl">
               Start with the <span className="font-display italic text-primary">work</span> you want to do.
             </h2>
-            <p className="mt-4 max-w-md text-sm leading-6 text-slate-500">
-              Agent conversations, terminal sessions, automations, activity, and configuration — grouped by workflow instead of scattered as separate top-level tools.
-            </p>
+            {/* Quick actions stay one compact row — the sidebar owns
+                navigation; these are just the two most common starts. */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link
+                to="/agent/web"
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-all hover:opacity-90"
+              >
+                <Bot className="h-3.5 w-3.5" /> New conversation
+              </Link>
+              <Link
+                to="/agent/terminal"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-4 py-2 text-xs font-semibold text-slate-600 transition-colors hover:border-primary/30 hover:text-primary"
+              >
+                <Terminal className="h-3.5 w-3.5" /> Open terminal
+              </Link>
+            </div>
           </div>
 
-          {/* Live activity strip — gives the hero information density. */}
           <div className="relative mt-8 space-y-3">
-            {/* Equalizer decoration */}
             <div aria-hidden className="flex h-10 items-end gap-[3px]">
               {EQ_BARS.map((h, i) => (
                 <span
@@ -143,7 +130,7 @@ export default function HomePage() {
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">recent activity</span>
                 <Link
-                  to="/activity/sessions"
+                  to="/activity/timeline"
                   className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary transition-colors hover:text-primary/80"
                 >
                   View all <ArrowUpRight className="h-3 w-3" />
@@ -179,99 +166,187 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ===== WEB AGENT (wide) ===== */}
-        <TileLink action={webAgent} className="animate-fade-rise stagger-2 lg:col-span-2" featured />
+        {/* ===== SYSTEM ===== */}
+        <section className="animate-fade-rise stagger-2 glass-card flex flex-col p-5">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <Cpu className="h-4 w-4 text-primary" /> System
+            </h3>
+            <Link to="/settings/system" className="text-[11px] font-semibold text-primary hover:underline">
+              Details
+            </Link>
+          </div>
+          <div className="mt-4 flex-1 space-y-3">
+            {metrics ? (
+              <>
+                <MetricRow icon={<Cpu className="h-3.5 w-3.5" />} label="CPU" value={metrics.cpu_percent} />
+                <MetricRow icon={<MemoryStick className="h-3.5 w-3.5" />} label="Memory" value={metrics.memory_percent} extra={`${metrics.memory_used_gb.toFixed(1)} / ${metrics.memory_total_gb.toFixed(1)} GB`} />
+                <MetricRow icon={<HardDrive className="h-3.5 w-3.5" />} label="Disk" value={metrics.disk_percent} extra={`${metrics.disk_used_gb.toFixed(0)} / ${metrics.disk_total_gb.toFixed(0)} GB`} />
+              </>
+            ) : (
+              <p className="text-xs text-slate-400">Loading metrics…</p>
+            )}
+          </div>
+        </section>
 
-        {/* ===== LOCAL TERMINAL ===== */}
-        <TileLink action={localTerminal} className="animate-fade-rise stagger-3" mono />
+        {/* ===== RECENT SESSIONS ===== */}
+        <section className="animate-fade-rise stagger-3 glass-card flex flex-col p-5 sm:col-span-2">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <Activity className="h-4 w-4 text-primary" /> Continue where you left off
+            </h3>
+            <Link to="/activity/sessions" className="text-[11px] font-semibold text-primary hover:underline">
+              All sessions
+            </Link>
+          </div>
+          <ul className="mt-3 flex-1 divide-y divide-slate-100">
+            {recentSessions === null ? (
+              <li className="py-6 text-center text-xs text-slate-400">Loading sessions…</li>
+            ) : recentSessions.length === 0 ? (
+              <li className="py-6 text-center text-xs text-slate-400">
+                No sessions yet — start a conversation or run a task.
+              </li>
+            ) : (
+              recentSessions.map(session => (
+                <li key={session.sessionId}>
+                  <Link
+                    to={`/activity/sessions?session=${encodeURIComponent(session.sessionId)}`}
+                    className="group flex items-center justify-between gap-3 py-2.5"
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-slate-500">
+                        {session.target}
+                      </span>
+                      <span className="min-w-0 truncate text-xs font-medium text-slate-700 group-hover:text-primary">
+                        {workspaceLabel(session.projectPath || '') || 'Unknown workspace'}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2 text-[10px] text-slate-400">
+                      <span>{formatCompactAgo(session.lastActivity)}</span>
+                      <ArrowRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
+                    </span>
+                  </Link>
+                </li>
+              ))
+            )}
+          </ul>
+        </section>
 
         {/* ===== AUTOMATIONS ===== */}
-        <TileLink action={automations} className="animate-fade-rise stagger-4" />
-
-        {/* ===== ACTIVITY (full-width strip — row 2 (Hero + Local Terminal +
-            Automations) already fills all 4 columns on its own, so Activity
-            closes it out at full width instead of leaving a lg:col-span-2
-            partner slot empty) ===== */}
-        <TileLink action={activity} className="animate-fade-rise stagger-5 lg:col-span-4" chart />
-
-        {/* ===== CAPABILITIES (full-width strip) ===== */}
-        <TileLink action={capabilities} className="animate-fade-rise stagger-6 lg:col-span-4" strip />
+        <section className="animate-fade-rise stagger-4 glass-card flex flex-col p-5">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <Clock3 className="h-4 w-4 text-primary" /> Automations
+            </h3>
+            <Link to="/automations/tasks" className="text-[11px] font-semibold text-primary hover:underline">
+              Open
+            </Link>
+          </div>
+          <div className="mt-4 flex-1">
+            {runs === null ? (
+              <p className="text-xs text-slate-400">Checking runs…</p>
+            ) : runs.length === 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500">Nothing running right now.</p>
+                <Link
+                  to="/automations/tasks"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                >
+                  Run a task <ArrowRight className="h-3 w-3" />
+                </Link>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {runs.map(run => (
+                  <li
+                    key={run.task_id}
+                    className="flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs"
+                  >
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-mono font-semibold text-emerald-800">
+                      {run.task_id}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-semibold uppercase text-emerald-600">
+                      {run.engine}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );
 }
 
-/* ---------- Tile sub-component ---------- */
-
-interface TileLinkProps {
-  action: typeof QUICK_ACTIONS[number];
-  className?: string;
-  featured?: boolean;
-  mono?: boolean;
-  chart?: boolean;
-  strip?: boolean;
+function MetricRow({ icon, label, value, extra }: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  extra?: string;
+}) {
+  const pct = Math.min(Math.round(value), 100);
+  const tone = value > 85 ? 'bg-red-500' : value > 65 ? 'bg-amber-400' : 'bg-primary';
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs">
+        <span className="flex items-center gap-1.5 text-slate-500">
+          {icon} {label}
+        </span>
+        <span className="font-medium text-slate-700">
+          {pct}%{extra ? <span className="ml-1 font-normal text-slate-400">{extra}</span> : null}
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-full rounded-full transition-all ${tone}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
 }
 
-function TileLink({ action, className = '', featured, mono, chart, strip }: TileLinkProps) {
-  const { to, title, description, icon: Icon } = action;
+function useRecentActivity(limit: number): AuditEvent[] | null {
+  const [events, setEvents] = useState<AuditEvent[] | null>(null);
 
-  return (
-    <Link
-      to={to}
-      aria-label={title}
-      className={`glass-card group relative flex min-h-36 flex-col justify-between overflow-hidden p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-white hover:shadow-[0_28px_40px_-16px_rgba(15,23,42,0.12)] ${className}`}
-    >
-      {/* Hover spotlight sweep */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-primary/[0.04] to-transparent transition-transform duration-700 group-hover:translate-x-full"
-      />
+  useEffect(() => {
+    let cancelled = false;
+    fetchAuditEvents({ limit })
+      .then(res => { if (!cancelled) setEvents(res.events); })
+      .catch(() => { if (!cancelled) setEvents([]); });
+    return () => { cancelled = true; };
+  }, [limit]);
 
-      <div className="relative flex items-start justify-between gap-3">
-        <div className={`inline-flex rounded-xl p-2.5 text-primary transition-colors ${
-          featured ? 'bg-primary/15' : 'bg-primary/10 group-hover:bg-primary/15'
-        }`}>
-          <Icon className="h-5 w-5" />
-        </div>
-        <ArrowRight className="h-4 w-4 text-slate-300 transition-all duration-300 group-hover:translate-x-0.5 group-hover:text-primary" />
-      </div>
+  return events;
+}
 
-      <div className="relative mt-4">
-        <h3 className={`text-base font-semibold text-slate-800 ${mono ? 'font-mono' : ''}`}>
-          {title}
-        </h3>
-        <p className="mt-1.5 text-xs leading-5 text-slate-500">{description}</p>
-      </div>
+function useRecentSessions(limit: number): SessionUsage[] | null {
+  const [sessions, setSessions] = useState<SessionUsage[] | null>(null);
 
-      {/* Per-tile flourish — gives each card a distinct silhouette. */}
-      {chart && (
-        <div aria-hidden className="relative mt-4 flex h-8 items-end gap-1">
-          {[0.35, 0.55, 0.4, 0.75, 0.5, 0.9, 0.6, 0.45, 0.7].map((h, i) => (
-            <span
-              key={i}
-              className="flex-1 rounded-sm bg-gradient-to-t from-primary/20 to-primary/60 opacity-70 transition-opacity group-hover:opacity-100"
-              style={{ height: `${h * 100}%` }}
-            />
-          ))}
-        </div>
-      )}
+  useEffect(() => {
+    let cancelled = false;
+    fetchSessions(limit)
+      .then(list => { if (!cancelled) setSessions(list); })
+      .catch(() => { if (!cancelled) setSessions([]); });
+    return () => { cancelled = true; };
+  }, [limit]);
 
-      {strip && (
-        <div aria-hidden className="relative mt-4 flex flex-wrap gap-1.5">
-          {['Skills', 'Prompts', 'Hooks', 'Plugins', 'MCP'].map(tag => (
-            <span key={tag} className="rounded-full border border-slate-200 bg-white/60 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
+  return sessions;
+}
 
-      {mono && (
-        <div aria-hidden className="relative mt-4 font-mono text-[11px] leading-relaxed text-slate-400">
-          <div><span className="text-emerald-500">$</span> ca --provider claude</div>
-          <div className="text-slate-400">▍ ready</div>
-        </div>
-      )}
-    </Link>
-  );
+/** Only the running rows matter on a dashboard — everything else is noise. */
+function useRunningTasks(): RunStatus[] | null {
+  const [runs, setRuns] = useState<RunStatus[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    request<RunStatus[]>('/api/tasks/runs')
+      .then(list => { if (!cancelled) setRuns((list || []).filter(run => run.status === 'running')); })
+      .catch(() => { if (!cancelled) setRuns([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  return runs;
 }

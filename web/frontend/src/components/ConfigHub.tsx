@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Save, Loader2, Plus, Trash2, Folder, Layers, Globe, Zap, Check, X, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Save, Loader2, Plus, Trash2, Folder, Layers, Globe, Zap, Check, X, AlertTriangle, CheckCircle2, ArrowRight, Eraser } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { useProject, type Config, type GroupDefinition, type Project } from '../context/ProjectContext';
 import request from '../utils/request';
 import LoadingState from './shared/LoadingState';
@@ -28,8 +29,10 @@ const ConfigHub: React.FC = () => {
     projects,
     groups,
     refreshConfig,
-    availableGroups
+    availableGroups,
+    setCurrentGroup
   } = useProject();
+  const navigate = useNavigate();
 
   const [localConfig, setLocalConfig] = useState<Config | null>(null);
   const [localProjects, setLocalProjects] = useState<EditableProject[]>([]);
@@ -116,11 +119,11 @@ const ConfigHub: React.FC = () => {
       group: group.trim(),
     }));
     if (normalizedProjects.some(project => !project.path || !project.group)) {
-      setError('Project path and resource group are required. Complete or remove empty project rows.');
+      setError('Workspace path and resource group are required. Complete or remove empty rows.');
       return;
     }
     if (new Set(normalizedProjects.map(project => project.path)).size !== normalizedProjects.length) {
-      setError('Each project path can only be registered once.');
+      setError('Each workspace path can only be registered once.');
       return;
     }
 
@@ -189,6 +192,27 @@ const ConfigHub: React.FC = () => {
       { uiId: createEditableRowId('project'), path: '', group: 'common' },
     ]);
   };
+
+  // Batch version of removeProject for rows whose saved path no longer
+  // exists on disk. Still a draft: the save bar shows the pending removal
+  // and "Discard changes" brings every row back.
+  const removeMissingPaths = () => {
+    setIsDirty(true);
+    setLocalProjects(current => current.filter(p => {
+      const saved = projects.find(project => project.path === p.path.trim());
+      return !(p.path.trim() && saved?.available === false);
+    }));
+  };
+
+  // Whether any row is currently flagged as missing, so the batch cleanup
+  // button only appears when it has something to do.
+  const missingRowCount = useMemo(
+    () => localProjects.filter(p => {
+      const saved = projects.find(project => project.path === p.path.trim());
+      return Boolean(p.path.trim()) && saved?.available === false;
+    }).length,
+    [localProjects, projects],
+  );
 
   const updateProject = (uiId: string, field: keyof Project, value: string) => {
     setIsDirty(true);
@@ -318,7 +342,7 @@ const ConfigHub: React.FC = () => {
         </div>
       </section>
 
-      {/* Project Registry */}
+      {/* Workspace Registry */}
       <section className="glass-card p-4 sm:p-8 space-y-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div className="flex items-center gap-3">
@@ -326,13 +350,24 @@ const ConfigHub: React.FC = () => {
               <Folder size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">Project Registry</h2>
-              <p className="text-xs text-slate-500">Map paths to resource groups (Longest Prefix Match)</p>
+              <h2 className="text-lg font-semibold tracking-tight">Workspaces</h2>
+              <p className="text-xs text-slate-500">Registered directories CodeAgent can work in, mapped to resource groups (longest prefix match)</p>
             </div>
           </div>
-          <button onClick={addProject} className="text-xs flex items-center gap-2 font-semibold text-primary bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-all">
-            <Plus className="w-4 h-4" /> Add Project
-          </button>
+          <div className="flex items-center gap-2">
+            {missingRowCount > 0 && (
+              <button
+                onClick={removeMissingPaths}
+                title={`Remove the ${missingRowCount} registered path${missingRowCount === 1 ? '' : 's'} that no longer exist on disk`}
+                className="text-xs flex items-center gap-2 font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl hover:bg-amber-100 transition-all"
+              >
+                <Eraser className="w-4 h-4" /> Remove {missingRowCount} missing path{missingRowCount === 1 ? '' : 's'}
+              </button>
+            )}
+            <button onClick={addProject} className="text-xs flex items-center gap-2 font-semibold text-primary bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-all">
+              <Plus className="w-4 h-4" /> Add Workspace
+            </button>
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -348,7 +383,7 @@ const ConfigHub: React.FC = () => {
                 <input
                   id={`project-path-${p.uiId}`}
                   type="text"
-                  aria-label={`Project path ${i + 1}`}
+                  aria-label={`Workspace path ${i + 1}`}
                   value={p.path}
                   onChange={(e) => updateProject(p.uiId, 'path', e.target.value)}
                   placeholder="/absolute/path/to/your/project"
@@ -365,14 +400,14 @@ const ConfigHub: React.FC = () => {
               </div>
               <select
                 id={`project-group-${p.uiId}`}
-                aria-label={`Resource group for project ${i + 1}`}
+                aria-label={`Resource group for workspace ${i + 1}`}
                 value={p.group}
                 onChange={(e) => updateProject(p.uiId, 'group', e.target.value)}
                 className="w-full sm:w-40 p-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/20"
               >
                 {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
-              <button aria-label={`Remove project ${p.path || i + 1}`} title="Unregister this project" onClick={() => removeProject(p.uiId)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
+              <button aria-label={`Remove workspace ${p.path || i + 1}`} title="Unregister this workspace" onClick={() => removeProject(p.uiId)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
                 <Trash2 size={18} />
               </button>
             </div>
@@ -380,14 +415,14 @@ const ConfigHub: React.FC = () => {
           })}
           {localProjects.length === 0 && (
             <div className="text-center py-8 space-y-2">
-              <p className="text-slate-500 text-sm">No projects registered yet.</p>
+              <p className="text-slate-500 text-sm">No workspaces registered yet.</p>
               <p className="text-xs text-slate-400">
                 Add the absolute path of a directory you want CodeAgent to work in — for example
                 {' '}<code className="bg-slate-100 px-1 rounded text-slate-600 font-mono">/home/you/code/my-app</code>.
                 The agent never operates outside a registered path.
               </p>
               <button onClick={addProject} className="mt-1 inline-flex items-center gap-2 text-xs font-semibold text-primary bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-all">
-                <Plus className="w-4 h-4" /> Add your first project
+                <Plus className="w-4 h-4" /> Add your first workspace
               </button>
             </div>
           )}
@@ -444,11 +479,28 @@ const ConfigHub: React.FC = () => {
                 <span className="font-semibold text-sm text-slate-800 uppercase tracking-tight">{name}</span>
                 <span className="text-xs text-slate-400">{def.skills?.length ?? 0} skills · {def.prompts?.length ?? 0} prompts · {def.hooks?.length ?? 0} hooks · {def.plugins?.length ?? 0} plugins</span>
               </div>
-              {name !== 'codeagent' && name !== 'common' && (
-                <button aria-label={`Remove group ${name}`} onClick={() => removeGroup(name)} className="p-1.5 text-slate-500 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
-                  <Trash2 size={15} />
-                </button>
-              )}
+              <div className="flex items-center gap-1">
+                {/* Group membership is edited in the capability galleries, one
+                    kind at a time — link there instead of leaving "where do I
+                    actually tick the boxes?" unanswered. Hidden while dirty so
+                    navigating away can't silently drop unsaved edits. */}
+                {!dirty && (
+                  <button
+                    onClick={() => {
+                      setCurrentGroup(name);
+                      navigate('/settings/skills');
+                    }}
+                    className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    Manage members <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                {name !== 'codeagent' && name !== 'common' && (
+                  <button aria-label={`Remove group ${name}`} onClick={() => removeGroup(name)} className="p-1.5 text-slate-500 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
+                    <Trash2 size={15} />
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

@@ -48,6 +48,7 @@ type Props = {
   showHiddenWorkspaces: boolean;
   onHideWorkspace: (path: string) => void;
   onUnhideWorkspace: (path: string) => void;
+  onHideAllUnavailable: () => void;
   onToggleShowHiddenWorkspaces: () => void;
   onRegisterWorkspace: (path: string) => Promise<void>;
   registeringWorkspace: string | null;
@@ -98,6 +99,7 @@ export default function AgentWorkspaceSidebar({
   showHiddenWorkspaces,
   onHideWorkspace,
   onUnhideWorkspace,
+  onHideAllUnavailable,
   onToggleShowHiddenWorkspaces,
   onRegisterWorkspace,
   registeringWorkspace,
@@ -278,8 +280,8 @@ export default function AgentWorkspaceSidebar({
                         </button>
                         <Link
                           to={buildTimelineLink(item.session.engine, item.session.session_id, item.session.project_path)}
-                          title="View in Events"
-                          aria-label="View in Events"
+                          title="View in Timeline"
+                          aria-label="View in Timeline"
                           className="mr-1 hidden rounded-md p-1.5 text-slate-400 hover:bg-white hover:text-primary group-hover:block focus:block"
                         >
                           <History className="h-3.5 w-3.5" />
@@ -335,22 +337,35 @@ export default function AgentWorkspaceSidebar({
           )}
         {!nativeSessionsLoading && unavailableSessionCount > 0 && (
           <>
-            <button
-              onClick={() =>
-                onShowUnavailableHistoryChange(!showUnavailableHistory)
-              }
-              aria-expanded={unavailableHistoryExpanded}
-              className="mt-2 flex w-full items-center justify-between border-t border-slate-100 px-2 pb-1 pt-3 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-700"
-            >
-              <span>
-                Unavailable workspaces ({unavailableWorkspaceGroups.length})
-              </span>
-              <ChevronDown
-                className={`h-3.5 w-3.5 transition-transform ${
-                  unavailableHistoryExpanded ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
+            <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-100 px-2 pb-1 pt-3">
+              <button
+                onClick={() =>
+                  onShowUnavailableHistoryChange(!showUnavailableHistory)
+                }
+                aria-expanded={unavailableHistoryExpanded}
+                className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-700"
+              >
+                <span className="truncate">
+                  Unavailable workspaces ({unavailableWorkspaceGroups.length})
+                </span>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 shrink-0 transition-transform ${
+                    unavailableHistoryExpanded ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+              {/* With dozens of stale history paths, hiding one at a time is
+                  its own chore -- offer the bulk form of the same action. */}
+              {unavailableWorkspaceGroups.length > 1 && (
+                <button
+                  onClick={onHideAllUnavailable}
+                  title="Dismiss every unavailable workspace in this list"
+                  className="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                >
+                  Hide all
+                </button>
+              )}
+            </div>
             {unavailableHistoryExpanded &&
               visibleUnavailableWorkspaceGroups.map(group => {
                 const { latestSession, isHidden } = group;
@@ -401,7 +416,7 @@ export default function AgentWorkspaceSidebar({
                         to={buildTimelineLink(latestSession.engine, latestSession.session_id, latestSession.project_path)}
                         className="inline-block text-[10px] font-semibold text-primary hover:underline"
                       >
-                        View in Events
+                        View in Timeline
                       </Link>
                     </span>
                   </div>

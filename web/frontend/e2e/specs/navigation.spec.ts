@@ -26,9 +26,14 @@ test('sidebar nav links navigate and mark the active route', async ({ page }) =>
 test('legacy routes redirect into the new hierarchy', async ({ page }) => {
   await page.goto('/skills');
   await waitForH2(page, 'Skills');
-  await expect(page).toHaveURL(/\/settings\/capabilities\/skills$/);
+  await expect(page).toHaveURL(/\/settings\/skills$/);
   await expect(page.getByRole('navigation', { name: 'Settings sections' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Capabilities sections' })).toBeVisible();
+  // Capabilities was flattened from a nested tab row into the Settings row.
+  await expect(page.getByRole('navigation', { name: 'Capabilities sections' })).toHaveCount(0);
+
+  await page.goto('/settings/capabilities/plugins');
+  await waitForH2(page, 'Plugins');
+  await expect(page).toHaveURL(/\/settings\/plugins$/);
 });
 
 test('Agent workspace combines Web Agent and Local Terminal modes', async ({ page }) => {

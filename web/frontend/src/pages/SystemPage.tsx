@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
 import { fetchSystemHealth, type SystemHealth } from '../api/system';
 import { useSystemMetrics } from '../context/SystemMetricsContext';
-import LogViewer from '../components/LogViewer';
 
 function StatusIcon({ status }: { status: string }) {
   if (status === '[OK]') return <CheckCircle className="w-4 h-4 text-green-600" />;
@@ -125,9 +124,9 @@ export default function SystemPage() {
           </div>
         </div>
       ))}
-
-      {/* Log viewer */}
-      <LogViewer />
+      {/* Task run logs live in Automations > Logs, next to the tasks that
+          write them -- embedding a second viewer here duplicated that page
+          with no system-health purpose of its own. */}
     </div>
   );
 }

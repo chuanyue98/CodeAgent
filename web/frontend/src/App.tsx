@@ -12,7 +12,6 @@ import {
   ACTIVITY_TABS,
   AGENT_TABS,
   AUTOMATION_TABS,
-  CAPABILITY_TABS,
   PAGE_LABELS,
   primaryNav,
   SETTINGS_TABS,
@@ -32,7 +31,6 @@ const LogViewer = lazy(() => import('./components/LogViewer'));
 const SessionsPage = lazy(() => import('./components/SessionsPage'));
 const AuditTrail = lazy(() => import('./components/AuditTrail'));
 const AgentWorkspace = lazy(() => import('./pages/AgentWorkspace'));
-const ChatPage = lazy(() => import('./components/ChatPage'));
 const CronPage = lazy(() => import('./components/CronPage'));
 const McpPage = lazy(() => import('./components/McpPage'));
 
@@ -155,7 +153,6 @@ function App() {
               >
                 <Route index element={<Navigate to="web" replace />} />
                 <Route path="web" element={page(<AgentWorkspace />)} />
-                <Route path="legacy" element={page(<ChatPage />)} />
                 <Route path="terminal" element={page(<LaunchPad />)} />
               </Route>
 
@@ -185,22 +182,19 @@ function App() {
               >
                 <Route index element={<Navigate to="workspace" replace />} />
                 <Route path="workspace" element={page(<ConfigHub />)} />
-                <Route
-                  path="capabilities"
-                  element={<SectionLayout label="Capabilities" description="Resources configured for the selected project group." tabs={CAPABILITY_TABS} />}
-                >
-                  <Route index element={<Navigate to="skills" replace />} />
-                  <Route path="skills" element={page(<SkillGallery />)} />
-                  <Route path="prompts" element={page(<PromptsGallery />)} />
-                  <Route path="hooks" element={page(<HooksGallery />)} />
-                  <Route path="plugins" element={page(<PluginGallery />)} />
-                  <Route path="mcp" element={page(<McpPage />)} />
-                </Route>
+                <Route path="skills" element={page(<SkillGallery />)} />
+                <Route path="prompts" element={page(<PromptsGallery />)} />
+                <Route path="hooks" element={page(<HooksGallery />)} />
+                <Route path="plugins" element={page(<PluginGallery />)} />
+                <Route path="mcp" element={page(<McpPage />)} />
                 <Route path="system" element={page(<SystemPage />)} />
               </Route>
 
               <Route path="/launch" element={<Navigate to="/agent/terminal" replace />} />
               <Route path="/chat" element={<Navigate to="/agent/web" replace />} />
+              {/* The legacy engine-direct Chat page was removed: Web Agent is
+                  the only chat surface now. Old links land on it. */}
+              <Route path="/agent/legacy" element={<Navigate to="/agent/web" replace />} />
               <Route path="/dashboard" element={<Navigate to="/automations/tasks" replace />} />
               <Route path="/cron" element={<Navigate to="/automations/schedules" replace />} />
               <Route path="/logs" element={<Navigate to="/automations/logs" replace />} />
@@ -216,11 +210,19 @@ function App() {
               <Route path="/analytics" element={<KeepQuery to="/activity/usage" />} />
               <Route path="/sessions" element={<KeepQuery to="/activity/sessions" />} />
               <Route path="/audit" element={<KeepQuery to="/activity/timeline" />} />
-              <Route path="/skills" element={<Navigate to="/settings/capabilities/skills" replace />} />
-              <Route path="/prompts" element={<Navigate to="/settings/capabilities/prompts" replace />} />
-              <Route path="/hooks" element={<Navigate to="/settings/capabilities/hooks" replace />} />
-              <Route path="/plugins" element={<Navigate to="/settings/capabilities/plugins" replace />} />
-              <Route path="/mcp" element={<Navigate to="/settings/capabilities/mcp" replace />} />
+              <Route path="/skills" element={<Navigate to="/settings/skills" replace />} />
+              <Route path="/prompts" element={<Navigate to="/settings/prompts" replace />} />
+              <Route path="/hooks" element={<Navigate to="/settings/hooks" replace />} />
+              <Route path="/plugins" element={<Navigate to="/settings/plugins" replace />} />
+              <Route path="/mcp" element={<Navigate to="/settings/mcp" replace />} />
+              {/* Settings' capability pages were flattened from
+                  /settings/capabilities/<kind> to /settings/<kind>. */}
+              <Route path="/settings/capabilities" element={<Navigate to="/settings/skills" replace />} />
+              <Route path="/settings/capabilities/skills" element={<KeepQuery to="/settings/skills" />} />
+              <Route path="/settings/capabilities/prompts" element={<KeepQuery to="/settings/prompts" />} />
+              <Route path="/settings/capabilities/hooks" element={<KeepQuery to="/settings/hooks" />} />
+              <Route path="/settings/capabilities/plugins" element={<KeepQuery to="/settings/plugins" />} />
+              <Route path="/settings/capabilities/mcp" element={<KeepQuery to="/settings/mcp" />} />
               <Route path="/config" element={<Navigate to="/settings/workspace" replace />} />
               <Route path="/system" element={<Navigate to="/settings/system" replace />} />
               <Route path="*" element={<Navigate to="/home" replace />} />

@@ -17,9 +17,9 @@ interface ActivityFilterPanelProps {
 }
 
 /**
- * The filter sidebar shared by Activity's History and Events tabs. Both tabs
- * previously carried their own near-identical copy, which drifted (one derived
- * the engine list from data, the other hardcoded it) and dropped everything
+ * The filter sidebar shared by Activity's Sessions and Timeline tabs. Both
+ * tabs previously carried their own near-identical copy, which drifted (one
+ * derived the engine list from data, the other hardcoded it) and dropped everything
  * you had typed the moment you switched tabs.
  */
 export default function ActivityFilterPanel({
@@ -78,7 +78,7 @@ export default function ActivityFilterPanel({
 
       <div>
         <label className="text-xs text-slate-400 font-medium block mb-1" htmlFor="activity-project">
-          Project
+          Workspace
         </label>
         <div className="relative">
           <FolderGit2 className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -88,7 +88,7 @@ export default function ActivityFilterPanel({
             onChange={e => filters.setProject(e.target.value)}
             className="w-full appearance-none pl-7 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
           >
-            <option value={ALL_PROJECTS}>All projects</option>
+            <option value={ALL_PROJECTS}>All workspaces</option>
             {projectPaths.map(path => (
               <option key={path} value={path} title={path}>
                 {projectLabel(path)}
@@ -98,7 +98,7 @@ export default function ActivityFilterPanel({
         </div>
         {filters.followsWorkspace && selectedWorkspace && (
           <p className="mt-1 text-[10px] leading-4 text-slate-400">
-            Following the workspace switcher.
+            Following the shared workspace selection.
           </p>
         )}
       </div>

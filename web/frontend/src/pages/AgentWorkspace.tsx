@@ -35,6 +35,9 @@ export default function AgentWorkspace() {
         showHiddenWorkspaces={workspace.showHiddenWorkspaces}
         onHideWorkspace={workspace.onHideWorkspace}
         onUnhideWorkspace={workspace.onUnhideWorkspace}
+        onHideAllUnavailable={() => workspace.onHideAllUnavailableWorkspaces(
+          workspace.unavailableWorkspaceGroups.map(group => group.path),
+        )}
         onToggleShowHiddenWorkspaces={workspace.onToggleShowHiddenWorkspaces}
         onRegisterWorkspace={workspace.onRegisterWorkspace}
         registeringWorkspace={workspace.registeringWorkspace}
@@ -88,23 +91,17 @@ export default function AgentWorkspace() {
         {workspace.noGatewayProvider && (
           <div className="mb-3 flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             <div>
-              <p className="font-semibold">No interactive provider is available</p>
+              <p className="font-semibold">No interactive engine is available</p>
               <p className="mt-0.5">{workspace.providers[0]?.unavailableReason || 'The Agent Gateway could not start.'}</p>
             </div>
-            {workspace.gatewayStatus.legacyFallback && (
-              <Link to="/agent/legacy" className="shrink-0 font-semibold underline">Open legacy Chat</Link>
-            )}
           </div>
         )}
         {!workspace.loading && !workspace.gatewayStatus.enabled && (
           <div className="mb-3 flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
             <div>
               <p className="font-semibold">Agent Gateway is disabled</p>
-              <p className="mt-0.5">Enable it in configuration to use persistent provider sessions.</p>
+              <p className="mt-0.5">Enable it in configuration to use persistent engine sessions.</p>
             </div>
-            {workspace.gatewayStatus.legacyFallback && (
-              <Link to="/agent/legacy" className="shrink-0 font-semibold underline">Open legacy Chat</Link>
-            )}
           </div>
         )}
         {workspace.error && (
@@ -158,13 +155,13 @@ export default function AgentWorkspace() {
             {workspace.state.messages.length === 0 && !workspace.state.activeTurnId && (
               <div className="flex h-full min-h-48 flex-col items-center justify-center text-center text-slate-400">
                 <p className="animate-fade-rise stagger-1 text-sm font-medium text-slate-600">
-                  {!workspace.workspaceIsUsable ? 'Choose a workspace to begin' : !workspace.selectedProvider ? 'Choose a provider to begin' : 'Start a new conversation'}
+                  {!workspace.workspaceIsUsable ? 'Choose a workspace to begin' : !workspace.selectedProvider ? 'Choose an engine to begin' : 'Start a new conversation'}
                 </p>
                 <p className="animate-fade-rise stagger-2 mt-1 max-w-md text-xs">
                   {!workspace.workspaceIsUsable
                     ? 'Select a registered workspace above. The agent will only operate inside that directory.'
                     : !workspace.selectedProvider
-                      ? 'Select an available provider to start an interactive session.'
+                      ? 'Select an available engine to start an interactive session.'
                       : `Send a message to start ${workspace.selectedCapabilities?.displayName || 'the agent'} in ${workspace.workspace}.`}
                 </p>
                 {workspace.canCompose && (
@@ -233,7 +230,7 @@ export default function AgentWorkspace() {
       {workspace.pendingRemoveSession && (
         <ConfirmDialog
           title="Remove this conversation?"
-          description={`"${workspace.pendingRemoveSession.title || 'Untitled conversation'}" will be removed locally. Its provider history will remain available.`}
+          description={`"${workspace.pendingRemoveSession.title || 'Untitled conversation'}" will be removed locally. Its engine history will remain available.`}
           confirmLabel="Remove"
           onConfirm={workspace.onConfirmRemoveSession}
           onCancel={workspace.onCancelRemoveSession}

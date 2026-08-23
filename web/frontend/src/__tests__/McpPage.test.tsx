@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import McpPage from '../components/McpPage';
 import { ProjectProvider } from '../context/ProjectContext';
@@ -66,18 +67,20 @@ afterEach(() => {
 
 function renderMcpPage() {
   return render(
-    <ProjectProvider>
-      <McpPage />
-    </ProjectProvider>,
+    <MemoryRouter>
+      <ProjectProvider>
+        <McpPage />
+      </ProjectProvider>
+    </MemoryRouter>,
   );
 }
 
-describe('McpPage in-place edit', () => {
+describe('McpPage modal edit', () => {
   test('editing a server pre-fills the form and saves via remove-then-add', async () => {
     renderMcpPage();
 
     await screen.findByText('search');
-    fireEvent.click(screen.getByTitle('Edit'));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit search' }));
 
     await screen.findByText('Edit "search"');
     expect(screen.getByPlaceholderText('my-server')).toHaveValue('search');
@@ -106,20 +109,19 @@ describe('McpPage in-place edit', () => {
     expect(screen.getByRole('button', { name: /Add Server/ })).toBeInTheDocument();
   });
 
-  test('cancel edit resets the form without calling the API', async () => {
+  test('cancel edit closes the modal without calling the API', async () => {
     renderMcpPage();
 
     await screen.findByText('search');
-    fireEvent.click(screen.getByTitle('Edit'));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit search' }));
     await screen.findByText('Edit "search"');
 
-    fireEvent.click(screen.getByTitle('Cancel edit'));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
     await waitFor(() => {
       expect(screen.queryByText('Edit "search"')).not.toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: /Add Server/ })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('my-server')).toHaveValue('');
+    expect(screen.queryByPlaceholderText('my-server')).not.toBeInTheDocument();
     expect(deleteCalls).toHaveLength(0);
     expect(addCalls).toHaveLength(0);
   });
@@ -143,11 +145,7 @@ describe('McpPage server search', () => {
   });
 
   test('filters the server list by name or command/url', async () => {
-    render(
-      <ProjectProvider>
-        <McpPage />
-      </ProjectProvider>,
-    );
+    renderMcpPage();
 
     await screen.findByText('search');
     expect(screen.getByText('weather-api')).toBeVisible();
@@ -159,11 +157,7 @@ describe('McpPage server search', () => {
   });
 
   test('shows an empty state when no server matches', async () => {
-    render(
-      <ProjectProvider>
-        <McpPage />
-      </ProjectProvider>,
-    );
+    renderMcpPage();
 
     await screen.findByText('search');
     fireEvent.change(screen.getByLabelText('Search servers'), { target: { value: 'nonexistent' } });

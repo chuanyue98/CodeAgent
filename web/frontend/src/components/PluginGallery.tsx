@@ -2,7 +2,9 @@ import { Zap } from 'lucide-react';
 import ResourceGallery, { type ResourceGalleryLabels } from './ResourceGallery';
 
 const labels: ResourceGalleryLabels = {
-  sidebar: 'Registry',
+  // Same word as the other three galleries: one sidebar heading across all
+  // Capabilities tabs reads as one feature, not four.
+  sidebar: 'Library',
   detailHeading: 'Plugin Detail',
   backLabel: 'Back to plugin list',
   searchLabel: 'Search plugins',
