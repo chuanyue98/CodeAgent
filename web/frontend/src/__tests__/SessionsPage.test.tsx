@@ -105,23 +105,23 @@ describe('SessionsPage batch delete', () => {
   test('selecting sessions and confirming deletes only the selected ones', async () => {
     renderSessionsPage();
 
-    await screen.findByText('2 sessions');
+    await screen.findByText('2 个会话');
 
-    fireEvent.click(screen.getByLabelText('Select session session-a'));
+    fireEvent.click(screen.getByLabelText('选择会话 session-a'));
 
-    expect(await screen.findByText('1 selected')).toBeVisible();
+    expect(await screen.findByText('已选择 1 个')).toBeVisible();
 
-    fireEvent.click(screen.getByRole('button', { name: /Delete selected/ }));
+    fireEvent.click(screen.getByRole('button', { name: /删除所选/ }));
 
     const dialog = await screen.findByRole('alertdialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: '删除' }));
 
     await waitFor(() => {
       expect(deleteCalls).toHaveLength(1);
     });
     expect(deleteCalls[0]).toContain('/api/history/claude/session-a');
 
-    await screen.findByText('1 session');
+    await screen.findByText('1 个会话');
     expect(screen.queryByText('/workspace/project-a')).not.toBeInTheDocument();
     expect(screen.getByText('/workspace/project-b')).toBeVisible();
   });
@@ -129,59 +129,59 @@ describe('SessionsPage batch delete', () => {
   test('select-all-filtered then delete removes every visible session', async () => {
     renderSessionsPage();
 
-    await screen.findByText('2 sessions');
+    await screen.findByText('2 个会话');
 
-    fireEvent.click(screen.getByLabelText('Select all sessions matching the current filters'));
-    expect(await screen.findByText('2 selected')).toBeVisible();
+    fireEvent.click(screen.getByLabelText('选择当前筛选条件下的全部会话'));
+    expect(await screen.findByText('已选择 2 个')).toBeVisible();
 
-    fireEvent.click(screen.getByRole('button', { name: /Delete selected/ }));
+    fireEvent.click(screen.getByRole('button', { name: /删除所选/ }));
     const dialog = await screen.findByRole('alertdialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: '删除' }));
 
     await waitFor(() => {
       expect(deleteCalls).toHaveLength(2);
     });
-    await screen.findByText('No sessions match your filters');
+    await screen.findByText('没有符合筛选条件的会话');
   });
 });
 
 describe('SessionsPage session detail', () => {
   test('one click on a row shows the conversation, not a link to another tab', async () => {
     renderSessionsPage();
-    await screen.findByText('2 sessions');
+    await screen.findByText('2 个会话');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open session session-a' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开会话 session-a' }));
 
     const panel = await screen.findByTestId('session-detail');
     expect(await within(panel).findByText('how do I ship this')).toBeVisible();
 
     // Reading a transcript used to require hopping to the Events tab.
-    expect(screen.queryByText(/View in Events/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/在事件页中查看/)).not.toBeInTheDocument();
   });
 
   test('the panel carries the usage figures and both session actions', async () => {
     renderSessionsPage();
-    await screen.findByText('2 sessions');
+    await screen.findByText('2 个会话');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open session session-a' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开会话 session-a' }));
     const panel = await screen.findByTestId('session-detail');
 
-    expect(within(panel).getByText('Usage')).toBeVisible();
+    expect(within(panel).getByText('用量')).toBeVisible();
     expect(within(panel).getByText('$0.12')).toBeVisible();
     // Convert lives here now instead of only in Events…
     expect(within(panel).getByRole('button', { name: /Gemini/ })).toBeVisible();
     // …and so does deleting this one session.
-    expect(within(panel).getByRole('button', { name: /Delete this session/ })).toBeVisible();
+    expect(within(panel).getByRole('button', { name: '删除此会话' })).toBeVisible();
   });
 
   test('closing the panel returns to the plain list', async () => {
     renderSessionsPage();
-    await screen.findByText('2 sessions');
+    await screen.findByText('2 个会话');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open session session-a' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开会话 session-a' }));
     const panel = await screen.findByTestId('session-detail');
 
-    fireEvent.click(within(panel).getByLabelText('Close session details'));
+    fireEvent.click(within(panel).getByLabelText('关闭会话详情'));
 
     await waitFor(() => {
       expect(screen.queryByTestId('session-detail')).not.toBeInTheDocument();
@@ -190,16 +190,16 @@ describe('SessionsPage session detail', () => {
 
   test('deleting from the panel drops the row and closes the panel', async () => {
     renderSessionsPage();
-    await screen.findByText('2 sessions');
+    await screen.findByText('2 个会话');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open session session-a' }));
+    fireEvent.click(screen.getByRole('button', { name: '打开会话 session-a' }));
     const panel = await screen.findByTestId('session-detail');
-    fireEvent.click(within(panel).getByRole('button', { name: /Delete this session/ }));
+    fireEvent.click(within(panel).getByRole('button', { name: '删除此会话' }));
 
     const dialog = await screen.findByRole('alertdialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: '删除' }));
 
-    await screen.findByText('1 session');
+    await screen.findByText('1 个会话');
     expect(deleteCalls[0]).toContain('/api/history/claude/session-a');
     expect(screen.queryByTestId('session-detail')).not.toBeInTheDocument();
   });
@@ -221,16 +221,16 @@ describe('SessionsPage session identity', () => {
   test('renders both engines rows for one shared session id', async () => {
     renderSessionsPage();
 
-    await screen.findByText('2 sessions');
+    await screen.findByText('2 个会话');
     expect(screen.getByText('/workspace/via-claude')).toBeVisible();
     expect(screen.getByText('/workspace/via-codex')).toBeVisible();
   });
 
   test('opening one row leaves the other unselected', async () => {
     renderSessionsPage();
-    await screen.findByText('2 sessions');
+    await screen.findByText('2 个会话');
 
-    const rows = screen.getAllByRole('button', { name: `Open session ${SHARED_ID}` });
+    const rows = screen.getAllByRole('button', { name: `打开会话 ${SHARED_ID}` });
     expect(rows).toHaveLength(2);
     expect(rows.every(row => row.getAttribute('aria-pressed') === 'false')).toBe(true);
 
@@ -244,13 +244,13 @@ describe('SessionsPage session identity', () => {
 
   test('selecting one row selects only that engine session', async () => {
     renderSessionsPage();
-    await screen.findByText('2 sessions');
+    await screen.findByText('2 个会话');
 
-    const checkboxes = screen.getAllByLabelText(`Select session ${SHARED_ID}`);
+    const checkboxes = screen.getAllByLabelText(`选择会话 ${SHARED_ID}`);
     expect(checkboxes).toHaveLength(2);
 
     fireEvent.click(checkboxes[0]);
 
-    expect(await screen.findByText('1 selected')).toBeVisible();
+    expect(await screen.findByText('已选择 1 个')).toBeVisible();
   });
 });

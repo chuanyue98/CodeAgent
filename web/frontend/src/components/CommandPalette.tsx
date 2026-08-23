@@ -5,6 +5,7 @@ import { Search, SquareStack, MessageSquare, ListChecks, FolderGit2, Pin, PinOff
 import { useProject } from '../context/ProjectContext';
 import { PAGE_LABELS } from '../navigation';
 import { fetchSessions, type SessionUsage } from '../api/analytics';
+import { buildSessionLink } from '../utils/sessionLink';
 import request from '../utils/request';
 import Modal from './shared/Modal';
 
@@ -18,7 +19,7 @@ interface PaletteItem {
   id: string;
   label: string;
   hint: string;
-  section: 'Pinned' | 'Navigate' | 'Project' | 'Session' | 'Task' | 'Workspace';
+  section: '已固定' | '跳转' | '资源组' | '会话' | '任务' | '工作区';
   icon: typeof SquareStack;
   run: () => void;
   /**
@@ -74,15 +75,15 @@ export default function CommandPalette() {
       id: `nav:${path}`,
       label,
       hint: path,
-      section: 'Navigate',
+      section: '跳转',
       icon: SquareStack,
       run: () => navigate(path),
     }));
     const groupItems: PaletteItem[] = availableGroups.map(group => ({
       id: `group:${group}`,
-      label: `Switch to ${group}`,
-      hint: group === currentGroup ? 'current resource group' : 'resource group',
-      section: 'Project',
+      label: `切换到 ${group}`,
+      hint: group === currentGroup ? '当前资源组' : '资源组',
+      section: '资源组',
       icon: SquareStack,
       run: () => setCurrentGroup(group),
     }));
@@ -93,27 +94,29 @@ export default function CommandPalette() {
         pinKey: `workspace:${project.path}`,
         label: project.path.split(/[\\/]/).filter(Boolean).pop() || project.path,
         hint: project.path,
-        section: 'Workspace',
+        section: '工作区',
         icon: FolderGit2,
         run: () => {
+          // Switching workspaces is a global scope change, not navigation:
+          // stay on the current page (the old forced jump to /agent/web bound
+          // "change workspace" to "go to the chat page" for no reason).
           setSelectedWorkspace(project.path);
-          navigate('/agent/web');
         },
       }));
     const sessionItems: PaletteItem[] = sessions.map(session => ({
       id: `session:${session.target}:${session.sessionId}`,
       label: session.projectPath.split(/[\\/]/).filter(Boolean).pop() || session.sessionId,
-      hint: `${session.target} session · ${session.projectPath}`,
-      section: 'Session',
+      hint: `${session.target} 会话 · ${session.projectPath}`,
+      section: '会话',
       icon: MessageSquare,
-      run: () => navigate(`/activity/sessions?session=${encodeURIComponent(session.sessionId)}`),
+      run: () => navigate(buildSessionLink(session.target, session.sessionId, session.projectPath || '')),
     }));
     const taskItems: PaletteItem[] = tasks.map(task => ({
       id: `task:${task.name}`,
       pinKey: `task:${task.name}`,
       label: task.title || task.name,
-      hint: task.description || `task · ${task.name}`,
-      section: 'Task',
+      hint: task.description || `任务 · ${task.name}`,
+      section: '任务',
       icon: ListChecks,
       run: () => navigate(`/automations/tasks?task=${encodeURIComponent(task.name)}`),
     }));
@@ -123,7 +126,7 @@ export default function CommandPalette() {
     // `pinKey` so unpinning from either copy stays in sync.
     const pinnedItems: PaletteItem[] = [...workspaceItems, ...taskItems]
       .filter(item => item.pinKey && pinnedIds.has(item.pinKey))
-      .map(item => ({ ...item, id: `pinned:${item.id}`, section: 'Pinned' as const }));
+      .map(item => ({ ...item, id: `pinned:${item.id}`, section: '已固定' as const }));
     return [...pinnedItems, ...navItems, ...workspaceItems, ...sessionItems, ...taskItems, ...groupItems];
   }, [navigate, availableGroups, currentGroup, setCurrentGroup, projects, setSelectedWorkspace, sessions, tasks, pinnedIds]);
 
@@ -199,8 +202,8 @@ export default function CommandPalette() {
         type="button"
         data-testid="command-palette-trigger"
         onClick={() => setOpen(true)}
-        aria-label="Open command palette"
-        title="Search (Ctrl/Cmd+K)"
+        aria-label="打开命令面板"
+        title="搜索 (Ctrl/Cmd+K)"
         className="flex items-center gap-1.5 rounded-xl border border-slate-100 bg-white/50 px-3 py-2 text-slate-500 shadow-sm backdrop-blur-md transition-colors hover:bg-white hover:text-slate-800"
       >
         <Search size={16} />
@@ -212,7 +215,7 @@ export default function CommandPalette() {
       {open && (
         <Modal
           onClose={() => setOpen(false)}
-          ariaLabel="Command palette"
+          ariaLabel="命令面板"
           testId="command-palette"
           overlayClassName="pt-[15vh]"
           panelClassName="max-w-lg overflow-hidden"
@@ -224,17 +227,17 @@ export default function CommandPalette() {
               value={query}
               onChange={event => setQuery(event.target.value)}
               onKeyDown={handleInputKeyDown}
-              placeholder="Go to a page, session, task, workspace…"
-              aria-label="Command palette search"
+              placeholder="跳转到页面、会话、任务、工作区…"
+              aria-label="命令面板搜索"
               className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
             />
             <kbd className="hidden shrink-0 rounded border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-400 sm:inline">
               Esc
             </kbd>
           </div>
-          <ul className="max-h-80 overflow-y-auto py-2" role="listbox" aria-label="Command palette results">
+          <ul className="max-h-80 overflow-y-auto py-2" role="listbox" aria-label="命令面板结果">
             {filtered.length === 0 && (
-              <li className="px-4 py-6 text-center text-sm text-slate-400">No matches</li>
+              <li className="px-4 py-6 text-center text-sm text-slate-400">没有匹配项</li>
             )}
             {filtered.map((item, index) => {
               const pinned = !!item.pinKey && pinnedIds.has(item.pinKey);
@@ -264,8 +267,8 @@ export default function CommandPalette() {
                     <button
                       type="button"
                       onClick={event => togglePinned(item.pinKey!, event)}
-                      aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
-                      title={pinned ? 'Unpin' : 'Pin'}
+                      aria-label={pinned ? `取消固定 ${item.label}` : `固定 ${item.label}`}
+                      title={pinned ? '取消固定' : '固定'}
                       className={`shrink-0 p-2 mr-1 rounded-lg transition-colors ${
                         pinned ? 'text-primary hover:bg-primary/10' : 'text-slate-300 hover:text-slate-500 hover:bg-slate-50'
                       }`}

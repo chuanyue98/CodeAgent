@@ -51,8 +51,8 @@ export default function AgentMessage({ role, text }: Props) {
         <button
           type="button"
           onClick={copy}
-          aria-label={copied ? 'Copied' : 'Copy message'}
-          title={copied ? 'Copied' : 'Copy message'}
+          aria-label={copied ? '已复制' : '复制消息'}
+          title={copied ? '已复制' : '复制消息'}
           // Always reachable by keyboard (focus:opacity-100); revealed on
           // hover for pointer users so it never competes with the text.
           className="absolute right-1.5 top-1.5 rounded-md border border-slate-200 bg-white p-1.5 text-slate-400 opacity-0 shadow-sm transition-opacity hover:text-slate-700 focus:opacity-100 group-hover:opacity-100"

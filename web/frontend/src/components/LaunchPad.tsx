@@ -11,12 +11,11 @@ interface Engine {
   color: string;
 }
 
-// Descriptions stay in the UI's language (English) -- these were the only
-// Chinese strings left in the interface, which read as an unfinished page.
+// The UI language is Chinese; keep engine names (Claude/Gemini/...) as brands.
 const ENGINES: Engine[] = [
   { id: 'claude',    name: 'Claude',    description: 'Anthropic · Claude Code CLI',      color: 'bg-orange-50 border-orange-200 text-orange-700' },
   { id: 'gemini',    name: 'Gemini',    description: 'Google · Gemini CLI',              color: 'bg-blue-50 border-blue-200 text-blue-700' },
-  { id: 'opencode',  name: 'OpenCode',  description: 'Local npm CLI with a full TUI',    color: 'bg-violet-50 border-violet-200 text-violet-700' },
+  { id: 'opencode',  name: 'OpenCode',  description: '本地 npm CLI，带完整 TUI',           color: 'bg-violet-50 border-violet-200 text-violet-700' },
   { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',               color: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
 ];
 
@@ -39,7 +38,7 @@ export default function LaunchPad() {
       })
       .catch(err => {
         setAvailable(false);
-        setReason(err instanceof Error ? err.message : 'Failed to detect browser terminal support');
+        setReason(err instanceof Error ? err.message : '检测浏览器终端支持失败');
       });
   }, []);
 
@@ -58,7 +57,7 @@ export default function LaunchPad() {
             onClick={() => setActiveSession(null)}
             className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
           >
-            <X size={14} /> Close terminal
+            <X size={14} /> 关闭终端
           </button>
         </div>
         <BrowserTerminal
@@ -74,12 +73,11 @@ export default function LaunchPad() {
     <div className="space-y-6">
       <div className="space-y-2">
         <p className="text-sm text-slate-600">
-          Opens the provider CLI in an in-browser terminal, running on the machine hosting CodeAgent.
+          在浏览器终端中打开引擎 CLI，运行在托管 CodeAgent 的本机上。
         </p>
         <p className="text-xs text-slate-400">
-          The CLI must already be installed and signed in on this machine. Unlike Web Agent,
-          the terminal shows the provider&apos;s own interface — CodeAgent only sets the working
-          directory and injects your configured resources.
+          相应 CLI 必须已在本机安装并登录。与 Web Agent 不同，终端展示的是引擎自己的界面——CodeAgent
+          只负责设置工作目录并注入你配置的资源。
         </p>
       </div>
 
@@ -87,7 +85,7 @@ export default function LaunchPad() {
         <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <p className="font-semibold">Browser terminal unavailable</p>
+            <p className="font-semibold">浏览器终端不可用</p>
             <p className="mt-0.5 text-xs">{reason}</p>
           </div>
         </div>
@@ -95,11 +93,11 @@ export default function LaunchPad() {
 
       {validProjects.length === 0 ? (
         <div role="status" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          Register a project in Settings before opening a terminal.
+          打开终端前请先在“设置”中注册一个工作区。
         </div>
       ) : (
         <div className="max-w-sm space-y-1">
-          <label htmlFor="launchpad-project" className="text-xs font-medium text-slate-500">Workspace</label>
+          <label htmlFor="launchpad-project" className="text-xs font-medium text-slate-500">工作区</label>
           <select
             id="launchpad-project"
             value={effectiveProject}
@@ -134,7 +132,7 @@ export default function LaunchPad() {
                 ${engine.color}`}
             >
               <TerminalSquare size={15} />
-              Open terminal
+              打开终端
             </button>
           </div>
         ))}

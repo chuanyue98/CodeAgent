@@ -21,8 +21,8 @@ interface ConfirmDialogProps {
 export default function ConfirmDialog({
   title,
   description,
-  confirmLabel = 'Delete',
-  cancelLabel = 'Cancel',
+  confirmLabel = '删除',
+  cancelLabel = '取消',
   destructive = true,
   onConfirm,
   onCancel,

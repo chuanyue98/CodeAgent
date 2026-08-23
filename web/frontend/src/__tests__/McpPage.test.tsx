@@ -80,9 +80,9 @@ describe('McpPage modal edit', () => {
     renderMcpPage();
 
     await screen.findByText('search');
-    fireEvent.click(screen.getByRole('button', { name: 'Edit search' }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑 search' }));
 
-    await screen.findByText('Edit "search"');
+    await screen.findByText('编辑 "search"');
     expect(screen.getByPlaceholderText('my-server')).toHaveValue('search');
     expect(screen.getByPlaceholderText('npx my-mcp-server --flag')).toHaveValue('npx old-mcp-server');
     expect(screen.getByPlaceholderText('API_KEY=xxx')).toHaveValue('API_KEY=old-value');
@@ -90,7 +90,7 @@ describe('McpPage modal edit', () => {
     fireEvent.change(screen.getByPlaceholderText('npx my-mcp-server --flag'), {
       target: { value: 'npx new-mcp-server' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
 
     await waitFor(() => {
       expect(deleteCalls).toHaveLength(1);
@@ -104,22 +104,22 @@ describe('McpPage modal edit', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('Edit "search"')).not.toBeInTheDocument();
+      expect(screen.queryByText('编辑 "search"')).not.toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: /Add Server/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /添加服务器/ })).toBeInTheDocument();
   });
 
   test('cancel edit closes the modal without calling the API', async () => {
     renderMcpPage();
 
     await screen.findByText('search');
-    fireEvent.click(screen.getByRole('button', { name: 'Edit search' }));
-    await screen.findByText('Edit "search"');
+    fireEvent.click(screen.getByRole('button', { name: '编辑 search' }));
+    await screen.findByText('编辑 "search"');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
 
     await waitFor(() => {
-      expect(screen.queryByText('Edit "search"')).not.toBeInTheDocument();
+      expect(screen.queryByText('编辑 "search"')).not.toBeInTheDocument();
     });
     expect(screen.queryByPlaceholderText('my-server')).not.toBeInTheDocument();
     expect(deleteCalls).toHaveLength(0);
@@ -150,7 +150,7 @@ describe('McpPage server search', () => {
     await screen.findByText('search');
     expect(screen.getByText('weather-api')).toBeVisible();
 
-    fireEvent.change(screen.getByLabelText('Search servers'), { target: { value: 'weather' } });
+    fireEvent.change(screen.getByLabelText('搜索服务器'), { target: { value: 'weather' } });
 
     expect(screen.getByText('weather-api')).toBeVisible();
     expect(screen.queryByText('search')).not.toBeInTheDocument();
@@ -160,8 +160,8 @@ describe('McpPage server search', () => {
     renderMcpPage();
 
     await screen.findByText('search');
-    fireEvent.change(screen.getByLabelText('Search servers'), { target: { value: 'nonexistent' } });
+    fireEvent.change(screen.getByLabelText('搜索服务器'), { target: { value: 'nonexistent' } });
 
-    expect(screen.getByText('No servers match your search.')).toBeVisible();
+    expect(screen.getByText('没有匹配的服务器。')).toBeVisible();
   });
 });

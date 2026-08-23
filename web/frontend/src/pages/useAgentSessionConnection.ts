@@ -288,7 +288,7 @@ export default function useAgentSessionConnection({
     if (state.activeTurnId) return;
     const registered = validProjects.some(project => project.path === native.project_path);
     if (!registered) {
-      setError(`Register this workspace before resuming: ${native.project_path}`);
+      setError(`恢复会话前请先注册该工作区：${native.project_path}`);
       return;
     }
     const selectionId = ++selectionRequestRef.current;

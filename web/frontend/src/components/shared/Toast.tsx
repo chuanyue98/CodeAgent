@@ -25,7 +25,7 @@ export default function Toast({ message, onDismiss }: ToastProps) {
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="Dismiss notification"
+          aria-label="关闭通知"
           className="-mr-1 -mt-1 shrink-0 rounded-md p-1 text-red-400 transition-colors hover:bg-red-100 hover:text-red-700"
         >
           <X className="h-3.5 w-3.5" />

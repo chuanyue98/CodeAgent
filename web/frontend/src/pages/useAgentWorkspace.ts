@@ -253,12 +253,12 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const availableProviders = providers.filter(provider => provider.available);
   const noGatewayProvider = !loading && gatewayStatus.enabled && availableProviders.length === 0;
   const connectionLabel = connecting
-    ? 'Connecting'
+    ? '连接中'
     : connected
-      ? 'Connected'
+      ? '已连接'
       : state.session
-        ? 'Disconnected'
-        : 'Ready to start';
+        ? '已断开'
+        : '可以开始';
   // The shared workspace is restored from localStorage, so it can name a
   // path that is no longer registered (or not registered yet, before
   // /api/projects resolves). Compose only against one that actually resolves,
@@ -266,14 +266,14 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
   const workspaceIsUsable = validProjects.some(project => project.path === workspace);
   const canCompose = Boolean(workspaceIsUsable && selectedProvider && selectedCapabilities?.available && !noGatewayProvider);
   const composerPlaceholder = !workspaceIsUsable
-    ? 'Select a workspace to begin'
+    ? '先选择一个工作区'
     : !selectedProvider
-      ? 'Select a provider to begin'
+      ? '先选择一个引擎'
       : noGatewayProvider
-        ? 'No interactive provider is available'
-        : `Message ${selectedCapabilities?.displayName || 'the agent'}… (Enter to send, Shift+Enter for newline)`;
+        ? '没有可用的交互引擎'
+        : `给 ${selectedCapabilities?.displayName || '智能体'} 发消息…（Enter 发送，Shift+Enter 换行）`;
   const sessionResourceSnapshot = state.session?.resourceSnapshot;
-  const sessionResourceGroup = sessionResourceSnapshot?.group || 'Unknown';
+  const sessionResourceGroup = sessionResourceSnapshot?.group || '未知';
   const resourceCount = (sessionResourceSnapshot?.skills?.length ?? 0)
     + (sessionResourceSnapshot?.prompts?.length ?? 0)
     + (sessionResourceSnapshot?.hooks?.length ?? 0)

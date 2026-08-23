@@ -52,7 +52,7 @@ describe('SectionLayout preserveParams', () => {
       '/activity/timeline?q=deploy&session=s-1&sessionEngine=claude&sessionProject=%2Fwork%2Fapp',
     );
 
-    const target = new URL(href('Sessions'), 'http://localhost');
+    const target = new URL(href('会话'), 'http://localhost');
     expect(target.searchParams.get('q')).toBe('deploy');
     expect(target.searchParams.get('session')).toBeNull();
     expect(target.searchParams.get('sessionEngine')).toBeNull();
@@ -62,6 +62,6 @@ describe('SectionLayout preserveParams', () => {
   test('links stay bare when nothing is filtered', () => {
     renderActivityTabs('/activity/sessions');
 
-    expect(href('Timeline')).toBe('/activity/timeline');
+    expect(href('时间线')).toBe('/activity/timeline');
   });
 });

@@ -28,7 +28,7 @@ describe('TaskList search', () => {
         onManualCreateClick={vi.fn()}
       />,
     );
-    expect(screen.queryByLabelText('Search tasks')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('搜索任务')).not.toBeInTheDocument();
   });
 
   test('filters the visible tasks by name, title, or description', () => {
@@ -45,7 +45,7 @@ describe('TaskList search', () => {
     expect(screen.getByText('Code Review')).toBeVisible();
     expect(screen.getByText('Fix Bug')).toBeVisible();
 
-    fireEvent.change(screen.getByLabelText('Search tasks'), { target: { value: 'diagnose' } });
+    fireEvent.change(screen.getByLabelText('搜索任务'), { target: { value: 'diagnose' } });
 
     expect(screen.getByText('Fix Bug')).toBeVisible();
     expect(screen.queryByText('Code Review')).not.toBeInTheDocument();
@@ -62,8 +62,8 @@ describe('TaskList search', () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText('Search tasks'), { target: { value: 'nonexistent' } });
+    fireEvent.change(screen.getByLabelText('搜索任务'), { target: { value: 'nonexistent' } });
 
-    expect(screen.getByText('No tasks match your search.')).toBeVisible();
+    expect(screen.getByText('没有匹配的任务。')).toBeVisible();
   });
 });

@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from 'date-fns';
+import { zhCN } from 'date-fns/locale';
 import type { AgentSession, NativeAgentSession } from '../types/agent';
 
 export function requestId(): string {
@@ -19,17 +20,17 @@ export function workspaceLabel(path: string): string {
 export function relativeTime(value: string | null | undefined): string {
   if (!value) return '';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '' : formatDistanceToNow(date, { addSuffix: true });
+  return Number.isNaN(date.getTime()) ? '' : formatDistanceToNow(date, { addSuffix: true, locale: zhCN });
 }
 
 export function sessionStatusLabel(status: AgentSession['status']): string {
   switch (status) {
-    case 'error': return 'Needs attention';
-    case 'disconnected': return 'Reconnect';
-    case 'busy': return 'Working';
-    case 'starting': return 'Starting';
-    case 'closed': return 'Closed';
-    default: return 'Ready';
+    case 'error': return '需要关注';
+    case 'disconnected': return '重新连接';
+    case 'busy': return '运行中';
+    case 'starting': return '启动中';
+    case 'closed': return '已关闭';
+    default: return '就绪';
   }
 }
 

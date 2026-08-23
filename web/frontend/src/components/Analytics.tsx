@@ -103,7 +103,7 @@ const Analytics: React.FC = () => {
         <div
           className="flex gap-1 bg-slate-100 p-1 rounded-xl"
           role="group"
-          aria-label="Time range"
+          aria-label="时间范围"
         >
           {RANGES.map(r => (
             <button
@@ -128,7 +128,7 @@ const Analytics: React.FC = () => {
             hover:border-primary/30 transition-all disabled:opacity-50"
         >
           <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
-          Refresh
+          刷新
         </button>
       </div>
 
@@ -140,11 +140,10 @@ const Analytics: React.FC = () => {
           <div className="rounded-2xl bg-primary/10 p-3 text-primary">
             <TrendingUp className="h-6 w-6" />
           </div>
-          <p className="text-sm font-semibold text-slate-800">No usage recorded yet</p>
+          <p className="text-sm font-semibold text-slate-800">还没有用量记录</p>
           <p className="max-w-md text-xs leading-5 text-slate-500">
-            Token counts and cost estimates are read from the session logs each provider CLI
-            writes on this machine. Run an agent session or a task, then press Refresh — nothing
-            is sent anywhere to produce these numbers.
+            Token 数量和成本估算读取自各引擎 CLI 在本机写入的会话日志。运行一次代理会话或任务，
+            然后点击刷新——生成这些数字不会向任何地方发送数据。
           </p>
         </div>
       )}
@@ -153,9 +152,9 @@ const Analytics: React.FC = () => {
           7 days", which otherwise render as the same wall of zeros. */}
       {hasUsage && !hasRangeUsage && (
         <div className="glass-card flex flex-col items-center gap-1 px-6 py-8 text-center">
-          <p className="text-sm font-semibold text-slate-800">No usage in the last {rangeLabel}</p>
+          <p className="text-sm font-semibold text-slate-800">最近 {rangeLabel}内没有用量</p>
           <p className="text-xs text-slate-500">
-            Pick a wider range to see earlier activity.
+            选择更长的时间范围即可查看更早的记录。
           </p>
         </div>
       )}
@@ -163,31 +162,31 @@ const Analytics: React.FC = () => {
       {/* ── Stat cards ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatCard
-          label="Total Tokens"
+          label="总 Token"
           value={fmtTokens(totals.inputTokens + totals.outputTokens + totals.cacheTokens)}
           sub={`${fmtTokens(totals.inputTokens)} in / ${fmtTokens(totals.outputTokens)} out`}
           Icon={FileText} iconColor="text-blue-600" iconBg="bg-blue-100" stagger="stagger-2"
         />
         <StatCard
-          label="Total Cost" value={fmtCost(totals.cost)}
-          sub={`~${fmtCost(avgCostPerSession)} / session`}
+          label="总成本" value={fmtCost(totals.cost)}
+          sub={`每会话 ~${fmtCost(avgCostPerSession)}`}
           Icon={DollarSign} iconColor="text-green-600" iconBg="bg-green-100" stagger="stagger-3"
         />
         <StatCard
-          label="Cache Tokens" value={fmtTokens(totals.cacheTokens)}
-          sub={`${rangeEngines.length} engine${rangeEngines.length === 1 ? '' : 's'}`}
+          label="缓存 Token" value={fmtTokens(totals.cacheTokens)}
+          sub={`${rangeEngines.length} 个引擎`}
           Icon={Database} iconColor="text-cyan-600" iconBg="bg-cyan-100" stagger="stagger-4"
         />
         <StatCard
-          label="Input Cost"
+          label="输入成本"
           value={fmtCost(rangeModels.reduce((s, m) => s + m.inputCost, 0))}
-          sub={`${fmtTokens(totals.inputTokens)} tokens`}
+          sub={`${fmtTokens(totals.inputTokens)} Token`}
           Icon={ArrowDownRight} iconColor="text-purple-600" iconBg="bg-purple-100" stagger="stagger-5"
         />
         <StatCard
-          label="Output Cost"
+          label="输出成本"
           value={fmtCost(rangeModels.reduce((s, m) => s + m.outputCost, 0))}
-          sub={`${fmtTokens(totals.outputTokens)} tokens`}
+          sub={`${fmtTokens(totals.outputTokens)} Token`}
           Icon={ArrowUpRight} iconColor="text-orange-600" iconBg="bg-orange-100" stagger="stagger-6"
         />
       </div>
@@ -202,7 +201,7 @@ const Analytics: React.FC = () => {
         pieData={pieData}
         sessionCount={sessionCount}
         avgCostPerSession={avgCostPerSession}
-        totalLabel={activeRange.days === null ? 'Total' : `Last ${rangeLabel}`}
+        totalLabel={activeRange.days === null ? '总计' : `最近 ${rangeLabel}`}
         recentSessions={recentSessions}
       />
 

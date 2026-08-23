@@ -101,7 +101,7 @@ export default function McpPage() {
       })
       .catch(() => {
         if (!mountedRef.current) return;
-        setError('Failed to load engines');
+        setError('加载引擎失败');
       });
   }, []);
 
@@ -128,7 +128,7 @@ export default function McpPage() {
       })
       .catch(e => {
         if (!mountedRef.current) return;
-        setError(e instanceof Error ? e.message : 'Failed to load MCP servers');
+        setError(e instanceof Error ? e.message : '加载 MCP 服务器失败');
       });
   }, [selectedEngine, projectPath]);
 
@@ -199,9 +199,9 @@ export default function McpPage() {
           await addMcpServer(selectedEngine, payload);
         } catch (addErr) {
           setError(
-            `Removed "${editName}" but couldn't save the new configuration: ` +
-            `${addErr instanceof Error ? addErr.message : 'unknown error'}. ` +
-            'It has been removed — re-add it manually.',
+            `已移除 "${editName}"，但保存新配置失败：` +
+            `${addErr instanceof Error ? addErr.message : '未知错误'}。` +
+            '该服务器已被移除——请手动重新添加。',
           );
           closeModal();
           loadServers();
@@ -216,7 +216,7 @@ export default function McpPage() {
       setError(
         e instanceof Error
           ? e.message
-          : `Failed to ${editName ? 'update' : 'add'} MCP server`,
+          : `${editName ? '更新' : '添加'} MCP 服务器失败`,
       );
     } finally {
       setSubmitting(false);
@@ -231,7 +231,7 @@ export default function McpPage() {
       await removeMcpServer(selectedEngine, serverName, projectPath);
       loadServers();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to remove MCP server');
+      setError(e instanceof Error ? e.message : '移除 MCP 服务器失败');
     }
   };
 
@@ -242,7 +242,7 @@ export default function McpPage() {
         <div className="p-6 border-b border-slate-100">
           <h2 className="text-sm font-semibold flex items-center gap-2 uppercase tracking-widest text-slate-400">
             <Server className="w-4 h-4 text-primary" />
-            Engines
+            引擎
           </h2>
         </div>
         <div className="custom-scrollbar flex-1 overflow-y-auto p-4 space-y-1">
@@ -271,9 +271,9 @@ export default function McpPage() {
       <div className="flex-1 flex flex-col min-w-0 gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-xs text-slate-400 font-medium shrink-0">
-            Workspace
+            工作区
             <select
-              aria-label="Workspace"
+              aria-label="工作区"
               value={projectPath}
               onChange={e => setProjectPath(e.target.value)}
               disabled={groupProjects.length === 0}
@@ -287,14 +287,14 @@ export default function McpPage() {
             </select>
           </label>
           <div className="relative min-w-0 flex-1 max-w-72">
-            <label htmlFor="mcp-server-search" className="sr-only">Search servers</label>
+            <label htmlFor="mcp-server-search" className="sr-only">搜索服务器</label>
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
               id="mcp-server-search"
               type="text"
               value={serverSearch}
               onChange={e => setServerSearch(e.target.value)}
-              placeholder="Search servers..."
+              placeholder="搜索服务器…"
               disabled={servers.length === 0}
               className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary disabled:opacity-50"
             />
@@ -302,27 +302,26 @@ export default function McpPage() {
           <button
             onClick={openAdd}
             disabled={groupProjects.length === 0}
-            title={groupProjects.length === 0 ? 'Register a workspace in this group first' : 'Add an MCP server'}
+            title={groupProjects.length === 0 ? '请先在该资源组中注册一个工作区' : '添加 MCP 服务器'}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:opacity-90 transition-all font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Plus className="w-4 h-4" /> Add Server
+            <Plus className="w-4 h-4" /> 添加服务器
           </button>
         </div>
 
         {groupProjects.length === 0 && (
           <div className="glass-card p-6 text-sm text-slate-500 text-center">
-            No workspaces registered for group "{currentGroup}" —{' '}
+            资源组 "{currentGroup}" 尚未注册任何工作区——{' '}
             <Link to="/settings/workspace" className="font-semibold text-primary hover:underline">
-              register one in Workspace settings
-            </Link>.
+              请在工作区设置中注册
+            </Link>。
           </div>
         )}
 
         {GLOBAL_SCOPE_ENGINES.has(selectedEngine) && (
           <div className="flex items-center gap-2 px-3 py-2 bg-amber-50/60 border border-amber-100 rounded-lg text-xs text-amber-700">
-            {selectedEngine === 'codex' ? 'Codex' : 'OpenCode'} stores MCP servers in a single
-            global config file, not scoped per project — servers added here apply everywhere this
-            engine runs, regardless of which workspace is selected above.
+            {selectedEngine === 'codex' ? 'Codex' : 'OpenCode'} 将 MCP 服务器存储在单一全局配置文件中，
+            不区分项目——这里添加的服务器对该引擎在任何地方都生效，与上方选择的工作区无关。
           </div>
         )}
 
@@ -331,11 +330,11 @@ export default function McpPage() {
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
           {servers.length === 0 ? (
             <div className="glass-card p-10 text-center">
-              <p className="text-sm text-slate-400">No MCP servers configured for this engine.</p>
+              <p className="text-sm text-slate-400">该引擎尚未配置 MCP 服务器。</p>
             </div>
           ) : filteredServers.length === 0 ? (
             <div className="glass-card p-10 text-center text-sm text-slate-400">
-              No servers match your search.
+              没有匹配的服务器。
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 pb-2">
@@ -356,16 +355,16 @@ export default function McpPage() {
                     <div className="flex items-center gap-1 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                       <button
                         onClick={() => openEdit(server)}
-                        aria-label={`Edit ${server.name}`}
-                        title="Edit"
+                        aria-label={`编辑 ${server.name}`}
+                        title="编辑"
                         className="p-1.5 text-slate-400 hover:text-primary transition-colors"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setPendingRemoveServer(server.name)}
-                        aria-label={`Remove ${server.name}`}
-                        title="Remove"
+                        aria-label={`移除 ${server.name}`}
+                        title="移除"
                         className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -384,7 +383,7 @@ export default function McpPage() {
                     </span>
                     {server.env && Object.keys(server.env).length > 0 && (
                       <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">
-                        {Object.keys(server.env).length} env
+                        {Object.keys(server.env).length} 个环境变量
                       </span>
                     )}
                   </div>
@@ -398,11 +397,11 @@ export default function McpPage() {
       {draft && (
         <Modal onClose={closeModal} ariaLabelledBy="mcp-modal-title">
           <h3 id="mcp-modal-title" className="text-lg font-semibold text-slate-800">
-            {editName ? `Edit "${editName}"` : 'Add MCP Server'}
+            {editName ? `编辑 "${editName}"` : '添加 MCP 服务器'}
           </h3>
           <div className="space-y-3">
             <div>
-              <label htmlFor="mcp-name" className="text-xs text-slate-400 font-medium block mb-1">Name</label>
+              <label htmlFor="mcp-name" className="text-xs text-slate-400 font-medium block mb-1">名称</label>
               <input
                 id="mcp-name"
                 type="text"
@@ -419,7 +418,7 @@ export default function McpPage() {
                   draft.kind === 'local' ? 'bg-primary/10 text-primary' : 'text-slate-500 hover:bg-slate-50'
                 }`}
               >
-                Local (stdio)
+                本地 (stdio)
               </button>
               <button
                 onClick={() => setDraft({ ...draft, kind: 'remote' })}
@@ -427,12 +426,12 @@ export default function McpPage() {
                   draft.kind === 'remote' ? 'bg-primary/10 text-primary' : 'text-slate-500 hover:bg-slate-50'
                 }`}
               >
-                Remote (URL)
+                远程 (URL)
               </button>
             </div>
             {draft.kind === 'local' ? (
               <div>
-                <label htmlFor="mcp-command" className="text-xs text-slate-400 font-medium block mb-1">Command</label>
+                <label htmlFor="mcp-command" className="text-xs text-slate-400 font-medium block mb-1">命令</label>
                 <input
                   id="mcp-command"
                   type="text"
@@ -457,7 +456,7 @@ export default function McpPage() {
             )}
             <div>
               <label htmlFor="mcp-env" className="text-xs text-slate-400 font-medium block mb-1">
-                Environment (one KEY=VALUE per line)
+                环境变量（每行一个 KEY=VALUE）
               </label>
               <textarea
                 id="mcp-env"
@@ -474,7 +473,7 @@ export default function McpPage() {
               onClick={closeModal}
               className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors font-medium text-sm"
             >
-              Cancel
+              取消
             </button>
             <button
               onClick={() => void handleSubmit()}
@@ -487,8 +486,8 @@ export default function McpPage() {
               className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-all"
             >
               {editName
-                ? (submitting ? 'Saving…' : 'Save Changes')
-                : <><Plus className="w-4 h-4" /> {submitting ? 'Adding…' : 'Add Server'}</>}
+                ? (submitting ? '保存中…' : '保存修改')
+                : <><Plus className="w-4 h-4" /> {submitting ? '添加中…' : '添加服务器'}</>}
             </button>
           </div>
         </Modal>
@@ -496,9 +495,9 @@ export default function McpPage() {
 
       {pendingRemoveServer && (
         <ConfirmDialog
-          title="Remove this MCP server?"
-          description={`"${pendingRemoveServer}" will be removed from ${selectedEngine}'s configuration. This cannot be undone.`}
-          confirmLabel="Remove"
+          title="移除这个 MCP 服务器？"
+          description={`"${pendingRemoveServer}" 将从 ${selectedEngine} 的配置中移除，此操作不可撤销。`}
+          confirmLabel="移除"
           onConfirm={() => void confirmRemove()}
           onCancel={() => setPendingRemoveServer(null)}
         />

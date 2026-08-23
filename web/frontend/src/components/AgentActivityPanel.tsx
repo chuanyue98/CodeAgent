@@ -18,13 +18,13 @@ export default function AgentActivityPanel({
     <aside className="glass-card flex w-80 shrink-0 flex-col p-4">
       <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
         <div>
-          <p className="text-sm font-semibold text-slate-800">Activity</p>
+          <p className="text-sm font-semibold text-slate-800">回合事件</p>
           <p className="text-[10px] text-slate-400">
-            Tools, diffs, usage, and protocol events
+            工具、diff、用量和协议事件
           </p>
         </div>
         <button
-          aria-label="Close activity"
+          aria-label="关闭回合事件"
           onClick={onClose}
           className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-50"
         >
@@ -33,7 +33,7 @@ export default function AgentActivityPanel({
       </div>
       <div className="custom-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto">
         {activity.length === 0 && (
-          <p className="text-xs italic text-slate-400">No activity yet</p>
+          <p className="text-xs italic text-slate-400">暂无事件</p>
         )}
         {activity.map(event => (
           <details

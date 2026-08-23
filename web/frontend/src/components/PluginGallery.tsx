@@ -4,14 +4,14 @@ import ResourceGallery, { type ResourceGalleryLabels } from './ResourceGallery';
 const labels: ResourceGalleryLabels = {
   // Same word as the other three galleries: one sidebar heading across all
   // Capabilities tabs reads as one feature, not four.
-  sidebar: 'Library',
-  detailHeading: 'Plugin Detail',
-  backLabel: 'Back to plugin list',
-  searchLabel: 'Search plugins',
-  searchPlaceholder: 'Search plugins...',
+  sidebar: '资源库',
+  detailHeading: '插件详情',
+  backLabel: '返回插件列表',
+  searchLabel: '搜索插件',
+  searchPlaceholder: '搜索插件…',
   searchId: 'plugin-search',
-  emptyCategory: 'No plugins found in this category.',
-  emptySidebar: 'No plugins found',
+  emptyCategory: '该分类下没有插件。',
+  emptySidebar: '未找到插件',
   itemSingular: 'plugin',
 };
 

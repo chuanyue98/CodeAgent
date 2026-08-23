@@ -9,7 +9,7 @@ test.beforeEach(async ({ baseURL }) => {
 test('laptop layout keeps session controls inside their panels and metrics out of the content', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto('/sessions');
-  await waitForH2(page, 'Sessions');
+  await waitForH2(page, '会话');
 
   const filters = page.getByTestId('activity-filters');
   const list = page.getByTestId('session-list');
@@ -32,7 +32,7 @@ test('laptop layout keeps session controls inside their panels and metrics out o
 test('compact layout stacks session filters above results', async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 768 });
   await page.goto('/sessions');
-  await waitForH2(page, 'Sessions');
+  await waitForH2(page, '会话');
 
   const navBox = await page.locator('aside').first().boundingBox();
   const filtersBox = await page.getByTestId('activity-filters').boundingBox();
@@ -47,10 +47,10 @@ test('compact layout stacks session filters above results', async ({ page }) => 
 test('nested workspace routes avoid page-level overflow at supported widths', async ({ page }) => {
   const routes = [
     { path: '/agent/web', label: 'Web Agent' },
-    { path: '/automations/tasks', label: 'Tasks' },
-    { path: '/activity/sessions', label: 'Sessions' },
-    { path: '/settings/plugins', label: 'Plugins' },
-    { path: '/settings/system', label: 'System' },
+    { path: '/automations/tasks', label: '任务' },
+    { path: '/activity/sessions', label: '会话' },
+    { path: '/settings/plugins', label: '插件' },
+    { path: '/settings/system', label: '系统' },
   ];
 
   for (const width of [1366, 1024, 768]) {

@@ -52,7 +52,7 @@ export default function TaskDetail({
       <div className="flex items-center justify-between">
         <button onClick={onBack} className="flex items-center gap-2 text-sm text-slate-500 hover:text-primary transition-colors">
           <ArrowLeft className="w-4 h-4" />
-          Back
+          返回
         </button>
 
         <div className="flex items-center gap-3">
@@ -62,17 +62,17 @@ export default function TaskDetail({
               className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-sm font-bold border border-red-100 hover:bg-red-100 transition-colors"
             >
               <StopCircle className="w-4 h-4" />
-              Stop Execution
+              停止执行
             </button>
           ) : (
             <>
               <select
-                aria-label="Workspace"
+                aria-label="工作区"
                 value={workspace}
                 onChange={e => onWorkspaceChange(e.target.value)}
                 className="max-w-56 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
-                <option value="" disabled>Select workspace</option>
+                <option value="" disabled>选择工作区</option>
                 {projects.filter(project => project.available !== false).map(project => (
                   <option key={project.path} value={project.path}>{project.path}</option>
                 ))}
@@ -91,7 +91,7 @@ export default function TaskDetail({
                 className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
               >
                 <Play className="w-4 h-4" />
-                Run Task
+                运行任务
               </button>
             </>
           )}
@@ -104,7 +104,7 @@ export default function TaskDetail({
             {task.title}
             {activeRun && (
               <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-bold uppercase tracking-wider border border-emerald-100 animate-pulse">
-                Running
+                运行中
               </span>
             )}
           </h2>
@@ -118,17 +118,17 @@ export default function TaskDetail({
             <>
               <section className="glass-card p-6 space-y-4 border-slate-100">
                 <div className="flex justify-between items-end">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Progress</span>
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">进度</span>
                   <span className="text-3xl font-semibold text-primary tracking-tighter">{pct}%</span>
                 </div>
                 <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                   <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
                 </div>
-                <p className="text-xs text-slate-400">{done} / {task.stages.length} stages completed</p>
+                <p className="text-xs text-slate-400">已完成 {done} / {task.stages.length} 个阶段</p>
               </section>
 
               <section className="space-y-3">
-                <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Stages</h2>
+                <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">阶段</h2>
                 {task.stages.map((stage, i) => (
                   <div
                     key={i}
@@ -160,7 +160,7 @@ export default function TaskDetail({
             <section className="space-y-3">
               <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                 <Terminal className="w-4 h-4" />
-                Execution Logs
+                执行日志
               </h2>
               <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 400 }}>
                 <LogViewer taskId={activeRun.task_id} />
@@ -179,7 +179,7 @@ export default function TaskDetail({
           <section className="space-y-3">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
               <Terminal className="w-3.5 h-3.5" />
-              Mounted Skills
+              挂载的技能
             </h2>
             <div className="space-y-2">
               {task.resolved_skills && task.resolved_skills.length > 0 ? (
@@ -203,7 +203,7 @@ export default function TaskDetail({
                 ))
               ) : (
                 <div className="text-xs text-slate-400 italic p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                  No skills mounted
+                  未挂载技能
                 </div>
               )}
             </div>
@@ -212,7 +212,7 @@ export default function TaskDetail({
           <section className="space-y-3">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
               <BookOpen className="w-3.5 h-3.5" />
-              Injected Prompts
+              注入的提示词
             </h2>
             <div className="flex flex-wrap gap-2">
               {task.resolved_prompts && task.resolved_prompts.length > 0 ? (
@@ -223,7 +223,7 @@ export default function TaskDetail({
                 ))
               ) : (
                 <div className="text-xs text-slate-400 italic p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200 w-full">
-                  No prompts injected
+                  未注入提示词
                 </div>
               )}
             </div>

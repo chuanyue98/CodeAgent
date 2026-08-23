@@ -9,11 +9,11 @@ test.beforeEach(async ({ baseURL }) => {
 async function gotoChat(page: Page): Promise<void> {
   await page.goto('/chat');
   await waitForH2(page, 'Web Agent');
-  await expect(page.getByLabel('Workspace')).not.toHaveValue('');
+  await expect(page.getByLabel('工作区')).not.toHaveValue('');
 }
 
 const input = (page: Page) => page.locator('textarea');
-const selectProvider = (page: Page, provider: string) => page.getByLabel('Engine').selectOption(provider);
+const selectProvider = (page: Page, provider: string) => page.getByLabel('引擎').selectOption(provider);
 
 test('selecting an engine shows an empty conversation list when none exist', async ({
   page,
@@ -21,7 +21,7 @@ test('selecting an engine shows an empty conversation list when none exist', asy
   await gotoChat(page);
   await selectProvider(page, 'fake');
   // No sessions exist in the isolated backend -> empty state shown.
-  await expect(page.locator('main')).toContainText('No conversations yet');
+  await expect(page.locator('main')).toContainText('还没有会话');
 });
 
 test('sending a message streams an assistant reply', async ({ page }) => {
@@ -42,8 +42,8 @@ test('New session clears the conversation', async ({ page }) => {
   await expect(page.locator('main')).toContainText('Echo: hello e2e', {
     timeout: 20000,
   });
-  await page.getByRole('button', { name: 'New', exact: true }).click();
-  await expect(page.getByText(/Start a new conversation/i)).toBeVisible();
+  await page.getByRole('button', { name: '新建', exact: true }).click();
+  await expect(page.getByText(/开始新会话/)).toBeVisible();
 });
 
 test('an active session locks workspace and provider selection until New is clicked', async ({ page }) => {
@@ -55,12 +55,12 @@ test('an active session locks workspace and provider selection until New is clic
     timeout: 20000,
   });
 
-  await expect(page.getByLabel('Workspace')).toBeDisabled();
-  await expect(page.getByLabel('Engine')).toBeDisabled();
+  await expect(page.getByLabel('工作区')).toBeDisabled();
+  await expect(page.getByLabel('引擎')).toBeDisabled();
 
-  await page.getByRole('button', { name: 'New', exact: true }).click();
-  await expect(page.getByLabel('Workspace')).toBeEnabled();
-  await expect(page.getByLabel('Engine')).toBeEnabled();
+  await page.getByRole('button', { name: '新建', exact: true }).click();
+  await expect(page.getByLabel('工作区')).toBeEnabled();
+  await expect(page.getByLabel('引擎')).toBeEnabled();
 });
 
 test('sessions from unregistered workspaces are listed but cannot be opened', async ({ page }) => {
@@ -85,14 +85,14 @@ test('sessions from unregistered workspaces are listed but cannot be opened', as
   await gotoChat(page);
   await selectProvider(page, 'fake');
 
-  await page.getByRole('button', { name: /Unavailable workspaces/ }).click();
+  await page.getByRole('button', { name: /不可用工作区/ }).click();
   const entry = page.getByText('unregistered-project');
   await expect(entry).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Register' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '注册' })).toBeVisible();
 
   // The entry is inert (not a button) — clicking it must not open a session.
   await entry.click();
-  await expect(page.getByText(/Start a new conversation/i)).toBeVisible();
+  await expect(page.getByText(/开始新会话/)).toBeVisible();
 });
 
 test('Shift+Enter inserts a newline without sending; Enter sends', async ({
@@ -126,7 +126,7 @@ test('renders markdown and provides copy-to-clipboard for code blocks', async ({
   await expect(preElement).toContainText('const val = 42;');
 
   // Verify copy button appears on hover/focus
-  const copyButton = preElement.locator('..').getByRole('button', { name: 'Copy code' });
+  const copyButton = preElement.locator('..').getByRole('button', { name: '复制代码' });
   // Trigger hover to make it visible
   await preElement.hover();
   await expect(copyButton).toBeVisible();
