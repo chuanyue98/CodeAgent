@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import McpPage from '../components/McpPage';
 import { ProjectProvider } from '../context/ProjectContext';
@@ -66,20 +67,22 @@ afterEach(() => {
 
 function renderMcpPage() {
   return render(
-    <ProjectProvider>
-      <McpPage />
-    </ProjectProvider>,
+    <MemoryRouter>
+      <ProjectProvider>
+        <McpPage />
+      </ProjectProvider>
+    </MemoryRouter>,
   );
 }
 
-describe('McpPage in-place edit', () => {
+describe('McpPage modal edit', () => {
   test('editing a server pre-fills the form and saves via remove-then-add', async () => {
     renderMcpPage();
 
     await screen.findByText('search');
-    fireEvent.click(screen.getByTitle('Edit'));
+    fireEvent.click(screen.getByRole('button', { name: '编辑 search' }));
 
-    await screen.findByText('Edit "search"');
+    await screen.findByText('编辑 "search"');
     expect(screen.getByPlaceholderText('my-server')).toHaveValue('search');
     expect(screen.getByPlaceholderText('npx my-mcp-server --flag')).toHaveValue('npx old-mcp-server');
     expect(screen.getByPlaceholderText('API_KEY=xxx')).toHaveValue('API_KEY=old-value');
@@ -87,7 +90,7 @@ describe('McpPage in-place edit', () => {
     fireEvent.change(screen.getByPlaceholderText('npx my-mcp-server --flag'), {
       target: { value: 'npx new-mcp-server' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
 
     await waitFor(() => {
       expect(deleteCalls).toHaveLength(1);
@@ -101,25 +104,24 @@ describe('McpPage in-place edit', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('Edit "search"')).not.toBeInTheDocument();
+      expect(screen.queryByText('编辑 "search"')).not.toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: /Add Server/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /添加服务器/ })).toBeInTheDocument();
   });
 
-  test('cancel edit resets the form without calling the API', async () => {
+  test('cancel edit closes the modal without calling the API', async () => {
     renderMcpPage();
 
     await screen.findByText('search');
-    fireEvent.click(screen.getByTitle('Edit'));
-    await screen.findByText('Edit "search"');
+    fireEvent.click(screen.getByRole('button', { name: '编辑 search' }));
+    await screen.findByText('编辑 "search"');
 
-    fireEvent.click(screen.getByTitle('Cancel edit'));
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
 
     await waitFor(() => {
-      expect(screen.queryByText('Edit "search"')).not.toBeInTheDocument();
+      expect(screen.queryByText('编辑 "search"')).not.toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: /Add Server/ })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('my-server')).toHaveValue('');
+    expect(screen.queryByPlaceholderText('my-server')).not.toBeInTheDocument();
     expect(deleteCalls).toHaveLength(0);
     expect(addCalls).toHaveLength(0);
   });
@@ -143,31 +145,23 @@ describe('McpPage server search', () => {
   });
 
   test('filters the server list by name or command/url', async () => {
-    render(
-      <ProjectProvider>
-        <McpPage />
-      </ProjectProvider>,
-    );
+    renderMcpPage();
 
     await screen.findByText('search');
     expect(screen.getByText('weather-api')).toBeVisible();
 
-    fireEvent.change(screen.getByLabelText('Search servers'), { target: { value: 'weather' } });
+    fireEvent.change(screen.getByLabelText('搜索服务器'), { target: { value: 'weather' } });
 
     expect(screen.getByText('weather-api')).toBeVisible();
     expect(screen.queryByText('search')).not.toBeInTheDocument();
   });
 
   test('shows an empty state when no server matches', async () => {
-    render(
-      <ProjectProvider>
-        <McpPage />
-      </ProjectProvider>,
-    );
+    renderMcpPage();
 
     await screen.findByText('search');
-    fireEvent.change(screen.getByLabelText('Search servers'), { target: { value: 'nonexistent' } });
+    fireEvent.change(screen.getByLabelText('搜索服务器'), { target: { value: 'nonexistent' } });
 
-    expect(screen.getByText('No servers match your search.')).toBeVisible();
+    expect(screen.getByText('没有匹配的服务器。')).toBeVisible();
   });
 });

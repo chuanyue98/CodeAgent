@@ -17,9 +17,9 @@ interface ActivityFilterPanelProps {
 }
 
 /**
- * The filter sidebar shared by Activity's History and Events tabs. Both tabs
- * previously carried their own near-identical copy, which drifted (one derived
- * the engine list from data, the other hardcoded it) and dropped everything
+ * The filter sidebar shared by Activity's Sessions and Timeline tabs. Both
+ * tabs previously carried their own near-identical copy, which drifted (one
+ * derived the engine list from data, the other hardcoded it) and dropped everything
  * you had typed the moment you switched tabs.
  */
 export default function ActivityFilterPanel({
@@ -47,21 +47,21 @@ export default function ActivityFilterPanel({
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-          <Filter className="w-4 h-4" /> Filters
+          <Filter className="w-4 h-4" /> 筛选
         </div>
         {filters.isFiltered && (
           <button
             onClick={filters.clearAll}
             className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600"
           >
-            <X className="w-3 h-3" /> Clear
+            <X className="w-3 h-3" /> 清除
           </button>
         )}
       </div>
 
       <div>
         <label className="text-xs text-slate-400 font-medium block mb-1" htmlFor="activity-search">
-          Search
+          搜索
         </label>
         <div className="relative">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
@@ -78,7 +78,7 @@ export default function ActivityFilterPanel({
 
       <div>
         <label className="text-xs text-slate-400 font-medium block mb-1" htmlFor="activity-project">
-          Project
+          工作区
         </label>
         <div className="relative">
           <FolderGit2 className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -88,7 +88,7 @@ export default function ActivityFilterPanel({
             onChange={e => filters.setProject(e.target.value)}
             className="w-full appearance-none pl-7 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
           >
-            <option value={ALL_PROJECTS}>All projects</option>
+            <option value={ALL_PROJECTS}>全部工作区</option>
             {projectPaths.map(path => (
               <option key={path} value={path} title={path}>
                 {projectLabel(path)}
@@ -98,24 +98,24 @@ export default function ActivityFilterPanel({
         </div>
         {filters.followsWorkspace && selectedWorkspace && (
           <p className="mt-1 text-[10px] leading-4 text-slate-400">
-            Following the workspace switcher.
+            跟随共享的工作区选择。
           </p>
         )}
       </div>
 
       <div>
-        <span className="text-xs text-slate-400 font-medium block mb-1">Date Range</span>
+        <span className="text-xs text-slate-400 font-medium block mb-1">日期范围</span>
         <div className="grid grid-cols-1 gap-2">
           <input
             type="date"
-            aria-label="Date range start"
+            aria-label="日期范围起点"
             value={filters.dateStart}
             onChange={e => filters.setDateStart(e.target.value)}
             className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
           />
           <input
             type="date"
-            aria-label="Date range end"
+            aria-label="日期范围终点"
             value={filters.dateEnd}
             onChange={e => filters.setDateEnd(e.target.value)}
             className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
@@ -125,11 +125,11 @@ export default function ActivityFilterPanel({
 
       {showEventTypes && (
         <div>
-          <span className="text-xs text-slate-400 font-medium block mb-1">Event Type</span>
+          <span className="text-xs text-slate-400 font-medium block mb-1">事件类型</span>
           <div className="space-y-1">
             {[
-              { value: 'message', label: 'Message' },
-              { value: 'tool_call', label: 'Tool Call' },
+              { value: 'message', label: '消息' },
+              { value: 'tool_call', label: '工具调用' },
             ].map(({ value, label }) => (
               <button
                 key={value}
@@ -149,7 +149,7 @@ export default function ActivityFilterPanel({
       )}
 
       <div>
-        <span className="text-xs text-slate-400 font-medium block mb-1">Engine</span>
+        <span className="text-xs text-slate-400 font-medium block mb-1">引擎</span>
         <div className="space-y-1">
           {engineOptions.map(engine => (
             <button
@@ -166,7 +166,7 @@ export default function ActivityFilterPanel({
             </button>
           ))}
           {engineOptions.length === 0 && (
-            <p className="px-2 text-xs text-slate-400">No engines recorded yet</p>
+            <p className="px-2 text-xs text-slate-400">暂无引擎记录</p>
           )}
         </div>
       </div>

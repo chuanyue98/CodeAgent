@@ -20,7 +20,7 @@ function CodeBlockWrapper({ children, ...props }: ComponentPropsWithoutRef<'pre'
       <button
         onClick={handleCopy}
         className="absolute top-2 right-2 p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors border border-slate-700 opacity-0 group-hover/code:opacity-100 focus:opacity-100 z-10"
-        title="Copy code"
+        title="复制代码"
       >
         {copied ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
       </button>

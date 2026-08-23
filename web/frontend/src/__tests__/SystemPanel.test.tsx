@@ -42,7 +42,7 @@ describe('SystemPanel', () => {
     await act(async () => {});
 
     expect(screen.queryByText('12%')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'System status' }));
+    fireEvent.click(screen.getByRole('button', { name: '系统状态' }));
     expect(screen.getByText('12%')).toBeInTheDocument();
   });
 
@@ -55,7 +55,7 @@ describe('SystemPanel', () => {
     renderPanel();
     await act(async () => {});
 
-    fireEvent.click(screen.getByRole('button', { name: 'System status' }));
+    fireEvent.click(screen.getByRole('button', { name: '系统状态' }));
     expect(screen.getByText('Failed to fetch system metrics')).toBeInTheDocument();
 
     await act(async () => {

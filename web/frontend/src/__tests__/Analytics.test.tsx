@@ -109,13 +109,13 @@ function pickRange(label: string) {
 describe('Analytics is one page, not four tabs', () => {
   test('shows every section at once instead of a tab bar', async () => {
     renderAnalytics();
-    await screen.findByText('Total Cost');
+    await screen.findByText('总成本');
 
-    expect(screen.getByText('Model Breakdown')).toBeVisible();
-    expect(screen.getByText(/Cost by engine/)).toBeVisible();
-    expect(screen.getByText(/Tokens by engine/)).toBeVisible();
+    expect(screen.getByText('模型明细')).toBeVisible();
+    expect(screen.getByText(/按引擎成本/)).toBeVisible();
+    expect(screen.getByText(/按引擎 Token/)).toBeVisible();
 
-    // The old Overview/Daily/Monthly/Sessions sub-tabs are gone.
+    // The old Overview/Daily/Monthly sub-tabs are gone.
     for (const gone of ['Overview', 'Daily', 'Monthly']) {
       expect(screen.queryByRole('button', { name: gone })).not.toBeInTheDocument();
     }
@@ -123,10 +123,10 @@ describe('Analytics is one page, not four tabs', () => {
 
   test('offers the four time ranges', async () => {
     renderAnalytics();
-    await screen.findByText('Total Cost');
+    await screen.findByText('总成本');
 
-    const group = screen.getByRole('group', { name: 'Time range' });
-    for (const label of ['7 days', '30 days', '90 days', 'All time']) {
+    const group = screen.getByRole('group', { name: '时间范围' });
+    for (const label of ['7 天', '30 天', '90 天', '全部']) {
       expect(within(group).getByRole('button', { name: label })).toBeVisible();
     }
   });
@@ -135,42 +135,42 @@ describe('Analytics is one page, not four tabs', () => {
 describe('Analytics time range scoping', () => {
   test('defaults to 30 days and counts only rows inside it', async () => {
     renderAnalytics();
-    await screen.findByText('Total Cost');
+    await screen.findByText('总成本');
 
     // Only the 2-days-ago row ($10) is inside 30 days; the 45-day-old $100 is not.
-    expect(within(statCard('Total Cost')).getByText('$10.00')).toBeVisible();
+    expect(within(statCard('总成本')).getByText('$10.00')).toBeVisible();
   });
 
   test('widening the range pulls in older rows', async () => {
     renderAnalytics();
-    await screen.findByText('Total Cost');
+    await screen.findByText('总成本');
 
-    pickRange('90 days');
-    expect(within(statCard('Total Cost')).getByText('$110.00')).toBeVisible();
+    pickRange('90 天');
+    expect(within(statCard('总成本')).getByText('$110.00')).toBeVisible();
 
-    pickRange('7 days');
-    expect(within(statCard('Total Cost')).getByText('$10.00')).toBeVisible();
+    pickRange('7 天');
+    expect(within(statCard('总成本')).getByText('$10.00')).toBeVisible();
   });
 
   test('scopes the engine card to the range, not all-time', async () => {
     renderAnalytics();
-    await screen.findByText('Total Cost');
+    await screen.findByText('总成本');
 
     // The all-time engine summary says $110; the 30-day view must not.
-    // "Est. Cost" is unique to the engine card (unlike the engine name, which
+    // "预估成本" is unique to the engine card (unlike the engine name, which
     // also appears in the pie legend).
-    const engineCard = screen.getByText('Est. Cost').closest('div.glass-card') as HTMLElement;
+    const engineCard = screen.getByText('预估成本').closest('div.glass-card') as HTMLElement;
     expect(within(engineCard).getByText('$10.00')).toBeVisible();
     expect(within(engineCard).queryByText('$110.00')).not.toBeInTheDocument();
   });
 
   test('scopes the model breakdown and derives its cost split', async () => {
     renderAnalytics();
-    await screen.findByText('Model Breakdown');
+    await screen.findByText('模型明细');
 
     fireEvent.click(screen.getByRole('button', { name: /claude-opus/ }));
 
-    const panel = screen.getByText('Token Breakdown').closest('div') as HTMLElement;
+    const panel = screen.getByText('Token 明细').closest('div') as HTMLElement;
     // Half the all-time tokens sit in range, so half the all-time input cost
     // ($44 over 2000 tokens → $22 over the 1000 in range).
     expect(within(panel).getByText('$22.00')).toBeVisible();
@@ -179,10 +179,10 @@ describe('Analytics time range scoping', () => {
 
   test('says so when the range is empty rather than showing bare zeros', async () => {
     renderAnalytics();
-    await screen.findByText('Total Cost');
+    await screen.findByText('总成本');
 
-    pickRange('7 days');
-    expect(screen.queryByText(/No usage in the last/)).not.toBeInTheDocument();
+    pickRange('7 天');
+    expect(screen.queryByText(/最近 7 天内没有用量/)).not.toBeInTheDocument();
   });
 });
 
@@ -200,7 +200,7 @@ describe('Analytics empty range', () => {
 
     renderAnalytics();
 
-    expect(await screen.findByText(/No usage in the last 30 days/)).toBeVisible();
-    expect(screen.queryByText('No usage recorded yet')).not.toBeInTheDocument();
+    expect(await screen.findByText(/最近 30 天内没有用量/)).toBeVisible();
+    expect(screen.queryByText('还没有用量记录')).not.toBeInTheDocument();
   });
 });

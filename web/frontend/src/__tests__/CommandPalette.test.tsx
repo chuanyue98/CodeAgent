@@ -45,10 +45,10 @@ function renderPalette() {
 describe('CommandPalette pinning', () => {
   test('pinning a workspace surfaces it in a Pinned section and persists to localStorage', async () => {
     renderPalette();
-    fireEvent.click(screen.getByLabelText('Open command palette'));
+    fireEvent.click(screen.getByLabelText('打开命令面板'));
 
     await screen.findByText('proj-a');
-    fireEvent.click(screen.getByLabelText('Pin proj-a'));
+    fireEvent.click(screen.getByLabelText('固定 proj-a'));
 
     await waitFor(() => {
       expect(screen.getAllByText('proj-a')).toHaveLength(2);
@@ -64,13 +64,13 @@ describe('CommandPalette pinning', () => {
       JSON.stringify(['workspace:/workspace/proj-a']),
     );
     renderPalette();
-    fireEvent.click(screen.getByLabelText('Open command palette'));
+    fireEvent.click(screen.getByLabelText('打开命令面板'));
 
     await waitFor(() => {
       expect(screen.getAllByText('proj-a')).toHaveLength(2);
     });
 
-    fireEvent.click(screen.getAllByLabelText('Unpin proj-a')[0]);
+    fireEvent.click(screen.getAllByLabelText('取消固定 proj-a')[0]);
 
     await waitFor(() => {
       expect(screen.getAllByText('proj-a')).toHaveLength(1);

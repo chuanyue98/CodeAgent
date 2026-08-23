@@ -65,7 +65,7 @@ export default function useAnalyticsData(): AnalyticsData {
       setError(null);
     } catch (e) {
       if (!mountedRef.current) return;
-      setError(e instanceof Error ? e.message : 'Failed to load analytics');
+      setError(e instanceof Error ? e.message : '加载分析数据失败');
     } finally {
       if (mountedRef.current) setLoading(false);
     }

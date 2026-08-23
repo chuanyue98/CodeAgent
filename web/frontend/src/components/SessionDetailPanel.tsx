@@ -69,7 +69,7 @@ export default function SessionDetailPanel({
       .catch(() => {
         if (!mounted) return;
         setLoading(false);
-        setLoadError('Could not load this conversation.');
+        setLoadError('无法加载此对话记录。');
       });
 
     return () => {
@@ -89,13 +89,13 @@ export default function SessionDetailPanel({
       setConvertState({
         status: 'success',
         targetEngine,
-        message: `Opened in ${engineLabel(targetEngine)} — new session ${result.newSessionId}`,
+        message: `已在 ${engineLabel(targetEngine)} 中打开 — 新会话 ${result.newSessionId}`,
       });
     } catch (err) {
       setConvertState({
         status: 'error',
         targetEngine,
-        message: err instanceof Error ? err.message : 'Conversion failed',
+        message: err instanceof Error ? err.message : '转换失败',
       });
     }
   };
@@ -112,7 +112,7 @@ export default function SessionDetailPanel({
     } catch (err) {
       setDeleting(false);
       setConfirmingDelete(false);
-      setDeleteError(err instanceof Error ? err.message : 'Could not delete this session.');
+      setDeleteError(err instanceof Error ? err.message : '无法删除此会话。');
     }
   };
 
@@ -135,7 +135,7 @@ export default function SessionDetailPanel({
             {engine}
           </span>
           <button
-            aria-label="Close session details"
+            aria-label="关闭会话详情"
             onClick={onClose}
             className="text-slate-400 transition-colors hover:text-slate-600"
           >
@@ -148,16 +148,16 @@ export default function SessionDetailPanel({
         {usage && (
           <section>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
-              Usage
+              用量
             </p>
             <div className="mb-2 grid grid-cols-2 gap-2">
               <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-2 text-center">
                 <p className="text-sm font-bold text-slate-800">{fmtTokens(totalTokens)}</p>
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Tokens</p>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">Token</p>
               </div>
               <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-2 text-center">
                 <p className="text-sm font-bold text-slate-800">{fmtCost(usage.cost)}</p>
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Est. cost</p>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">预估费用</p>
               </div>
             </div>
             {usage.modelBreakdowns?.length > 0 && (
@@ -166,8 +166,8 @@ export default function SessionDetailPanel({
                   <div key={`${mb.modelName}-${i}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
                     <span className="min-w-0 break-all font-mono text-slate-600">{mb.modelName}</span>
                     <div className="flex flex-wrap gap-3 text-slate-500">
-                      <span>in: {fmtTokens(mb.inputTokens)}</span>
-                      <span>out: {fmtTokens(mb.outputTokens)}</span>
+                      <span>输入：{fmtTokens(mb.inputTokens)}</span>
+                      <span>输出：{fmtTokens(mb.outputTokens)}</span>
                       <span className="font-semibold text-slate-700">{fmtCost(mb.cost)}</span>
                     </div>
                   </div>
@@ -175,24 +175,24 @@ export default function SessionDetailPanel({
               </div>
             )}
             <div className="mt-2 flex flex-wrap gap-4 border-t border-slate-50 pt-2 text-xs text-slate-500">
-              <span>Cache write: {fmtTokens(usage.cacheCreationTokens)}</span>
-              <span>Cache read: {fmtTokens(usage.cacheReadTokens)}</span>
+              <span>缓存写入：{fmtTokens(usage.cacheCreationTokens)}</span>
+              <span>缓存读取：{fmtTokens(usage.cacheReadTokens)}</span>
             </div>
           </section>
         )}
 
         <section>
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
-            Conversation
+            对话记录
           </p>
           {loading && (
             <p className="flex items-center gap-2 text-xs text-slate-400">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading conversation…
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> 正在加载对话记录…
             </p>
           )}
           {!loading && loadError && <p className="text-xs text-slate-400">{loadError}</p>}
           {!loading && !loadError && detail?.messages.length === 0 && (
-            <p className="text-xs text-slate-400">This session has no messages.</p>
+            <p className="text-xs text-slate-400">此会话没有消息。</p>
           )}
           {!loading && !loadError && detail && detail.messages.length > 0 && (
             <div className="space-y-3">
@@ -227,7 +227,7 @@ export default function SessionDetailPanel({
 
       <div className="space-y-2 border-t border-slate-100 pt-3">
         <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
-          Open in another engine
+          在其他引擎中打开
         </p>
         <div className="flex flex-wrap gap-2">
           {ALL_ENGINES.filter(target => target !== engine).map(target => (
@@ -263,7 +263,7 @@ export default function SessionDetailPanel({
           onClick={() => setConfirmingDelete(true)}
           className="flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
         >
-          <Trash2 className="h-3 w-3" /> Delete this session
+          <Trash2 className="h-3 w-3" /> 删除此会话
         </button>
         <p className="truncate font-mono text-[10px] text-slate-300" title={sessionId}>
           {sessionId}
@@ -272,9 +272,9 @@ export default function SessionDetailPanel({
 
       {confirmingDelete && (
         <ConfirmDialog
-          title="Delete this session?"
-          description="This permanently removes the underlying history file. This cannot be undone."
-          confirmLabel={deleting ? 'Deleting…' : 'Delete'}
+          title="删除此会话？"
+          description="这将永久删除底层的历史记录文件，且无法撤销。"
+          confirmLabel={deleting ? '删除中…' : '删除'}
           onConfirm={() => { if (!deleting) void handleDelete(); }}
           onCancel={() => { if (!deleting) setConfirmingDelete(false); }}
         />

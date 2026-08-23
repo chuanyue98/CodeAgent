@@ -91,7 +91,7 @@ export function CostTrendCard({ series, granularity, rangeLabel }: TrendCardsPro
   return (
     <div className="animate-fade-rise stagger-2 glass-card p-5">
       <SectionTitle>
-        Cost by engine — {granularity === 'month' ? 'per month' : `last ${rangeLabel}`}
+        按引擎成本 — {granularity === 'month' ? '按月' : `最近 ${rangeLabel}`}
       </SectionTitle>
       <ResponsiveContainer width="100%" height={240}>
         <AreaChart data={series.cost} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
@@ -139,7 +139,7 @@ export function TokensTrendCard({ series, granularity, rangeLabel }: TrendCardsP
   return (
     <div className="animate-fade-rise stagger-3 glass-card p-5">
       <SectionTitle>
-        Tokens by engine — {granularity === 'month' ? 'per month' : `last ${rangeLabel}`}
+        按引擎 Token — {granularity === 'month' ? '按月' : `最近 ${rangeLabel}`}
       </SectionTitle>
       <ResponsiveContainer width="100%" height={200}>
         {granularity === 'month' ? (
@@ -207,7 +207,7 @@ export function CostDistributionCard({ pieData }: { pieData: PieDatum[] }) {
   if (pieData.length === 0) return null;
   return (
     <div className="glass-card p-4">
-      <SectionTitle>Cost Distribution</SectionTitle>
+      <SectionTitle>成本分布</SectionTitle>
       <ResponsiveContainer width="100%" height={180}>
         <PieChart>
           <Pie

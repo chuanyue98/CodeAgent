@@ -106,7 +106,7 @@ export default function AuditTrail() {
       .catch(() => {
         if (!mounted) return;
         setLoading(false);
-        setError('Failed to load audit events');
+        setError('加载事件失败');
       });
 
     return () => {
@@ -145,7 +145,7 @@ export default function AuditTrail() {
   }, [events, search, selectedTypes]);
 
   if (loading) {
-    return <FilterListSkeleton label="Loading events" />;
+    return <FilterListSkeleton label="加载事件中" />;
   }
 
   if (error) {
@@ -157,32 +157,30 @@ export default function AuditTrail() {
       <ActivityFilterPanel
         filters={filters}
         engineOptions={ALL_ENGINES}
-        searchPlaceholder="Project, session, content..."
+        searchPlaceholder="项目、会话、内容…"
         showEventTypes
       />
 
       <div className="flex-1 min-w-0 glass-card p-5 flex flex-col">
         <div className="flex items-center justify-between mb-2">
           <p className="text-xs text-slate-400 font-medium">
-            {filtered.length} event{filtered.length !== 1 ? 's' : ''}
+            {filtered.length} 条事件
           </p>
           <button
             onClick={load}
             className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
           >
-            <RefreshCw className="w-3 h-3" /> Refresh
+            <RefreshCw className="w-3 h-3" /> 刷新
           </button>
         </div>
         <p className="text-[11px] text-slate-400 mb-4">
-          Every message and tool call across sessions and engines, newest first — search here to
-          find which session something happened in. Not an approval or permission log.
+          跨会话与引擎的全部消息和工具调用，按时间倒序——在这里搜索某件事发生在哪个会话。这不是审批或权限日志。
         </p>
 
         {truncated && (
           <div className="flex items-center gap-2 mb-4 px-3 py-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            Showing the {EVENT_LIMIT.toLocaleString()} most recent events per engine. More match your
-            filters — narrow the date range to see them.
+            每个引擎仅显示最近 {EVENT_LIMIT.toLocaleString()} 条事件。有更多结果匹配你的筛选——缩小日期范围以查看。
           </div>
         )}
 
@@ -233,7 +231,7 @@ export default function AuditTrail() {
                 {isExpanded && (
                   <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-600 space-y-2">
                     {event.event_type === 'message' ? (
-                      <p className="whitespace-pre-wrap break-words">{event.content_preview || '(empty)'}</p>
+                      <p className="whitespace-pre-wrap break-words">{event.content_preview || '（空）'}</p>
                     ) : (
                       <>
                         <div><span className="text-slate-400">args: </span><span className="font-mono break-words">{event.args_preview || '—'}</span></div>
@@ -244,7 +242,7 @@ export default function AuditTrail() {
                       onClick={() => setDrawerSession({ engine: event.engine, sessionId: event.session_id, project: event.project_path })}
                       className="text-primary text-xs font-medium hover:underline"
                     >
-                      View full session →
+                      查看完整会话 →
                     </button>
                   </div>
                 )}
@@ -252,7 +250,7 @@ export default function AuditTrail() {
             );
           })}
           {filtered.length === 0 && (
-            <p className="text-sm text-slate-400 text-center py-8">No events match your filters</p>
+            <p className="text-sm text-slate-400 text-center py-8">没有符合筛选条件的事件</p>
           )}
         </div>
       </div>

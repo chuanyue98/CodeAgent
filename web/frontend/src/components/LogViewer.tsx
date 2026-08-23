@@ -26,7 +26,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
       await fetchLogFiles().then(setFiles);
       setFilesError(null);
     } catch (e) {
-      setFilesError(e instanceof Error ? e.message : 'Failed to load log files');
+      setFilesError(e instanceof Error ? e.message : '加载日志文件失败');
     }
   }, []);
 
@@ -73,11 +73,11 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
       <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-b border-slate-100">
         <div className="flex flex-wrap items-center gap-2">
           <Terminal className="w-4 h-4 text-slate-500" />
-          <span className="text-sm font-semibold text-slate-700">Logs</span>
+          <span className="text-sm font-semibold text-slate-700">日志</span>
           {selectedTaskId && (
             <span className={`flex items-center gap-1 text-xs ${connected ? 'text-green-600' : 'text-red-500'}`}>
               {connected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {connected ? 'Live' : 'Disconnected'}
+              {connected ? '实时' : '已断开'}
             </span>
           )}
         </div>
@@ -85,7 +85,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
           onClick={() => setAutoScroll(!autoScroll)}
           className="text-xs text-slate-500 hover:text-slate-800"
         >
-          {autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
+          {autoScroll ? '自动滚动：开' : '自动滚动：关'}
         </button>
       </div>
 
@@ -108,7 +108,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
             </button>
           ))}
           {files?.length === 0 && (
-            <p className="text-xs text-slate-400 px-2">No log files</p>
+            <p className="text-xs text-slate-400 px-2">暂无日志文件</p>
           )}
         </div>
 
@@ -117,7 +117,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto p-3 font-mono text-xs leading-relaxed bg-slate-50/50"
         >
-          {loading && <p className="text-slate-400">Loading...</p>}
+          {loading && <p className="text-slate-400">加载中…</p>}
           {error && (
             <div className="flex items-center gap-2 text-red-600 mb-2">
               <AlertCircle className="w-3 h-3" />
@@ -127,13 +127,13 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
           {truncated && (
             <div className="sticky top-0 z-10 mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
               <span>
-                Showing last {DEFAULT_VISIBLE_LINES.toLocaleString()} of {allLines.length.toLocaleString()} lines
+                正在显示全部 {allLines.length.toLocaleString()} 行中的最后 {DEFAULT_VISIBLE_LINES.toLocaleString()} 行
               </span>
               <button
                 onClick={() => setShowAllLines(true)}
                 className="font-semibold text-amber-900 underline hover:no-underline"
               >
-                Show all
+                显示全部
               </button>
             </div>
           )}

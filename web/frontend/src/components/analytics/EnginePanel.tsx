@@ -35,13 +35,13 @@ export default function EnginePanel({
               <span className={`text-[11px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${eb(eng.target)}`}>
                 {eng.target}
               </span>
-              <span className="text-xs text-slate-400">{eng.sessionCount} sessions</span>
+              <span className="text-xs text-slate-400">{eng.sessionCount} 个会话</span>
             </div>
             <div className="space-y-1.5 text-xs">
               {[
-                { label: 'Input', value: fmtTokens(eng.inputTokens) },
-                { label: 'Output', value: fmtTokens(eng.outputTokens) },
-                { label: 'Cache', value: fmtTokens(eng.cacheCreationTokens + eng.cacheReadTokens) },
+                { label: '输入', value: fmtTokens(eng.inputTokens) },
+                { label: '输出', value: fmtTokens(eng.outputTokens) },
+                { label: '缓存', value: fmtTokens(eng.cacheCreationTokens + eng.cacheReadTokens) },
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between">
                   <span className="text-slate-400">{label}</span>
@@ -49,19 +49,19 @@ export default function EnginePanel({
                 </div>
               ))}
               <div className="flex justify-between pt-1.5 border-t border-slate-100">
-                <span className="text-slate-500 font-medium">Est. Cost</span>
+                <span className="text-slate-500 font-medium">预估成本</span>
                 <span className="font-bold" style={{ color: ec(eng.target) }}>
                   {fmtCost(eng.cost)}
                 </span>
               </div>
             </div>
             <div className="mt-2 text-[10px] text-slate-300 truncate">
-              {eng.models.slice(0, 2).join(', ')}{eng.models.length > 2 && ` +${eng.models.length - 2} more`}
+              {eng.models.slice(0, 2).join(', ')}{eng.models.length > 2 && ` +${eng.models.length - 2} 个`}
             </div>
           </div>
         ))}
         {rangeEngines.length === 0 && (
-          <p className="text-xs text-slate-400">No engine usage in this range.</p>
+          <p className="text-xs text-slate-400">该时间范围内没有引擎用量。</p>
         )}
       </div>
 
@@ -75,11 +75,11 @@ export default function EnginePanel({
                 to="/activity/sessions"
                 className="flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline"
               >
-                All sessions <LinkArrow className="h-3 w-3" />
+                全部会话 <LinkArrow className="h-3 w-3" />
               </Link>
             }
           >
-            <span className="flex items-center gap-1.5"><Terminal className="w-3 h-3" /> Sessions</span>
+            <span className="flex items-center gap-1.5"><Terminal className="w-3 h-3" /> 会话</span>
           </SectionTitle>
           <div className="grid grid-cols-2 gap-2 mb-3">
             <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-center">
@@ -90,12 +90,12 @@ export default function EnginePanel({
             </div>
             <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-center">
               <p className="text-lg font-bold text-green-700">{fmtCost(avgCostPerSession)}</p>
-              <p className="text-[9px] text-slate-600 uppercase tracking-wide">Avg / session</p>
+              <p className="text-[9px] text-slate-600 uppercase tracking-wide">每会话平均</p>
             </div>
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium mb-1">
-              <Clock className="w-3 h-3" /> Recent activity
+              <Clock className="w-3 h-3" /> 最近动态
             </div>
             {recentSessions.map(s => (
               <div
@@ -124,7 +124,7 @@ export default function EnginePanel({
               </div>
             ))}
             {recentSessions.length === 0 && (
-              <p className="text-[11px] text-slate-400">No sessions in this range.</p>
+              <p className="text-[11px] text-slate-400">该时间范围内没有会话。</p>
             )}
           </div>
         </div>

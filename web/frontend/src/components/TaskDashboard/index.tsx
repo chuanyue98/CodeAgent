@@ -46,7 +46,7 @@ const TaskDashboard: React.FC = () => {
       setTasks(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error');
+      setError(e instanceof Error ? e.message : '错误');
     } finally {
       setLoading(false);
     }
@@ -81,7 +81,7 @@ const TaskDashboard: React.FC = () => {
       if (active) setActiveRunId(active.task_id);
       else setActiveRunId(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error');
+      setError(e instanceof Error ? e.message : '错误');
     }
   }, [currentGroup, runs]);
 
@@ -105,7 +105,7 @@ const TaskDashboard: React.FC = () => {
 
   const runTask = async (engine: string) => {
     if (!selected || !workspace) {
-      setError('Select a workspace before running a task');
+      setError('运行任务前请先选择工作区');
       return;
     }
     try {
@@ -117,7 +117,7 @@ const TaskDashboard: React.FC = () => {
       setActiveRunId(status.task_id);
       void fetchRuns();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to run task');
+      setError(e instanceof Error ? e.message : '运行任务失败');
     }
   };
 

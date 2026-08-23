@@ -21,7 +21,7 @@ export default function ModelBreakdown({
 
   return (
     <div className="animate-fade-rise stagger-6 glass-card p-5">
-      <SectionTitle>Model Breakdown</SectionTitle>
+      <SectionTitle>模型明细</SectionTitle>
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 space-y-1.5 min-w-0">
           {rangeModels.map(m => {
@@ -69,15 +69,15 @@ export default function ModelBreakdown({
           const ioRatio = m.outputTokens > 0 ? m.inputTokens / m.outputTokens : 0;
           const ioLabel = ioRatio < 0.1 ? '0:1' : ioRatio > 10 ? '1:0' : `${ioRatio.toFixed(1)}:1`;
           const ioText = ioRatio < 0.3
-            ? 'More output than input. Generation-heavy workload.'
+            ? '输出多于输入，以生成为主的工作负载。'
             : ioRatio > 3
-            ? 'More input than output. Context-heavy workload.'
-            : 'Balanced input/output ratio.';
+            ? '输入多于输出，以上下文为主的工作负载。'
+            : '输入/输出比例均衡。';
           const rows = [
-            { label: 'Input',       cost: m.inputCost,      tokens: m.inputTokens },
-            { label: 'Output',      cost: m.outputCost,     tokens: m.outputTokens },
-            { label: 'Cache Write', cost: m.cacheWriteCost, tokens: m.cacheCreationTokens },
-            { label: 'Cache Read',  cost: m.cacheReadCost,  tokens: m.cacheReadTokens },
+            { label: '输入',       cost: m.inputCost,      tokens: m.inputTokens },
+            { label: '输出',      cost: m.outputCost,     tokens: m.outputTokens },
+            { label: '缓存写入', cost: m.cacheWriteCost, tokens: m.cacheCreationTokens },
+            { label: '缓存读取',  cost: m.cacheReadCost,  tokens: m.cacheReadTokens },
           ];
           return (
             <div className="w-full lg:w-72 shrink-0 rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-4">
@@ -85,7 +85,7 @@ export default function ModelBreakdown({
                 <p className="text-sm font-bold text-slate-800 truncate">{m.model}</p>
                 <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
                   <span className="font-semibold text-slate-700">{pct.toFixed(1)}%</span>
-                  <span>usage</span>
+                  <span>用量</span>
                   <span className="text-slate-300">•</span>
                   <span className="font-semibold text-slate-700">{ioLabel}</span>
                   <span>I/O</span>
@@ -95,17 +95,17 @@ export default function ModelBreakdown({
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-lg bg-white border border-slate-200 p-2.5">
                   <p className="text-base font-bold text-slate-800">{fmtCost(m.cost)}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Total Cost</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">总成本</p>
                 </div>
                 <div className="rounded-lg bg-white border border-slate-200 p-2.5">
                   <p className="text-base font-bold text-slate-800">{fmtTokens(totalTok)}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">All Tokens</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">全部 Token</p>
                 </div>
               </div>
 
               <div>
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
-                  Token Breakdown
+                  Token 明细
                 </p>
                 <div className="space-y-1">
                   {rows.map(({ label, cost, tokens }) => (
@@ -120,7 +120,7 @@ export default function ModelBreakdown({
 
               <div className="rounded-lg bg-white border border-slate-200 p-2.5">
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">
-                  Input/Output Ratio
+                  输入/输出比例
                 </p>
                 <p className="text-xs text-slate-600">{ioText}</p>
               </div>

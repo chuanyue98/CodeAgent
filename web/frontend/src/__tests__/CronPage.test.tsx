@@ -65,7 +65,7 @@ describe('CronPage schedule search', () => {
     await screen.findByText('code_review');
     expect(screen.getByText('dependency_check')).toBeVisible();
 
-    fireEvent.change(screen.getByLabelText('Search schedules'), { target: { value: 'gemini' } });
+    fireEvent.change(screen.getByLabelText('搜索定时计划'), { target: { value: 'gemini' } });
 
     expect(screen.getByText('dependency_check')).toBeVisible();
     expect(screen.queryByText('code_review')).not.toBeInTheDocument();
@@ -75,8 +75,8 @@ describe('CronPage schedule search', () => {
     renderCronPage();
 
     await screen.findByText('code_review');
-    fireEvent.change(screen.getByLabelText('Search schedules'), { target: { value: 'nonexistent' } });
+    fireEvent.change(screen.getByLabelText('搜索定时计划'), { target: { value: 'nonexistent' } });
 
-    expect(screen.getByText('No schedules match your search.')).toBeVisible();
+    expect(screen.getByText('没有匹配的定时计划。')).toBeVisible();
   });
 });

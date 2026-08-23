@@ -76,10 +76,10 @@ describe('AgentSessionBanner resource honesty', () => {
     });
 
     // Prompts carry a receipt; skills do not -- only skills get flagged.
-    expect(screen.getByText('not applied')).toBeInTheDocument();
-    fireEvent.click(screen.getByText(/Configured resources/));
-    expect(screen.getByText('not injected')).toBeInTheDocument();
-    expect(screen.getByText(/Amber kinds are configured/)).toBeInTheDocument();
+    expect(screen.getByText('未应用')).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/已配置资源/));
+    expect(screen.getByText('未注入')).toBeInTheDocument();
+    expect(screen.getByText(/琥珀色标记的资源类型已在资源组中配置/)).toBeInTheDocument();
   });
 
   test('shows everything applied when every configured kind has a receipt', () => {
@@ -92,10 +92,10 @@ describe('AgentSessionBanner resource honesty', () => {
       },
     });
 
-    expect(screen.getByText('applied')).toBeInTheDocument();
-    expect(screen.queryByText('not applied')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText(/Configured resources/));
-    expect(screen.queryByText('not injected')).not.toBeInTheDocument();
+    expect(screen.getByText('已应用')).toBeInTheDocument();
+    expect(screen.queryByText('未应用')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText(/已配置资源/));
+    expect(screen.queryByText('未注入')).not.toBeInTheDocument();
   });
 
   test('flags all configured kinds when nothing carries a receipt', () => {
@@ -103,15 +103,15 @@ describe('AgentSessionBanner resource honesty', () => {
       snapshot: { group: 'web', skills: ['base/review'], prompts: ['base'] },
     });
 
-    expect(screen.getByText('not applied')).toBeInTheDocument();
-    fireEvent.click(screen.getByText(/Configured resources/));
-    expect(screen.getAllByText('not injected')).toHaveLength(2);
+    expect(screen.getByText('未应用')).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/已配置资源/));
+    expect(screen.getAllByText('未注入')).toHaveLength(2);
   });
 
   test('stays quiet when nothing is configured', () => {
     renderBanner({ snapshot: { group: 'web' } });
 
-    expect(screen.queryByText('not applied')).not.toBeInTheDocument();
-    expect(screen.queryByText('applied')).not.toBeInTheDocument();
+    expect(screen.queryByText('未应用')).not.toBeInTheDocument();
+    expect(screen.queryByText('已应用')).not.toBeInTheDocument();
   });
 });

@@ -45,7 +45,7 @@ export default function SectionLayout({
           Shown from lg up, where there is room beside the tabs. */}
       <div className="animate-fade-rise stagger-1 flex flex-wrap items-center justify-between gap-x-4 border-b border-slate-200 px-1 pb-2">
         <span className="sr-only">{description}</span>
-        <nav aria-label={`${label} sections`} className="custom-scrollbar flex max-w-full gap-1 overflow-x-auto">
+        <nav aria-label={`${label}分区`} className="custom-scrollbar flex max-w-full gap-1 overflow-x-auto">
           {tabs.map((tab, i) => {
             const active = tab.matchPrefix
               ? pathname === tab.matchPrefix || pathname.startsWith(`${tab.matchPrefix}/`)

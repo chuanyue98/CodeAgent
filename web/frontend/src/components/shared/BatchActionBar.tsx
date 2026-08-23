@@ -6,7 +6,6 @@ interface BatchActionBarProps {
   onActivateSelected: () => void;
   onDeactivateSelected: () => void;
   onClearSelection: () => void;
-  itemLabelPlural: string;
 }
 
 /**
@@ -22,41 +21,40 @@ export default function BatchActionBar({
   onActivateSelected,
   onDeactivateSelected,
   onClearSelection,
-  itemLabelPlural,
 }: BatchActionBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-3 text-xs">
       <label className="flex items-center gap-2 text-slate-500 font-medium cursor-pointer select-none">
         <input
           type="checkbox"
-          aria-label={`Select all ${itemLabelPlural}`}
+          aria-label="全选"
           checked={allSelected}
           onChange={onToggleSelectAll}
           disabled={totalCount === 0}
           className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
         />
-        {totalCount} {itemLabelPlural}
+        {totalCount} 项
       </label>
       {selectedCount > 0 && (
         <span className="flex items-center gap-2">
-          <span className="text-slate-500">{selectedCount} selected</span>
+          <span className="text-slate-500">已选择 {selectedCount} 项</span>
           <button
             onClick={onActivateSelected}
             className="px-2 py-1 rounded-md border border-primary/20 text-primary hover:bg-primary/5 transition-colors font-medium"
           >
-            Activate
+            启用
           </button>
           <button
             onClick={onDeactivateSelected}
             className="px-2 py-1 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors font-medium"
           >
-            Deactivate
+            停用
           </button>
           <button
             onClick={onClearSelection}
             className="px-2 py-1 rounded-md text-slate-400 hover:text-slate-600 transition-colors"
           >
-            Clear
+            清除
           </button>
         </span>
       )}

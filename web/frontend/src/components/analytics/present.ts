@@ -28,8 +28,8 @@ export function timeAgo(iso: string) {
   if (!iso) return '—';
   const ms = Date.now() - new Date(iso).getTime();
   const days = Math.floor(ms / 86400000);
-  if (days === 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 30) return `${days}d ago`;
+  if (days === 0) return '今天';
+  if (days === 1) return '昨天';
+  if (days < 30) return `${days} 天前`;
   return iso.slice(0, 10);
 }

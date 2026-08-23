@@ -16,9 +16,9 @@ export async function waitForH2(page: Page, label: string): Promise<void> {
 /** Opens the ProjectSwitcher dropdown (click toggle) and picks a group.
  *  Drives every page whose data is re-scoped by `currentGroup`. */
 export async function switchGroup(page: Page, group: string): Promise<void> {
-  // ProjectSwitcher is the only header button with aria-haspopup="listbox"
-  // (the command palette and system status triggers use other roles).
-  await page.locator('header button[aria-haspopup="listbox"]').click();
+  // The header has two listbox triggers (workspace switcher + group
+  // switcher); disambiguate by the group switcher's accessible name.
+  await page.getByRole('button', { name: /资源组/ }).click();
   await page.getByRole('option', { name: group, exact: true }).click();
 }
 

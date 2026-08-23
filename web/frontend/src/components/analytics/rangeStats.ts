@@ -20,10 +20,10 @@ export interface RangeDefinition {
 }
 
 export const RANGES: RangeDefinition[] = [
-  { id: '7d', label: '7 days', days: 7 },
-  { id: '30d', label: '30 days', days: 30 },
-  { id: '90d', label: '90 days', days: 90 },
-  { id: 'all', label: 'All time', days: null },
+  { id: '7d', label: '7 天', days: 7 },
+  { id: '30d', label: '30 天', days: 30 },
+  { id: '90d', label: '90 天', days: 90 },
+  { id: 'all', label: '全部', days: null },
 ];
 
 export function activeRangeOf(id: RangeId): RangeDefinition {

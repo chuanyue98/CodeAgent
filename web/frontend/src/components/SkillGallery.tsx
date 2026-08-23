@@ -2,13 +2,13 @@ import { Terminal } from 'lucide-react';
 import ResourceGallery, { type ResourceGalleryLabels } from './ResourceGallery';
 
 const labels: ResourceGalleryLabels = {
-  sidebar: 'Library',
-  detailHeading: 'Skill Detail',
-  backLabel: 'Back to skill list',
-  searchLabel: 'Search skills',
-  searchPlaceholder: 'Search skills...',
+  sidebar: '资源库',
+  detailHeading: '技能详情',
+  backLabel: '返回技能列表',
+  searchLabel: '搜索技能',
+  searchPlaceholder: '搜索技能…',
   searchId: 'skill-search',
-  emptyCategory: 'No skills found in this category.',
+  emptyCategory: '该分类下没有技能。',
   itemSingular: 'skill',
 };
 

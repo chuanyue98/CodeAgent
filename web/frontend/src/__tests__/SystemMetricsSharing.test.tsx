@@ -47,7 +47,7 @@ describe('SystemPanel and SystemPage share one metrics subscription', () => {
     // SystemPage renders its own "42%" for CPU immediately (metrics section);
     // SystemPanel keeps its copy hidden until opened.
     expect(await screen.findAllByText('42%')).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: 'System status' }));
+    fireEvent.click(screen.getByRole('button', { name: '系统状态' }));
     expect(screen.getAllByText('42%')).toHaveLength(2);
 
     // One shared subscription, not one fetch per consumer.
@@ -68,11 +68,11 @@ describe('SystemPanel and SystemPage share one metrics subscription', () => {
     expect(fetchSystemMetrics).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+      fireEvent.click(screen.getByRole('button', { name: '刷新' }));
     });
 
     expect(fetchSystemMetrics).toHaveBeenCalledTimes(2);
-    fireEvent.click(screen.getByRole('button', { name: 'System status' }));
+    fireEvent.click(screen.getByRole('button', { name: '系统状态' }));
     expect(screen.getAllByText('42%')).toHaveLength(2);
   });
 });

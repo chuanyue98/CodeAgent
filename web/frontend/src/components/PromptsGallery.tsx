@@ -19,14 +19,14 @@ interface PromptMeta {
 }
 
 const labels: ResourceGalleryLabels = {
-  sidebar: 'Library',
-  detailHeading: 'Prompt Group',
-  backLabel: 'Back to prompt group list',
-  searchLabel: 'Search prompt groups',
-  searchPlaceholder: 'Search prompt groups...',
+  sidebar: '资源库',
+  detailHeading: '提示词组详情',
+  backLabel: '返回提示词组列表',
+  searchLabel: '搜索提示词组',
+  searchPlaceholder: '搜索提示词组…',
   searchId: 'prompt-search',
-  emptyCategory: 'No prompt groups found in this category.',
-  emptySidebar: 'No prompt groups found.',
+  emptyCategory: '该分类下没有提示词组。',
+  emptySidebar: '未找到提示词组。',
   itemSingular: 'prompt group',
 };
 
@@ -59,7 +59,7 @@ function renderMeta(item: ResourceItem<PromptMeta>) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="mr-1 text-[11px] font-bold uppercase tracking-widest text-slate-500">
-        {files.length} file{files.length === 1 ? '' : 's'}
+        {files.length} 个文件
       </span>
       {files.slice(0, 4).map(file => (
         <span key={file.path} className="rounded-full border border-slate-100 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-600">
@@ -81,7 +81,7 @@ function renderDetailAside(item: ResourceItem<PromptMeta>) {
     <>
       <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
         <Files className="h-4 w-4 text-primary" />
-        Files in Group
+        组内文件
       </div>
       <div className="space-y-2">
         {files.map(file => (

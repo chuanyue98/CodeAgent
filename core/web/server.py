@@ -311,4 +311,14 @@ else:
             from fastapi import HTTPException
 
             raise HTTPException(status_code=404, detail="API route not found")
-        return FileResponse(FRONTEND_DIST / "index.html")
+        # Hashed /assets chunks can be cached forever, but index.html must
+        # always revalidate: it is the only thing that points at the current
+        # chunk names, and a stale cached copy keeps serving the previous
+        # build's chunks after a rebuild (they may still be in cache too),
+        # which looks exactly like "the rebuild changed nothing".
+        return FileResponse(
+            FRONTEND_DIST / "index.html",
+            headers={
+                "Cache-Control": "no-cache",
+            },
+        )

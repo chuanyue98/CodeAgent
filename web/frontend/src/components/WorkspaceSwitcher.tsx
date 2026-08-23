@@ -1,9 +1,17 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { FolderGit2, ChevronDown } from 'lucide-react';
+import { Link } from 'react-router';
 import { useProject } from '../context/ProjectContext';
-import { Layers, ChevronDown } from 'lucide-react';
+import { workspaceLabel } from '../utils/agentWorkspaceHelpers';
 
-export default function ProjectSwitcher() {
-  const { currentGroup, setCurrentGroup, availableGroups, groups } = useProject();
+/**
+ * Header-level switcher for the shared workspace selection. The workspace
+ * used to be visible only inside each page's own dropdown (Agent, Terminal,
+ * Tasks, Schedules), so the rest of the app gave no hint of "which project
+ * am I on right now" — this surfaces it globally, next to the group chip.
+ */
+export default function WorkspaceSwitcher() {
+  const { validProjects, selectedWorkspace, setSelectedWorkspace } = useProject();
   const [open, setOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
@@ -19,18 +27,16 @@ export default function ProjectSwitcher() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // When opening, focus the current group
   useEffect(() => {
     if (open) {
-      const idx = availableGroups.indexOf(currentGroup);
+      const idx = validProjects.findIndex(project => project.path === selectedWorkspace);
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setFocusedIndex(idx >= 0 ? idx : 0);
     } else {
       setFocusedIndex(-1);
     }
-  }, [open, currentGroup, availableGroups]);
+  }, [open, selectedWorkspace, validProjects]);
 
-  // Scroll focused option into view and move browser focus
   useEffect(() => {
     if (open && focusedIndex >= 0 && listboxRef.current) {
       const option = listboxRef.current.querySelectorAll('[role="option"]')[focusedIndex] as HTMLElement;
@@ -54,20 +60,20 @@ export default function ProjectSwitcher() {
       case 'ArrowDown':
         e.preventDefault();
         setFocusedIndex((prev) =>
-          prev < availableGroups.length - 1 ? prev + 1 : 0
+          prev < validProjects.length - 1 ? prev + 1 : 0
         );
         break;
       case 'ArrowUp':
         e.preventDefault();
         setFocusedIndex((prev) =>
-          prev > 0 ? prev - 1 : availableGroups.length - 1
+          prev > 0 ? prev - 1 : validProjects.length - 1
         );
         break;
       case 'Enter':
       case ' ':
         e.preventDefault();
-        if (focusedIndex >= 0 && focusedIndex < availableGroups.length) {
-          setCurrentGroup(availableGroups[focusedIndex]);
+        if (focusedIndex >= 0 && focusedIndex < validProjects.length) {
+          setSelectedWorkspace(validProjects[focusedIndex].path);
           setOpen(false);
         }
         break;
@@ -81,16 +87,16 @@ export default function ProjectSwitcher() {
         break;
       case 'End':
         e.preventDefault();
-        setFocusedIndex(availableGroups.length - 1);
+        setFocusedIndex(validProjects.length - 1);
         break;
     }
   };
 
-  const current = groups[currentGroup];
-  const resourceCount = (current?.skills?.length ?? 0)
-    + (current?.prompts?.length ?? 0)
-    + (current?.hooks?.length ?? 0)
-    + (current?.plugins?.length ?? 0);
+  const current = validProjects.find(project => project.path === selectedWorkspace);
+
+  // With nothing registered there is nothing to switch between — the Agent
+  // and Settings pages carry the "go register something" guidance.
+  if (validProjects.length === 0) return null;
 
   return (
     <div className="relative" ref={ref}>
@@ -99,44 +105,45 @@ export default function ProjectSwitcher() {
         onKeyDown={handleKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`资源组：${currentGroup}`}
-        title={`资源组：${currentGroup}`}
-        className="flex max-w-64 items-center gap-2 px-3 md:px-4 py-2 bg-white/50 backdrop-blur-md border border-slate-100 rounded-xl hover:bg-white transition-colors shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        aria-label={`当前工作区：${current ? workspaceLabel(current.path) : '未选择'}`}
+        title={current?.path || '选择工作区'}
+        className="flex max-w-56 items-center gap-2 px-3 md:px-4 py-2 bg-white/50 backdrop-blur-md border border-slate-100 rounded-xl hover:bg-white transition-colors shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       >
-        <Layers size={16} className="text-primary shrink-0" />
-        {/* The "资源组 · " prefix used to eat the budget and truncate the one
-            part that matters ("资源组 · codea…"). The name wins; the label
-            drops out first on narrow headers. */}
+        <FolderGit2 size={16} className="text-primary shrink-0" />
         <span className="truncate text-sm font-semibold">
-          <span className="hidden text-slate-400 lg:inline">资源组 · </span>{currentGroup}
+          <span className="hidden text-slate-400 lg:inline">工作区 · </span>
+          {current ? workspaceLabel(current.path) : '未选择'}
         </span>
         <ChevronDown size={14} className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-56 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-slate-100 bg-white shadow-xl">
-          <div className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">资源组</div>
+        <div className="absolute right-0 z-50 mt-2 w-64 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-slate-100 bg-white shadow-xl">
+          <div className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">工作区</div>
           <div role="listbox" ref={listboxRef} className="p-2 pt-1 max-h-64 overflow-y-auto" onKeyDown={handleKeyDown}>
-            {availableGroups.map((group, index) => (
+            {validProjects.map((project, index) => (
               <button
-                key={group}
+                key={project.path}
                 role="option"
-                aria-selected={currentGroup === group}
+                aria-selected={project.path === selectedWorkspace}
                 tabIndex={focusedIndex === index ? 0 : -1}
-                onClick={() => { setCurrentGroup(group); setOpen(false); }}
+                onClick={() => { setSelectedWorkspace(project.path); setOpen(false); }}
+                title={project.path}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                  currentGroup === group
+                  project.path === selectedWorkspace
                     ? 'bg-primary/10 text-primary font-bold'
                     : focusedIndex === index
                     ? 'bg-slate-100 text-slate-900'
                     : 'hover:bg-slate-50 text-slate-600'
                 }`}
               >
-                {group}
+                <span className="block truncate">{workspaceLabel(project.path)}</span>
+                <span className="block truncate text-[10px] font-normal text-slate-400">{project.path}</span>
               </button>
             ))}
           </div>
           <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-2 text-[11px] text-slate-500">
-            已配置 {resourceCount} 项资源
+            切换工作区会一并切换它所属的资源组（{current?.group ?? '—'}） ·{' '}
+            <Link to="/settings/workspace" className="text-primary hover:underline">管理</Link>
           </div>
         </div>
       )}

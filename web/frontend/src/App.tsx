@@ -5,6 +5,7 @@ import CommandPalette from './components/CommandPalette';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import SectionLayout from './components/SectionLayout';
 import SystemPanel from './components/SystemPanel';
+import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import { useProject } from './context/ProjectContext';
 import {
@@ -12,7 +13,6 @@ import {
   ACTIVITY_TABS,
   AGENT_TABS,
   AUTOMATION_TABS,
-  CAPABILITY_TABS,
   PAGE_LABELS,
   primaryNav,
   SETTINGS_TABS,
@@ -32,7 +32,6 @@ const LogViewer = lazy(() => import('./components/LogViewer'));
 const SessionsPage = lazy(() => import('./components/SessionsPage'));
 const AuditTrail = lazy(() => import('./components/AuditTrail'));
 const AgentWorkspace = lazy(() => import('./pages/AgentWorkspace'));
-const ChatPage = lazy(() => import('./components/ChatPage'));
 const CronPage = lazy(() => import('./components/CronPage'));
 const McpPage = lazy(() => import('./components/McpPage'));
 
@@ -87,8 +86,8 @@ function App() {
             )}
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              aria-label={isSidebarOpen ? 'Collapse navigation' : 'Expand navigation'}
-              title={isSidebarOpen ? 'Collapse navigation' : 'Expand navigation'}
+              aria-label={isSidebarOpen ? '折叠导航' : '展开导航'}
+              title={isSidebarOpen ? '折叠导航' : '展开导航'}
               className={`hidden rounded-xl border border-transparent p-2 text-slate-600 transition-colors hover:border-slate-100 hover:bg-slate-50 lg:block ${!isSidebarOpen && 'mx-auto'}`}
             >
               {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
@@ -96,7 +95,7 @@ function App() {
             <span className="text-xl font-black text-primary lg:hidden" aria-label="CodeAgent">CA</span>
           </div>
 
-          <nav aria-label="Primary navigation" className="custom-scrollbar mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto p-2 lg:mt-4 lg:p-4">
+          <nav aria-label="主导航" className="custom-scrollbar mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto p-2 lg:mt-4 lg:p-4">
             {primaryNav.map(item => {
               const active = pathname === item.matchPrefix
                 || pathname.startsWith(`${item.matchPrefix}/`);
@@ -135,13 +134,14 @@ function App() {
             <div className="flex shrink-0 items-center gap-2">
               <CommandPalette />
               <SystemPanel />
+              <WorkspaceSwitcher />
               <ProjectSwitcher />
             </div>
           </header>
           {ctxError && (
             <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600" role="alert">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>Configuration error: {ctxError}</span>
+              <span>配置错误：{ctxError}</span>
             </div>
           )}
           <div className="animate-fade-in stagger-3 custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1 md:pr-2">
@@ -151,17 +151,16 @@ function App() {
 
               <Route
                 path="/agent"
-                element={<SectionLayout label="Agent" description="Conversations and local provider terminals in one workspace." tabs={AGENT_TABS} />}
+                element={<SectionLayout label="Agent" description="会话与本地引擎终端，同在一个工作区。" tabs={AGENT_TABS} />}
               >
                 <Route index element={<Navigate to="web" replace />} />
                 <Route path="web" element={page(<AgentWorkspace />)} />
-                <Route path="legacy" element={page(<ChatPage />)} />
                 <Route path="terminal" element={page(<LaunchPad />)} />
               </Route>
 
               <Route
                 path="/automations"
-                element={<SectionLayout label="Automations" description="Run repeatable work, manage schedules, and read run logs." tabs={AUTOMATION_TABS} />}
+                element={<SectionLayout label="自动化" description="运行可复用的任务、管理定时计划、查看运行日志。" tabs={AUTOMATION_TABS} />}
               >
                 <Route index element={<Navigate to="tasks" replace />} />
                 <Route path="tasks" element={page(<TaskDashboard />)} />
@@ -171,7 +170,7 @@ function App() {
 
               <Route
                 path="/activity"
-                element={<SectionLayout label="Activity" description="Past sessions, their event timeline, and usage." tabs={ACTIVITY_TABS} preserveParams={ACTIVITY_FILTER_PARAMS} />}
+                element={<SectionLayout label="动态" description="过往会话、事件时间线与用量。" tabs={ACTIVITY_TABS} preserveParams={ACTIVITY_FILTER_PARAMS} />}
               >
                 <Route index element={<Navigate to="sessions" replace />} />
                 <Route path="sessions" element={page(<SessionsPage />)} />
@@ -181,26 +180,23 @@ function App() {
 
               <Route
                 path="/settings"
-                element={<SectionLayout label="Settings" description="Workspace configuration, capabilities, and system health." tabs={SETTINGS_TABS} />}
+                element={<SectionLayout label="设置" description="工作区配置、能力资源与系统健康。" tabs={SETTINGS_TABS} />}
               >
                 <Route index element={<Navigate to="workspace" replace />} />
                 <Route path="workspace" element={page(<ConfigHub />)} />
-                <Route
-                  path="capabilities"
-                  element={<SectionLayout label="Capabilities" description="Resources configured for the selected project group." tabs={CAPABILITY_TABS} />}
-                >
-                  <Route index element={<Navigate to="skills" replace />} />
-                  <Route path="skills" element={page(<SkillGallery />)} />
-                  <Route path="prompts" element={page(<PromptsGallery />)} />
-                  <Route path="hooks" element={page(<HooksGallery />)} />
-                  <Route path="plugins" element={page(<PluginGallery />)} />
-                  <Route path="mcp" element={page(<McpPage />)} />
-                </Route>
+                <Route path="skills" element={page(<SkillGallery />)} />
+                <Route path="prompts" element={page(<PromptsGallery />)} />
+                <Route path="hooks" element={page(<HooksGallery />)} />
+                <Route path="plugins" element={page(<PluginGallery />)} />
+                <Route path="mcp" element={page(<McpPage />)} />
                 <Route path="system" element={page(<SystemPage />)} />
               </Route>
 
               <Route path="/launch" element={<Navigate to="/agent/terminal" replace />} />
               <Route path="/chat" element={<Navigate to="/agent/web" replace />} />
+              {/* The legacy engine-direct Chat page was removed: Web Agent is
+                  the only chat surface now. Old links land on it. */}
+              <Route path="/agent/legacy" element={<Navigate to="/agent/web" replace />} />
               <Route path="/dashboard" element={<Navigate to="/automations/tasks" replace />} />
               <Route path="/cron" element={<Navigate to="/automations/schedules" replace />} />
               <Route path="/logs" element={<Navigate to="/automations/logs" replace />} />
@@ -216,11 +212,19 @@ function App() {
               <Route path="/analytics" element={<KeepQuery to="/activity/usage" />} />
               <Route path="/sessions" element={<KeepQuery to="/activity/sessions" />} />
               <Route path="/audit" element={<KeepQuery to="/activity/timeline" />} />
-              <Route path="/skills" element={<Navigate to="/settings/capabilities/skills" replace />} />
-              <Route path="/prompts" element={<Navigate to="/settings/capabilities/prompts" replace />} />
-              <Route path="/hooks" element={<Navigate to="/settings/capabilities/hooks" replace />} />
-              <Route path="/plugins" element={<Navigate to="/settings/capabilities/plugins" replace />} />
-              <Route path="/mcp" element={<Navigate to="/settings/capabilities/mcp" replace />} />
+              <Route path="/skills" element={<Navigate to="/settings/skills" replace />} />
+              <Route path="/prompts" element={<Navigate to="/settings/prompts" replace />} />
+              <Route path="/hooks" element={<Navigate to="/settings/hooks" replace />} />
+              <Route path="/plugins" element={<Navigate to="/settings/plugins" replace />} />
+              <Route path="/mcp" element={<Navigate to="/settings/mcp" replace />} />
+              {/* Settings' capability pages were flattened from
+                  /settings/capabilities/<kind> to /settings/<kind>. */}
+              <Route path="/settings/capabilities" element={<Navigate to="/settings/skills" replace />} />
+              <Route path="/settings/capabilities/skills" element={<KeepQuery to="/settings/skills" />} />
+              <Route path="/settings/capabilities/prompts" element={<KeepQuery to="/settings/prompts" />} />
+              <Route path="/settings/capabilities/hooks" element={<KeepQuery to="/settings/hooks" />} />
+              <Route path="/settings/capabilities/plugins" element={<KeepQuery to="/settings/plugins" />} />
+              <Route path="/settings/capabilities/mcp" element={<KeepQuery to="/settings/mcp" />} />
               <Route path="/config" element={<Navigate to="/settings/workspace" replace />} />
               <Route path="/system" element={<Navigate to="/settings/system" replace />} />
               <Route path="*" element={<Navigate to="/home" replace />} />

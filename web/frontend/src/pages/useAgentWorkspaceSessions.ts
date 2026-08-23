@@ -146,6 +146,17 @@ export default function useAgentWorkspaceSessions({
     });
   }, []);
 
+  // One click for "I don't care about any of these right now" -- with dozens
+  // of unavailable groups, hiding them one by one is its own chore.
+  const hideAllUnavailableWorkspaces = useCallback((paths: string[]) => {
+    setHiddenWorkspaces(prev => {
+      const next = new Set(prev);
+      for (const path of paths) next.add(path);
+      writeHiddenWorkspaces(next);
+      return next;
+    });
+  }, []);
+
   const toggleShowHiddenWorkspaces = useCallback(() => {
     setShowHiddenWorkspaces(prev => !prev);
   }, []);
@@ -245,6 +256,7 @@ export default function useAgentWorkspaceSessions({
     showHiddenWorkspaces,
     onHideWorkspace: hideWorkspace,
     onUnhideWorkspace: unhideWorkspace,
+    onHideAllUnavailableWorkspaces: hideAllUnavailableWorkspaces,
     onToggleShowHiddenWorkspaces: toggleShowHiddenWorkspaces,
     workspaceConversations,
   };

@@ -16,14 +16,14 @@ interface HookMeta {
 }
 
 const labels: ResourceGalleryLabels = {
-  sidebar: 'Library',
-  detailHeading: 'Hook Detail',
-  backLabel: 'Back to hook list',
-  searchLabel: 'Search hooks',
-  searchPlaceholder: 'Search hooks...',
+  sidebar: '资源库',
+  detailHeading: '钩子详情',
+  backLabel: '返回钩子列表',
+  searchLabel: '搜索钩子',
+  searchPlaceholder: '搜索钩子…',
   searchId: 'hook-search',
-  emptyCategory: 'No hooks found in this category.',
-  emptySidebar: 'No hooks found.',
+  emptyCategory: '该分类下没有钩子。',
+  emptySidebar: '未找到钩子。',
   itemSingular: 'hook',
 };
 
@@ -44,7 +44,7 @@ function transformHooks(raw: unknown): ResourceData<HookMeta> {
       id: hook.id,
       name: hook.name,
       description: hook.description,
-      readme: hook.description || '_No description provided._',
+      readme: hook.description || '_暂无描述。_',
       meta: { event: hook.event, path: hook.path },
     });
   }

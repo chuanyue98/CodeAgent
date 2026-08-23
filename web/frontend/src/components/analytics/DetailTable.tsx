@@ -17,19 +17,19 @@ export default function DetailTable({
   return (
     <div className="animate-fade-rise stagger-6 glass-card p-5">
       <SectionTitle>
-        {granularity === 'month' ? 'Detail by month' : `Detail — last ${rangeLabel}`}
+        {granularity === 'month' ? '按月明细' : `明细 — 最近 ${rangeLabel}`}
       </SectionTitle>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-slate-100 text-slate-400">
               <th className="text-left py-2 pr-4 font-medium">
-                {granularity === 'month' ? 'Month' : 'Date'}
+                {granularity === 'month' ? '月份' : '日期'}
               </th>
-              <th className="text-left py-2 pr-4 font-medium">Engine</th>
-              <th className="text-right py-2 pr-4 font-medium">Input</th>
-              <th className="text-right py-2 pr-4 font-medium">Output</th>
-              <th className="text-right py-2 font-medium">Cost</th>
+              <th className="text-left py-2 pr-4 font-medium">引擎</th>
+              <th className="text-right py-2 pr-4 font-medium">输入</th>
+              <th className="text-right py-2 pr-4 font-medium">输出</th>
+              <th className="text-right py-2 font-medium">成本</th>
             </tr>
           </thead>
           <tbody>
