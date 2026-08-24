@@ -168,8 +168,16 @@ def initialize_default_groups() -> None:
 
     try:
         config_service.modify_config(_modifier)
+    except FileNotFoundError:
+        # Genuinely expected before the first run writes a config.
+        logger.debug("No config at %s yet; skipping group seeding", CONFIG_PATH)
     except Exception:
-        pass  # config file may not exist yet — silently skip
+        # Everything else was being swallowed by the same handler, so a
+        # permission error, a corrupt config or a bug in _modifier all looked
+        # identical to "no config yet" -- the server came up with no groups
+        # and nothing said why. Startup still continues; the UI degrades to
+        # an empty group list rather than failing to boot.
+        logger.exception("Failed to seed default groups from %s", CONFIG_PATH)
 
 
 @asynccontextmanager

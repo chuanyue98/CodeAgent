@@ -30,6 +30,7 @@ from core.session_history.parsers.codebuddy_parser import (
     _encode_codebuddy_project_dir,
 )
 from core.utils.atomic_write import atomic_write
+from core.utils.long_paths import list_files, long_path, mtime
 
 
 def _recent_native_model(home: Path | None = None, scan_files: int = 6) -> str:
@@ -44,14 +45,15 @@ def _recent_native_model(home: Path | None = None, scan_files: int = 6) -> str:
     root = (home or Path.home()) / ".codebuddy" / "projects"
     try:
         files = sorted(
-            root.glob("*/*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
+            list_files(root, ".jsonl", recursive=True), key=mtime, reverse=True
         )[:scan_files]
     except OSError:
         return ""
 
     for path in files:
         try:
-            content = path.read_text(encoding="utf-8", errors="replace")
+            with open(long_path(path), encoding="utf-8", errors="replace") as handle:
+                content = handle.read()
         except OSError:
             continue
         for line in reversed(content.splitlines()):
@@ -117,8 +119,9 @@ def write_codebuddy_session(session: Any) -> str:
     new_session_id = str(uuid.uuid4())
     project_dir_name = _encode_codebuddy_project_dir(session.project_path)
     codebuddy_projects = Path.home() / ".codebuddy" / "projects" / project_dir_name
-    codebuddy_projects.mkdir(parents=True, exist_ok=True)
-
+    # No mkdir here: atomic_write creates the parent through the long-path
+    # spelling. CodeBuddy names this directory after the entire project
+    # path, which passes MAX_PATH on a deep project.
     file_path = codebuddy_projects / f"{new_session_id}.jsonl"
     cwd = _codebuddy_cwd(session.project_path)
 
@@ -158,9 +161,6 @@ def write_codebuddy_session(session: Any) -> str:
         ts = _to_codebuddy_ts(getattr(msg, "timestamp", None))
 
         if msg.role == "user":
-            # Annotated because the assistant branch below reassigns `row`
-            # with a different value shape; without it the type is inferred
-            # from this first literal alone and the two disagree.
             msg_id = str(uuid.uuid4())
             # Annotated because the assistant branch below reassigns `row`
             # with a different value shape; without it the type is inferred

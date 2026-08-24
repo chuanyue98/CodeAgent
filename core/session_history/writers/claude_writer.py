@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.utils.atomic_write import atomic_write
+from core.utils.long_paths import list_files, long_path, mtime
 
 if TYPE_CHECKING:
     from core.session_history.models import UnifiedSession
@@ -79,7 +80,7 @@ def _recent_native_meta(
     root = (home or Path.home()) / ".claude" / "projects"
     try:
         files = sorted(
-            root.glob("*/*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
+            list_files(root, ".jsonl", recursive=True), key=mtime, reverse=True
         )[:scan_files]
     except OSError:
         return None, None
@@ -88,7 +89,8 @@ def _recent_native_meta(
     version: str | None = None
     for path in files:
         try:
-            content = path.read_text(encoding="utf-8", errors="replace")
+            with open(long_path(path), encoding="utf-8", errors="replace") as handle:
+                content = handle.read()
         except OSError:
             continue
         for line in reversed(content.splitlines()):
@@ -165,8 +167,10 @@ def write_claude_session(session: UnifiedSession) -> str:
     new_session_id = str(uuid.uuid4())
     project_dir_name = _encode_project_path(session.project_path)
     claude_projects = Path.home() / ".claude" / "projects" / project_dir_name
-    claude_projects.mkdir(parents=True, exist_ok=True)
-
+    # No mkdir here: atomic_write creates the parent, and it does so through
+    # the long-path spelling. Claude names this directory after the entire
+    # project path, so a deep project passes MAX_PATH and a plain
+    # Path.mkdir fails on a directory it is perfectly able to create.
     file_path = claude_projects / f"{new_session_id}.jsonl"
     cwd = (
         session.project_path.replace("/", "\\")
