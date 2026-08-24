@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter, defaultdict
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Query
 
 from core.analytics.service import get_analytics_data, refresh_analytics_data
 from core.session_history.paths import normalize_project_path
+from core.session_history.session_finder import find_all_sessions
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -71,6 +74,100 @@ async def get_engines():
 async def get_models():
     data = await _data()
     return data.get("models", [])
+
+
+def _tool_usage(
+    project: str | None,
+    engine: str | None,
+    days: int | None,
+) -> dict:
+    """Counts tool calls per tool, per engine, from parsed session history.
+
+    Deliberately not sourced from ``core.analytics`` -- that pipeline
+    aggregates token/cost rows and never carries tool calls. The parsers in
+    ``core.session_history`` are the only place ``tool_calls`` exists, and
+    ``/api/history/audit`` already reads them the same way.
+
+    Counting across every engine is the part no single vendor CLI can do:
+    each one only ever sees its own sessions.
+    """
+    sessions = find_all_sessions(project, engine=engine)
+
+    cutoff = None
+    if days is not None and days > 0:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+
+    totals: Counter[str] = Counter()
+    per_engine: dict[str, Counter[str]] = defaultdict(Counter)
+    engines: Counter[str] = Counter()
+    counted_sessions = 0
+
+    for session in sessions:
+        if cutoff is not None:
+            parsed = _as_utc(session.ended_at or session.started_at)
+            # A session whose timestamp is missing or unparseable is kept:
+            # dropping it would silently understate the totals, and an
+            # inflated window is easier to notice than a quiet omission.
+            if parsed is not None and parsed < cutoff:
+                continue
+
+        counted_sessions += 1
+        # EngineType is a str Enum, so this is already the wire value.
+        session_engine = str(session.engine.value or "unknown")
+        for message in session.messages:
+            for call in message.tool_calls:
+                name = call.name.strip()
+                if not name:
+                    continue
+                totals[name] += 1
+                per_engine[name][session_engine] += 1
+                engines[session_engine] += 1
+
+    tools = [
+        {
+            "name": name,
+            "count": count,
+            "byEngine": dict(per_engine[name].most_common()),
+        }
+        for name, count in totals.most_common()
+    ]
+    return {
+        "tools": tools,
+        "totalCalls": sum(totals.values()),
+        "sessions": counted_sessions,
+        "engines": dict(engines.most_common()),
+    }
+
+
+def _as_utc(value: str) -> datetime | None:
+    """Best-effort parse of a session timestamp into an aware UTC datetime.
+
+    Returns None for anything unparseable; the caller treats that as "keep",
+    not "drop".
+    """
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+@router.get("/tools")
+async def get_tool_usage(
+    project: str | None = Query(
+        None, description="Project directory path; omit to include every project"
+    ),
+    engine: str | None = Query(None, description="Filter by engine"),
+    days: int | None = Query(
+        None, ge=1, le=3650, description="Only count sessions active within N days"
+    ),
+):
+    """Returns a tool-usage ranking built from every engine's session history."""
+    return await asyncio.to_thread(_tool_usage, project, engine, days)
 
 
 @router.post("/refresh")
