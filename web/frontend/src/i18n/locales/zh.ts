@@ -43,7 +43,6 @@ export const zh: Record<TranslationKey, string> = {
   'tab.automations.schedules': '定时任务',
   'tab.automations.logs': '日志',
   'tab.activity.sessions': '会话',
-  'tab.activity.timeline': '时间线',
   'tab.activity.usage': '用量',
   'tab.settings.workspace': '工作区',
   'tab.settings.skills': '技能',
@@ -57,7 +56,7 @@ export const zh: Record<TranslationKey, string> = {
   'section.nav': '{label}分区',
   'section.agent.description': '会话与本地引擎终端，同在一个工作区。',
   'section.automations.description': '运行可复用的任务、管理定时计划、查看运行日志。',
-  'section.activity.description': '过往会话、事件时间线与用量。',
+  'section.activity.description': '过往会话与用量。',
   'section.settings.description': '工作区配置、能力资源与系统健康。',
 
   // ── App shell ─────────────────────────────────────────────────────────────
@@ -197,18 +196,6 @@ export const zh: Record<TranslationKey, string> = {
   'sessions.deleteFailedOne': '{total} 个会话中有 {failed} 个删除失败。',
   'sessions.deleteFailed': '{total} 个会话中有 {failed} 个删除失败。',
 
-  // ── Timeline ──────────────────────────────────────────────────────────────
-  'timeline.loadFailed': '加载事件失败',
-  'timeline.loading': '加载事件中',
-  'timeline.searchPlaceholder': '项目、会话、内容…',
-  'timeline.countOne': '{count} 条事件',
-  'timeline.count': '{count} 条事件',
-  'timeline.blurb':
-    '跨会话与引擎的全部消息和工具调用，按时间倒序——在这里搜索某件事发生在哪个会话。这不是审批或权限日志。',
-  'timeline.truncated': '每个引擎仅显示最近 {limit} 条事件。有更多结果匹配你的筛选——缩小日期范围以查看。',
-  'timeline.emptyContent': '（空）',
-  'timeline.viewFullSession': '查看完整会话 →',
-  'timeline.empty': '没有符合筛选条件的事件',
 
   // ── Usage / analytics ─────────────────────────────────────────────────────
   'analytics.loadFailed': '加载分析数据失败',
@@ -424,7 +411,7 @@ export const zh: Record<TranslationKey, string> = {
   'agent.removeConversation': '移除会话 {name}',
   'agent.removeLocal': '移除本地会话',
   'agent.messageCount': '{count} 条消息',
-  'agent.viewInTimeline': '在时间线中查看',
+  'agent.viewSession': '查看会话',
   'agent.loadMoreConversations': '加载更多会话',
   'agent.loadingHistory': '正在加载 {provider} 历史记录…',
   'agent.loadMoreHistory': '加载更多历史记录',

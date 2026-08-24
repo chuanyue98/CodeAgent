@@ -50,10 +50,10 @@ describe('SectionLayout preserveParams', () => {
     // These identify one row to open; carrying them into a sibling tab would
     // pop a drawer the user never asked for.
     renderActivityTabs(
-      '/activity/timeline?q=deploy&session=s-1&sessionEngine=claude&sessionProject=%2Fwork%2Fapp',
+      '/activity/sessions?q=deploy&session=s-1&sessionEngine=claude&sessionProject=%2Fwork%2Fapp',
     );
 
-    const target = new URL(href('Sessions'), 'http://localhost');
+    const target = new URL(href('Usage'), 'http://localhost');
     expect(target.searchParams.get('q')).toBe('deploy');
     expect(target.searchParams.get('session')).toBeNull();
     expect(target.searchParams.get('sessionEngine')).toBeNull();
@@ -63,6 +63,6 @@ describe('SectionLayout preserveParams', () => {
   test('links stay bare when nothing is filtered', () => {
     renderActivityTabs('/activity/sessions');
 
-    expect(href('Timeline')).toBe('/activity/timeline');
+    expect(href('Usage')).toBe('/activity/usage');
   });
 });

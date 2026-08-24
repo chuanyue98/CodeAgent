@@ -133,7 +133,7 @@ export default function HomePage() {
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">{t('home.recentActivity')}</span>
                 <Link
-                  to="/activity/timeline"
+                  to="/activity/sessions"
                   className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary transition-colors hover:text-primary/80"
                 >
                   {t('home.viewAll')} <ArrowUpRight className="h-3 w-3" />

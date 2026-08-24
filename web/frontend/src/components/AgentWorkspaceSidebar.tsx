@@ -24,7 +24,7 @@ import {
 } from '../utils/agentWorkspaceHelpers';
 import type { ConversationListItem } from '../utils/agentWorkspaceHelpers';
 import type { UnavailableWorkspaceGroup } from '../pages/useAgentWorkspaceSessions';
-import { buildTimelineLink } from '../utils/sessionLink';
+import { buildSessionLink } from '../utils/sessionLink';
 import { useLanguageCode, useT } from '../i18n/context';
 
 const PAGE_SIZE = SESSION_PAGE_SIZE;
@@ -282,9 +282,9 @@ export default function AgentWorkspaceSidebar({
                           </span>
                         </button>
                         <Link
-                          to={buildTimelineLink(item.session.engine, item.session.session_id, item.session.project_path)}
-                          title={t('agent.viewInTimeline')}
-                          aria-label={t('agent.viewInTimeline')}
+                          to={buildSessionLink(item.session.engine, item.session.session_id, item.session.project_path)}
+                          title={t('agent.viewSession')}
+                          aria-label={t('agent.viewSession')}
                           className="mr-1 hidden rounded-md p-1.5 text-slate-400 hover:bg-white hover:text-primary group-hover:block focus:block"
                         >
                           <History className="h-3.5 w-3.5" />
@@ -418,10 +418,10 @@ export default function AgentWorkspaceSidebar({
                         </button>
                       )}
                       <Link
-                        to={buildTimelineLink(latestSession.engine, latestSession.session_id, latestSession.project_path)}
+                        to={buildSessionLink(latestSession.engine, latestSession.session_id, latestSession.project_path)}
                         className="inline-block text-[10px] font-semibold text-primary hover:underline"
                       >
-                        {t('agent.viewInTimeline')}
+                        {t('agent.viewSession')}
                       </Link>
                     </span>
                   </div>

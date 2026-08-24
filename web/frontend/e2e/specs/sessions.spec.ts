@@ -39,20 +39,16 @@ test('engine toggle narrows the list to that engine', async ({ page }) => {
   await expect(page.locator('main')).toContainText('2 sessions');
 });
 
-test('filters survive switching to the Timeline tab', async ({ page }) => {
-  await gotoSessions(page);
-  await page.getByPlaceholder('Project or session...').fill('e2e-gemini-project');
-  await expect(page.locator('main')).toContainText('1 session');
-
-  await page
-    .getByRole('navigation', { name: 'Activity sections' })
-    .getByRole('link', { name: 'Timeline' })
-    .click();
-
-  await waitForH2(page, 'Timeline');
-  await expect(page.getByPlaceholder('Project, session, content...')).toHaveValue(
-    'e2e-gemini-project',
+test('an old Timeline link still opens the session it pointed at', async ({ page }) => {
+  // Timeline was removed, but its deep links are in people's history and in
+  // the Agent sidebar's older sessions; they carry the same params Sessions
+  // reads, so the redirect has to preserve the query string.
+  await page.goto(
+    '/activity/timeline?session=claude-session-1&sessionEngine=claude&sessionProject=%2Ftmp%2Fe2e-claude-project',
   );
+  await waitForH2(page, 'Sessions');
+  await expect(page).toHaveURL(/\/activity\/sessions\?/);
+  await expect(page).toHaveURL(/session=claude-session-1/);
 });
 
 test('sort buttons toggle their direction', async ({ page }) => {
@@ -71,7 +67,7 @@ test('opening a session row shows its detail panel', async ({ page }) => {
   const panel = page.getByTestId('session-detail');
   await expect(panel).toBeVisible();
   // Usage, the transcript and the per-session actions all live here now,
-  // instead of being split across this tab and the Timeline tab.
+  // instead of being split across a separate event-feed tab.
   await expect(panel).toContainText('Usage');
   await expect(panel).toContainText('Conversation');
   await expect(panel.getByRole('button', { name: /Delete this session/ })).toBeVisible();

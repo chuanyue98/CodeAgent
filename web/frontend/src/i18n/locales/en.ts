@@ -47,7 +47,6 @@ export const en = {
   'tab.automations.schedules': 'Schedules',
   'tab.automations.logs': 'Logs',
   'tab.activity.sessions': 'Sessions',
-  'tab.activity.timeline': 'Timeline',
   'tab.activity.usage': 'Usage',
   'tab.settings.workspace': 'Workspace',
   'tab.settings.skills': 'Skills',
@@ -61,7 +60,7 @@ export const en = {
   'section.nav': '{label} sections',
   'section.agent.description': 'Conversations and local provider terminals in one workspace.',
   'section.automations.description': 'Run repeatable work, manage schedules, and read run logs.',
-  'section.activity.description': 'Past sessions, their event timeline, and usage.',
+  'section.activity.description': 'Past sessions and what they cost.',
   'section.settings.description': 'Workspace configuration, capabilities, and system health.',
 
   // ── App shell ─────────────────────────────────────────────────────────────
@@ -202,19 +201,6 @@ export const en = {
   'sessions.deleteFailedOne': '{failed} of {total} session could not be deleted.',
   'sessions.deleteFailed': '{failed} of {total} sessions could not be deleted.',
 
-  // ── Timeline ──────────────────────────────────────────────────────────────
-  'timeline.loadFailed': 'Failed to load audit events',
-  'timeline.loading': 'Loading events',
-  'timeline.searchPlaceholder': 'Project, session, content...',
-  'timeline.countOne': '{count} event',
-  'timeline.count': '{count} events',
-  'timeline.blurb':
-    'Every message and tool call across sessions and engines, newest first — search here to find which session something happened in. Not an approval or permission log.',
-  'timeline.truncated':
-    'Showing the {limit} most recent events per engine. More match your filters — narrow the date range to see them.',
-  'timeline.emptyContent': '(empty)',
-  'timeline.viewFullSession': 'View full session →',
-  'timeline.empty': 'No events match your filters',
 
   // ── Usage / analytics ─────────────────────────────────────────────────────
   'analytics.loadFailed': 'Failed to load analytics',
@@ -433,7 +419,7 @@ export const en = {
   'agent.removeConversation': 'Remove conversation {name}',
   'agent.removeLocal': 'Remove local conversation',
   'agent.messageCount': '{count} msgs',
-  'agent.viewInTimeline': 'View in Timeline',
+  'agent.viewSession': 'View session',
   'agent.loadMoreConversations': 'Load more conversations',
   'agent.loadingHistory': 'Loading {provider} history…',
   'agent.loadMoreHistory': 'Load more history',

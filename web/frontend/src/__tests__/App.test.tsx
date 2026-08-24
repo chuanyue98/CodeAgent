@@ -42,22 +42,24 @@ describe('App Layout and Navigation', () => {
   });
 });
 
-describe('Activity tabs are Sessions / Timeline / Usage', () => {
+describe('Activity tabs are Sessions / Usage', () => {
   test.each([
     ['/activity/sessions', 'Sessions'],
-    ['/activity/timeline', 'Timeline'],
     ['/activity/usage', 'Usage'],
   ])('%s renders as %s', async (path, label) => {
     renderWithRouter(path);
     expect(await screen.findByRole('heading', { name: label })).toBeInTheDocument();
   });
 
+  // Timeline is gone; every URL that used to point at it now lands on
+  // Sessions, which understands the same single-session deep-link params.
   test.each([
     ['/activity/history', 'Sessions'],
-    ['/activity/events', 'Timeline'],
+    ['/activity/timeline', 'Sessions'],
+    ['/activity/events', 'Sessions'],
     ['/activity/analytics', 'Usage'],
     ['/sessions', 'Sessions'],
-    ['/audit', 'Timeline'],
+    ['/audit', 'Sessions'],
     ['/analytics', 'Usage'],
   ])('the old %s location redirects to %s', async (path, label) => {
     renderWithRouter(path);
@@ -72,7 +74,7 @@ describe('Activity tabs are Sessions / Timeline / Usage', () => {
 
     const tabs = screen.getByRole('navigation', { name: 'Activity sections' });
     const target = new URL(
-      within(tabs).getByRole('link', { name: 'Timeline' }).getAttribute('href') ?? '',
+      within(tabs).getByRole('link', { name: 'Usage' }).getAttribute('href') ?? '',
       'http://localhost',
     );
     expect(target.searchParams.get('q')).toBe('deploy');

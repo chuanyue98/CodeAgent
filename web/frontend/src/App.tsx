@@ -32,7 +32,6 @@ const Analytics = lazy(() => import('./components/Analytics'));
 const LaunchPad = lazy(() => import('./components/LaunchPad'));
 const LogViewer = lazy(() => import('./components/LogViewer'));
 const SessionsPage = lazy(() => import('./components/SessionsPage'));
-const AuditTrail = lazy(() => import('./components/AuditTrail'));
 const AgentWorkspace = lazy(() => import('./pages/AgentWorkspace'));
 const CronPage = lazy(() => import('./components/CronPage'));
 const McpPage = lazy(() => import('./components/McpPage'));
@@ -179,7 +178,6 @@ function App() {
               >
                 <Route index element={<Navigate to="sessions" replace />} />
                 <Route path="sessions" element={page(<SessionsPage />)} />
-                <Route path="timeline" element={page(<AuditTrail />)} />
                 <Route path="usage" element={page(<Analytics />)} />
               </Route>
 
@@ -212,11 +210,15 @@ function App() {
                   Sessions/Timeline/Usage. These carry the query string so a
                   saved filtered view or a session deep link still resolves. */}
               <Route path="/activity/history" element={<KeepQuery to="/activity/sessions" />} />
-              <Route path="/activity/events" element={<KeepQuery to="/activity/timeline" />} />
+              {/* Timeline was removed. Its links carry the same
+                  session/sessionEngine/sessionProject params Sessions reads,
+                  so an old bookmark still opens the session it pointed at. */}
+              <Route path="/activity/timeline" element={<KeepQuery to="/activity/sessions" />} />
+              <Route path="/activity/events" element={<KeepQuery to="/activity/sessions" />} />
               <Route path="/activity/analytics" element={<KeepQuery to="/activity/usage" />} />
               <Route path="/analytics" element={<KeepQuery to="/activity/usage" />} />
               <Route path="/sessions" element={<KeepQuery to="/activity/sessions" />} />
-              <Route path="/audit" element={<KeepQuery to="/activity/timeline" />} />
+              <Route path="/audit" element={<KeepQuery to="/activity/sessions" />} />
               <Route path="/skills" element={<Navigate to="/settings/skills" replace />} />
               <Route path="/prompts" element={<Navigate to="/settings/prompts" replace />} />
               <Route path="/hooks" element={<Navigate to="/settings/hooks" replace />} />

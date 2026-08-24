@@ -24,7 +24,6 @@ const PAGES: { path: string; label: string; screenshotSlug: string; emptyStateHi
   { path: '/logs', label: 'Logs', screenshotSlug: 'logs' },
   { path: '/analytics', label: 'Usage', screenshotSlug: 'analytics' },
   { path: '/sessions', label: 'Sessions', screenshotSlug: 'sessions' },
-  { path: '/audit', label: 'Timeline', screenshotSlug: 'audit-trail' },
   { path: '/system', label: 'System', screenshotSlug: 'system' },
 ];
 

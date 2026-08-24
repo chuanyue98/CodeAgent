@@ -36,12 +36,12 @@ export const AUTOMATION_TABS: SectionTab[] = [
   { to: '/automations/logs', labelKey: 'tab.automations.logs' },
 ];
 
-// Three nouns that don't overlap: Sessions is a list of objects, Timeline is
-// a list of events, Usage is numbers. History/Events/Analytics all translated
-// to roughly "records" and gave no hint which one answered which question.
+// Two views that answer different questions: Sessions is a list of objects,
+// Usage is numbers. Timeline (a flat event feed) was removed -- its only
+// distinct capability, searching content across sessions, searched a capped
+// client-side window and so could not answer the question it existed for.
 export const ACTIVITY_TABS: SectionTab[] = [
   { to: '/activity/sessions', labelKey: 'tab.activity.sessions' },
-  { to: '/activity/timeline', labelKey: 'tab.activity.timeline' },
   { to: '/activity/usage', labelKey: 'tab.activity.usage' },
 ];
 
@@ -76,7 +76,6 @@ export const PAGE_LABEL_KEYS: Record<string, TranslationKey> = {
   '/automations/schedules': 'tab.automations.schedules',
   '/automations/logs': 'tab.automations.logs',
   '/activity/sessions': 'tab.activity.sessions',
-  '/activity/timeline': 'tab.activity.timeline',
   '/activity/usage': 'tab.activity.usage',
   '/settings/workspace': 'tab.settings.workspace',
   '/settings/skills': 'tab.settings.skills',

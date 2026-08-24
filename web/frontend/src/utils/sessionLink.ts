@@ -22,11 +22,3 @@ export function buildSessionLink(engine: string, sessionId: string, projectPath:
   return `/activity/sessions${buildSessionParams(engine, sessionId, projectPath)}`;
 }
 
-/**
- * Opens the session's drawer on the Timeline page (the event view).
- * Timeline still also accepts the old unprefixed names so existing links
- * keep working.
- */
-export function buildTimelineLink(engine: string, sessionId: string, projectPath: string): string {
-  return `/activity/timeline${buildSessionParams(engine, sessionId, projectPath)}`;
-}
