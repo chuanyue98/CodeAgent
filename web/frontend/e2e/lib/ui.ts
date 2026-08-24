@@ -38,19 +38,81 @@ export function cardByText(page: Page, text: string): Locator {
   return page.locator('div.glass-card', { hasText: text });
 }
 
-/** Clicks the toggle switch inside a gallery card. For every gallery the
- *  first <button> in a card is its enable/disable switch. */
-export async function toggleInCard(card: Locator): Promise<void> {
-  await card.locator('button').first().click();
+// ── Resources page (ResourceHub) ─────────────────────────────────────────
+// The four galleries (skills/prompts/hooks/plugins) are one page now: a
+// `kind > category` sidebar on the left, cards on the right, and a search box
+// that spans every kind rather than only the current category.
+
+/** The `kind > category` sidebar, scoped by its "Library" heading so the
+ *  locators below cannot stray into the app's own navigation. */
+function resourceSidebar(page: Page): Locator {
+  return page
+    .locator('div.glass-card')
+    .filter({ has: page.getByRole('heading', { name: 'Library', exact: true }) });
 }
 
-/** Clicks a card to open its detail view. */
-export async function openCard(page: Page, text: string): Promise<void> {
-  await cardByText(page, text).click({ trial: false });
+/** A kind header ("Skills", "Prompts", ...), which also carries that kind's
+ *  item count. Kind headers are the only collapsible rows in the sidebar, so
+ *  `aria-expanded` distinguishes them from the category rows beneath. */
+export function resourceKind(page: Page, kind: string): Locator {
+  return resourceSidebar(page)
+    .locator('button[aria-expanded]')
+    .filter({ hasText: new RegExp(`^${kind}`, 'i') });
 }
 
-/** Returns from a detail view via the icon-only back button (a <button>
- *  whose child svg has the `rotate-180` class in every gallery). */
-export async function backFromDetail(page: Page): Promise<void> {
-  await page.locator('button', { has: page.locator('svg.rotate-180') }).click();
+/** A category row beneath `kind`. Category names are not unique across kinds
+ *  — `base` exists under skills, hooks *and* plugins — so a category is only
+ *  addressable relative to the kind that owns it. */
+export function resourceCategory(page: Page, kind: string, category: string): Locator {
+  return resourceKind(page, kind)
+    .locator('xpath=following-sibling::div[1]')
+    .getByRole('button', { name: new RegExp(`^${category}`, 'i') });
+}
+
+/** Opens the Resources page and selects `kind > category` in the sidebar. */
+export async function gotoResource(
+  page: Page,
+  kind: string,
+  category: string,
+): Promise<void> {
+  await page.goto('/settings/resources');
+  await waitForH2(page, 'Resources');
+  // Kind groups start expanded, so the category rows are already visible;
+  // clicking the kind header would collapse the group instead.
+  await resourceCategory(page, kind, category).click();
+}
+
+/** Types into the Resources search box, addressed by its label: this page has
+ *  several inputs (per-card checkboxes) and search is not simply the first. */
+export async function typeResourceSearch(page: Page, term: string): Promise<void> {
+  const box = page.getByLabel('Search all resources');
+  await box.click();
+  await box.fill(term);
+}
+
+/** A resource card — a `role="button"` glass-card whose heading is the item
+ *  name. Matching the heading rather than the card's text keeps one fixture
+ *  name from also selecting another that contains it. */
+export function resourceCard(page: Page, name: string): Locator {
+  return page
+    .locator('div.glass-card[role="button"]')
+    .filter({ has: page.getByRole('heading', { level: 2, name, exact: true }) });
+}
+
+/** The active/inactive switch on a resource card. */
+export function resourceToggle(page: Page, name: string): Locator {
+  return page.getByRole('switch', { name: `Toggle ${name} active status`, exact: true });
+}
+
+/** The detail view's switch. It is labelled by the kind's noun ("Activate
+ *  skill") rather than by the item name, so it needs its own locator. */
+export function resourceDetailToggle(page: Page, noun: string): Locator {
+  return page.getByRole('switch', {
+    name: new RegExp(`^(Activate|Deactivate) ${noun}$`),
+  });
+}
+
+/** Leaves a resource detail view. */
+export async function backFromResourceDetail(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Back to the resource list' }).click();
 }
