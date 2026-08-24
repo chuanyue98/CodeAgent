@@ -22,6 +22,8 @@ from core.session_history.models import (
     UnifiedSession,
 )
 from core.session_history.paths import normalize_project_path
+from core.utils.long_paths import exists as path_exists
+from core.utils.long_paths import list_files, long_path
 
 
 def _ms_to_iso(timestamp: object) -> str:
@@ -73,7 +75,7 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
     Returns:
         UnifiedSession if parsing succeeds, None otherwise.
     """
-    if not file_path.exists() or file_path.suffix != ".jsonl":
+    if not path_exists(file_path) or file_path.suffix != ".jsonl":
         return None
 
     session_id = ""
@@ -88,7 +90,10 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
     call_id_to_index: dict[str, int] = {}
 
     try:
-        with open(file_path, encoding="utf-8") as f:
+        # long_path, not a bare open: these files live under a directory named
+        # after the whole project path, which passes MAX_PATH on a deep
+        # enough project and makes the read fail on a file that exists.
+        with open(long_path(file_path), encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -287,7 +292,7 @@ def find_codex_sessions(
     )
     sessions: list[UnifiedSession] = []
 
-    for jsonl_file in base.rglob("*.jsonl"):
+    for jsonl_file in list_files(base, ".jsonl", recursive=True):
         session = parse_codex_session(jsonl_file)
         if session:
             if normalized_target is not None:

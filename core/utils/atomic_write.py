@@ -11,6 +11,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from core.utils.long_paths import long_path
+
 
 def atomic_write(path: Path | str, content: str, encoding: str = "utf-8") -> None:
     """Writes *content* to *path* atomically.
@@ -20,19 +22,25 @@ def atomic_write(path: Path | str, content: str, encoding: str = "utf-8") -> Non
     error occurs, the temporary file is cleaned up and the original file is
     left untouched.
 
+    Long Windows paths are handled rather than failing: the session writers
+    name a directory after the whole project path, so a deep enough project
+    used to make conversion die with a bare ``FileNotFoundError [WinError 3]``
+    naming a path that plainly existed. See :mod:`core.utils.long_paths`.
+
     Args:
         path: Destination file path.
         content: Text content to write.
         encoding: Text encoding (default ``"utf-8"``).
     """
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    parent_target = long_path(path.parent)
+    os.makedirs(parent_target, exist_ok=True)
 
-    fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    fd, tmp_path = tempfile.mkstemp(dir=parent_target, suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding=encoding) as f:
             f.write(content)
-        os.replace(tmp_path, str(path))
+        os.replace(tmp_path, long_path(path))
     except BaseException:
         try:
             os.unlink(tmp_path)

@@ -45,6 +45,8 @@ from core.session_history.paths import (
     normalize_project_path,
     strip_extended_length_prefix,
 )
+from core.utils.long_paths import exists as path_exists
+from core.utils.long_paths import list_dirs, list_files, long_path
 
 
 def _encode_codebuddy_project_dir(path: str) -> str:
@@ -147,7 +149,7 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
     Returns:
         UnifiedSession if parsing yields at least one message, else None.
     """
-    if not file_path.exists() or file_path.suffix != ".jsonl":
+    if not path_exists(file_path) or file_path.suffix != ".jsonl":
         return None
 
     session_id = file_path.stem
@@ -163,7 +165,10 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
     tool_calls_by_call_id: dict[str, ToolCallSummary] = {}
 
     try:
-        with open(file_path, encoding="utf-8") as f:
+        # long_path, not a bare open: these files live under a directory named
+        # after the whole project path, which passes MAX_PATH on a deep
+        # enough project and makes the read fail on a file that exists.
+        with open(long_path(file_path), encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -347,7 +352,7 @@ def find_codebuddy_sessions(
     )
 
     sessions: list[UnifiedSession] = []
-    for project_dir in base.iterdir():
+    for project_dir in list_dirs(base):
         if not project_dir.is_dir():
             continue
         if normalized_target is not None and not _codebuddy_dir_matches(
@@ -355,7 +360,7 @@ def find_codebuddy_sessions(
         ):
             continue
 
-        for jsonl_file in project_dir.glob("*.jsonl"):
+        for jsonl_file in list_files(project_dir, ".jsonl"):
             session = parse_codebuddy_session(jsonl_file)
             if session:
                 # When the session's own cwd resolves to the target, surface

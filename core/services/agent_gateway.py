@@ -207,13 +207,37 @@ class AgentGateway:
             raise AgentGatewayError(
                 "workspace_unavailable", "Selected workspace is unavailable"
             )
+        # Exact match first, then the deepest registered ancestor. Requiring
+        # an exact match made every subdirectory unusable, which also made
+        # the longest-prefix group resolution in core.project_groups
+        # unreachable from the Web UI: you could not start a session in a
+        # subdirectory at all, so its group never had to be worked out.
+        #
+        # Ancestry is tested with `in .parents`, not a string prefix -- the
+        # latter accepts /work/demo-old for a rule of /work/demo.
+        best: tuple[int, str] | None = None
         for project in config.get("project_registry", []):
             if not isinstance(project, dict) or not isinstance(
                 project.get("path"), str
             ):
                 continue
-            if Path(project["path"]).expanduser().resolve() == requested:
+            try:
+                registered = Path(project["path"]).expanduser().resolve()
+            except (OSError, ValueError):
+                continue
+            if registered == requested:
                 return str(requested), project["path"]
+            if registered in requested.parents:
+                depth = len(registered.parts)
+                if best is None or depth > best[0]:
+                    best = (depth, project["path"])
+
+        if best is not None:
+            # The identity stays the *registered* path: it is what
+            # GET /api/projects returns and what the frontend matches a
+            # session against, while the cwd is where the CLI actually runs.
+            return str(requested), best[1]
+
         raise AgentGatewayError(
             "workspace_not_registered",
             "Select a workspace registered in Settings before starting an agent",
