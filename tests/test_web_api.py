@@ -63,7 +63,7 @@ def test_agent_gateway_settings_support_config_and_environment(monkeypatch):
         "agent_gateway": {
             "enabled": False,
             "legacy_fallback": False,
-            "providers": {"gemini": False, "codex": True},
+            "providers": {"codebuddy": False, "codex": True},
         }
     }
     monkeypatch.setenv("CA_AGENT_GATEWAY_ENABLED", "1")
@@ -77,8 +77,7 @@ def test_agent_gateway_settings_support_config_and_environment(monkeypatch):
         "codex": False,
         "claude": True,
         "opencode": True,
-        "gemini": False,
-        "codebuddy": True,
+        "codebuddy": False,
     }
 
 

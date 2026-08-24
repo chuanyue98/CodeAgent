@@ -770,28 +770,13 @@ class AgentGateway:
     ) -> None:
         """Keeps one provider's event pump alive for the Gateway's lifetime.
 
-        Previously this was a bare pump: when ``events()`` raised, every
-        session for that provider was marked ERROR and the task simply
-        returned. Nothing ever restarted it, so a single transient failure
-        -- a CLI subprocess dying, a protocol hiccup, a provider that was
-        merely slow to install -- removed that provider permanently until
-        the user restarted the whole server. A long-lived ``ca ui`` would
-        lose providers one by one with no way back.
+        Restarts the pump on all three ways it can stop: ``events()`` raising,
+        ``events()`` returning cleanly, and ``start()`` having failed at boot.
+        Any of them left unattended takes the provider out until the server is
+        restarted.
 
-        Three failure modes are handled here, all of which used to be
-        terminal:
-
-        * ``events()`` raises -- the crash case.
-        * ``events()`` returns cleanly (the ``None`` sentinel in
-          ``iter_events``), which produced no error event at all: the pump
-          just stopped and the provider went quiet with the UI still
-          showing it as healthy.
-        * ``start()`` failed at boot, which previously skipped creating a
-          pump task entirely.
-
-        Sessions are moved to DISCONNECTED rather than ERROR because they
-        are recoverable: ERROR is terminal in the UI, and the session is
-        resumable again as soon as the provider comes back.
+        Sessions are moved to DISCONNECTED, not ERROR: ERROR is terminal in
+        the UI, and these sessions are resumable once the provider is back.
         """
         loop = asyncio.get_running_loop()
         delay = self.reconnect_base_delay

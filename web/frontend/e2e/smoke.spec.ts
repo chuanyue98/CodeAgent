@@ -13,10 +13,9 @@ import AxeBuilder from '@axe-core/playwright';
 const PAGES: { path: string; label: string; screenshotSlug: string; emptyStateHint?: RegExp }[] = [
   { path: '/launch', label: 'Local Terminal', screenshotSlug: 'launch' },
   { path: '/chat', label: 'Web Agent', screenshotSlug: 'chat' },
-  { path: '/skills', label: 'Skills', screenshotSlug: 'skills' },
-  { path: '/prompts', label: 'Prompts', screenshotSlug: 'prompts' },
-  { path: '/hooks', label: 'Hooks', screenshotSlug: 'hooks' },
-  { path: '/plugins', label: 'Plugins', screenshotSlug: 'plugins' },
+  // The four resource galleries were merged into one Resources page; their
+  // old paths now redirect to /settings/resources?kind=<id>.
+  { path: '/settings/resources', label: 'Resources', screenshotSlug: 'resources' },
   { path: '/mcp', label: 'MCP', screenshotSlug: 'mcp-servers' },
   { path: '/config', label: 'Workspace', screenshotSlug: 'configuration' },
   { path: '/dashboard', label: 'Tasks', screenshotSlug: 'dashboard' },

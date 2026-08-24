@@ -17,12 +17,11 @@ from core.services.run_store import RunStore, TaskRunRecord
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
 
 # Field name each engine's JSON(L) output uses for its session identifier.
-# codex calls it "thread_id"; the other three call it "session_id"/"sessionID".
+# codex calls it "thread_id"; the others call it "session_id"/"sessionID".
 _CHAT_SESSION_ID_FIELDS: dict[str, tuple[str, ...]] = {
     "claude": ("session_id",),
     "codex": ("thread_id",),
     "opencode": ("sessionID",),
-    "gemini": ("session_id", "sessionId"),
     "codebuddy": ("session_id", "sessionId"),
 }
 
@@ -307,10 +306,6 @@ class TaskRunner:
             from engines.start_opencode import OpenCodeEngine
 
             return OpenCodeEngine()
-        if engine == "gemini":
-            from engines.start_gemini import GeminiEngine
-
-            return GeminiEngine()
         if engine == "codebuddy":
             from engines.start_codebuddy import CodeBuddyEngine
 

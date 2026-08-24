@@ -64,7 +64,7 @@ class PluginScanner:
                 prompt_files = []
                 for suffix in [".md", ".txt"]:
                     # Priority: Platform specific -> Generic
-                    for name in ["GEMINI", "standards", "README"]:
+                    for name in ["AGENTS", "standards", "README"]:
                         p = item / f"{name}{suffix}"
                         if p.exists():
                             prompt_files.append(str(p.resolve().as_posix()))

@@ -85,9 +85,7 @@ async def get_sessions(
     sessions = [
         {
             **s,
-            "title": title_map.get(
-                (s.get("target", ""), s.get("sessionId", "")), ""
-            ),
+            "title": title_map.get((s.get("target", ""), s.get("sessionId", "")), ""),
         }
         for s in sessions
     ]

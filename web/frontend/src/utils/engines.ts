@@ -5,7 +5,6 @@
  */
 export const ENGINE_LABELS: Record<string, string> = {
   claude: 'Claude',
-  gemini: 'Gemini',
   opencode: 'OpenCode',
   codex: 'Codex',
   codebuddy: 'CodeBuddy',

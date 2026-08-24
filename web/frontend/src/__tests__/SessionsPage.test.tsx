@@ -24,7 +24,7 @@ function session(overrides: Partial<SessionUsage>): SessionUsage {
 
 const SESSIONS: SessionUsage[] = [
   session({ sessionId: 'session-a', target: 'claude', projectPath: '/workspace/project-a' }),
-  session({ sessionId: 'session-b', target: 'gemini', projectPath: '/workspace/project-b' }),
+  session({ sessionId: 'session-b', target: 'codebuddy', projectPath: '/workspace/project-b' }),
 ];
 
 function jsonResponse(data: unknown) {
@@ -175,7 +175,7 @@ describe('SessionsPage session detail', () => {
     expect(within(panel).getByText('Usage')).toBeVisible();
     expect(within(panel).getByText('$0.12')).toBeVisible();
     // Convert lives here now instead of only in Events…
-    expect(within(panel).getByRole('button', { name: /Gemini/ })).toBeVisible();
+    expect(within(panel).getByRole('button', { name: /CodeBuddy/ })).toBeVisible();
     // …and so does deleting this one session.
     expect(within(panel).getByRole('button', { name: /Delete this session/ })).toBeVisible();
   });

@@ -8,21 +8,18 @@ from collections.abc import Iterable
 
 ENGINE_CLI_CANDIDATES: dict[str, tuple[str, ...]] = {
     "claude": ("claude", "claude.cmd"),
-    "gemini": ("gemini", "gemini.cmd"),
     "opencode": ("opencode", "opencode.cmd"),
     "codex": ("codex", "codex.cmd"),
 }
 
 ENGINE_INSTALL_HINTS: dict[str, str] = {
     "claude": "npm install -g @anthropic-ai/claude-code",
-    "gemini": "npm install -g @google/gemini-cli",
     "opencode": "npm install -g opencode-ai",
     "codex": "npm install -g @openai/codex",
 }
 
 ENGINE_DISPLAY_NAMES: dict[str, str] = {
     "claude": "Claude Code",
-    "gemini": "Gemini CLI",
     "opencode": "OpenCode",
     "codex": "Codex",
 }

@@ -87,7 +87,7 @@ class _FakeMcpService:
         )
         return [
             {
-                "engine": "gemini",
+                "engine": "opencode",
                 "name": "srv1",
                 "action": "added",
                 "detail": "ok",
@@ -205,20 +205,20 @@ async def test_sync_mcp_servers(fake_service):
             json={
                 "project": "/tmp/proj",
                 "source": "claude",
-                "targets": ["gemini"],
+                "targets": ["opencode"],
                 "dryRun": True,
             },
         )
 
     assert response.status_code == 200
     assert response.json() == [
-        {"engine": "gemini", "name": "srv1", "action": "added", "detail": "ok"}
+        {"engine": "opencode", "name": "srv1", "action": "added", "detail": "ok"}
     ]
     assert fake_service.synced == [
         {
             "source_engine": "claude",
             "project_path": "/tmp/proj",
-            "targets": ["gemini"],
+            "targets": ["opencode"],
             "names": None,
             "overwrite": False,
             "dry_run": True,

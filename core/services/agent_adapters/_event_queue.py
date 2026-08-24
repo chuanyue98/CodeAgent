@@ -8,7 +8,7 @@ inconsistent) across the four adapters:
 * ``claude.py`` and ``opencode.py`` guard the queue with a non-blocking
   ``put_nowait()`` that drops the oldest buffered event (and leaves a
   ``provider_backpressure`` error behind) when the queue is full.
-* ``codex.py`` and ``gemini.py`` instead did a blocking ``await
+* ``codex.py`` and ``codebuddy.py`` instead did a blocking ``await
   self._events.put(...)``. Because that call runs inside the single
   ``_read_loop`` task that also resolves pending JSON-RPC requests, a
   stalled consumer could fill the queue and wedge the entire adapter.

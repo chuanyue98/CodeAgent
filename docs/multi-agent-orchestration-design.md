@@ -7,7 +7,7 @@
 
 ## 一、核心约束
 
-CodeAgent 的引擎层是对**官方 CLI 工具**（`claude`, `codex`, `gemini`, `opencode`）的封装（`ca_launcher.py {engine} -t {task} -y`），不是直连 LLM API。这与调研的三个项目有本质区别：
+CodeAgent 的引擎层是对**官方 CLI 工具**（`claude`, `codex`, `opencode`, `codebuddy`）的封装（`ca_launcher.py {engine} -t {task} -y`），不是直连 LLM API。这与调研的三个项目有本质区别：
 
 - 如果是直连 API，自己就是 agent loop 的实现者，"多 agent" 只是进程内并发调用 —— 一个统一实现就够了。
 - 包装官方 CLI 意味着每个引擎是**黑盒、一次性调用、跑完退出**，中途没有通用的"塞消息进去"的通道。CodeAgent 现有的 hooks（`before_tool`/`after_tool`，见 `hooks/base/*/metadata.json`）作用域也只到单次 run 内部，够不到跨 session 通信。
@@ -69,7 +69,7 @@ crew:
       waits_for: [plan]
     review:
       task: code-review
-      engine: gemini
+      engine: opencode
       waits_for: [impl-backend, impl-frontend]
 ```
 

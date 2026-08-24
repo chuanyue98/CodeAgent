@@ -1,6 +1,6 @@
 # CodeAgent Documentation
 
-CodeAgent is a CLI-first AI orchestration framework that injects your private engineering standards and automation skills into any LLM engine (Claude, Gemini, Codex, OpenCode).
+CodeAgent is a CLI-first AI orchestration framework that injects your private engineering standards and automation skills into any LLM engine (Claude, OpenCode, Codex, CodeBuddy).
 
 ## Getting Started
 

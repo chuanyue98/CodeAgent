@@ -8,7 +8,7 @@ def test_inject_hooks_to_settings_new_file(tmp_path, monkeypatch):
     # Mocking necessary parts of BaseEngine to avoid loading real config
     engine = BaseEngine("Dummy", "dummy-model")
 
-    settings_rel_path = ".gemini/settings.json"
+    settings_rel_path = ".opencode/settings.json"
     hooks = [{"name": "test-hook", "event": "BeforeAgent", "command": "echo hello"}]
 
     # This should fail because the method is not implemented yet
@@ -33,7 +33,7 @@ def test_inject_hooks_to_settings_update_existing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     engine = BaseEngine("Dummy", "dummy-model")
 
-    settings_rel_path = ".gemini/settings.json"
+    settings_rel_path = ".opencode/settings.json"
     settings_path = tmp_path / settings_rel_path
     settings_path.parent.mkdir(parents=True)
 
@@ -171,7 +171,7 @@ def test_a_leftover_injection_is_never_backed_up(tmp_path, monkeypatch):
     restore puts the injection right back, so `ca doctor` reports stale
     injections that --fix can never clear."""
     monkeypatch.chdir(tmp_path)
-    settings = tmp_path / ".gemini" / "settings.json"
+    settings = tmp_path / ".opencode" / "settings.json"
     settings.parent.mkdir(parents=True)
     settings.write_text(
         json.dumps({"hooks": {"X": []}, "_ca_injected": True}), encoding="utf-8"
@@ -179,7 +179,7 @@ def test_a_leftover_injection_is_never_backed_up(tmp_path, monkeypatch):
 
     engine = BaseEngine("Dummy", "dummy-model")
     engine.inject_hooks_to_settings(
-        ".gemini/settings.json", [{"name": "h", "event": "X", "command": "c"}]
+        ".opencode/settings.json", [{"name": "h", "event": "X", "command": "c"}]
     )
 
     assert not settings.with_suffix(".json.bak").exists()
@@ -189,32 +189,32 @@ def test_a_leftover_injection_self_heals_on_the_next_cycle(tmp_path, monkeypatch
     """With no poisoned backup, restore deletes the orphan instead of
     resurrecting it — so one normal run cleans up after a crashed one."""
     monkeypatch.chdir(tmp_path)
-    settings = tmp_path / ".gemini" / "settings.json"
+    settings = tmp_path / ".opencode" / "settings.json"
     settings.parent.mkdir(parents=True)
     settings.write_text(json.dumps({"_ca_injected": True}), encoding="utf-8")
 
     engine = BaseEngine("Dummy", "dummy-model")
     engine.inject_hooks_to_settings(
-        ".gemini/settings.json", [{"name": "h", "event": "X", "command": "c"}]
+        ".opencode/settings.json", [{"name": "h", "event": "X", "command": "c"}]
     )
-    engine.restore_settings(".gemini/settings.json")
+    engine.restore_settings(".opencode/settings.json")
 
     assert not settings.exists()
 
 
 def test_a_users_own_settings_are_still_backed_up_and_restored(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    settings = tmp_path / ".gemini" / "settings.json"
+    settings = tmp_path / ".opencode" / "settings.json"
     settings.parent.mkdir(parents=True)
     original = json.dumps({"theme": "dark"})
     settings.write_text(original, encoding="utf-8")
 
     engine = BaseEngine("Dummy", "dummy-model")
     engine.inject_hooks_to_settings(
-        ".gemini/settings.json", [{"name": "h", "event": "X", "command": "c"}]
+        ".opencode/settings.json", [{"name": "h", "event": "X", "command": "c"}]
     )
     assert settings.with_suffix(".json.bak").exists()
 
-    engine.restore_settings(".gemini/settings.json")
+    engine.restore_settings(".opencode/settings.json")
 
     assert json.loads(settings.read_text(encoding="utf-8")) == {"theme": "dark"}

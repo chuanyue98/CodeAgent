@@ -295,7 +295,12 @@ async def test_list_engines_reports_supports_resume():
 
     assert response.status_code == 200
     engines = {e["id"]: e["supportsResume"] for e in response.json()}
-    assert engines == {"gemini": False, "claude": True, "opencode": True, "codex": True}
+    assert engines == {
+        "claude": True,
+        "opencode": True,
+        "codex": True,
+        "codebuddy": True,
+    }
 
 
 @pytest.mark.asyncio

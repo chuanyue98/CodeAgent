@@ -19,8 +19,8 @@ from .commands.tasks import batch_run, doctor, new, ps, stop, ui
 from .helpers import init_cli_runtime
 
 EPILOG = """\
-Engines: gemini, claude, opencode, codex
-         (default: gemini; set "default_engine" in config.json to change)
+Engines: opencode, claude, codex, codebuddy
+         (default: opencode; set "default_engine" in config.json to change)
 
 YOLO mode is enabled by default.
 
@@ -28,7 +28,7 @@ YOLO mode is enabled by default.
 Examples:
   ca                       Start the default engine
   ca claude do something   Start claude with extra args
-  ca --proxy gemini        Start gemini with proxy enabled
+  ca --proxy opencode      Start opencode with proxy enabled
   ca doctor --fix          Run health check and auto-repair
   ca ui                    Start the Web UI
   ca new my-task           Create a new task draft
@@ -98,7 +98,6 @@ def cli(ctx, proxy, yolo):  # type: ignore[no-untyped-def]
     config = _helpers_mod.load_config()
     root = _helpers_mod._project_root()
     engine_script_map = {
-        "gemini": str(root / "engines" / "start_gemini.py"),
         "claude": str(root / "engines" / "start_claude_code.py"),
         "opencode": str(root / "engines" / "start_opencode.py"),
         "codex": str(root / "engines" / "start_codex.py"),

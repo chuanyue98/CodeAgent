@@ -24,7 +24,7 @@ class BaseEngine(_ConfigMixin, _PromptMixin, _LinksMixin, _SettingsMixin):
     resource discovery (skills, prompts, hooks, plugins), and prompt assembly.
 
     Attributes:
-        name (str): The unique name of the engine (e.g., 'gemini', 'claude').
+        name (str): The unique name of the engine (e.g., 'opencode', 'claude').
         default_model (str): The default LLM model name to use.
         root_dir (Path): The root directory of the CodeAgent project.
         full_config (dict): The complete configuration loaded from config.json.

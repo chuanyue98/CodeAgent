@@ -5,7 +5,6 @@ engine-native parsers (readers) and engine-native writers.
 
     Claude JSONL  ──→  UnifiedSession  ──→  Codex JSONL
     Codex JSONL   ──→  UnifiedSession  ──→  Claude JSONL
-    Gemini JSONL  ──→  UnifiedSession  ──→  ...
     OpenCode DB   ──→  UnifiedSession  ──→  ...
 
 Only core conversational content is preserved: user messages, assistant text
@@ -23,7 +22,7 @@ from enum import Enum
 class EngineType(str, Enum):
     """Supported engine types.
 
-    claude/codex/gemini/opencode/codebuddy are launchable CLI engines (they
+    claude/codex/opencode/codebuddy are launchable CLI engines (they
     are part of ``core.constants.ENGINES``, which drives launching, conversion
     targets and engine validation). codebuddy is driven through the ACP
     (Agent Client Protocol) adapter in
@@ -32,7 +31,6 @@ class EngineType(str, Enum):
 
     CLAUDE = "claude"
     CODEX = "codex"
-    GEMINI = "gemini"
     OPENCODE = "opencode"
     CODEBUDDY = "codebuddy"
 

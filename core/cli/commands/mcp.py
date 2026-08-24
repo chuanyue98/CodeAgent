@@ -39,7 +39,7 @@ def mcp_list(ctx, engine):  # type: ignore[no-untyped-def]
         except Exception as exc:
             click.echo(f"{click.style(name, bold=True)}: ⚠️  {exc}")
             continue
-        scope = "project" if name in ("claude", "gemini") else "global"
+        scope = "project" if name == "claude" else "global"
         header = f"{name} ({scope})"
         if not servers:
             click.echo(f"{click.style(header, bold=True)}: (none)")
@@ -92,11 +92,7 @@ def mcp_add(ctx, engine, name, command, url, env_pairs, transport):  # type: ign
     except (ValueError, RuntimeError) as exc:
         print(t("mcp.error", error=exc))
         sys.exit(1)
-    scope = (
-        t("mcp.scope_project")
-        if engine in ("claude", "gemini")
-        else t("mcp.scope_global")
-    )
+    scope = t("mcp.scope_project") if engine == "claude" else t("mcp.scope_global")
     print(t("mcp.added", name=name, engine=engine, scope=scope))
     others = sorted(ENGINES - {engine})
     print(t("mcp.sync_hint", engine=engine))

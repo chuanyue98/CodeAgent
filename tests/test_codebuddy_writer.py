@@ -90,9 +90,11 @@ def test_write_codebuddy_session_round_trip(home: Path) -> None:
     assert "git status" in tc.args_preview
     assert tc.result_preview == "On branch main"
 
-    # Timestamps stay in epoch-millisecond strings.
-    assert user.timestamp == "1787548456532"
-    assert assistant.timestamp == "1787548459000"
+    # The writer emits epoch milliseconds (CodeBuddy's own unit) and the parser
+    # normalizes them back to ISO 8601 on the way in, so a round trip lands on
+    # the ISO spelling the unified model documents.
+    assert user.timestamp == "2026-08-24T05:14:16.532Z"
+    assert assistant.timestamp == "2026-08-24T05:14:19.000Z"
 
 
 def test_write_codebuddy_session_normalizes_iso_timestamps(home: Path) -> None:
@@ -132,3 +134,63 @@ def test_written_directory_uses_parser_encoding(home: Path) -> None:
     assert _encode_codebuddy_project_dir("E:/demo/CodeAgent") in [
         d.name for d in projects.iterdir()
     ]
+
+
+def test_posix_cwd_stays_posix(home: Path) -> None:
+    """A POSIX project path must not be back-slashed into the ``cwd`` field.
+
+    ``/home/cy/x`` was being written as ``\\home\\cy\\x``, which names no
+    directory on Linux or macOS, so every session converted into CodeBuddy
+    there pointed at a working directory it could not resolve.
+    """
+    session = UnifiedSession(
+        session_id="orig",
+        engine=EngineType.CLAUDE,
+        project_path="/home/cy/github/chuanyue98/CUITCCA",
+        messages=[UnifiedMessage(role="user", content="hi")],
+    )
+    new_id = write_codebuddy_session(session)
+
+    written = (
+        home
+        / ".codebuddy"
+        / "projects"
+        / "home-cy-github-chuanyue98-CUITCCA"
+        / f"{new_id}.jsonl"
+    )
+    assert written.exists()  # and not under a leading-dash directory
+    row = json.loads(written.read_text(encoding="utf-8").splitlines()[0])
+    assert row["cwd"] == "/home/cy/github/chuanyue98/CUITCCA"
+
+
+def test_rows_carry_id_and_numeric_timestamp(home: Path) -> None:
+    """Every real CodeBuddy row has an ``id`` and a numeric ``timestamp``."""
+    session = UnifiedSession(
+        session_id="orig",
+        engine=EngineType.CLAUDE,
+        project_path="/home/cy/demo",
+        title="a title",
+        messages=[
+            UnifiedMessage(
+                role="assistant",
+                content="done",
+                timestamp="2026-08-24T05:14:16.532Z",
+                tool_calls=[ToolCallSummary(name="Bash", args_preview='{"c": "ls"}')],
+            )
+        ],
+    )
+    new_id = write_codebuddy_session(session)
+    written = next((home / ".codebuddy" / "projects").rglob(f"{new_id}.jsonl"))
+    rows = [
+        json.loads(line)
+        for line in written.read_text(encoding="utf-8").splitlines()
+        if line
+    ]
+
+    assert rows, "writer produced no rows"
+    for row in rows:
+        assert row.get("id"), f"row without id: {row['type']}"
+        assert isinstance(row["timestamp"], int), (
+            f"{row['type']} timestamp is {type(row['timestamp']).__name__}, "
+            "but CodeBuddy stores epoch milliseconds as a JSON number"
+        )

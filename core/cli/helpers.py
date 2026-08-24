@@ -39,7 +39,7 @@ def init_cli_runtime() -> None:
     configure_root_logging()
 
 
-FALLBACK_ENGINE = "gemini"
+FALLBACK_ENGINE = "opencode"
 
 
 def _installed_root() -> Path:

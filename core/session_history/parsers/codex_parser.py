@@ -181,15 +181,28 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
                             if phase == "final" and text:
                                 # Attach any pending tool calls
                                 tc = pending_tool_calls[:] if pending_tool_calls else []
-                                messages.append(
-                                    UnifiedMessage(
-                                        role="assistant",
-                                        content=text,
-                                        timestamp=timestamp,
-                                        tool_calls=tc,
-                                        model=model,
+                                # Codex records one assistant turn twice: an
+                                # ``event_msg``/``agent_message`` for the UI and
+                                # this ``response_item`` for the transcript. Only
+                                # this one carries tool calls, so it replaces the
+                                # earlier copy instead of doubling the turn.
+                                if (
+                                    messages
+                                    and messages[-1].role == "assistant"
+                                    and messages[-1].content == text
+                                    and not messages[-1].tool_calls
+                                ):
+                                    messages[-1].tool_calls = tc
+                                else:
+                                    messages.append(
+                                        UnifiedMessage(
+                                            role="assistant",
+                                            content=text,
+                                            timestamp=timestamp,
+                                            tool_calls=tc,
+                                            model=model,
+                                        )
                                     )
-                                )
                                 pending_tool_calls.clear()
                                 call_id_to_index.clear()
                                 ended_at = timestamp

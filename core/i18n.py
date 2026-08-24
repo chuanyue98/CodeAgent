@@ -390,9 +390,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "   Resume with: codex continue",
         "zh": "   恢复方式: codex continue",
     },
-    "convert.resume_gemini": {
-        "en": "   Resume with: gemini (select from history)",
-        "zh": "   恢复方式: gemini (从历史记录中选择)",
+    "convert.resume_codebuddy": {
+        "en": "   Resume with: codebuddy --resume {session_id}",
+        "zh": "   恢复方式: codebuddy --resume {session_id}",
     },
     "convert.resume_opencode": {
         "en": "   Resume with: opencode (select from history)",
@@ -774,8 +774,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh": "钩子生效情况 ({count})",
     },
     "doctor.hook_delivery_supported": {
-        "en": "claude, gemini, opencode: supported",
-        "zh": "claude, gemini, opencode: 支持",
+        "en": "claude, opencode, codebuddy: supported",
+        "zh": "claude, opencode, codebuddy: 支持",
     },
     "doctor.codex_hooks_label": {"en": "codex hooks", "zh": "codex 钩子"},
     "doctor.codex_trusted": {"en": "project is trusted", "zh": "项目已被信任"},

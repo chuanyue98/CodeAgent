@@ -1,12 +1,12 @@
-"""Shared JSON-RPC-over-stdio transport for the Codex and Gemini adapters.
+"""Shared JSON-RPC-over-stdio transport for the Codex and CodeBuddy adapters.
 
-Both ``codex.py`` (Codex's app-server protocol) and ``gemini.py`` (the
+Both ``codex.py`` (Codex's app-server protocol) and ``codebuddy.py`` (the
 Agent Client Protocol) speak line-delimited JSON-RPC to a child process over
 stdio: a pending-futures map keyed by request id, a write lock around
 stdout writes, an incrementing request id counter, and a read loop that
 either resolves a pending future, dispatches a server-initiated request, or
 dispatches a notification. The only structural difference between the two
-protocols is that ACP (Gemini) wraps every message in a
+protocols is that ACP (CodeBuddy) wraps every message in a
 ``{"jsonrpc": "2.0", ...}`` envelope while Codex's app-server protocol does
 not. :class:`JsonRpcStdioTransport` extracts that machinery so both
 adapters compose it instead of re-implementing it; the adapter-specific

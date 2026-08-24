@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 from core.session_history.models import (
@@ -39,6 +40,7 @@ from core.session_history.models import (
     UnifiedMessage,
     UnifiedSession,
 )
+from core.session_history.parsers._synthetic import is_synthetic_user_content
 from core.session_history.paths import (
     normalize_project_path,
     strip_extended_length_prefix,
@@ -70,7 +72,45 @@ def _encode_codebuddy_project_dir(path: str) -> str:
     # ``+`` collapses a run of separators (``:/``, ``:\``, ``\\`` ...) into a
     # single dash, matching how CodeBuddy names its project dirs
     # (``E:\demo\CodeAgent`` → ``e-demo-CodeAgent``).
-    return re.sub(r"[^A-Za-z0-9]+", "-", p)
+    # A POSIX path's leading separator is dropped, not dashed: CodeBuddy
+    # stores ``/home/cy/x`` under ``home-cy-x``.
+    return re.sub(r"[^A-Za-z0-9]+", "-", p).lstrip("-")
+
+
+def _to_iso8601(value: object) -> str:
+    """Converts a CodeBuddy timestamp to ISO 8601.
+
+    CodeBuddy records epoch milliseconds; :attr:`UnifiedMessage.timestamp`
+    holds ISO 8601, which writers copy verbatim and ``find_all_sessions``
+    sorts on as a plain string.
+
+    Args:
+        value: The raw ``timestamp`` field: epoch milliseconds (number or
+            digit string), an ISO 8601 string, or missing.
+
+    Returns:
+        str: An ISO 8601 UTC timestamp, or ``""`` when *value* is unusable.
+    """
+    if isinstance(value, bool) or value in ("", None):
+        return ""
+    if isinstance(value, (int, float)):
+        epoch_ms = float(value)
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return ""
+        # Already ISO 8601 (or anything non-numeric): keep the source spelling.
+        if not text.isdigit():
+            return text
+        epoch_ms = float(text)
+    else:
+        return ""
+
+    try:
+        moment = datetime.fromtimestamp(epoch_ms / 1000, tz=UTC)
+    except (OverflowError, OSError, ValueError):
+        return ""
+    return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
 
 
 def _codebuddy_dir_matches(dir_name: str, target_path: str) -> bool:
@@ -139,11 +179,7 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
                 if not cwd and row.get("cwd"):
                     cwd = row.get("cwd", "")
 
-                ts = row.get("timestamp", "")
-                if isinstance(ts, (int, float)) and not isinstance(ts, bool):
-                    # CodeBuddy records epoch milliseconds; store as the raw
-                    # string (aligned with the claude/codex passthrough style).
-                    ts = str(int(ts))
+                ts = _to_iso8601(row.get("timestamp", ""))
 
                 if row_type == "ai-title":
                     if not title:
@@ -156,6 +192,8 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
                         content = _extract_text_content(
                             row.get("content"), "input_text"
                         )
+                        if content and is_synthetic_user_content(content):
+                            continue
                         if content:
                             if not started_at and ts:
                                 started_at = ts

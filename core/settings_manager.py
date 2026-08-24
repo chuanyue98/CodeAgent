@@ -88,7 +88,7 @@ class SettingsManager:
     """Manages backup, injection, and restoration of engine settings files.
 
     Handles hook injection, plugin registration, and settings backup/restore
-    for all engine types (Gemini, Claude, Codex, OpenCode).
+    for all engine types (Claude, Codex, OpenCode, CodeBuddy).
     """
 
     def __init__(self, event_map: dict[str, str]):

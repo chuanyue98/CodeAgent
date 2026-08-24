@@ -61,7 +61,7 @@ def get_agent_gateway_settings(config: dict) -> dict:
             f"CA_AGENT_PROVIDER_{name.upper()}",
             bool(provider_config.get(name, True)),
         )
-        for name in ("codex", "claude", "opencode", "gemini", "codebuddy")
+        for name in ("codex", "claude", "opencode", "codebuddy")
     }
     return {
         "enabled": _env_bool(
@@ -171,7 +171,6 @@ async def lifespan(app: FastAPI):
     from core.services.agent_adapters.codebuddy import CodeBuddyAdapter
     from core.services.agent_adapters.codex import CodexAdapter
     from core.services.agent_adapters.fake import FakeAgentAdapter
-    from core.services.agent_adapters.gemini import GeminiAdapter
     from core.services.agent_adapters.opencode import OpenCodeAdapter
     from core.services.agent_gateway import AgentGateway
     from core.services.agent_store import AgentStore
@@ -186,7 +185,6 @@ async def lifespan(app: FastAPI):
         "codex": CodexAdapter,
         "claude": ClaudeAdapter,
         "opencode": OpenCodeAdapter,
-        "gemini": GeminiAdapter,
         "codebuddy": CodeBuddyAdapter,
     }
     adapters: list[AgentAdapter] = []

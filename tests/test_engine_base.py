@@ -224,9 +224,9 @@ def test_ensure_skills_link_deduplicates_same_skill_name(monkeypatch, tmp_path, 
     )
 
     with caplog.at_level("INFO"):
-        engine.ensure_skills_link(".gemini/skills")
+        engine.ensure_skills_link(".opencode/skills")
 
-    mounted_root = project_root / ".gemini" / "skills"
+    mounted_root = project_root / ".opencode" / "skills"
     assert (mounted_root / "ui-ux-pro-max" / "SKILL.md").read_text(
         encoding="utf-8"
     ) == "project"
@@ -253,7 +253,7 @@ def test_ensure_skills_link_preserves_unmanaged_links_and_regular_dirs(
     (stale_skill_root / "SKILL.md").write_text("old", encoding="utf-8")
     (fresh_skill_root / "SKILL.md").write_text("new", encoding="utf-8")
 
-    mounted_root = project_root / ".gemini" / "skills"
+    mounted_root = project_root / ".opencode" / "skills"
     mounted_root.mkdir(parents=True)
     engine._create_skill_link(stale_skill_root, mounted_root / "old-skill")
 
@@ -264,7 +264,7 @@ def test_ensure_skills_link_preserves_unmanaged_links_and_regular_dirs(
     monkeypatch.setattr(engine, "get_skills_to_mount", lambda: ["web/new-skill"])
     monkeypatch.setattr(engine, "_get_skill_search_roots", lambda: [builtin_root])
 
-    engine.ensure_skills_link(".gemini/skills")
+    engine.ensure_skills_link(".opencode/skills")
 
     # On Windows the link is a junction (mklink /j), not a symlink — is_symlink()
     # is False but it must still exist as a directory/junction and not be removed.
@@ -277,7 +277,7 @@ def test_ensure_skills_link_preserves_unmanaged_links_and_regular_dirs(
     ) == "new"
     assert (regular_dir / "keep.txt").read_text(encoding="utf-8") == "keep"
 
-    engine.cleanup_skills_link(".gemini/skills")
+    engine.cleanup_skills_link(".opencode/skills")
     assert (mounted_root / "old-skill").exists()
     assert not (mounted_root / "new-skill").exists()
 
@@ -292,7 +292,7 @@ def test_ensure_skills_link_does_not_replace_regular_file(monkeypatch, tmp_path)
     source = tmp_path / "source" / "skill"
     source.mkdir(parents=True)
     (source / "SKILL.md").write_text("skill", encoding="utf-8")
-    mounted_root = project_root / ".gemini" / "skills"
+    mounted_root = project_root / ".opencode" / "skills"
     mounted_root.mkdir(parents=True)
     collision = mounted_root / "skill"
     collision.write_text("user-owned", encoding="utf-8")
@@ -300,7 +300,7 @@ def test_ensure_skills_link_does_not_replace_regular_file(monkeypatch, tmp_path)
     monkeypatch.setattr(engine, "get_skills_to_mount", lambda: ["skill"])
     monkeypatch.setattr(engine, "_get_skill_search_roots", lambda: [source.parent])
 
-    engine.ensure_skills_link(".gemini/skills")
+    engine.ensure_skills_link(".opencode/skills")
 
     assert collision.read_text(encoding="utf-8") == "user-owned"
 
@@ -334,12 +334,12 @@ def test_ensure_skills_link_warns_when_resolved_dir_has_no_skill_md(
     monkeypatch.setattr(engine, "_get_skill_search_roots", lambda: [builtin_root])
 
     with caplog.at_level("INFO"):
-        engine.ensure_skills_link(".gemini/skills")
+        engine.ensure_skills_link(".opencode/skills")
 
     assert "broken-skill" in caplog.text
     assert "no SKILL.md" in caplog.text
 
-    mounted_root = project_root / ".gemini" / "skills"
+    mounted_root = project_root / ".opencode" / "skills"
     assert (mounted_root / "good-skill" / "SKILL.md").exists()
     assert not (mounted_root / "broken-skill").exists()
 
@@ -478,7 +478,7 @@ def test_ensure_plugins_link(mock_engine, tmp_path, monkeypatch):
     # Setup a plugin
     plugin_dir = tmp_path / "my-plugin"
     plugin_dir.mkdir()
-    (plugin_dir / "GEMINI.md").touch()
+    (plugin_dir / "AGENTS.md").touch()
 
     monkeypatch.setattr(
         mock_engine,

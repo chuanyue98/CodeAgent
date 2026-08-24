@@ -83,8 +83,6 @@ def _validate_source_file_path(source_file: str, engine: str) -> Path:
         allowed_dirs.append((home / ".claude" / "projects").resolve())
     elif engine == "codex":
         allowed_dirs.append((home / ".codex" / "sessions").resolve())
-    elif engine == "gemini":
-        allowed_dirs.append((home / ".gemini" / "tmp").resolve())
     elif engine == "opencode":
         allowed_dirs.append((home / ".opencode").resolve())
         allowed_dirs.append((home / ".local" / "share" / "opencode").resolve())
@@ -164,7 +162,7 @@ async def list_sessions(
     Args:
         project: Optional project directory path filter. Omit to search
             across every project the user has session history for.
-        engine: Optional engine filter ("claude", "codex", "gemini", "opencode").
+        engine: Optional engine filter ("claude", "codex", "opencode", "codebuddy").
         limit: Maximum number of sessions to return.
 
     Returns:
@@ -199,7 +197,7 @@ async def get_audit_events(
     session parsers.
 
     Args:
-        engine: Optional engine filter ("claude", "codex", "gemini", "opencode").
+        engine: Optional engine filter ("claude", "codex", "opencode", "codebuddy").
         project: Optional project directory path filter. Omit to search
             across every project the user has session history for.
         since: Optional ISO 8601 lower bound on event timestamp (inclusive).
@@ -335,11 +333,6 @@ def _resume_launch_command(engine: str, session_id: str, project: Path) -> list[
         return ["claude", "--resume", session_id]
     if engine == "codex":
         return ["codex", "resume", session_id]
-    if engine == "gemini":
-        # Gemini resumes by its own session index, not by the converted UUID
-        # we minted, so a native-resume is not possible from here. Fall back
-        # to launching the engine normally in the project directory.
-        return ["gemini"]
     if engine == "codebuddy":
         return ["codebuddy", "--resume", session_id]
     raise ValueError(f"Unknown engine: {engine}")

@@ -1,6 +1,6 @@
 """Shared subprocess graceful-teardown helper.
 
-``claude.py``, ``codex.py``, ``gemini.py``, and ``opencode.py`` each spawn a
+``claude.py``, ``codex.py``, ``codebuddy.py``, and ``opencode.py`` each spawn a
 child process and each independently implemented the same shutdown
 sequence: ask nicely (``terminate()``), give it a short grace period, then
 ``kill()`` and give it a longer grace period, and finally give up and log a

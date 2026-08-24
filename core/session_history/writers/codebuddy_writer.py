@@ -12,7 +12,8 @@ reads back):
   - ``function_call`` / ``function_call_result`` → tool invocations (share ``callId``)
   - ``ai-title``               → auto-generated session title
 
-Timestamps are epoch milliseconds (CodeBuddy's native unit), stored as strings.
+Timestamps are epoch milliseconds (CodeBuddy's native unit), written as JSON
+numbers the way CodeBuddy writes them itself.
 """
 
 from __future__ import annotations
@@ -33,30 +34,34 @@ from core.utils.atomic_write import atomic_write
 def _codebuddy_cwd(path: str) -> str:
     """Returns the project path in CodeBuddy's on-disk ``cwd`` spelling.
 
-    Real ``~/.codebuddy/projects`` files store ``cwd`` with a lower-cased drive
-    letter and back-slashes (``e:\\demo\\CodeAgent``), so we mirror that.
+    Windows paths get a lower-cased drive letter and back-slashes
+    (``e:\\demo\\CodeAgent``), matching real files. POSIX paths stay as they
+    are — back-slashing one names a directory that exists nowhere.
     """
+    if not re.match(r"^[A-Za-z]:", path):
+        return path
     p = path.replace("/", "\\")
-    if re.match(r"^[A-Za-z]:", p):
-        p = p[0].lower() + p[1:]
-    return p
+    return p[0].lower() + p[1:]
 
 
-def _to_codebuddy_ts(value: str | None) -> str:
-    """Normalizes a UnifiedSession timestamp to epoch-milliseconds string."""
+def _to_codebuddy_ts(value: str | None) -> int:
+    """Normalizes a UnifiedSession timestamp to epoch milliseconds.
+
+    Returns an ``int``: real rows store the timestamp as a JSON number.
+    """
     if not value:
-        return str(int(time.time() * 1000))
+        return int(time.time() * 1000)
     s = str(value).strip()
     if s.isdigit():
-        return s
+        return int(s)
     # ISO-8601 (e.g. Claude's ``2025-...Z``) → epoch ms.
     try:
         from datetime import datetime
 
         dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-        return str(int(dt.timestamp() * 1000))
+        return int(dt.timestamp() * 1000)
     except ValueError:
-        return str(int(time.time() * 1000))
+        return int(time.time() * 1000)
 
 
 def write_codebuddy_session(session: Any) -> str:
@@ -84,9 +89,21 @@ def write_codebuddy_session(session: Any) -> str:
 
     # Title, if present.
     if session.title:
+        first_ts = _to_codebuddy_ts(
+            getattr(session.messages[0], "timestamp", None)
+            if session.messages
+            else None
+        )
         lines.append(
             json.dumps(
-                {"type": "ai-title", "aiTitle": session.title, "cwd": cwd},
+                {
+                    "id": str(uuid.uuid4()),
+                    "timestamp": first_ts,
+                    "type": "ai-title",
+                    "aiTitle": session.title,
+                    "sessionId": new_session_id,
+                    "cwd": cwd,
+                },
                 ensure_ascii=False,
             )
         )
@@ -99,6 +116,7 @@ def write_codebuddy_session(session: Any) -> str:
             # with a different value shape; without it the type is inferred
             # from this first literal alone and the two disagree.
             row: dict[str, Any] = {
+                "id": str(uuid.uuid4()),
                 "type": "message",
                 "role": "user",
                 "content": [{"type": "input_text", "text": msg.content}],
@@ -111,6 +129,7 @@ def write_codebuddy_session(session: Any) -> str:
         elif msg.role == "assistant":
             model = msg.model or session.model or ""
             row = {
+                "id": str(uuid.uuid4()),
                 "type": "message",
                 "role": "assistant",
                 "status": "completed",
@@ -135,6 +154,7 @@ def write_codebuddy_session(session: Any) -> str:
                 lines.append(
                     json.dumps(
                         {
+                            "id": str(uuid.uuid4()),
                             "type": "function_call",
                             "name": tc.name,
                             "callId": call_id,
@@ -150,6 +170,7 @@ def write_codebuddy_session(session: Any) -> str:
                 lines.append(
                     json.dumps(
                         {
+                            "id": str(uuid.uuid4()),
                             "type": "function_call_result",
                             "name": tc.name,
                             "callId": call_id,

@@ -132,21 +132,6 @@ def test_list_codebuddy_missing_file_returns_empty(tmp_path):
     assert mcp_service.list_servers("codebuddy", str(tmp_path)) == []
 
 
-def test_list_gemini_reads_project_settings(tmp_path):
-    gemini_dir = tmp_path / ".gemini"
-    gemini_dir.mkdir()
-    (gemini_dir / "settings.json").write_text(
-        json.dumps({"mcpServers": {"srv1": {"command": "echo", "args": ["hi"]}}}),
-        encoding="utf-8",
-    )
-
-    servers = mcp_service.list_servers("gemini", str(tmp_path))
-
-    assert servers[0]["name"] == "srv1"
-    assert servers[0]["scope"] == "project"
-    assert servers[0]["command"] == ["echo", "hi"]
-
-
 def test_list_codex_reads_global_config_toml(tmp_path, home):
     codex_dir = home / ".codex"
     codex_dir.mkdir()
@@ -301,27 +286,6 @@ def test_add_server_codex_builds_expected_argv(tmp_path, fake_bin):
     assert argv == ["mcp", "add", "srv1", "--env", "FOO=bar", "--", "echo", "hi"]
 
 
-def test_add_server_gemini_builds_expected_argv(tmp_path, fake_bin):
-    write_fake_cli(fake_bin, "gemini")
-
-    mcp_service.add_server(
-        "gemini", str(tmp_path), "srv1", command=["echo", "hi"], env={"FOO": "bar"}
-    )
-
-    argv = recorded_argv(fake_bin, "gemini")
-    assert argv == [
-        "mcp",
-        "add",
-        "--scope",
-        "project",
-        "srv1",
-        "-e",
-        "FOO=bar",
-        "echo",
-        "hi",
-    ]
-
-
 def test_add_server_opencode_builds_expected_argv(tmp_path, fake_bin):
     write_fake_cli(fake_bin, "opencode")
 
@@ -412,41 +376,6 @@ def test_remove_server_codebuddy_via_cli(tmp_path, fake_bin):
     ]
 
 
-def test_remove_server_gemini_via_file_edit_preserves_others(tmp_path):
-    gemini_dir = tmp_path / ".gemini"
-    gemini_dir.mkdir()
-    settings_path = gemini_dir / "settings.json"
-    settings_path.write_text(
-        json.dumps(
-            {
-                "otherKey": "keep-me",
-                "mcpServers": {
-                    "srv1": {"command": "echo"},
-                    "srv2": {"command": "ls"},
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    mcp_service.remove_server("gemini", str(tmp_path), "srv1")
-
-    data = json.loads(settings_path.read_text(encoding="utf-8"))
-    assert data["otherKey"] == "keep-me"
-    assert list(data["mcpServers"].keys()) == ["srv2"]
-
-
-def test_remove_server_gemini_missing_raises_key_error(tmp_path):
-    gemini_dir = tmp_path / ".gemini"
-    gemini_dir.mkdir()
-    (gemini_dir / "settings.json").write_text(
-        json.dumps({"mcpServers": {}}), encoding="utf-8"
-    )
-
-    with pytest.raises(KeyError):
-        mcp_service.remove_server("gemini", str(tmp_path), "does-not-exist")
-
-
 def test_remove_server_opencode_via_file_edit_preserves_others(tmp_path, home):
     config_dir = home / ".config" / "opencode"
     config_dir.mkdir(parents=True)
@@ -501,7 +430,7 @@ def test_sync_defaults_to_every_other_engine(tmp_path, home, calls):
 
     results = mcp_service.sync_servers("claude", str(tmp_path))
 
-    assert {r["engine"] for r in results} == {"codex", "gemini", "opencode", "codebuddy"}
+    assert {r["engine"] for r in results} == {"codex", "opencode", "codebuddy"}
     # codebuddy's project scope IS claude's ``.mcp.json`` (verified live), so
     # it already "has" srv1 and correctly reports skipped rather than added.
     for r in results:
@@ -509,7 +438,6 @@ def test_sync_defaults_to_every_other_engine(tmp_path, home, calls):
         assert r["action"] == expected_action
     assert {engine for kind, engine, *_ in calls if kind == "add"} == {
         "codex",
-        "gemini",
         "opencode",
     }
 
@@ -520,12 +448,12 @@ def test_sync_forwards_command_and_env(tmp_path, home, calls):
         {"srv1": {"command": "echo", "args": ["hi"], "env": {"FOO": "bar"}}},
     )
 
-    mcp_service.sync_servers("claude", str(tmp_path), targets=["gemini"])
+    mcp_service.sync_servers("claude", str(tmp_path), targets=["opencode"])
 
     assert calls == [
         (
             "add",
-            "gemini",
+            "opencode",
             "srv1",
             {"command": ["echo", "hi"], "transport": None, "env": {"FOO": "bar"}},
         )
@@ -565,13 +493,14 @@ def test_sync_rejects_unknown_server_name(tmp_path, home):
 
 def test_sync_skips_existing_by_default(tmp_path, home, calls):
     _write_claude_source(tmp_path, {"srv1": {"command": "echo"}})
-    gemini_dir = tmp_path / ".gemini"
-    gemini_dir.mkdir()
-    (gemini_dir / "settings.json").write_text(
-        json.dumps({"mcpServers": {"srv1": {"command": "other"}}}), encoding="utf-8"
+    opencode_dir = home / ".config" / "opencode"
+    opencode_dir.mkdir(parents=True, exist_ok=True)
+    (opencode_dir / "opencode.json").write_text(
+        json.dumps({"mcp": {"srv1": {"type": "local", "command": ["other"]}}}),
+        encoding="utf-8",
     )
 
-    results = mcp_service.sync_servers("claude", str(tmp_path), targets=["gemini"])
+    results = mcp_service.sync_servers("claude", str(tmp_path), targets=["opencode"])
 
     assert results[0]["action"] == "skipped"
     assert calls == []
@@ -579,14 +508,15 @@ def test_sync_skips_existing_by_default(tmp_path, home, calls):
 
 def test_sync_overwrite_removes_then_adds(tmp_path, home, calls):
     _write_claude_source(tmp_path, {"srv1": {"command": "echo"}})
-    gemini_dir = tmp_path / ".gemini"
-    gemini_dir.mkdir()
-    (gemini_dir / "settings.json").write_text(
-        json.dumps({"mcpServers": {"srv1": {"command": "other"}}}), encoding="utf-8"
+    opencode_dir = home / ".config" / "opencode"
+    opencode_dir.mkdir(parents=True, exist_ok=True)
+    (opencode_dir / "opencode.json").write_text(
+        json.dumps({"mcp": {"srv1": {"type": "local", "command": ["other"]}}}),
+        encoding="utf-8",
     )
 
     results = mcp_service.sync_servers(
-        "claude", str(tmp_path), targets=["gemini"], overwrite=True
+        "claude", str(tmp_path), targets=["opencode"], overwrite=True
     )
 
     assert results[0]["action"] == "replaced"
@@ -615,21 +545,22 @@ def test_sync_isolates_per_engine_failures(tmp_path, home, monkeypatch):
     monkeypatch.setattr(mcp_service, "add_server", flaky_add)
 
     results = mcp_service.sync_servers(
-        "claude", str(tmp_path), targets=["codex", "gemini"]
+        "claude", str(tmp_path), targets=["codex", "opencode"]
     )
 
     by_engine = {r["engine"]: r for r in results}
     assert by_engine["codex"]["action"] == "failed"
     assert "not found on PATH" in by_engine["codex"]["detail"]
-    assert by_engine["gemini"]["action"] == "added"
+    assert by_engine["opencode"]["action"] == "added"
 
 
 def test_sync_reports_data_loss_when_overwrite_readd_fails(tmp_path, home, monkeypatch):
     _write_claude_source(tmp_path, {"srv1": {"command": "echo"}})
-    gemini_dir = tmp_path / ".gemini"
-    gemini_dir.mkdir()
-    (gemini_dir / "settings.json").write_text(
-        json.dumps({"mcpServers": {"srv1": {"command": "other"}}}), encoding="utf-8"
+    opencode_dir = home / ".config" / "opencode"
+    opencode_dir.mkdir(parents=True, exist_ok=True)
+    (opencode_dir / "opencode.json").write_text(
+        json.dumps({"mcp": {"srv1": {"type": "local", "command": ["other"]}}}),
+        encoding="utf-8",
     )
     monkeypatch.setattr(mcp_service, "remove_server", lambda *a, **k: None)
     monkeypatch.setattr(
@@ -639,7 +570,7 @@ def test_sync_reports_data_loss_when_overwrite_readd_fails(tmp_path, home, monke
     )
 
     results = mcp_service.sync_servers(
-        "claude", str(tmp_path), targets=["gemini"], overwrite=True
+        "claude", str(tmp_path), targets=["opencode"], overwrite=True
     )
 
     assert results[0]["action"] == "failed"
@@ -667,7 +598,7 @@ def test_sync_maps_remote_transport_to_http(tmp_path, home, calls):
         tmp_path, {"srv1": {"type": "remote", "url": "https://example.com/mcp"}}
     )
 
-    mcp_service.sync_servers("claude", str(tmp_path), targets=["gemini"])
+    mcp_service.sync_servers("claude", str(tmp_path), targets=["opencode"])
 
     assert calls[0][3] == {
         "url": "https://example.com/mcp",
@@ -681,7 +612,7 @@ def test_sync_preserves_sse_transport(tmp_path, home, calls):
         tmp_path, {"srv1": {"type": "sse", "url": "https://example.com/sse"}}
     )
 
-    mcp_service.sync_servers("claude", str(tmp_path), targets=["gemini"])
+    mcp_service.sync_servers("claude", str(tmp_path), targets=["opencode"])
 
     assert calls[0][3]["transport"] == "sse"
 
@@ -689,7 +620,7 @@ def test_sync_preserves_sse_transport(tmp_path, home, calls):
 def test_sync_fails_entry_with_neither_command_nor_url(tmp_path, home, calls):
     _write_claude_source(tmp_path, {"srv1": {"type": "stdio"}})
 
-    results = mcp_service.sync_servers("claude", str(tmp_path), targets=["gemini"])
+    results = mcp_service.sync_servers("claude", str(tmp_path), targets=["opencode"])
 
     assert results[0]["action"] == "failed"
     assert "neither a command nor a url" in results[0]["detail"]

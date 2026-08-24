@@ -21,6 +21,7 @@ from core.session_history.models import (
     UnifiedMessage,
     UnifiedSession,
 )
+from core.session_history.parsers._synthetic import is_synthetic_user_content
 from core.session_history.paths import strip_extended_length_prefix
 
 
@@ -47,33 +48,15 @@ def _decode_claude_project_path(dir_name: str) -> str:
 
 
 def _encode_claude_project_dir(path: str) -> str:
-    """Encodes a file path the way Claude Code encodes it for its
-    ``~/.claude/projects/<dir>`` directory names.
+    """Encodes a path the way Claude Code names ``~/.claude/projects/<dir>``.
 
-    Verified directly against real ``~/.claude/projects`` directories,
-    cross-checked with the ``cwd`` recorded inside their session JSONL
-    files (see investigation notes in the PR/commit that introduced this):
+    Every character that is not an ASCII letter or digit becomes a single
+    ``-``: ``E:\\demo\\hearthstone-bot`` -> ``E--demo-hearthstone-bot``.
 
-      - ``E:\\demo\\hearthstone-bot``                              -> ``E--demo-hearthstone-bot``
-      - ``E:\\me``                                                 -> ``E--me``
-      - ``C:\\Users\\Administrator``                               -> ``C--Users-Administrator``
-      - ``\\\\wsl.localhost\\Ubuntu-24.04\\home\\cy\\...\\CUITCCA``   -> ``--wsl-localhost-Ubuntu-24-04-home-cy-...-CUITCCA``
-
-    The rule is simply: every character that is not an ASCII letter or
-    digit (``:``, ``\\``, ``/``, ``.``, ``_``, space, and any literal ``-``
-    already present in the path) is replaced 1:1 with a single ``-``. Note
-    the WSL example above: the dots in ``Ubuntu-24.04`` become dashes just
-    like the surrounding path separators, and the *existing* dash in
-    ``Ubuntu-24.04`` is preserved as a dash too — so ``-`` in a dir name is
-    inherently ambiguous about what it originally was.
-
-    Because this collapses several distinct characters onto the same
-    output character, it is a many-to-one mapping: a directory name cannot
-    be decoded back into an unambiguous path in general (see
-    ``_decode_claude_project_path``, which is a best-effort display
-    fallback, not something to match against). It *can*, however, be
-    produced unambiguously from a known path, which is what makes it
-    reliable for matching — see ``_claude_dir_matches``.
+    The mapping is many-to-one — separators, dots and literal dashes all
+    collapse onto ``-`` — so a directory name cannot be decoded back into an
+    unambiguous path. Match by re-encoding a known path instead; see
+    :func:`_claude_dir_matches`.
 
     Args:
         path: A file path (backslash or forward-slash separated).
@@ -87,29 +70,14 @@ def _encode_claude_project_dir(path: str) -> str:
 def _claude_dir_matches(dir_name: str, target_path: str) -> bool:
     """Checks if a Claude project directory name matches a target file path.
 
-    This used to try to *decode* ``dir_name`` back into a path using a
-    length-based heuristic (accumulate dash-split parts until they got
-    "close enough" to a target segment). That approach is fundamentally
-    unreliable: Claude's encoding (see ``_encode_claude_project_dir``)
-    collapses many different characters onto ``-``, so a decoder walking
-    the dashes has no principled way to know whether a given ``-`` was a
-    path separator, a literal dash in a directory name, a dot, or
-    something else. In rare cases it could match a session history to the
+    Re-encodes ``target_path`` with :func:`_encode_claude_project_dir` and
+    compares, rather than trying to invert that encoding — a decoder walking
+    the dashes cannot tell a separator from a literal dash and can match the
     wrong project.
 
-    Instead, we go the other way: re-encode the *known* ``target_path``
-    with the same rule Claude uses and compare it directly to
-    ``dir_name``. This mirrors exactly what Claude Code does when it
-    creates the directory, so it can't misfire on ambiguous dashes — it
-    never tries to invert the encoding, only to reproduce it.
-
-    Note this does not (and cannot) resolve the underlying ambiguity in
-    Claude's own encoding: e.g. a project at ``.../my-project`` and one at
-    ``.../my/project`` both encode to ``...-my-project``, so Claude Code
-    itself stores their sessions in the same directory. When that happens
-    this function will correctly report a match for *both* target paths,
-    same as Claude Code's own behavior — there is no information left to
-    tell them apart after encoding.
+    Claude's own encoding stays ambiguous either way: ``.../my-project`` and
+    ``.../my/project`` produce the same directory, so both report a match,
+    exactly as Claude Code itself behaves.
 
     Args:
         dir_name: The Claude projects directory name (e.g. ``E--demo-hearthstone-bot``).
@@ -188,6 +156,8 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
 
                 if row_type == "user":
                     content = _extract_user_content(msg)
+                    if content and is_synthetic_user_content(content):
+                        continue
                     if content:
                         messages.append(
                             UnifiedMessage(

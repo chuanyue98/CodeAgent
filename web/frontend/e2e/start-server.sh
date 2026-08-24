@@ -36,7 +36,7 @@ mkdir -p "$HOME"
 
 # Windows: Python's Path.home() reads USERPROFILE (then HOMEDRIVE+HOMEPATH) and
 # never HOME, so the analytics collectors -- which resolve ~/.claude, ~/.codex,
-# ~/.gemini themselves -- kept reading the developer's real history despite the
+# their own data dirs themselves -- kept reading the developer's real history despite the
 # scratch HOME above, and the seeded-fixture assertions saw hundreds of real
 # sessions. cygpath exists only on Windows/Cygwin shells, so this is a no-op
 # everywhere else (CI included).
@@ -78,7 +78,7 @@ cp -r "$SCRIPT_DIR"/fixtures/prompts/* "$CA_PROMPTS_ROOT"/
 # every page's "no failed /api/* requests" check honest.
 echo '{}' > "$CA_CONFIG_PATH"
 
-# Fake claude/codex/gemini/opencode binaries ahead of anything real on PATH —
+# Fake claude/codex/opencode binaries ahead of anything real on PATH —
 # see fixtures/fake-engines/README.md for why real CLIs must never run here.
 export PATH="$SCRIPT_DIR/fixtures/fake-engines:$PATH"
 

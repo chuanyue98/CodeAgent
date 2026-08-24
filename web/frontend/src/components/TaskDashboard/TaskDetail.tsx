@@ -44,7 +44,7 @@ export default function TaskDetail({
   onWorkspaceChange: (workspace: string) => void;
 }) {
   const t = useT();
-  const [selectedEngine, setSelectedEngine] = useState(engines[0]?.id || 'gemini');
+  const [selectedEngine, setSelectedEngine] = useState(engines[0]?.id || 'opencode');
 
   const done = task.stages.filter(s => classifyStageStatus(s.status) === 'done').length;
   const pct = task.stages.length > 0 ? Math.round((done / task.stages.length) * 100) : 0;

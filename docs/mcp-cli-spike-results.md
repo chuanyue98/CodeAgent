@@ -31,22 +31,6 @@ resulting config file, `list`, then attempt `remove`.
   ever needed, though `mcp_service.py` reads `config.toml` via `tomlkit` for
   consistency with `engines/start_codex.py`'s existing load/save pattern.
 
-## gemini
-
-- `gemini mcp add --scope project <name> <cmdOrUrl> [args...]` writes to
-  `<project>/.gemini/settings.json`:
-  ```json
-  {"mcpServers": {"<name>": {"command": "<cmd>", "args": [...]}}}
-  ```
-- **`gemini mcp remove --scope project <name>` reproducibly fails** with
-  `Server "<name>" not found in project settings.` — confirmed on a fresh
-  directory, immediately after a successful `add`, twice. This is a CLI
-  defect/limitation in this environment, not a scope or trust-folder issue
-  (the "untrusted folder" warning shown by `mcp list` is unrelated — it only
-  affects whether servers are *enabled*, not whether `remove` can find them).
-  **v1 fallback**: `mcp_service.py` removes gemini servers by directly
-  editing `.gemini/settings.json`'s `mcpServers` key (pop the entry, atomic
-  write, preserve every other key) rather than shelling out.
 
 ## opencode
 
@@ -73,10 +57,9 @@ resulting config file, `list`, then attempt `remove`.
 |---|---|---|
 | claude | per-project (`.mcp.json`) | both via CLI |
 | codex | global (`~/.codex/config.toml`) | both via CLI |
-| gemini | per-project (`.gemini/settings.json`) | add via CLI, remove via direct file edit (CLI broken) |
 | opencode | global (`~/.config/opencode/opencode.json`) | add via CLI, remove via direct file edit (CLI lacks the subcommand) |
 
 All four engines' `list_servers()` reads go **directly against the native
 config file**, not CLI text output, for consistency and because `claude mcp
-list`/`gemini mcp list` output isn't cleanly machine-parseable (health
+list` output isn't cleanly machine-parseable (health
 status text, account-level entries mixed in, etc).
