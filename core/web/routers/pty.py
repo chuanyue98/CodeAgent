@@ -217,13 +217,14 @@ class _PosixSession:
         if pid is None:
             return
         with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
-            os.killpg(os.getpgid(pid), sig)
+            # POSIX-only, like the class holding it and the ioctl above.
+            os.killpg(os.getpgid(pid), sig)  # type: ignore[attr-defined]
 
     async def terminate(self) -> None:
         self._signal_process_group(signal.SIGTERM)
 
     async def kill(self) -> None:
-        self._signal_process_group(signal.SIGKILL)
+        self._signal_process_group(signal.SIGKILL)  # type: ignore[attr-defined]
 
     async def close(self) -> None:
         with contextlib.suppress(OSError):
