@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Clock, Plus, Trash2, Play, PauseCircle, PlayCircle, Pencil, X, Search } from 'lucide-react';
+import { Clock, Plus, Trash2, Play, PauseCircle, PlayCircle, Pencil, X, Search, Sparkles, CheckCircle2 } from 'lucide-react';
 import cronstrue from 'cronstrue';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
@@ -7,6 +7,8 @@ import usePolling from '../hooks/usePolling';
 import request from '../utils/request';
 import ConfirmDialog from './shared/ConfirmDialog';
 import ErrorState from './shared/ErrorState';
+import TaskTemplateGallery from './cron/TaskTemplateGallery';
+import type { TaskTemplate } from '../data/taskTemplates';
 import {
   fetchSchedules,
   createSchedule,
@@ -27,6 +29,16 @@ interface Engine {
 }
 
 const POLL_INTERVAL_MS = 10000;
+
+/** Task blueprint payload accepted by POST /api/tasks. */
+interface TaskBlueprint {
+  name: string;
+  title: string;
+  objective: string;
+  context: string;
+  instructions: string;
+  verification: string;
+}
 
 function formatTimestamp(ts: number | null): string {
   if (ts === null) return '—';
@@ -54,6 +66,9 @@ export default function CronPage() {
     nextRuns: [],
   });
   const [scheduleSearch, setScheduleSearch] = useState('');
+  const [templateBusyId, setTemplateBusyId] = useState<string | null>(null);
+  const [templateNotice, setTemplateNotice] = useState<string | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
 
   // Guards setState calls in async fetches below from firing after the
   // component has unmounted (e.g. a fast workspace/page switch while a
@@ -118,17 +133,23 @@ export default function CronPage() {
     loadSchedules();
   }, [loadSchedules]);
 
+  const loadTasks = useCallback(async (): Promise<Task[]> => {
+    const list = await request<Task[]>('/api/tasks');
+    if (mountedRef.current) {
+      setTasks(list);
+      if (list.length > 0) setTaskName(prev => prev || list[0].name);
+    }
+    return list;
+  }, []);
+
   useEffect(() => {
-    request<Task[]>('/api/tasks')
-      .then((list) => {
-        if (!mountedRef.current) return;
-        setTasks(list);
-        if (list.length > 0) setTaskName(prev => prev || list[0].name);
-      })
-      .catch(() => {
-        if (!mountedRef.current) return;
-        setError(t('cron.loadTasksFailed'));
-      });
+    // loadTasks only touches state after its await, but the rule cannot see
+    // past the call, so the same disable the other pages use applies here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadTasks().catch(() => {
+      if (!mountedRef.current) return;
+      setError(t('cron.loadTasksFailed'));
+    });
 
     request<Engine[]>('/api/engines')
       .then((list) => {
@@ -140,9 +161,62 @@ export default function CronPage() {
         if (!mountedRef.current) return;
         setError(t('cron.loadEnginesFailed'));
       });
-  }, [t]);
+  }, [loadTasks, t]);
 
   usePolling(loadSchedules, POLL_INTERVAL_MS);
+
+  /**
+   * Writes the template's blueprint to tasks/<id>.md and prefills the form
+   * with it. Deliberately stops there: creating the schedule too would put a
+   * recurring job on the user's machine from a single click on a card.
+   */
+  const handleUseTemplate = async (template: TaskTemplate) => {
+    setTemplateBusyId(template.id);
+    setTemplateNotice(null);
+    setError(null);
+
+    const select = (existed: boolean) => {
+      setTaskName(template.id);
+      setCronExpr(template.cronExpr);
+      setEditingScheduleId(null);
+      setTemplateNotice(
+        t(existed ? 'template.existed' : 'template.created', { name: t(template.titleKey) }),
+      );
+    };
+
+    try {
+      if (tasks.some(task => task.name === template.id)) {
+        select(true);
+        return;
+      }
+      const body: TaskBlueprint = {
+        name: template.id,
+        title: t(template.titleKey),
+        objective: t(template.objectiveKey),
+        context: t(template.contextKey),
+        instructions: t(template.instructionsKey),
+        verification: t(template.verificationKey),
+      };
+      try {
+        await request('/api/tasks', { method: 'POST', body: JSON.stringify(body) });
+        await loadTasks();
+        select(false);
+      } catch (createError) {
+        // The list this component holds can be stale -- another tab, the CLI,
+        // or an earlier click may have written the file already. Re-read
+        // before believing the failure, so a lost race reads as "it's already
+        // there" rather than an error.
+        const fresh = await loadTasks().catch(() => [] as Task[]);
+        if (fresh.some(task => task.name === template.id)) select(true);
+        else throw createError;
+      }
+    } catch (e) {
+      if (!mountedRef.current) return;
+      setError(e instanceof Error ? e.message : t('template.createFailed'));
+    } finally {
+      if (mountedRef.current) setTemplateBusyId(null);
+    }
+  };
 
   const handleSave = async () => {
     if (!taskName || !engine || !workspace || !cronExpr.trim()) return;
@@ -348,6 +422,17 @@ export default function CronPage() {
               ({filteredSchedules.length}{scheduleSearch ? ` / ${schedules.length}` : ''})
             </span>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+          {schedules.length > 0 && (
+            <button
+              onClick={() => setShowTemplates(value => !value)}
+              aria-expanded={showTemplates}
+              className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {showTemplates ? t('template.hide') : t('template.show')}
+            </button>
+          )}
           {schedules.length > 0 && (
             <div className="relative w-full max-w-56">
               <label htmlFor="schedule-search" className="sr-only">{t('cron.searchLabel')}</label>
@@ -362,6 +447,7 @@ export default function CronPage() {
               />
             </div>
           )}
+          </div>
         </div>
 
         {error && (
@@ -370,11 +456,31 @@ export default function CronPage() {
           </div>
         )}
 
+        {templateNotice && (
+          <div className="mb-3 flex items-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-700">
+            <CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1">{templateNotice}</span>
+            <button
+              onClick={() => setTemplateNotice(null)}
+              aria-label={t('common.close')}
+              className="shrink-0 text-emerald-500 transition-colors hover:text-emerald-700"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto space-y-2">
           {schedules.length === 0 && (
-            <p className="text-sm text-slate-500 text-center py-8">
-              {t('cron.empty')}
-            </p>
+            <div className="space-y-5 py-2">
+              <p className="text-sm text-slate-500">{t('cron.empty')}</p>
+              <TaskTemplateGallery busyId={templateBusyId} onUse={handleUseTemplate} />
+            </div>
+          )}
+          {schedules.length > 0 && showTemplates && (
+            <div className="mb-4 border-b border-slate-100 pb-4">
+              <TaskTemplateGallery busyId={templateBusyId} onUse={handleUseTemplate} />
+            </div>
           )}
           {schedules.length > 0 && filteredSchedules.length === 0 && (
             <p className="text-sm text-slate-400 text-center py-8">{t('cron.noSearchMatch')}</p>
