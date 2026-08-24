@@ -117,6 +117,37 @@ def _find_opencode_db() -> Path | None:
     return None
 
 
+def _last_used_model(con: sqlite3.Connection) -> tuple[str, str] | None:
+    """The (modelID, providerID) OpenCode itself most recently ran with.
+
+    Taken from OpenCode's own rows rather than from the source engine: the
+    converted session's model name ("claude-opus-4", "gpt-5-codex", ...)
+    names no OpenCode provider, and OpenCode resolves the model to continue
+    with from the transcript. A value it wrote itself is one it can serve.
+
+    Returns None when this install has no session carrying a model yet, in
+    which case the caller omits the fields rather than inventing a provider.
+    """
+    try:
+        rows = con.execute(
+            "SELECT model FROM session WHERE model IS NOT NULL "
+            "ORDER BY time_created DESC LIMIT 20"
+        ).fetchall()
+    except sqlite3.Error:
+        return None
+
+    for (raw,) in rows:
+        try:
+            model = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        model_id = model.get("id")
+        provider_id = model.get("providerID")
+        if model_id and provider_id:
+            return str(model_id), str(provider_id)
+    return None
+
+
 def write_opencode_session(session: UnifiedSession) -> str:
     """Writes a UnifiedSession into the OpenCode SQLite database.
 
@@ -149,6 +180,10 @@ def write_opencode_session(session: UnifiedSession) -> str:
 
     try:
         project_id = _find_or_create_project(con, worktree, now_ms)
+        # Resolved once for the whole transcript; every assistant turn we
+        # write claims the same model, which is what OpenCode does within a
+        # session that never switched models.
+        last_model = _last_used_model(con)
 
         # Insert session row
         con.execute(
@@ -210,6 +245,17 @@ def write_opencode_session(session: UnifiedSession) -> str:
                 "time": {"created": msg_time, "completed": msg_time + 500},
                 "finish": "stop",
             }
+
+            # OpenCode resolves which model continues the conversation from
+            # the transcript's last assistant turn. Without these two fields
+            # that lookup yields undefined and the first prompt after a
+            # convert dies inside SessionPrompt.run with
+            # "TypeError: undefined is not an object (evaluating
+            # 'X.model.modelID')" -- the transcript loads and renders fine,
+            # so the session looks converted right up until you type.
+            # Same failure class as the tokens.cache.read crash above.
+            if msg.role == "assistant" and last_model is not None:
+                msg_data["modelID"], msg_data["providerID"] = last_model
 
             con.execute(
                 """INSERT INTO message (id, session_id, time_created, time_updated, data)

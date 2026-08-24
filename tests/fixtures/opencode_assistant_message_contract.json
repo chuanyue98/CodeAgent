@@ -1,0 +1,28 @@
+{
+  "_what": "The shape OpenCode itself writes for an assistant message, so the converter can be checked against OpenCode instead of against our own assumptions.",
+  "_why": "tests/test_session_history.py builds its OpenCode database with a hand-written CREATE TABLE that mirrors what our writer uses. That can only ever confirm the writer agrees with itself: when the transcript loaded fine but the first prompt died on a field OpenCode needed and we never wrote (modelID/providerID), every test stayed green. Keys derived from real rows fail instead.",
+  "_derived_from": {
+    "samples": 807,
+    "opencode_versions": ["1.18.16", "1.18.18", "1.18.19", "1.18.20", "1.18.21"],
+    "note": "'required' are the keys present in every one of those messages; 'situational' appeared in some (error on aborted turns, finish on completed ones, summary/variant occasionally)."
+  },
+  "_refresh": "Re-derive against a real ~/.local/share/opencode/opencode.db after an OpenCode upgrade: select assistant messages from sessions whose version is not '1.0.0' (ours), intersect their key sets for 'required', union-minus-intersection for 'situational'. A stale fixture is visible and fixable; an assumption baked into a test is neither.",
+  "required_keys": [
+    "agent",
+    "cost",
+    "mode",
+    "modelID",
+    "parentID",
+    "path",
+    "providerID",
+    "role",
+    "time",
+    "tokens"
+  ],
+  "situational_keys": ["error", "finish", "summary", "variant"],
+  "nested_required_keys": {
+    "tokens": ["cache", "input", "output", "reasoning"],
+    "tokens.cache": ["read", "write"],
+    "time": ["completed", "created"]
+  }
+}
