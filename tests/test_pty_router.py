@@ -4,8 +4,10 @@ import asyncio
 import concurrent.futures
 import json
 import os
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -175,10 +177,60 @@ def test_pty_websocket_terminates_process_on_abrupt_disconnect(tmp_path, monkeyp
         ) as ws:
             ws.receive_json()
 
-    result = subprocess.run(
-        ["pgrep", "-f", "fake_pty_engine.py"], capture_output=True, text=True
-    )
+    # Poll rather than asserting instantly: teardown signals the process and
+    # the kernel reaps it a moment later, so a bare check here races the exit.
+    for _ in range(50):
+        result = subprocess.run(
+            ["pgrep", "-f", "fake_pty_engine.py"], capture_output=True, text=True
+        )
+        if not result.stdout.strip():
+            break
+        time.sleep(0.1)
     assert result.stdout.strip() == ""
+
+
+def test_pty_websocket_kills_the_whole_process_group(tmp_path, monkeypatch):
+    """Closing the terminal must take the engine CLI down with the launcher.
+
+    The launcher execs the provider CLI as its own child, so signalling only
+    the tracked pid left that grandchild alive holding the workspace's
+    ``.codeagent-session.lock`` — and every later launch of that engine in the
+    workspace then blocked forever in ``flock(LOCK_EX)``.
+    """
+    if sys.platform == "win32":
+        pytest.skip("PTY sessions are POSIX-only")
+
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/api/pty/ws",
+            params={"engine": "claude", "cwd": app.state.workspace},
+        ) as ws:
+            ws.receive_json()  # READY
+            ws.send_json({"type": "input", "data": "spawn-grandchild\n"})
+            grandchild_pid = None
+            for _ in range(20):
+                message = ws.receive_json()
+                if message.get("type") != "output":
+                    continue
+                for token in message["data"].split():
+                    if token.startswith("GRANDCHILD:"):
+                        grandchild_pid = int(token.split(":", 1)[1])
+                        break
+                if grandchild_pid is not None:
+                    break
+            assert grandchild_pid is not None, "fixture never reported a grandchild"
+            os.kill(grandchild_pid, 0)  # alive while the session is open
+
+    for _ in range(50):
+        try:
+            os.kill(grandchild_pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        os.kill(grandchild_pid, signal.SIGKILL)
+        pytest.fail("grandchild outlived the PTY session")
 
 
 def test_pty_websocket_closes_cleanly_when_spawn_fails(tmp_path, monkeypatch):
