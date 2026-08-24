@@ -95,7 +95,10 @@ def write_codebuddy_session(session: Any) -> str:
         ts = _to_codebuddy_ts(getattr(msg, "timestamp", None))
 
         if msg.role == "user":
-            row = {
+            # Annotated because the assistant branch below reassigns `row`
+            # with a different value shape; without it the type is inferred
+            # from this first literal alone and the two disagree.
+            row: dict[str, Any] = {
                 "type": "message",
                 "role": "user",
                 "content": [{"type": "input_text", "text": msg.content}],

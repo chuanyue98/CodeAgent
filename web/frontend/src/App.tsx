@@ -22,12 +22,9 @@ import {
 
 const HomePage = lazy(() => import('./pages/HomePage'));
 const SystemPage = lazy(() => import('./pages/SystemPage'));
-const SkillGallery = lazy(() => import('./components/SkillGallery'));
 const ConfigHub = lazy(() => import('./components/ConfigHub'));
 const TaskDashboard = lazy(() => import('./components/TaskDashboard'));
-const HooksGallery = lazy(() => import('./components/HooksGallery'));
-const PluginGallery = lazy(() => import('./components/PluginGallery'));
-const PromptsGallery = lazy(() => import('./components/PromptsGallery'));
+const ResourceHub = lazy(() => import('./components/ResourceHub'));
 const Analytics = lazy(() => import('./components/Analytics'));
 const LaunchPad = lazy(() => import('./components/LaunchPad'));
 const LogViewer = lazy(() => import('./components/LogViewer'));
@@ -187,10 +184,7 @@ function App() {
               >
                 <Route index element={<Navigate to="workspace" replace />} />
                 <Route path="workspace" element={page(<ConfigHub />)} />
-                <Route path="skills" element={page(<SkillGallery />)} />
-                <Route path="prompts" element={page(<PromptsGallery />)} />
-                <Route path="hooks" element={page(<HooksGallery />)} />
-                <Route path="plugins" element={page(<PluginGallery />)} />
+                <Route path="resources" element={page(<ResourceHub />)} />
                 <Route path="mcp" element={page(<McpPage />)} />
                 <Route path="system" element={page(<SystemPage />)} />
               </Route>
@@ -219,18 +213,22 @@ function App() {
               <Route path="/analytics" element={<KeepQuery to="/activity/usage" />} />
               <Route path="/sessions" element={<KeepQuery to="/activity/sessions" />} />
               <Route path="/audit" element={<KeepQuery to="/activity/sessions" />} />
-              <Route path="/skills" element={<Navigate to="/settings/skills" replace />} />
-              <Route path="/prompts" element={<Navigate to="/settings/prompts" replace />} />
-              <Route path="/hooks" element={<Navigate to="/settings/hooks" replace />} />
-              <Route path="/plugins" element={<Navigate to="/settings/plugins" replace />} />
+              <Route path="/skills" element={<Navigate to="/settings/resources?kind=skills" replace />} />
+              <Route path="/prompts" element={<Navigate to="/settings/resources?kind=prompts" replace />} />
+              <Route path="/hooks" element={<Navigate to="/settings/resources?kind=hooks" replace />} />
+              <Route path="/plugins" element={<Navigate to="/settings/resources?kind=plugins" replace />} />
+              <Route path="/settings/skills" element={<Navigate to="/settings/resources?kind=skills" replace />} />
+              <Route path="/settings/prompts" element={<Navigate to="/settings/resources?kind=prompts" replace />} />
+              <Route path="/settings/hooks" element={<Navigate to="/settings/resources?kind=hooks" replace />} />
+              <Route path="/settings/plugins" element={<Navigate to="/settings/resources?kind=plugins" replace />} />
               <Route path="/mcp" element={<Navigate to="/settings/mcp" replace />} />
               {/* Settings' capability pages were flattened from
                   /settings/capabilities/<kind> to /settings/<kind>. */}
-              <Route path="/settings/capabilities" element={<Navigate to="/settings/skills" replace />} />
-              <Route path="/settings/capabilities/skills" element={<KeepQuery to="/settings/skills" />} />
-              <Route path="/settings/capabilities/prompts" element={<KeepQuery to="/settings/prompts" />} />
-              <Route path="/settings/capabilities/hooks" element={<KeepQuery to="/settings/hooks" />} />
-              <Route path="/settings/capabilities/plugins" element={<KeepQuery to="/settings/plugins" />} />
+              <Route path="/settings/capabilities" element={<Navigate to="/settings/resources" replace />} />
+              <Route path="/settings/capabilities/skills" element={<Navigate to="/settings/resources?kind=skills" replace />} />
+              <Route path="/settings/capabilities/prompts" element={<Navigate to="/settings/resources?kind=prompts" replace />} />
+              <Route path="/settings/capabilities/hooks" element={<Navigate to="/settings/resources?kind=hooks" replace />} />
+              <Route path="/settings/capabilities/plugins" element={<Navigate to="/settings/resources?kind=plugins" replace />} />
               <Route path="/settings/capabilities/mcp" element={<KeepQuery to="/settings/mcp" />} />
               <Route path="/config" element={<Navigate to="/settings/workspace" replace />} />
               <Route path="/system" element={<Navigate to="/settings/system" replace />} />

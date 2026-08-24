@@ -52,16 +52,14 @@ export const ACTIVITY_TABS: SectionTab[] = [
 // single row and shouldn't leak into a sibling tab's filters.
 export const ACTIVITY_FILTER_PARAMS = ['q', 'from', 'to', 'engines', 'types', 'project'];
 
-// One flat row of Settings tabs. Capabilities used to be a nested second
-// SectionLayout (two stacked tab rows) whose only job was grouping the five
-// capability pages; folding them into this row costs no width and removes the
-// only three-level navigation in the app.
+// One flat row of Settings tabs. Skills/Prompts/Hooks/Plugins used to be four
+// of them; they are one Resources page now, because they are one question --
+// "what is this group running?" -- that four tabs could only answer four
+// times. MCP stays separate: it is scoped per engine, not per group, so it
+// does not belong under the same group selector.
 export const SETTINGS_TABS: SectionTab[] = [
   { to: '/settings/workspace', labelKey: 'tab.settings.workspace' },
-  { to: '/settings/skills', labelKey: 'tab.settings.skills' },
-  { to: '/settings/prompts', labelKey: 'tab.settings.prompts' },
-  { to: '/settings/hooks', labelKey: 'tab.settings.hooks' },
-  { to: '/settings/plugins', labelKey: 'tab.settings.plugins' },
+  { to: '/settings/resources', labelKey: 'tab.settings.resources' },
   { to: '/settings/mcp', labelKey: 'tab.settings.mcp' },
   { to: '/settings/system', labelKey: 'tab.settings.system' },
 ];
@@ -78,10 +76,7 @@ export const PAGE_LABEL_KEYS: Record<string, TranslationKey> = {
   '/activity/sessions': 'tab.activity.sessions',
   '/activity/usage': 'tab.activity.usage',
   '/settings/workspace': 'tab.settings.workspace',
-  '/settings/skills': 'tab.settings.skills',
-  '/settings/prompts': 'tab.settings.prompts',
-  '/settings/hooks': 'tab.settings.hooks',
-  '/settings/plugins': 'tab.settings.plugins',
+  '/settings/resources': 'tab.settings.resources',
   '/settings/mcp': 'tab.settings.mcp',
   '/settings/system': 'tab.settings.system',
 };

@@ -493,15 +493,17 @@ const ConfigHub: React.FC = () => {
                     })}</span>
               </div>
               <div className="flex items-center gap-1">
-                {/* Group membership is edited in the capability galleries, one
-                    kind at a time — link there instead of leaving "where do I
-                    actually tick the boxes?" unanswered. Hidden while dirty so
-                    navigating away can't silently drop unsaved edits. */}
+                {/* Group membership is edited on the Resources page — link
+                    there instead of leaving "where do I actually tick the
+                    boxes?" unanswered. It lands on all four kinds at once now
+                    rather than on skills with three tabs still to visit.
+                    Hidden while dirty so navigating away can't silently drop
+                    unsaved edits. */}
                 {!dirty && (
                   <button
                     onClick={() => {
                       setCurrentGroup(name);
-                      navigate('/settings/skills');
+                      navigate('/settings/resources');
                     }}
                     className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
                   >

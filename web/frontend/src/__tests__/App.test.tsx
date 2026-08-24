@@ -23,7 +23,7 @@ function renderWithRouter(initialPath = '/skills') {
 describe('App Layout and Navigation', () => {
   test('renders the five workflow navigation links', async () => {
     renderWithRouter();
-    await screen.findByRole('heading', { name: /Skills/i });
+    await screen.findByRole('heading', { name: /Resources/i });
     expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Agent' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Automations' })).toBeInTheDocument();
@@ -64,6 +64,27 @@ describe('Activity tabs are Sessions / Usage', () => {
   ])('the old %s location redirects to %s', async (path, label) => {
     renderWithRouter(path);
     expect(await screen.findByRole('heading', { name: label })).toBeInTheDocument();
+  });
+
+  // Skills/Prompts/Hooks/Plugins are one page now, so every address that
+  // named one of them has to still resolve. That the destination opens on the
+  // *right kind* is asserted in ResourceHub's own test, where the resource
+  // data can be mocked; here the question is only whether the route survives.
+  test.each([
+    '/skills',
+    '/prompts',
+    '/hooks',
+    '/plugins',
+    '/settings/skills',
+    '/settings/plugins',
+    '/settings/capabilities',
+    '/settings/capabilities/hooks',
+  ])('the old %s location still resolves to Resources', async path => {
+    renderWithRouter(path);
+
+    await screen.findByRole('heading', { name: /Resources/i });
+    const tabs = screen.getByRole('navigation', { name: 'Settings sections' });
+    expect(within(tabs).getByRole('link', { name: 'Resources' })).toBeInTheDocument();
   });
 
   test('a redirected deep link keeps its query string', async () => {

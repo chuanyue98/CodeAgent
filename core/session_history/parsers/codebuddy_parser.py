@@ -169,9 +169,7 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
                                 )
                             )
                     elif role == "assistant" and row.get("status") == "completed":
-                        text = _extract_text_content(
-                            row.get("content"), "output_text"
-                        )
+                        text = _extract_text_content(row.get("content"), "output_text")
                         msg_model = (row.get("providerData") or {}).get("model", "")
                         if msg_model and not model:
                             model = msg_model
@@ -213,8 +211,11 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
 
                 if row_type == "function_call_result":
                     call_id = row.get("callId", "")
-                    tc = tool_calls_by_call_id.get(call_id)
-                    if tc is not None:
+                    # A separate name: `tc` above is always a ToolCallSummary,
+                    # so rebinding it to an optional lookup made the two uses
+                    # disagree on the type.
+                    pending = tool_calls_by_call_id.get(call_id)
+                    if pending is not None:
                         out = row.get("output")
                         if isinstance(out, dict):
                             result_text = out.get("text", "")
@@ -222,7 +223,7 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
                             result_text = str(out) if out is not None else ""
                         if len(result_text) > 200:
                             result_text = result_text[:200] + "..."
-                        tc.result_preview = result_text
+                        pending.result_preview = result_text
                     if ts:
                         ended_at = ts
                     continue
