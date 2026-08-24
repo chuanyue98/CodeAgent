@@ -7,7 +7,7 @@ import {
   type SessionDetail,
 } from '../api/audit';
 import { type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
-import { ALL_ENGINES, engineLabel } from '../utils/engines';
+import { ALL_ENGINES, READ_ONLY_ENGINES, engineLabel } from '../utils/engines';
 import ConfirmDialog from './shared/ConfirmDialog';
 import { useT } from '../i18n/context';
 import MarkdownMessage from './MarkdownMessage';
@@ -243,7 +243,7 @@ export default function SessionDetailPanel({
           {t('sessionDetail.openInAnother')}
         </p>
         <div className="flex flex-wrap gap-2">
-          {ALL_ENGINES.filter(target => target !== engine).map(target => (
+          {ALL_ENGINES.filter(target => target !== engine && !READ_ONLY_ENGINES.has(target)).map(target => (
             <button
               key={target}
               disabled={convertState.status === 'loading'}

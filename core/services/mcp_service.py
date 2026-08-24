@@ -295,6 +295,18 @@ def _list_opencode() -> list[dict]:
     ]
 
 
+def _list_codebuddy(project: Path) -> list[dict]:
+    # Project scope lives in ``<project>/.mcp.json`` under ``mcpServers``
+    # (verified live: ``codebuddy mcp add <name> -s project -- ...`` writes
+    # entries shaped ``{"command": str, "args": [...], "type": "stdio"}``).
+    # User scope (``~/.codebuddy/.mcp.json``) is intentionally not merged,
+    # mirroring how the other engines surface project scope only.
+    servers = _read_json(project / ".mcp.json").get("mcpServers", {})
+    return [
+        _normalize_entry(name, "project", cfg) for name, cfg in _server_entries(servers)
+    ]
+
+
 def list_servers(engine: str, project_path: str) -> list[dict]:
     """Lists configured MCP servers for one engine, read from its native config."""
     _validate_engine(engine)
@@ -305,6 +317,8 @@ def list_servers(engine: str, project_path: str) -> list[dict]:
         return _list_codex()
     if engine == "gemini":
         return _list_gemini(project)
+    if engine == "codebuddy":
+        return _list_codebuddy(project)
     return _list_opencode()
 
 
@@ -389,6 +403,23 @@ def _build_add_command(
             cmd += command or []
         return cmd
 
+    if engine == "codebuddy":
+        # ``codebuddy mcp add [options] <name> <commandOrUrl> [args...]`` with
+        # ``-s/--scope`` (local|project|user), ``-t/--transport``
+        # (stdio|sse|http) and the same variadic ``-e/--env`` ordering hazard
+        # as claude/gemini — name before the -e flags, ``--`` before the
+        # command (verified live).
+        cmd = ["codebuddy", "mcp", "add", "-s", "project"]
+        if transport:
+            cmd += ["-t", transport]
+        cmd.append(name)
+        for pair in env_pairs:
+            cmd += ["-e", pair]
+        cmd.append(url if url else "--")
+        if command:
+            cmd += command
+        return cmd
+
     # opencode
     cmd = ["opencode", "mcp", "add", name]
     for pair in env_pairs:
@@ -432,6 +463,10 @@ def remove_server(engine: str, project_path: str, name: str) -> None:
         _run_cli(["claude", "mcp", "remove", name], cwd=project_path)
     elif engine == "codex":
         _run_cli(["codex", "mcp", "remove", name], cwd=project_path)
+    elif engine == "codebuddy":
+        _run_cli(
+            ["codebuddy", "mcp", "remove", name, "-s", "project"], cwd=project_path
+        )
     elif engine == "gemini":
         _remove_key(_gemini_settings_path(Path(project_path)), "mcpServers", name)
     else:

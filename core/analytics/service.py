@@ -6,6 +6,7 @@ from typing import Any
 
 from core.analytics.aggregator import _entry_cost, aggregate
 from core.analytics.collectors.claude_collector import scan_claude_usage
+from core.analytics.collectors.codebuddy_collector import scan_codebuddy_usage
 from core.analytics.collectors.codex_collector import scan_codex_usage
 from core.analytics.collectors.gemini_collector import scan_gemini_usage
 from core.analytics.collectors.opencode_collector import scan_opencode_usage
@@ -28,6 +29,17 @@ def _collect_all() -> list[RawUsageEntry]:
     """
     # 1. Load existing history
     history = load_history()
+
+    # Purge entries from removed data sources. trae/workbuddy collectors were
+    # dropped, but their snapshots persist in the history file and would keep
+    # surfacing on the analytics pages unless actively removed.
+    kept = [
+        entry for entry in history if entry.target not in {"workbuddy", "trae"}
+    ]
+    if len(kept) != len(history):
+        history = kept
+        save_history(history)
+
     last_ts = get_last_timestamps()
 
     # 2. Collect only new entries
@@ -35,6 +47,9 @@ def _collect_all() -> list[RawUsageEntry]:
     new_entries.extend(scan_claude_usage(since_timestamp=last_ts.get("claude", "")))
     new_entries.extend(scan_gemini_usage(since_timestamp=last_ts.get("gemini", "")))
     new_entries.extend(scan_opencode_usage(since_timestamp=last_ts.get("opencode", "")))
+    new_entries.extend(
+        scan_codebuddy_usage(since_timestamp=last_ts.get("codebuddy", ""))
+    )
 
     # Codex exposes a mutable session-level token total keyed by thread ID. Its
     # creation timestamp does not change as usage grows, so timestamp-only

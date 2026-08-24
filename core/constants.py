@@ -8,10 +8,10 @@ update every copy, with nothing catching a missed one.
 
 from __future__ import annotations
 
-# The four engine CLIs CodeAgent knows how to launch/manage. Used for
+# The engine CLIs CodeAgent knows how to launch/manage. Used for
 # request validation (reject an unknown `engine` field) and for iterating
 # "every engine" (e.g. building the /api/engines list).
-ENGINES = frozenset({"claude", "gemini", "opencode", "codex"})
+ENGINES = frozenset({"claude", "gemini", "opencode", "codex", "codebuddy"})
 
 # Directory under the system temp dir where engines drop the assembled
 # prompt for a run. Shared so `ca doctor` probes the location engines

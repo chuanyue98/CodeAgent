@@ -102,6 +102,7 @@ def cli(ctx, proxy, yolo):  # type: ignore[no-untyped-def]
         "claude": str(root / "engines" / "start_claude_code.py"),
         "opencode": str(root / "engines" / "start_opencode.py"),
         "codex": str(root / "engines" / "start_codex.py"),
+        "codebuddy": str(root / "engines" / "start_codebuddy.py"),
     }
     child_env = None
     if proxy:

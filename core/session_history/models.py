@@ -21,12 +21,20 @@ from enum import Enum
 
 
 class EngineType(str, Enum):
-    """Supported engine types."""
+    """Supported engine types.
+
+    claude/codex/gemini/opencode/codebuddy are launchable CLI engines (they
+    are part of ``core.constants.ENGINES``, which drives launching, conversion
+    targets and engine validation). codebuddy is driven through the ACP
+    (Agent Client Protocol) adapter in
+    ``core/services/agent_adapters/codebuddy.py``.
+    """
 
     CLAUDE = "claude"
     CODEX = "codex"
     GEMINI = "gemini"
     OPENCODE = "opencode"
+    CODEBUDDY = "codebuddy"
 
 
 @dataclass

@@ -8,7 +8,16 @@ export const ENGINE_LABELS: Record<string, string> = {
   gemini: 'Gemini',
   opencode: 'OpenCode',
   codex: 'Codex',
+  codebuddy: 'CodeBuddy',
 };
+
+/**
+ * Engines that only contribute read-only session history (no CLI adapter to
+ * spawn/convert into). They show up as filter options but must NOT appear as
+ * "convert this session into <engine>" targets. CodeBuddy is now a full
+ * engine, so it is intentionally absent from this set.
+ */
+export const READ_ONLY_ENGINES: ReadonlySet<string> = new Set([]);
 
 export const ALL_ENGINES = Object.keys(ENGINE_LABELS);
 
