@@ -8,6 +8,7 @@ Each line has ``{timestamp, type, payload}`` matching Codex's native format.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +28,36 @@ def _now_iso() -> str:
 def _now_filename() -> str:
     """Returns current UTC time formatted for Codex filename (dashes for colons)."""
     return datetime.now(tz=UTC).strftime("%Y-%m-%dT%H-%M-%S")
+
+
+def _configured_model_provider(home: Path | None = None) -> str:
+    """Reads ``model_provider`` from ``~/.codex/config.toml``.
+
+    A converted session that names a provider the user has not configured
+    records the wrong origin for the conversation; ``openai`` is only correct
+    for the default setup.
+
+    Args:
+        home: Optional home directory override.
+
+    Returns:
+        str: The configured provider name, or ``"openai"`` when unset.
+    """
+    config_path = (home or Path.home()) / ".codex" / "config.toml"
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+    except OSError:
+        return "openai"
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("["):
+            # Table headers scope the keys below them; only the top-level
+            # `model_provider` counts.
+            break
+        match = re.match(r'model_provider\s*=\s*["\'](?P<name>[^"\']+)["\']', stripped)
+        if match:
+            return match.group("name")
+    return "openai"
 
 
 def write_codex_session(session: UnifiedSession) -> str:
@@ -72,7 +103,7 @@ def write_codex_session(session: UnifiedSession) -> str:
             "cli_version": "0.1.0",
             "source": "cli",
             "thread_source": "user",
-            "model_provider": "openai",
+            "model_provider": _configured_model_provider(),
         },
     }
     lines.append(json.dumps(meta, ensure_ascii=False))

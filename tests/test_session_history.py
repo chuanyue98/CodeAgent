@@ -916,3 +916,33 @@ def test_claude_parser_drops_cli_synthetic_user_rows(tmp_path):
     assert session is not None
     assert [m.content for m in session.messages] == ["我们主分支是什么"]
     assert session.generate_title() == "我们主分支是什么"
+
+
+def test_codex_writer_reads_configured_model_provider(tmp_path):
+    """The converted session records the provider the user actually runs."""
+    from core.session_history.writers.codex_writer import _configured_model_provider
+
+    codex_dir = tmp_path / ".codex"
+    codex_dir.mkdir()
+    (codex_dir / "config.toml").write_text(
+        'model = "gpt-5.6-sol"\n'
+        'model_provider = "river98"\n'
+        "\n"
+        "[model_providers.river98]\n"
+        'model_provider = "ignored-inside-a-table"\n',
+        encoding="utf-8",
+    )
+
+    assert _configured_model_provider(tmp_path) == "river98"
+
+
+def test_codex_writer_model_provider_defaults_to_openai(tmp_path):
+    """No config, or no key in it, falls back to the stock provider."""
+    from core.session_history.writers.codex_writer import _configured_model_provider
+
+    assert _configured_model_provider(tmp_path) == "openai"
+
+    codex_dir = tmp_path / ".codex"
+    codex_dir.mkdir()
+    (codex_dir / "config.toml").write_text('model = "gpt-5.6-sol"\n', encoding="utf-8")
+    assert _configured_model_provider(tmp_path) == "openai"
