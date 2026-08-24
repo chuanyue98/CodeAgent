@@ -28,6 +28,14 @@ Token         everything else, incl.      :func:`verify_websocket` (WS) --
               non-browser clients         both apply Origin *and* token
 ============  ==========================  =====================================
 
+The first two always run. The third follows the bind address (see
+:func:`auth_enabled`): on loopback the Host and Origin checks are what
+actually stop a hostile page, and the token's remaining band -- other
+processes on this machine, which can read the token file anyway -- did not
+justify carrying a secret into the browser on every launch. Bind anywhere
+else and the token becomes mandatory, because Origin stops being a
+boundary the moment non-browser clients can reach the port.
+
 Static assets and ``/api/health`` stay unauthenticated on purpose: the
 browser must be able to load ``index.html`` *before* it has a token (it
 reads the token out of the URL the launcher opens), and ``/api/health`` is
@@ -39,9 +47,14 @@ Environment variables
     Use this exact token instead of the generated one. Intended for test
     harnesses and for deployments that inject the secret themselves.
 ``CA_UI_AUTH``
-    Set to ``0``/``off``/``false`` to disable *token* checking only. The
-    Host and Origin checks always run. Only appropriate when something in
-    front of this server (a reverse proxy) is doing authentication.
+    Forces *token* checking on (``1``) or off (``0``) instead of letting it
+    follow the bind address -- see :func:`auth_enabled`. Turning it off has
+    no effect on a non-loopback bind, where the token is the only remaining
+    boundary. The Host and Origin checks always run either way.
+
+``CA_UI_HOST``
+    The bind address, read here (not just by the launcher) because the
+    token requirement follows it.
 ``CA_UI_ALLOWED_HOSTS``
     Comma-separated extra Host header values to accept, for deployments
     reached under a real hostname. ``*`` accepts any Host, which disables
@@ -141,13 +154,44 @@ def reset_token_cache() -> None:
     _token_cache = None
 
 
+def bind_host() -> str:
+    """The address the server was told to bind, defaulting to loopback."""
+    return os.environ.get("CA_UI_HOST", "").strip() or "127.0.0.1"
+
+
 def auth_enabled() -> bool:
-    return os.environ.get("CA_UI_AUTH", "").strip().lower() not in {
-        "0",
-        "off",
-        "false",
-        "no",
-    }
+    """Whether the token check runs.
+
+    The requirement follows the bind address, because that is what decides
+    who can reach the port at all:
+
+    * **Loopback (the default).** Off. The Host and Origin checks already
+      reject the browser attacks -- a drive-by page always sends an Origin
+      the check refuses, and a rebound name always sends a Host it refuses.
+      What the token adds on top is stopping *other processes on this
+      machine*, and anything running as this user can simply read the token
+      file, so on a single-user desktop that band is narrow. Paying for it
+      with a secret that has to be carried into the browser on every launch
+      is a bad trade: the token is delivered only by the URL ``ca ui``
+      opens, so any other way of starting the server produced a UI that
+      401'd with no way forward.
+
+    * **Anything else.** On, and ``CA_UI_AUTH=0`` cannot turn it off. Once
+      the port answers the network, Origin is no longer a boundary --
+      non-browser clients simply omit the header, and the check has to let
+      them through for the CLI and the health probe to work.
+
+    An explicitly pinned ``CA_UI_TOKEN`` also turns it on: supplying a
+    token is how a harness says it intends to authenticate.
+    """
+    override = os.environ.get("CA_UI_AUTH", "").strip().lower()
+    exposed = not is_loopback_hostname(bind_host())
+
+    if override in {"0", "off", "false", "no"}:
+        return exposed
+    if override in {"1", "on", "true", "yes"}:
+        return True
+    return exposed or bool(os.environ.get("CA_UI_TOKEN", "").strip())
 
 
 def _hostname_of(value: str) -> str:
