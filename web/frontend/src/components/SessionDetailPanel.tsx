@@ -10,6 +10,7 @@ import { type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
 import { ALL_ENGINES, engineLabel } from '../utils/engines';
 import ConfirmDialog from './shared/ConfirmDialog';
 import { useT } from '../i18n/context';
+import MarkdownMessage from './MarkdownMessage';
 
 type ConvertState =
   | { status: 'idle' }
@@ -146,7 +147,11 @@ export default function SessionDetailPanel({
         </div>
       </div>
 
-      <div className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto pt-3">
+      {/* overflow-x-hidden is explicit: setting only overflow-y makes the
+          other axis compute to `auto`, so the whole panel picked up a
+          horizontal scrollbar whenever one line of a transcript was long.
+          Code blocks keep their own — wrapping code would mangle it. */}
+      <div className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden pt-3">
         {usage && (
           <section>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
@@ -209,7 +214,13 @@ export default function SessionDetailPanel({
                       {msg.timestamp ? new Date(msg.timestamp).toLocaleString() : ''}
                     </span>
                   </div>
-                  <p className="whitespace-pre-wrap break-words text-xs text-slate-600">{msg.content}</p>
+                  {/* Same rendering the Agent page gives these messages: they
+                      are the transcript of a session an engine wrote in
+                      markdown, so showing them raw meant a wall of ** and
+                      backticks in the one place you go to read them back. */}
+                  <div className="prose prose-sm prose-slate max-w-none break-words">
+                    <MarkdownMessage text={msg.content} />
+                  </div>
                   {msg.tool_calls?.length > 0 && (
                     <div className="mt-2 space-y-1">
                       {msg.tool_calls.map((tc, j) => (

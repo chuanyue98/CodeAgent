@@ -353,7 +353,11 @@ export default function SessionsPage() {
                       {session.target}
                     </span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 shrink-0">
+                  {/* Allowed to shrink: it already wraps its chips, but
+                      `shrink-0` kept them on one line and gave the whole row a
+                      hard minimum width, so a narrower list scrolled sideways
+                      instead of wrapping. */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
                     <span className="text-xs text-slate-500 flex items-center gap-1">
                       <FileText className="w-3 h-3" />{fmtTokens(totalTokens)}
                     </span>
@@ -381,8 +385,12 @@ export default function SessionsPage() {
       {/* One session, one place: usage, the actual conversation, and the
           actions that operate on it. Reading a transcript used to mean
           hopping to the Events tab and re-finding the session there. */}
+      {/* Wide enough to read a transcript in: at 26rem the markdown body was
+          narrower than the code blocks inside it, so every fenced block got its
+          own horizontal scrollbar. Steps up on larger screens, where the list
+          has width to spare. */}
       {openSession && (
-        <div className="w-full xl:w-[26rem] shrink-0 glass-card p-5 xl:h-full xl:min-h-0">
+        <div className="w-full xl:w-[38rem] xl:max-w-[45%] 2xl:w-[46rem] shrink-0 glass-card p-5 xl:h-full xl:min-h-0">
           <SessionDetailPanel
             key={selectedKey}
             engine={openSession.target}
