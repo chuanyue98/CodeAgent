@@ -154,7 +154,7 @@ function App() {
                 path="/agent"
                 element={<SectionLayout labelKey="nav.agent" descriptionKey="section.agent.description" tabs={AGENT_TABS} />}
               >
-                <Route index element={<Navigate to="web" replace />} />
+                <Route index element={<Navigate to="terminal" replace />} />
                 <Route path="web" element={page(<AgentWorkspace />)} />
                 <Route path="terminal" element={page(<LaunchPad />)} />
                 <Route path="instances" element={page(<InstancesPage />)} />

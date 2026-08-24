@@ -19,8 +19,17 @@ test('sidebar nav links navigate and mark the active route', async ({ page }) =>
   const primaryNav = page.getByRole('navigation', { name: 'Primary navigation' });
   const agentLink = primaryNav.getByRole('link', { name: 'Agent', exact: true });
   await agentLink.click();
-  await waitForH2(page, 'Web Agent');
+  // Agent opens on the terminal: it carries every feature the engine CLI has,
+  // where the Web Agent only covers what its adapters implement.
+  await waitForH2(page, 'Local Terminal');
+  await expect(page).toHaveURL(/\/agent\/terminal$/);
   await expect(agentLink).toHaveClass(/bg-primary\/10/);
+});
+
+test('/agent lands on the terminal', async ({ page }) => {
+  await page.goto('/agent');
+  await waitForH2(page, 'Local Terminal');
+  await expect(page).toHaveURL(/\/agent\/terminal$/);
 });
 
 test('legacy routes redirect into the new hierarchy', async ({ page }) => {

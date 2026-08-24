@@ -16,6 +16,7 @@ import codecs
 import contextlib
 import os
 import shutil
+import signal
 import struct
 import subprocess
 import sys
@@ -201,13 +202,28 @@ class _PosixSession:
     async def wait(self) -> int:
         return await self._process.wait()
 
+    def _signal_process_group(self, sig: int) -> None:
+        """Signals the whole process group, not just the tracked child.
+
+        ``_spawn_posix`` passes ``start_new_session=True``, so the child is a
+        process-group leader and the engine CLI it execs is a *grandchild*.
+        Signalling only the tracked pid leaves that grandchild running, and
+        with it the ``.codeagent-session.lock`` the launcher holds for the
+        workspace — after which every later launch of that engine there
+        blocks forever in ``flock(LOCK_EX)``, printing its banner and nothing
+        more. The Windows path already kills the tree for the same reason.
+        """
+        pid = self._process.pid
+        if pid is None:
+            return
+        with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+            os.killpg(os.getpgid(pid), sig)
+
     async def terminate(self) -> None:
-        with contextlib.suppress(ProcessLookupError):
-            self._process.terminate()
+        self._signal_process_group(signal.SIGTERM)
 
     async def kill(self) -> None:
-        with contextlib.suppress(ProcessLookupError):
-            self._process.kill()
+        self._signal_process_group(signal.SIGKILL)
 
     async def close(self) -> None:
         with contextlib.suppress(OSError):

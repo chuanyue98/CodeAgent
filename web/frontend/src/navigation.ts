@@ -15,15 +15,19 @@ export interface PrimaryNavItem {
 // nav in whichever language happened to be active at import time.
 export const primaryNav: PrimaryNavItem[] = [
   { to: '/home', matchPrefix: '/home', labelKey: 'nav.home', icon: Home },
-  { to: '/agent/web', matchPrefix: '/agent', labelKey: 'nav.agent', icon: Bot },
+  { to: '/agent/terminal', matchPrefix: '/agent', labelKey: 'nav.agent', icon: Bot },
   { to: '/automations/tasks', matchPrefix: '/automations', labelKey: 'nav.automations', icon: Clock3 },
   { to: '/activity/sessions', matchPrefix: '/activity', labelKey: 'nav.activity', icon: History },
   { to: '/settings/workspace', matchPrefix: '/settings', labelKey: 'nav.settings', icon: Settings },
 ];
 
+// Terminal first: it streams the engine's own TUI, so it has every feature the
+// vendor ships — model pickers, slash commands, approvals — the moment they
+// ship it. The Web Agent renders a chat over the gateway's structured events,
+// which only covers what its four per-engine adapters implement.
 export const AGENT_TABS: SectionTab[] = [
-  { to: '/agent/web', labelKey: 'tab.agent.web' },
   { to: '/agent/terminal', labelKey: 'tab.agent.terminal' },
+  { to: '/agent/web', labelKey: 'tab.agent.web' },
   { to: '/agent/instances', labelKey: 'tab.agent.instances' },
 ];
 

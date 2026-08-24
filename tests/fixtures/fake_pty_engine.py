@@ -5,6 +5,7 @@ just echoes stdin lines back, so tests can exercise the PTY plumbing without
 spawning a real provider CLI.
 """
 
+import subprocess
 import sys
 
 print("READY", flush=True)
@@ -12,6 +13,13 @@ for line in sys.stdin:
     line = line.rstrip("\n")
     if line == "exit":
         break
+    if line == "spawn-grandchild":
+        # The real launcher execs the provider CLI as its own child, so the
+        # engine the user sees is a *grandchild* of the PTY session. Stand in
+        # for it with a sleeper whose pid the test can watch.
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"])
+        print(f"GRANDCHILD:{child.pid}", flush=True)
+        continue
     if line == "burst":
         # Small enough to fit in the kernel's PTY output buffer without
         # blocking on backpressure (which would otherwise force us to
