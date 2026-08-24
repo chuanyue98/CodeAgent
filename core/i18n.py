@@ -307,6 +307,18 @@ MESSAGES: dict[str, dict[str, str]] = {
             "并建议在本服务前置一层带认证的反向代理。"
         ),
     },
+    "ui.non_loopback_tunnel_hint": {
+        "en": (
+            "    If you only need this from another machine of your own, an "
+            "SSH tunnel keeps the server on loopback:\n"
+            "      ssh -L {port}:127.0.0.1:{port} <user>@<this-host>"
+        ),
+        "zh": (
+            "    如果只是想从自己的另一台机器访问，用 SSH 隧道即可让服务继续"
+            "留在 loopback 上：\n"
+            "      ssh -L {port}:127.0.0.1:{port} <user>@<this-host>"
+        ),
+    },
     "ui.token_line": {
         "en": "UI token: {token}",
         "zh": "UI token：{token}",

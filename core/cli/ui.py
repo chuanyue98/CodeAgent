@@ -208,11 +208,21 @@ def run_ui_command() -> int:
         is_loopback_hostname,
     )
 
+    # On loopback the token check is off by default, so there is nothing to
+    # carry into the browser and the URL stays clean -- which also means a
+    # server started any other way (bare uvicorn, another shell) is usable
+    # without one. Binding elsewhere forces the check back on; see
+    # core.web.security.auth_enabled.
     if auth_enabled():
         token = get_ui_token()
         url = f"{url}?{TOKEN_QUERY_PARAM}={urllib.parse.quote(token)}"
-        if not is_loopback_hostname(api_host):
-            print(t("ui.non_loopback_warning", host=api_host))
+
+    # Deliberately not nested under auth_enabled(): the exposure is worth
+    # warning about on its own terms, and the warning must not disappear if
+    # that predicate ever changes.
+    if not is_loopback_hostname(api_host):
+        print(t("ui.non_loopback_warning", host=api_host))
+        print(t("ui.non_loopback_tunnel_hint", port=port))
 
     threading.Thread(
         target=_wait_for_api_then_open_browser,

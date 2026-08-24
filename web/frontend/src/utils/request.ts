@@ -37,11 +37,15 @@ async function request<T = unknown>(url: string, config: RequestConfig = {}): Pr
     if (!response.ok) {
       let detail = `Request failed with status ${response.status}`;
       if (response.status === 401) {
-        // The token is missing or stale -- a generic "Request failed with
-        // status 401" sends people hunting through logs for a backend
-        // fault, so name the actual fix instead.
+        // Reaching this means the server has the token check on, which only
+        // happens when it is bound off loopback (or was told to). Naming the
+        // recovery beats a generic "status 401" that sends people hunting
+        // through backend logs -- and it has to be a recovery that works
+        // whoever started the server, since "reopen with `ca ui`" is useless
+        // when the process was launched some other way.
         throw new Error(
-          'Not authorized. Reopen the UI with `ca ui`, or run `ca ui --show-token`.',
+          'Not authorized: this server requires a UI token. Run `ca ui --show-token` ' +
+            'to read it, then open this page as ?ca_token=<token>.',
         );
       }
       try {
