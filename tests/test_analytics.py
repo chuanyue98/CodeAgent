@@ -12,7 +12,14 @@ from core.analytics.service import _collect_all, get_analytics_data
 @pytest.fixture
 def mock_history_file(tmp_path):
     history_file = tmp_path / ".ca_analytics_history.jsonl"
-    with patch("core.analytics.history._history_path", return_value=history_file):
+    cache_file = tmp_path / ".ca_analytics_cache.json"
+    # Redirect the disk cache too, or force_refresh tests write their mock
+    # data into the developer's real ~/.ca_analytics_cache.json and the live
+    # server then serves poisoned data for the cache TTL window.
+    with (
+        patch("core.analytics.history._history_path", return_value=history_file),
+        patch("core.analytics.disk_cache._default_cache_path", return_value=cache_file),
+    ):
         yield history_file
 
 
