@@ -9,8 +9,9 @@ following OpenCode's native schema.
 from __future__ import annotations
 
 import json
-import secrets
+import shutil
 import sqlite3
+import subprocess
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,20 +21,66 @@ if TYPE_CHECKING:
     from core.session_history.models import UnifiedSession
 
 
+# OpenCode's fallback project for directories that are not git repositories.
+_GLOBAL_PROJECT_ID = "global"
+
+
 def _now_ms() -> int:
     """Returns current UTC time as Unix milliseconds."""
     return int(datetime.now(tz=UTC).timestamp() * 1000)
 
 
-def _find_or_create_project(con: sqlite3.Connection, worktree: str, now_ms: int) -> str:
-    """Finds the OpenCode project row for a worktree path, creating it if absent.
+def _opencode_project_id(worktree: str) -> str:
+    """Returns the project id OpenCode itself would use for *worktree*.
 
-    OpenCode's ``session.project_id`` is a foreign key into the ``project``
-    table, and the id is an opaque token assigned by OpenCode itself (not a
-    deterministic function of the path we could reproduce). Fabricating an
-    id here would leave the session pointing at a project row that never
-    exists, which makes OpenCode's own ``session list`` silently omit it
-    even though the row is otherwise well-formed.
+    Verified against OpenCode 1.18.21 by letting it initialize two fresh
+    repositories and reading back the rows it wrote: the id of a git worktree
+    is the SHA of the repository's **root commit** (``git rev-list
+    --max-parents=0 HEAD``), and non-git directories fall back to the shared
+    ``global`` project.
+
+    This has to be reproduced rather than invented. ``session.project_id`` is
+    what OpenCode filters on when it lists sessions for the current directory,
+    so a fabricated id (what this module used to mint with ``secrets``)
+    produces a session row that is well-formed, resumable by explicit id, and
+    yet invisible in ``opencode session list`` and in the TUI's session picker
+    -- the session is there but the user cannot find it.
+
+    Args:
+        worktree: The project's forward-slash-normalized worktree path.
+
+    Returns:
+        str: The root-commit SHA, or ``"global"`` when *worktree* is not a git
+        repository (or git is unavailable).
+    """
+    if not shutil.which("git"):
+        return _GLOBAL_PROJECT_ID
+    try:
+        proc = subprocess.run(
+            ["git", "-C", worktree, "rev-list", "--max-parents=0", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return _GLOBAL_PROJECT_ID
+    if proc.returncode != 0:
+        return _GLOBAL_PROJECT_ID
+    # A repository can have several root commits (an unrelated history was
+    # merged in); OpenCode keys off the first line, so match that.
+    root = proc.stdout.strip().splitlines()
+    return root[0].strip() if root and root[0].strip() else _GLOBAL_PROJECT_ID
+
+
+def _find_or_create_project(con: sqlite3.Connection, worktree: str, now_ms: int) -> str:
+    """Returns the ``project`` row id to hang the converted session off.
+
+    Looks up the id :func:`_opencode_project_id` derives, and inserts the row
+    only when OpenCode has not created it yet (a workspace it has never been
+    opened in). Matching on the id rather than on ``worktree`` matters: the
+    same directory can already have a stale row from an older OpenCode id
+    scheme, and attaching to that one hides the session again.
 
     Args:
         con: Open connection to the OpenCode SQLite database.
@@ -43,20 +90,25 @@ def _find_or_create_project(con: sqlite3.Connection, worktree: str, now_ms: int)
     Returns:
         str: The id of the matching (or newly created) project row.
     """
-    row = con.execute(
-        "SELECT id FROM project WHERE worktree = ?", (worktree,)
-    ).fetchone()
+    project_id = _opencode_project_id(worktree)
+
+    row = con.execute("SELECT id FROM project WHERE id = ?", (project_id,)).fetchone()
     if row:
         return row[0]
 
-    new_project_id = secrets.token_hex(20)
     con.execute(
         """INSERT INTO project (
             id, worktree, vcs, name, time_created, time_updated, sandboxes
-        ) VALUES (?, ?, NULL, NULL, ?, ?, '[]')""",
-        (new_project_id, worktree, now_ms, now_ms),
+        ) VALUES (?, ?, ?, NULL, ?, ?, '[]')""",
+        (
+            project_id,
+            "/" if project_id == _GLOBAL_PROJECT_ID else worktree,
+            None if project_id == _GLOBAL_PROJECT_ID else "git",
+            now_ms,
+            now_ms,
+        ),
     )
-    return new_project_id
+    return project_id
 
 
 def _find_opencode_db() -> Path | None:
@@ -98,13 +150,18 @@ def write_opencode_session(session: UnifiedSession) -> str:
     now_ms = _now_ms()
     worktree = session.project_path.replace("\\", "/")
 
-    # Model JSON
-    model_json = json.dumps(
-        {
-            "id": session.model or "unknown",
-            "providerID": "converted",
-        }
-    )
+    # Deliberately left NULL rather than carrying the source engine's model
+    # across. ``session.model`` names a model of the *source* engine
+    # (``claude-opus-5``, ``hy3`` ...) which OpenCode has no provider for, and
+    # the id it stores here is what it resolves on the next turn: this module
+    # used to write ``{"id": <source model>, "providerID": "converted"}``, and
+    # since no provider is registered under "converted", resuming the
+    # converted session failed the moment the user typed anything --
+    # ``Error: {"name":"UnknownError","message":"Unexpected server error"}``.
+    # A NULL model makes OpenCode fall back to the user's configured default,
+    # which is the only model we actually know works here (verified against
+    # OpenCode 1.18.21).
+    session_model = None
 
     con = sqlite3.connect(str(db_path))
 
@@ -129,7 +186,7 @@ def write_opencode_session(session: UnifiedSession) -> str:
                 worktree,
                 session.title or session.first_user_message[:80] or "Converted session",
                 "1.0.0",
-                model_json,
+                session_model,
                 now_ms,  # time_created
                 now_ms,  # time_updated
                 worktree,  # path
@@ -137,13 +194,16 @@ def write_opencode_session(session: UnifiedSession) -> str:
         )
 
         # Insert messages and parts
+        previous_message_id: str | None = None
         for i, msg in enumerate(session.messages):
             msg_id = f"msg_{uuid.uuid4().hex[:24]}"
             msg_time = now_ms + i * 1000  # stagger timestamps
 
-            # Message data JSON
+            # Message data JSON. ``parentID`` chains each assistant reply to
+            # the turn it answered, the way OpenCode writes it natively; user
+            # messages start a turn and carry no parent.
             msg_data = {
-                "parentID": None,
+                "parentID": previous_message_id if msg.role == "assistant" else None,
                 "role": msg.role,
                 "mode": "build",
                 "agent": "build",
@@ -166,8 +226,10 @@ def write_opencode_session(session: UnifiedSession) -> str:
                     if msg.role == "assistant"
                     else None
                 ),
-                "modelID": session.model or "unknown",
-                "providerID": "converted",
+                # Same reasoning as the session-level model above: naming a
+                # provider OpenCode has never heard of is worse than naming
+                # none, so the converted turns stay provider-less and the next
+                # turn resolves against the user's default.
                 "time": {"created": msg_time, "completed": msg_time + 500},
                 "finish": "stop",
             }
@@ -183,6 +245,8 @@ def write_opencode_session(session: UnifiedSession) -> str:
                     json.dumps(msg_data, ensure_ascii=False),
                 ),
             )
+
+            previous_message_id = msg_id
 
             # Insert text part
             if msg.content:
@@ -207,14 +271,26 @@ def write_opencode_session(session: UnifiedSession) -> str:
                 except (json.JSONDecodeError, TypeError):
                     input_obj = {}
 
+                # ``state.time`` is not optional. OpenCode reads it back when
+                # it rebuilds the conversation to send upstream, and a tool
+                # part without it kills the next turn -- bisected against
+                # OpenCode 1.18.21 by adding one field at a time: status alone
+                # or title/metadata alone still failed, adding ``time`` was
+                # what made the turn go through. ``status`` only ever takes
+                # ``completed``/``error``/``running`` in real rows, so the
+                # "unknown" this used to emit for a call whose result the
+                # parser did not capture is not a value OpenCode knows.
                 tool_part = {
                     "type": "tool",
                     "tool": tc.name,
                     "callID": f"call_{uuid.uuid4().hex[:24]}",
                     "state": {
-                        "status": "completed" if tc.result_preview else "unknown",
+                        "status": "completed",
                         "input": input_obj,
                         "output": tc.result_preview or "",
+                        "title": "",
+                        "metadata": {},
+                        "time": {"start": msg_time, "end": msg_time},
                     },
                 }
                 con.execute(

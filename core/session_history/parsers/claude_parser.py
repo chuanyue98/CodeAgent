@@ -21,6 +21,7 @@ from core.session_history.models import (
     UnifiedMessage,
     UnifiedSession,
 )
+from core.session_history.parsers._synthetic import is_synthetic_user_content
 from core.session_history.paths import strip_extended_length_prefix
 
 
@@ -188,6 +189,8 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
 
                 if row_type == "user":
                     content = _extract_user_content(msg)
+                    if content and is_synthetic_user_content(content):
+                        continue
                     if content:
                         messages.append(
                             UnifiedMessage(

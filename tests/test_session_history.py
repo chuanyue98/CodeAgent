@@ -1,7 +1,11 @@
 """Tests for cross-engine session history parsing, conversion, and API."""
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from core.session_history.models import (
     EngineType,
@@ -479,10 +483,30 @@ def _init_opencode_db(db_path):
     con.close()
 
 
-def test_write_opencode_session_reuses_existing_project(tmp_path, monkeypatch):
-    """A session converted into a project OpenCode already knows about must link
-    to that project's real id, not a fabricated one — otherwise OpenCode's own
-    `session list` silently omits it even though the row is well-formed."""
+def _make_git_repo(path: Path) -> str:
+    """Creates a git repository at *path* and returns its root-commit SHA."""
+    path.mkdir(parents=True, exist_ok=True)
+    run = lambda *args: subprocess.run(  # noqa: E731
+        ["git", "-C", str(path), *args], capture_output=True, text=True, check=True
+    )
+    run("init", "-q")
+    run("config", "user.email", "t@example.com")
+    run("config", "user.name", "t")
+    (path / "README.md").write_text("x", encoding="utf-8")
+    run("add", "-A")
+    run("commit", "-qm", "init")
+    return run("rev-parse", "HEAD").stdout.strip()
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
+def test_write_opencode_session_uses_opencode_project_id(tmp_path, monkeypatch):
+    """The session must hang off the project id OpenCode itself derives.
+
+    OpenCode keys a git worktree's project on the repository's root commit, and
+    filters ``session list`` on ``session.project_id``. Minting an id of our own
+    (which this writer used to do) leaves a well-formed row that is invisible in
+    both ``opencode session list`` and the TUI picker.
+    """
     import sqlite3
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -490,23 +514,13 @@ def test_write_opencode_session_reuses_existing_project(tmp_path, monkeypatch):
     db_path.parent.mkdir(parents=True)
     _init_opencode_db(db_path)
 
-    worktree = "E:/demo/test"
-    real_project_id = (
-        "c9434f3bddc889db7641bd25b90bf4dd956544a5"  # opaque id OpenCode assigned
-    )
-    con = sqlite3.connect(str(db_path))
-    with con:
-        con.execute(
-            "INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) "
-            "VALUES (?, ?, 1700000000000, 1700000000000, '[]')",
-            (real_project_id, worktree),
-        )
-    con.close()
+    worktree = tmp_path / "repo"
+    root_commit = _make_git_repo(worktree)
 
     session = UnifiedSession(
         session_id="orig-session",
         engine=EngineType.CLAUDE,
-        project_path="E:\\demo\\test",  # backslash form, as Claude records cwd on Windows
+        project_path=str(worktree),
         messages=[
             UnifiedMessage(role="user", content="hello"),
             UnifiedMessage(role="assistant", content="hi there"),
@@ -518,22 +532,103 @@ def test_write_opencode_session_reuses_existing_project(tmp_path, monkeypatch):
     new_id = write_opencode_session(session)
 
     con = sqlite3.connect(str(db_path))
-    row = con.execute(
-        "SELECT project_id, directory FROM session WHERE id = ?", (new_id,)
-    ).fetchone()
+    project_id = con.execute(
+        "SELECT project_id FROM session WHERE id = ?", (new_id,)
+    ).fetchone()[0]
     project_count = con.execute(
-        "SELECT COUNT(*) FROM project WHERE worktree = ?", (worktree,)
+        "SELECT COUNT(*) FROM project WHERE id = ?", (project_id,)
     ).fetchone()[0]
     con.close()
 
-    assert row[0] == real_project_id
-    assert row[1] == worktree
-    assert project_count == 1  # reused, not duplicated
+    assert project_id == root_commit
+    assert project_count == 1
 
 
-def test_write_opencode_session_creates_project_when_missing(tmp_path, monkeypatch):
-    """No prior project row for the target worktree — one must be created so the
-    session isn't left pointing at a nonexistent project."""
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
+def test_write_opencode_session_reuses_existing_project(tmp_path, monkeypatch):
+    """A project row OpenCode already wrote is reused, not duplicated."""
+    import sqlite3
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    db_path = tmp_path / ".local" / "share" / "opencode" / "opencode.db"
+    db_path.parent.mkdir(parents=True)
+    _init_opencode_db(db_path)
+
+    worktree = tmp_path / "repo"
+    root_commit = _make_git_repo(worktree)
+
+    con = sqlite3.connect(str(db_path))
+    with con:
+        con.execute(
+            "INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) "
+            "VALUES (?, ?, 1700000000000, 1700000000000, '[]')",
+            (root_commit, str(worktree)),
+        )
+    con.close()
+
+    session = UnifiedSession(
+        session_id="orig-session",
+        engine=EngineType.CLAUDE,
+        project_path=str(worktree),
+        messages=[UnifiedMessage(role="user", content="hello")],
+    )
+
+    from core.session_history.writers.opencode_writer import write_opencode_session
+
+    new_id = write_opencode_session(session)
+
+    con = sqlite3.connect(str(db_path))
+    project_id = con.execute(
+        "SELECT project_id FROM session WHERE id = ?", (new_id,)
+    ).fetchone()[0]
+    total = con.execute("SELECT COUNT(*) FROM project").fetchone()[0]
+    con.close()
+
+    assert project_id == root_commit
+    assert total == 1  # reused, not duplicated
+
+
+def test_write_opencode_session_falls_back_to_global_outside_git(tmp_path, monkeypatch):
+    """A directory that is not a git repository lands in OpenCode's ``global``
+    project, which is where OpenCode itself puts those sessions."""
+    import sqlite3
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    db_path = tmp_path / ".local" / "share" / "opencode" / "opencode.db"
+    db_path.parent.mkdir(parents=True)
+    _init_opencode_db(db_path)
+
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+
+    session = UnifiedSession(
+        session_id="orig-session",
+        engine=EngineType.CLAUDE,
+        project_path=str(plain),
+        messages=[UnifiedMessage(role="user", content="hello")],
+    )
+
+    from core.session_history.writers.opencode_writer import write_opencode_session
+
+    new_id = write_opencode_session(session)
+
+    con = sqlite3.connect(str(db_path))
+    project_id = con.execute(
+        "SELECT project_id FROM session WHERE id = ?", (new_id,)
+    ).fetchone()[0]
+    con.close()
+
+    assert project_id == "global"
+
+
+def test_write_opencode_session_omits_unknown_provider(tmp_path, monkeypatch):
+    """The converted session must not name a provider OpenCode cannot resolve.
+
+    Writing ``{"id": <source model>, "providerID": "converted"}`` made the very
+    first turn after resuming fail with ``UnknownError: Unexpected server
+    error`` — there is no provider registered under that name. A NULL model
+    falls back to the user's configured default.
+    """
     import sqlite3
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -544,8 +639,12 @@ def test_write_opencode_session_creates_project_when_missing(tmp_path, monkeypat
     session = UnifiedSession(
         session_id="orig-session",
         engine=EngineType.CLAUDE,
-        project_path="E:\\demo\\brand-new-project",
-        messages=[UnifiedMessage(role="user", content="hello")],
+        project_path=str(tmp_path / "plain"),
+        model="claude-opus-5",
+        messages=[
+            UnifiedMessage(role="user", content="hello"),
+            UnifiedMessage(role="assistant", content="hi", model="claude-opus-5"),
+        ],
     )
 
     from core.session_history.writers.opencode_writer import write_opencode_session
@@ -553,16 +652,68 @@ def test_write_opencode_session_creates_project_when_missing(tmp_path, monkeypat
     new_id = write_opencode_session(session)
 
     con = sqlite3.connect(str(db_path))
-    session_row = con.execute(
-        "SELECT project_id FROM session WHERE id = ?", (new_id,)
-    ).fetchone()
-    project_row = con.execute(
-        "SELECT worktree FROM project WHERE id = ?", (session_row[0],)
-    ).fetchone()
+    model = con.execute("SELECT model FROM session WHERE id = ?", (new_id,)).fetchone()[
+        0
+    ]
+    payloads = [
+        json.loads(row[0])
+        for row in con.execute(
+            "SELECT data FROM message WHERE session_id = ?", (new_id,)
+        )
+    ]
     con.close()
 
-    assert project_row is not None
-    assert project_row[0] == "E:/demo/brand-new-project"
+    assert model is None
+    assert all("providerID" not in payload for payload in payloads)
+    # The assistant reply chains to the user turn it answered.
+    assistant = next(p for p in payloads if p["role"] == "assistant")
+    assert assistant["parentID"] is not None
+
+
+def test_write_opencode_session_tool_part_carries_state_time(tmp_path, monkeypatch):
+    """Tool parts need ``state.time``.
+
+    Bisected against OpenCode 1.18.21: a converted session whose tool parts
+    omitted ``state.time`` failed on the next turn, while adding just that field
+    made it go through. ``status`` also has to be one of OpenCode's own values —
+    the "unknown" this used to emit is not one.
+    """
+    import sqlite3
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    db_path = tmp_path / ".local" / "share" / "opencode" / "opencode.db"
+    db_path.parent.mkdir(parents=True)
+    _init_opencode_db(db_path)
+
+    session = UnifiedSession(
+        session_id="orig-session",
+        engine=EngineType.CLAUDE,
+        project_path=str(tmp_path / "plain"),
+        messages=[
+            UnifiedMessage(
+                role="assistant",
+                content="running it",
+                tool_calls=[ToolCallSummary(name="Bash", args_preview='{"cmd": "ls"}')],
+            )
+        ],
+    )
+
+    from core.session_history.writers.opencode_writer import write_opencode_session
+
+    new_id = write_opencode_session(session)
+
+    con = sqlite3.connect(str(db_path))
+    parts = [
+        json.loads(row[0])
+        for row in con.execute("SELECT data FROM part WHERE session_id = ?", (new_id,))
+    ]
+    con.close()
+
+    tool_part = next(p for p in parts if p["type"] == "tool")
+    assert tool_part["state"]["status"] == "completed"
+    assert set(tool_part["state"]["time"]) == {"start", "end"}
+    assert "title" in tool_part["state"]
+    assert "metadata" in tool_part["state"]
 
 
 # ─── Session finder tests ─────────────────────────────────────────────
@@ -762,3 +913,57 @@ def test_build_audit_events_empty_input():
     from core.session_history.audit import build_audit_events
 
     assert build_audit_events([]) == []
+
+
+def test_claude_parser_drops_cli_synthetic_user_rows(tmp_path):
+    """Claude Code's own CLI events are not conversation turns.
+
+    Slash commands and friends are recorded as ordinary ``type: "user"`` rows.
+    They were being carried into the unified session, and because they are
+    often the *first* one, converted sessions ended up titled
+    ``<command-name>/clear</command-name>`` and replayed a ``/clear`` at the top
+    of the transcript in whichever engine they were opened.
+    """
+    rows = [
+        {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": (
+                    "<command-name>/clear</command-name>\n"
+                    "            <command-message>clear</command-message>"
+                ),
+            },
+            "uuid": "u0",
+            "timestamp": "2026-08-24T03:00:00.000Z",
+            "cwd": "/home/cy/demo",
+        },
+        {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": "<task-notification>done</task-notification>",
+            },
+            "uuid": "u1",
+            "timestamp": "2026-08-24T03:00:01.000Z",
+            "cwd": "/home/cy/demo",
+        },
+        {
+            "type": "user",
+            "message": {"role": "user", "content": "我们主分支是什么"},
+            "uuid": "u2",
+            "timestamp": "2026-08-24T03:00:02.000Z",
+            "cwd": "/home/cy/demo",
+        },
+    ]
+    path = tmp_path / "11111111-2222-3333-4444-555555555555.jsonl"
+    path.write_text(
+        "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    session = parse_claude_session(path)
+
+    assert session is not None
+    assert [m.content for m in session.messages] == ["我们主分支是什么"]
+    assert session.generate_title() == "我们主分支是什么"
