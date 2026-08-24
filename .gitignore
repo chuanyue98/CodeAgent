@@ -71,3 +71,7 @@ build/
 .trae-html-share-packages/
 uiux-review/
 codeagent-audit-report/
+
+# Other agent tools keep private working notes inside the repo; they are
+# local scratch, not project files.
+.workbuddy/
