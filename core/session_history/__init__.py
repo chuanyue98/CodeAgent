@@ -1,7 +1,7 @@
 """Cross-engine session history package.
 
 Provides unified parsing, conversion, and browsing of AI engine session
-histories (Claude, Codex, Gemini, OpenCode).
+histories (Claude, Codex, OpenCode, CodeBuddy).
 """
 
 from core.session_history.models import (

@@ -63,14 +63,12 @@ class Section:
 
 ENGINE_BINARIES = {
     "claude": ["claude", "claude.cmd"],
-    "gemini": ["gemini", "gemini.cmd"],
     "opencode": ["opencode", "opencode.cmd"],
     "codex": ["codex", "codex.cmd"],
 }
 
 ENGINE_INSTALL_HINTS = {
     "claude": "npm install -g @anthropic-ai/claude-code",
-    "gemini": "npm install -g @google/gemini-cli",
     "opencode": "npm install -g opencode-ai",
     "codex": "npm install -g @openai/codex",
 }
@@ -572,7 +570,6 @@ def check_stale_injections(section: Section) -> list[Path]:
 
     candidates = [
         cwd / ".claude" / "settings.json",
-        cwd / ".gemini" / "settings.json",
         cwd / ".opencode" / "settings.json",
         cwd / ".codex" / "settings.json",
         # Codex reads hooks from config.toml -- that is where start_codex

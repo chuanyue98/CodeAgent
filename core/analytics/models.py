@@ -19,7 +19,7 @@ class RawUsageEntry:
         cache_read_tokens: Tokens read from an existing cache.
         cost: Pre-computed cost (primarily for OpenCode); 0.0 means derive from pricing.
         project_path: Local filesystem path of the project.
-        target: The engine target (e.g., 'claude', 'gemini', 'codex', 'opencode').
+        target: The engine target (e.g., 'claude', 'codex', 'opencode').
     """
 
     timestamp: str  # ISO 8601
@@ -31,7 +31,7 @@ class RawUsageEntry:
     cache_read_tokens: int = 0
     cost: float = 0.0  # pre-computed cost (OpenCode); 0 = derive from pricing
     project_path: str = ""
-    target: str = ""  # claude | gemini | codex | opencode
+    target: str = ""  # claude | codex | opencode | codebuddy
 
 
 @dataclass
@@ -61,7 +61,7 @@ class DailyUsage:
 
     Attributes:
         date: Date string in YYYY-MM-DD format.
-        target: The engine target (e.g., 'claude', 'gemini').
+        target: The engine target (e.g., 'claude', 'codex').
         input_tokens: Total input tokens for the day/target.
         output_tokens: Total output tokens for the day/target.
         cache_creation_tokens: Total cache creation tokens.

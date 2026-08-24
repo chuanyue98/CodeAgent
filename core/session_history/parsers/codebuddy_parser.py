@@ -72,29 +72,17 @@ def _encode_codebuddy_project_dir(path: str) -> str:
     # ``+`` collapses a run of separators (``:/``, ``:\``, ``\\`` ...) into a
     # single dash, matching how CodeBuddy names its project dirs
     # (``E:\demo\CodeAgent`` → ``e-demo-CodeAgent``).
-    # The leading separator of a POSIX path is dropped rather than turned into
-    # a dash: CodeBuddy stores ``/home/cy/x`` under ``home-cy-x``, not
-    # ``-home-cy-x``. Verified by letting CodeBuddy 2.137.1 create a session in
-    # a fresh directory and reading back the name it chose. Windows paths start
-    # with the drive letter, so they are unaffected.
+    # A POSIX path's leading separator is dropped, not dashed: CodeBuddy
+    # stores ``/home/cy/x`` under ``home-cy-x``.
     return re.sub(r"[^A-Za-z0-9]+", "-", p).lstrip("-")
 
 
 def _to_iso8601(value: object) -> str:
-    """Converts a CodeBuddy timestamp to the ISO 8601 form the model expects.
+    """Converts a CodeBuddy timestamp to ISO 8601.
 
-    CodeBuddy records epoch milliseconds (``1787547364552``); every other
-    parser fills :attr:`UnifiedMessage.timestamp` with ISO 8601, which is what
-    the field is documented to hold. Passing the epoch value through unchanged
-    broke two things downstream:
-
-      - :func:`core.session_history.writers.claude_writer.write_claude_session`
-        copies the timestamp verbatim, so a CodeBuddy session converted to
-        Claude Code got epoch strings in a field Claude parses as ISO, and
-        ``claude --resume <id>`` answered "No conversation found".
-      - ``find_all_sessions`` sorts on the raw string, and ``"1787..."`` orders
-        below ``"2026-..."`` for every date, so CodeBuddy sessions sank to the
-        bottom of the Sessions list no matter how recent they were.
+    CodeBuddy records epoch milliseconds; :attr:`UnifiedMessage.timestamp`
+    holds ISO 8601, which writers copy verbatim and ``find_all_sessions``
+    sorts on as a plain string.
 
     Args:
         value: The raw ``timestamp`` field: epoch milliseconds (number or

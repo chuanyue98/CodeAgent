@@ -11,7 +11,7 @@ CodeAgent is built on a **Seven Pillars** architecture that cleanly separates co
 ├──────────────┬──────────────┬────────────────────────────────────┤
 │   Engines    │     Core     │         Resource Layers             │
 │──────────────│──────────────│────────────────────────────────────│
-│  gemini      │  Services    │  ┌──────────┐ ┌──────────┐        │
+│  opencode    │  Services    │  ┌──────────┐ ┌──────────┐        │
 │  claude      │  Scanners    │  │ Prompts  │ │  Skills  │        │
 │  opencode    │  Analytics   │  │ (Soul)   │ │ (Tools)  │        │
 │  codex       │  Web API     │  └──────────┘ └──────────┘        │
@@ -32,7 +32,6 @@ Pluggable adapters that wrap official CLI tools from each AI provider:
 
 | Engine | Script | CLI Tool |
 |--------|--------|----------|
-| Gemini | `engines/start_gemini.py` | `gemini` CLI |
 | Claude | `engines/start_claude_code.py` | `claude` CLI |
 | OpenCode | `engines/start_opencode.py` | `opencode` CLI |
 | Codex | `engines/start_codex.py` | `codex` CLI |
@@ -70,7 +69,7 @@ The orchestration hub containing:
 
 **Session History (`core/session_history/`)**
 - Stores and retrieves session data
-- Converts between different engine formats (Gemini ↔ Claude ↔ Codex ↔ OpenCode)
+- Converts between different engine formats (Claude ↔ OpenCode ↔ Codex ↔ CodeBuddy)
 - `session_finder.py` — Locates sessions by project path
 
 **Web Server (`core/web/`)**
@@ -140,7 +139,7 @@ Note: the hook directory named `pre-commit` is just a hook's name — it is not 
 
 `before_tool`/`after_tool` are translated to each engine's vendor-specific event names via
 `EVENT_MAP` in the engine adapter (`core/engine_base.py`). As of this writing, `EVENT_MAP`
-is only populated for the Claude (`PreToolUse`/`PostToolUse`) and Gemini
+is only populated for the Claude (`PreToolUse`/`PostToolUse`) and CodeBuddy
 (`BeforeTool`/`AfterTool`) engines; the Codex and OpenCode adapters do not yet declare one.
 
 ### 6. Plugins (`plugins/`)
@@ -156,7 +155,7 @@ High-level execution blueprints that define multi-step workflows:
 ```yaml
 # tasks/code_review.md
 task: code_review
-engine: gemini
+engine: opencode
 steps:
   - analyze: Read all changed files
   - review: Check for bugs, security, and style

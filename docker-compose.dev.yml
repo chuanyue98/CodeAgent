@@ -17,7 +17,6 @@ services:
       - ./.codeagent-home:/root/.codeagent
       - ./.codex:/root/.codex
       - ./.claude:/root/.claude
-      - ./.gemini:/root/.gemini
       - ./.opencode:/root/.config/opencode
     environment:
       - CA_DEBUG=1

@@ -2,7 +2,7 @@
 
 CodeBuddy Code exposes an Agent Client Protocol (ACP) server via
 ``codebuddy --acp``: JSON-RPC 2.0 over newline-delimited JSON on stdin/stdout.
-This is the same transport Gemini uses, so this adapter reuses the shared
+This is the same transport Codex uses, so this adapter reuses the shared
 ``JsonRpcStdioTransport`` and simply adapts CodeBuddy's specific handshake
 quirks (permission modes arrive as ``config_option_update`` notifications
 rather than a ``modes`` block, so we never require them).
@@ -192,7 +192,7 @@ class CodeBuddyAdapter:
         options: CreateSessionOptions | ResumeOptions,
     ) -> None:
         # CodeBuddy reports available models under ``models`` (not the
-        # ``modes``/``session/set_mode`` shape Gemini uses) and surfaces
+        # ``modes``/``session/set_mode`` shape ACP defines) and surfaces
         # permission modes as runtime ``config_option_update`` notifications.
         # We best-effort the model selection and never require a mode, so an
         # unusual response shape can't break session creation.
@@ -298,7 +298,9 @@ class CodeBuddyAdapter:
     async def steer_turn(
         self, provider_session_id: str, provider_turn_id: str, turn: TurnInput
     ) -> None:
-        raise CodeBuddyProtocolError("CodeBuddy ACP does not support same-turn steering")
+        raise CodeBuddyProtocolError(
+            "CodeBuddy ACP does not support same-turn steering"
+        )
 
     async def cancel_turn(
         self, provider_session_id: str, provider_turn_id: str

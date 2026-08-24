@@ -19,15 +19,15 @@ ca <command> [OPTIONS]
 
 ## Engine Launch
 
-If the first argument matches an engine name, it launches that engine. Otherwise, it forwards all arguments to the default engine (gemini).
+If the first argument matches an engine name, it launches that engine. Otherwise, it forwards all arguments to the default engine (opencode).
 
 ```bash
-ca                         # Launch default engine (gemini)
-ca gemini                  # Launch Gemini engine
+ca                         # Launch default engine (opencode)
+ca codex                   # Launch Codex engine
 ca claude                  # Launch Claude engine
 ca opencode                # Launch OpenCode engine
 ca codex                   # Launch Codex engine
-ca gemini "Refactor this"  # Execute a task with Gemini
+ca codex "Refactor this"   # Execute a task with Codex
 ca claude -t refactor      # Run a pre-defined task with Claude
 ```
 
@@ -35,7 +35,6 @@ ca claude -t refactor      # Run a pre-defined task with Claude
 
 | Engine | CLI Tool | Notes |
 |--------|----------|-------|
-| `gemini` | `gemini` | Google AI Studio CLI |
 | `claude` | `claude` | Anthropic Claude Code CLI |
 | `opencode` | `opencode` | OpenCode TUI (recommended) |
 | `codex` | `codex` | OpenAI Codex CLI |
@@ -57,7 +56,7 @@ Checks are grouped into five sections (see `core/doctor.py`):
 
 **Runtime**
 - Python version — confirms Python 3.13+ is in use
-- Engine availability — checks whether each provider CLI (`claude`, `gemini`, `codex`, `opencode`) is found on `PATH`
+- Engine availability — checks whether each provider CLI (`claude`, `opencode`, `codex`, `codebuddy`) is found on `PATH`
 
 **Configuration**
 - `config.json` validity — confirms the file exists and parses correctly
@@ -74,7 +73,7 @@ Checks are grouped into five sections (see `core/doctor.py`):
 - Symlink/junction capability — confirms skill-linking will work (directory junctions on Windows, symlinks on Unix)
 
 **Session Integrity**
-- Stale injections — detects leftover `_ca_injected` markers in `.claude/settings.json`, `.gemini/settings.json`, `.opencode/settings.json`, or `.codex/settings.json` from a previous crashed session; `ca doctor --fix` restores the `.bak` backups
+- Stale injections — detects leftover `_ca_injected` markers in `.claude/settings.json`, `.opencode/settings.json`, or `.codex/settings.json` from a previous crashed session; `ca doctor --fix` restores the `.bak` backups
 
 ### `ui`
 
@@ -93,22 +92,22 @@ Session history management across all engine formats.
 **List sessions:**
 ```bash
 ca history list                 # All sessions
-ca history list --engine gemini # Filter by engine
+ca history list --engine opencode # Filter by engine
 ```
 
 **Show session details:**
 ```bash
-ca history show gemini <session_id>
+ca history show opencode <session_id>
 ca history show claude <session_id>
 ```
 
 **Convert between engine formats:**
 ```bash
-ca history convert gemini <session_id> opencode
+ca history convert claude <session_id> opencode
 ca history convert claude <session_id> codex
 ```
 
-Supported engines for conversion: `gemini`, `claude`, `opencode`, `codex`
+Supported engines for conversion: `claude`, `opencode`, `codex`, `codebuddy`
 
 ### `new`
 
@@ -161,11 +160,11 @@ ca mcp list claude          # Just one engine
 
 ca mcp add claude fs -- npx -y @modelcontextprotocol/server-filesystem /data
 ca mcp add codex api --url https://example.com/mcp --transport http
-ca mcp add gemini fs --env LOG=debug -- npx -y server-fs
-ca mcp remove gemini fs
+ca mcp add codebuddy fs --env LOG=debug -- npx -y server-fs
+ca mcp remove codebuddy fs
 
 ca mcp sync claude                          # claude → the other three
-ca mcp sync claude --to gemini --to codex   # Only these targets
+ca mcp sync claude --to opencode --to codex # Only these targets
 ca mcp sync claude --name filesystem        # Only this server
 ca mcp sync claude --dry-run                # Preview without writing
 ca mcp sync claude --overwrite              # Replace same-named servers instead of skipping
@@ -177,7 +176,7 @@ A server already present in a target is skipped unless `--overwrite` is passed.
 
 Two things to know about scope, both confirmed live rather than assumed from `--help`:
 
-- **claude and gemini are per-project** (`.mcp.json`, `.gemini/settings.json`), so they
+- **claude and codebuddy are per-project** (`.mcp.json`), so they
   read and write relative to the current directory.
 - **codex and opencode are global** (`~/.codex/config.toml`,
   `~/.config/opencode/opencode.jsonc` or `.json`) — syncing *into* them affects every
@@ -220,7 +219,7 @@ Enable proxy support for engine sessions:
 
 ```bash
 ca --proxy                    # Use default proxy from config
-ca --proxy gemini "task..."   # Gemini with proxy
+ca --proxy codex "task..."    # Codex with proxy
 ```
 
 The system auto-detects active proxy ports from `config.json`.
@@ -231,8 +230,8 @@ The system auto-detects active proxy ports from `config.json`.
 # Start a coding session with Claude
 ca claude
 
-# Run a code review task with Gemini
-ca gemini -t code_review
+# Run a code review task with Codex
+ca codex -t code_review
 
 # Launch the analytics dashboard
 ca ui
@@ -240,8 +239,8 @@ ca ui
 # Create a new automation task
 ca new automated-testing
 
-# View Gemini session history
-ca history list --engine gemini
+# View OpenCode session history
+ca history list --engine opencode
 
 # Convert a Claude session for OpenCode
 ca history convert claude <session_id> opencode

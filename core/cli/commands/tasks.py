@@ -67,7 +67,7 @@ def stop(ctx, task_id):  # type: ignore[no-untyped-def]
 @click.option(
     "--engine",
     required=True,
-    type=click.Choice(["claude", "gemini", "opencode", "codex"]),
+    type=click.Choice(["claude", "opencode", "codex", "codebuddy"]),
     help="Engine to run the task with in every target project.",
 )
 @click.option(

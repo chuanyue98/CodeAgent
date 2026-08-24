@@ -4,14 +4,12 @@ import type { Translate } from '../../i18n/context';
 // ── Engine palette ───────────────────────────────────────────────────────────
 const ENGINE_COLORS: Record<string, string> = {
   claude: '#f97316',
-  gemini: '#3b82f6',
   codex: '#10b981',
   opencode: '#8b5cf6',
   codebuddy: '#0ea5e9',
 };
 const ENGINE_BADGE: Record<string, string> = {
   claude: 'bg-orange-100 text-orange-700',
-  gemini: 'bg-blue-100 text-blue-700',
   codex: 'bg-emerald-100 text-emerald-700',
   opencode: 'bg-violet-100 text-violet-700',
   codebuddy: 'bg-sky-100 text-sky-700',

@@ -8,7 +8,6 @@ from core.analytics.aggregator import _entry_cost, aggregate
 from core.analytics.collectors.claude_collector import scan_claude_usage
 from core.analytics.collectors.codebuddy_collector import scan_codebuddy_usage
 from core.analytics.collectors.codex_collector import scan_codex_usage
-from core.analytics.collectors.gemini_collector import scan_gemini_usage
 from core.analytics.collectors.opencode_collector import scan_opencode_usage
 from core.analytics.disk_cache import invalidate_cache, load_cache, save_cache
 from core.analytics.history import (
@@ -30,11 +29,12 @@ def _collect_all() -> list[RawUsageEntry]:
     # 1. Load existing history
     history = load_history()
 
-    # Purge entries from removed data sources. trae/workbuddy collectors were
-    # dropped, but their snapshots persist in the history file and would keep
-    # surfacing on the analytics pages unless actively removed.
+    # Snapshots from removed collectors persist in the history file and would
+    # keep surfacing on the analytics pages unless actively purged.
     kept = [
-        entry for entry in history if entry.target not in {"workbuddy", "trae"}
+        entry
+        for entry in history
+        if entry.target not in {"workbuddy", "trae", "gemini"}
     ]
     if len(kept) != len(history):
         history = kept
@@ -45,7 +45,6 @@ def _collect_all() -> list[RawUsageEntry]:
     # 2. Collect only new entries
     new_entries: list[RawUsageEntry] = []
     new_entries.extend(scan_claude_usage(since_timestamp=last_ts.get("claude", "")))
-    new_entries.extend(scan_gemini_usage(since_timestamp=last_ts.get("gemini", "")))
     new_entries.extend(scan_opencode_usage(since_timestamp=last_ts.get("opencode", "")))
     new_entries.extend(
         scan_codebuddy_usage(since_timestamp=last_ts.get("codebuddy", ""))

@@ -222,18 +222,10 @@ async def list_engines():
 
     ``supportsResume`` reflects ChatPage's ability to continue an existing
     session with prior context intact, verified live per engine — see
-    docs/chatpage-cli-spike-results.md. Gemini's individual-tier Code Assist
-    client is currently sunset (``IneligibleTierError``), so its resume path
-    was never confirmed and stays disabled here rather than assumed.
+    docs/chatpage-cli-spike-results.md.
     """
     # This could be more dynamic by checking shutil.which for binaries
     return [
-        {
-            "id": "gemini",
-            "name": "Gemini CLI",
-            "description": "Google AI Engineering Driver",
-            "supportsResume": False,
-        },
         {
             "id": "claude",
             "name": "Claude Code",
@@ -250,6 +242,12 @@ async def list_engines():
             "id": "codex",
             "name": "OpenAI Codex",
             "description": "OpenAI Engineering Driver",
+            "supportsResume": True,
+        },
+        {
+            "id": "codebuddy",
+            "name": "CodeBuddy Code",
+            "description": "Tencent Engineering Driver",
             "supportsResume": True,
         },
     ]

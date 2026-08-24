@@ -24,18 +24,18 @@ test('renders the seeded sessions and filter panel', async ({ page }) => {
 
 test('search filters the session list', async ({ page }) => {
   await gotoSessions(page);
-  await page.getByPlaceholder('Project or session...').fill('e2e-gemini-project');
+  await page.getByPlaceholder('Project or session...').fill('e2e-codebuddy-project');
   await expect(page.locator('main')).toContainText('1 session');
-  await expect(page.locator('main')).toContainText('e2e-gemini-project');
+  await expect(page.locator('main')).toContainText('e2e-codebuddy-project');
 });
 
 test('engine toggle narrows the list to that engine', async ({ page }) => {
   await gotoSessions(page);
-  const geminiFilter = page.getByTestId('activity-filters').getByRole('button', { name: 'gemini' });
-  await geminiFilter.click();
+  const codebuddyFilter = page.getByTestId('activity-filters').getByRole('button', { name: 'codebuddy' });
+  await codebuddyFilter.click();
   await expect(page.locator('main')).toContainText('1 session');
   // Toggle it off again — selection is additive, so this returns to all.
-  await geminiFilter.click();
+  await codebuddyFilter.click();
   await expect(page.locator('main')).toContainText('2 sessions');
 });
 

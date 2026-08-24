@@ -55,9 +55,7 @@ def scan_codebuddy_usage(
         if not project_dir.is_dir():
             continue
         for jsonl_file in project_dir.glob("*.jsonl"):
-            _parse_codebuddy_file(
-                jsonl_file, jsonl_file.stem, entries, since_timestamp
-            )
+            _parse_codebuddy_file(jsonl_file, jsonl_file.stem, entries, since_timestamp)
 
     return entries
 

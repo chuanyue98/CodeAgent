@@ -163,20 +163,6 @@ def test_extract_chat_session_id_returns_none_when_absent(tmp_path):
     assert runner._extract_chat_session_id("claude", log) is None
 
 
-def test_gemini_build_chat_command_rejects_resume():
-    from engines.start_gemini import GeminiEngine
-
-    engine = GeminiEngine()
-    with pytest.raises(ValueError, match="unverified"):
-        engine.build_chat_command("hello", session_id="some-session")
-
-    cmd = engine.build_chat_command("hello")
-    assert cmd[0] == "gemini"
-    assert "hello" in cmd
-    assert cmd[cmd.index("--approval-mode") + 1] == "plan"
-    assert "yolo" not in cmd
-
-
 def test_legacy_chat_commands_use_restricted_defaults():
     from engines.start_claude_code import ClaudeEngine
     from engines.start_codex import CodexEngine

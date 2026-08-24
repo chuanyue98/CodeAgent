@@ -13,7 +13,6 @@ from core.session_history.parsers import (
     find_claude_sessions,
     find_codebuddy_sessions,
     find_codex_sessions,
-    find_gemini_sessions,
     find_opencode_sessions,
 )
 
@@ -98,7 +97,7 @@ def find_all_sessions(
             sessions from every project are returned unfiltered.
         home: Optional home directory override.
         engine: Optional filter — only return sessions from this engine
-            (e.g. "claude", "codex", "gemini", "opencode", "codebuddy").
+            (e.g. "claude", "codex", "opencode", "codebuddy").
 
     Returns:
         list[UnifiedSession]: All sessions found, sorted by start time
@@ -111,9 +110,6 @@ def find_all_sessions(
 
     if engine is None or engine == "codex":
         all_sessions.extend(find_codex_sessions(project_path, home))
-
-    if engine is None or engine == "gemini":
-        all_sessions.extend(find_gemini_sessions(project_path, home))
 
     if engine is None or engine == "opencode":
         all_sessions.extend(find_opencode_sessions(project_path, home))
@@ -139,7 +135,7 @@ def find_session_by_id(
 
     Args:
         session_id: The session ID to find.
-        engine: The engine type ("claude", "codex", "gemini", "opencode").
+        engine: The engine type ("claude", "codex", "opencode", "codebuddy").
         project_path: The project path to search within.
         home: Optional home directory override.
 

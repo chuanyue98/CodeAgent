@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fake stand-in for the `claude`/`codex`/`gemini`/`opencode` CLIs, used only
+"""Fake stand-in for the `claude`/`codex`/`opencode` CLIs, used only
 by the Playwright E2E suite (web/frontend/e2e/). See README.md in this
 directory for why these exist and what argv shapes they handle.
 
@@ -7,7 +7,7 @@ This one file's content is identical across all four filenames in this
 directory — the engine is auto-detected from argv[0]'s basename, and
 per-engine differences (flag names, native config file format, session-id
 field name) are handled via the ENGINE branches below. Keep any edits to
-this docstring/logic in sync across claude/codex/gemini/opencode.
+this docstring/logic in sync across claude/codex/opencode.
 """
 
 import json
@@ -109,7 +109,7 @@ def _parse_add_args_name_first(rest: list) -> tuple:
 
 
 def _parse_add_args_scope_first(rest: list, has_separator: bool) -> tuple:
-    """claude/gemini shape: mcp add --scope project [--transport T] <name>
+    """claude shape: mcp add --scope project [--transport T] <name>
     [-e K=V ...] (<url> | -- <command...> | <command...>)"""
     i = 0
     while i < len(rest) and rest[i] in ("--scope", "--transport"):
@@ -135,7 +135,7 @@ def _parse_add_args_scope_first(rest: list, has_separator: bool) -> tuple:
 
 def handle_mcp_add() -> None:
     rest = args[2:]  # drop "mcp", "add"
-    if ENGINE in ("claude", "gemini"):
+    if ENGINE == "claude":
         name, command, url, env = _parse_add_args_scope_first(rest, ENGINE == "claude")
     else:
         name, command, url, env = _parse_add_args_name_first(rest)
@@ -149,20 +149,6 @@ def handle_mcp_add() -> None:
             entry.update({"type": "stdio", "command": command[0], "args": command[1:]})
         else:
             entry.update({"type": "http", "url": url})
-        data["mcpServers"][name] = entry
-        _write_json(path, data)
-    elif ENGINE == "gemini":
-        path = Path.cwd() / ".gemini" / "settings.json"
-        data = _read_json(path)
-        data.setdefault("mcpServers", {})
-        entry: dict = {}
-        if command:
-            entry["command"] = command[0]
-            entry["args"] = command[1:]
-        else:
-            entry["url"] = url
-        if env:
-            entry["env"] = env
         data["mcpServers"][name] = entry
         _write_json(path, data)
     elif ENGINE == "codex":
@@ -199,8 +185,8 @@ def handle_mcp_remove() -> None:
         _write_json(path, data)
     elif ENGINE == "codex":
         _remove_codex_server(Path.home() / ".codex" / "config.toml", name)
-    # gemini/opencode: mcp_service.py never shells out to remove for these
-    # two (it edits their native config file directly) — nothing to do here.
+    # opencode: mcp_service.py never shells out to remove for it (it edits
+    # the native config file directly) — nothing to do here.
     print(f'Removed MCP server "{name}"')
     sys.exit(0)
 
@@ -223,11 +209,9 @@ STRUCTURED_FLAGS = {"--output-format", "--json", "-o", "--format"}
 if any(flag in args for flag in STRUCTURED_FLAGS):
     # Message position differs per engine's build_chat_command(): last
     # positional for claude/codex, but immediately after a marker flag for
-    # gemini (-p) and opencode (run) since those two have flags trailing
-    # the message rather than only preceding it.
-    if ENGINE == "gemini" and "-p" in args:
-        message = args[args.index("-p") + 1]
-    elif ENGINE == "opencode" and "run" in args:
+    # opencode (run) since it has flags trailing the message rather than
+    # only preceding it.
+    if ENGINE == "opencode" and "run" in args:
         message = args[args.index("run") + 1]
     else:
         message = args[-1] if args else ""
@@ -260,8 +244,6 @@ if any(flag in args for flag in STRUCTURED_FLAGS):
                 }
             )
         )
-    elif ENGINE == "gemini":
-        print(json.dumps({"response": reply, "session_id": session_id}))
     else:  # opencode
         if "-s" in args:
             session_id = args[args.index("-s") + 1]

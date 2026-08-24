@@ -44,10 +44,10 @@ def test_aggregation_logic():
         RawUsageEntry(
             timestamp="2026-05-02T10:00:00Z",
             session_id="s2",
-            model="gemini-1.5-pro",
+            model="hy3",
             input_tokens=500,
             output_tokens=200,
-            target="gemini",
+            target="codebuddy",
         ),
     ]
 
@@ -101,12 +101,11 @@ def test_incremental_history(mock_history_file):
 
 
 @patch("core.analytics.service.scan_claude_usage")
-@patch("core.analytics.service.scan_gemini_usage")
 @patch("core.analytics.service.scan_codex_usage")
 @patch("core.analytics.service.scan_opencode_usage")
 @patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
 def test_service_incremental_collection(
-    mock_codebuddy, mock_opencode, mock_codex, mock_gemini, mock_claude, mock_history_file
+    mock_codebuddy, mock_opencode, mock_codex, mock_claude, mock_history_file
 ):
     # Setup initial history
     initial_entry = RawUsageEntry(
@@ -129,7 +128,6 @@ def test_service_incremental_collection(
         target="claude",
     )
     mock_claude.return_value = [new_entry]
-    mock_gemini.return_value = []
     mock_codex.return_value = []
     mock_opencode.return_value = []
 
@@ -145,12 +143,11 @@ def test_service_incremental_collection(
 
 
 @patch("core.analytics.service.scan_claude_usage", return_value=[])
-@patch("core.analytics.service.scan_gemini_usage", return_value=[])
 @patch("core.analytics.service.scan_opencode_usage", return_value=[])
 @patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
 @patch("core.analytics.service.scan_codex_usage")
 def test_codex_session_snapshot_is_replaced(
-    mock_codex, _mock_codebuddy, _mock_opencode, _mock_gemini, _mock_claude, mock_history_file
+    mock_codex, _mock_codebuddy, _mock_opencode, _mock_claude, mock_history_file
 ):
     append_history(
         [
@@ -328,11 +325,13 @@ def test_codebuddy_collector_incremental_skips_older(tmp_path):
     all_entries = scan_codebuddy_usage(home=tmp_path)
     assert len(all_entries) == 1
     # With a since_timestamp at/after the entry's time, nothing new is returned.
-    assert scan_codebuddy_usage(home=tmp_path, since_timestamp=all_entries[0].timestamp) == []
+    assert (
+        scan_codebuddy_usage(home=tmp_path, since_timestamp=all_entries[0].timestamp)
+        == []
+    )
 
 
 @patch("core.analytics.service.scan_claude_usage", return_value=[])
-@patch("core.analytics.service.scan_gemini_usage", return_value=[])
 @patch("core.analytics.service.scan_codex_usage", return_value=[])
 @patch("core.analytics.service.scan_opencode_usage", return_value=[])
 @patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
@@ -340,7 +339,6 @@ def test_collect_all_purges_removed_targets(
     _mock_codebuddy,
     _mock_opencode,
     _mock_codex,
-    _mock_gemini,
     _mock_claude,
     mock_history_file,
 ):
@@ -378,4 +376,3 @@ def test_collect_all_purges_removed_targets(
 
     assert {e.target for e in entries} == {"claude"}
     assert {e.target for e in load_history()} == {"claude"}
-

@@ -238,7 +238,7 @@ def test_main_default_engine_with_proxy(monkeypatch, capsys):
         with patch("subprocess.run") as mock_run:
             ca_launcher.main()
             args, kwargs = mock_run.call_args
-            assert "start_gemini.py" in args[0][1]
+            assert "start_opencode.py" in args[0][1]
             assert kwargs["env"] is not None
             assert "HTTP_PROXY" in kwargs["env"]
             captured = capsys.readouterr()
@@ -293,7 +293,7 @@ def test_prompt_starting_with_a_reserved_word_still_launches_the_engine(monkeypa
         ca_launcher.main()
         args, kwargs = mock_run.call_args
         cmd = args[0]
-        assert "start_gemini.py" in cmd[1]
+        assert "start_opencode.py" in cmd[1]
         assert cmd[2:] == ["new", "is", "broken", "please", "fix", "-y"]
 
 
@@ -305,7 +305,7 @@ def test_history_prompt_words_still_launch_the_engine(monkeypatch):
         ca_launcher.main()
         args, kwargs = mock_run.call_args
         cmd = args[0]
-        assert "start_gemini.py" in cmd[1]
+        assert "start_opencode.py" in cmd[1]
         assert cmd[2:] == ["history", "please", "explain", "this", "-y"]
 
 
@@ -740,11 +740,11 @@ def _mcp_config(tmp_path):
 def test_mcp_sync_reports_each_engine_result(tmp_path, monkeypatch, capsys):
     _mcp_config(tmp_path)
     monkeypatch.setattr(
-        "sys.argv", ["ca_launcher.py", "mcp", "sync", "claude", "--to", "gemini"]
+        "sys.argv", ["ca_launcher.py", "mcp", "sync", "claude", "--to", "opencode"]
     )
     fake = MagicMock(
         return_value=[
-            {"engine": "gemini", "name": "srv1", "action": "added", "detail": "ok"}
+            {"engine": "opencode", "name": "srv1", "action": "added", "detail": "ok"}
         ]
     )
     with (
@@ -754,8 +754,8 @@ def test_mcp_sync_reports_each_engine_result(tmp_path, monkeypatch, capsys):
         ca_launcher.main()
 
     out = capsys.readouterr().out
-    assert "gemini" in out and "srv1" in out
-    assert fake.call_args.kwargs["targets"] == ["gemini"]
+    assert "opencode" in out and "srv1" in out
+    assert fake.call_args.kwargs["targets"] == ["opencode"]
     assert fake.call_args.kwargs["names"] is None
 
 
@@ -807,7 +807,7 @@ def test_mcp_list_covers_all_engines_by_default(tmp_path, monkeypatch, capsys):
         ca_launcher.main()
 
     out = capsys.readouterr().out
-    for engine in ("claude", "codex", "gemini", "opencode"):
+    for engine in ("claude", "codex", "opencode", "codebuddy"):
         assert engine in out
 
 
@@ -902,7 +902,9 @@ def test_mcp_add_surfaces_a_cli_failure(tmp_path, monkeypatch, capsys):
 
 def test_mcp_remove_reports_a_missing_server(tmp_path, monkeypatch, capsys):
     _mcp_config(tmp_path)
-    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "mcp", "remove", "gemini", "no"])
+    monkeypatch.setattr(
+        "sys.argv", ["ca_launcher.py", "mcp", "remove", "opencode", "no"]
+    )
     with (
         patch("core.cli.helpers._project_root", return_value=tmp_path),
         patch("core.services.mcp_service.remove_server", side_effect=KeyError("no")),
@@ -911,12 +913,14 @@ def test_mcp_remove_reports_a_missing_server(tmp_path, monkeypatch, capsys):
         ca_launcher.main()
 
     assert exc.value.code == 1
-    assert "No such MCP server in gemini" in capsys.readouterr().out
+    assert "No such MCP server in opencode" in capsys.readouterr().out
 
 
 def test_mcp_remove_succeeds(tmp_path, monkeypatch, capsys):
     _mcp_config(tmp_path)
-    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "mcp", "remove", "gemini", "fs"])
+    monkeypatch.setattr(
+        "sys.argv", ["ca_launcher.py", "mcp", "remove", "opencode", "fs"]
+    )
     fake = MagicMock()
     with (
         patch("core.cli.helpers._project_root", return_value=tmp_path),
@@ -924,21 +928,21 @@ def test_mcp_remove_succeeds(tmp_path, monkeypatch, capsys):
     ):
         ca_launcher.main()
 
-    assert fake.call_args.args[0] == "gemini"
+    assert fake.call_args.args[0] == "opencode"
     assert fake.call_args.args[2] == "fs"
-    assert "Removed 'fs' from gemini" in capsys.readouterr().out
+    assert "Removed 'fs' from opencode" in capsys.readouterr().out
 
 
 # --- default engine ---------------------------------------------------------
 #
-# `ca` hard-coded gemini, so anyone working primarily in another engine had to
-# name it on every single invocation.
+# `ca` used to hard-code one engine, so anyone working primarily in another
+# had to name it on every single invocation.
 
-_ENGINE_MAP = {"gemini": "g", "claude": "c", "opencode": "o", "codex": "x"}
+_ENGINE_MAP = {"claude": "c", "opencode": "o", "codex": "x", "codebuddy": "b"}
 
 
 def test_default_engine_falls_back_when_unset():
-    assert ca_launcher._resolve_default_engine({}, _ENGINE_MAP) == "gemini"
+    assert ca_launcher._resolve_default_engine({}, _ENGINE_MAP) == "opencode"
 
 
 @pytest.mark.parametrize("value", ["claude", "CLAUDE", "  codex  "])
@@ -956,7 +960,7 @@ def test_unknown_default_engine_warns_and_falls_back(capsys):
     resolved = ca_launcher._resolve_default_engine(
         {"default_engine": "gpt5"}, _ENGINE_MAP
     )
-    assert resolved == "gemini"
+    assert resolved == "opencode"
     stderr = capsys.readouterr().err
     assert "gpt5" in stderr
     assert "claude" in stderr  # lists what it does know

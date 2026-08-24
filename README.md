@@ -6,7 +6,7 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 
 ## Features
 
-- **Multi-Engine Support** — Seamlessly switch between Claude, Gemini, Codex, and OpenCode without changing your workflow
+- **Multi-Engine Support** — Seamlessly switch between Claude, OpenCode, Codex, and CodeBuddy without changing your workflow
 - **Prompt Sovereignty** — Your engineering rules live in your repo as Plain Markdown. No hidden system prompts
 - **Modular Skills System** — Atomic, reusable automation capabilities with instruction files and executable scripts
 - **Lifecycle Hooks** — Execute custom commands on the `before_tool` / `after_tool` events (e.g. branch protection, CI monitoring, pre-commit linting)
@@ -30,7 +30,7 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 ├──────────┬──────────┬──────────┬──────────┬─────────────────┤
 │ Engines  │  Core    │ Prompts  │  Skills  │  Hooks/Plugins  │
 │──────────│──────────│──────────│──────────│─────────────────│
-│ gemini   │ Services │  base/   │  base/   │  lifecycle      │
+│ opencode │ Services │  base/   │  base/   │  lifecycle      │
 │ claude   │ Scanners │ coding/  │ custom/  │  triggers       │
 │ opencode │ Analytics│ eng/     │          │  bundles        │
 │ codex    │ Web API  │          │          │                 │
@@ -41,7 +41,6 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 
 1. **Engines** — Pluggable adapters for different AI agents (`engines/`)
    - `ca opencode`: Local npm CLI engine with TUI support **(Recommended)**
-   - `ca gemini`: Google AI-powered engineering driver
    - `ca claude`: Anthropic-powered high-reasoning driver
    - `ca codex`: OpenAI Codex CLI-powered engineering driver
 
@@ -74,7 +73,7 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 - **Python 3.13+**
 - **At least one provider CLI, already installed and signed in.** CodeAgent drives the
   official CLIs — it does not talk to any API itself, and does not store your keys.
-  Any one of `claude`, `gemini`, `codex`, or `opencode` is enough to start.
+  Any one of `claude`, `opencode`, `codex`, or `codebuddy` is enough to start.
 - [Optional] `bun` or `npm`, only if you want the Web UI.
 
 ### Installation
@@ -103,7 +102,7 @@ Already cloned without `--recurse-submodules`? Run `git submodule update
 
 ```bash
 cd /path/to/the/project/you/want/to/work/on
-ca claude                   # or gemini / codex / opencode
+ca claude                   # or opencode / codex / codebuddy
 ```
 
 The first launch in a new directory asks which resource group to bind it to, then hands
@@ -113,17 +112,16 @@ the whole loop — everything below is optional.
 ### Launch an Engine
 
 ```bash
-# Start the default engine (gemini) with project context injection
+# Start the default engine (opencode) with project context injection
 python ca_launcher.py
 
 # Launch a specific engine
 python ca_launcher.py opencode              # OpenCode TUI
-python ca_launcher.py gemini                # Google Gemini
 python ca_launcher.py claude                # Anthropic Claude
 python ca_launcher.py codex                 # OpenAI Codex
 
 # Execute a task directly
-python ca_launcher.py gemini "Refactor this module"
+python ca_launcher.py opencode "Refactor this module"
 python ca_launcher.py claude -t refactor    # Run pre-defined task
 python ca_launcher.py opencode -t code_review
 ```
@@ -158,13 +156,13 @@ Opens the dashboard at `http://127.0.0.1:8524`. Features:
 ```bash
 # List sessions for the current project
 ca history list
-ca history list --engine gemini    # Filter by engine
+ca history list --engine opencode  # Filter by engine
 
 # View session details
-ca history show gemini <session_id>
+ca history show opencode <session_id>
 
 # Convert sessions between engine formats
-ca history convert gemini <session_id> opencode
+ca history convert claude <session_id> opencode
 ```
 
 ### Task Authoring
@@ -222,7 +220,7 @@ CodeAgent uses a `config.json` for project-specific settings. It is gitignored;
 ```json
 {
   "default_mode": "local",
-  "default_engine": "gemini",
+  "default_engine": "opencode",
   "language": "auto",
   "groups": {
     "codeagent": {
@@ -268,7 +266,6 @@ See [docs/configuration.md](docs/configuration.md) for detailed reference.
 │   ├── doctor.py          # Health check & repair
 │   └── scanners/          # Resource discovery (skills, prompts, hooks, plugins)
 ├── engines/               # LLM Adapters
-│   ├── start_gemini.py
 │   ├── start_claude_code.py
 │   ├── start_opencode.py
 │   └── start_codex.py

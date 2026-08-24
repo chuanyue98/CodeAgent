@@ -8,18 +8,14 @@ config formats. Reads parse each engine's native config file directly
 ``mcp list`` output is cleanly machine-parseable (health-check text,
 account-level entries mixed with project entries, etc).
 
-Two engines needed a fallback confirmed by a live pre-build spike — see
+One engine needed a fallback confirmed by a live pre-build spike — see
 docs/mcp-cli-spike-results.md for the full transcript:
-  - ``gemini mcp remove`` reproducibly fails to find entries even
-    immediately after ``add`` in a fresh project. Removal falls back to
-    directly editing ``.gemini/settings.json``.
   - ``opencode`` has no ``mcp remove`` subcommand at all (only
     ``add``/``list``/``auth``/``logout``/``debug``). Removal falls back to
     directly editing ``opencode.json``.
 
 Scope also differs by engine, confirmed live (not assumed from --help):
-  - claude, gemini: per-project (``<project>/.mcp.json``,
-    ``<project>/.gemini/settings.json``).
+  - claude: per-project (``<project>/.mcp.json``).
   - codex, opencode: global, regardless of cwd (``~/.codex/config.toml``,
     ``~/.config/opencode/opencode.{jsonc,json}``) — the CLIs have no
     project-scope flag for MCP servers in this version. opencode 1.18 writes
@@ -62,10 +58,6 @@ def _validate_name(name: str) -> None:
 
 def _claude_mcp_path(project: Path) -> Path:
     return project / ".mcp.json"
-
-
-def _gemini_settings_path(project: Path) -> Path:
-    return project / ".gemini" / "settings.json"
 
 
 def _codex_config_path() -> Path:
@@ -213,7 +205,7 @@ def _remove_key(path: Path, top_key: str, name: str) -> None:
 def _normalize_entry(name: str, scope: str, cfg: dict) -> dict:
     """Maps one engine-native server config dict to a uniform shape.
 
-    Handles claude/gemini's ``{"command": str, "args": [...], "env": {...}}``,
+    Handles claude's ``{"command": str, "args": [...], "env": {...}}``,
     codex's TOML-derived equivalent, and opencode's
     ``{"command": [...combined...], "environment": {...}}`` — all four in
     one place rather than four near-duplicate normalizers.
@@ -281,13 +273,6 @@ def _list_codex() -> list[dict]:
     ]
 
 
-def _list_gemini(project: Path) -> list[dict]:
-    servers = _read_json(_gemini_settings_path(project)).get("mcpServers", {})
-    return [
-        _normalize_entry(name, "project", cfg) for name, cfg in _server_entries(servers)
-    ]
-
-
 def _list_opencode() -> list[dict]:
     servers = _read_json(_opencode_config_path()).get("mcp", {})
     return [
@@ -315,8 +300,6 @@ def list_servers(engine: str, project_path: str) -> list[dict]:
         return _list_claude(project)
     if engine == "codex":
         return _list_codex()
-    if engine == "gemini":
-        return _list_gemini(project)
     if engine == "codebuddy":
         return _list_codebuddy(project)
     return _list_opencode()
@@ -388,26 +371,11 @@ def _build_add_command(
             cmd += command or []
         return cmd
 
-    if engine == "gemini":
-        # Same variadic -e/--env ordering hazard as claude — name must come
-        # before the -e flags.
-        cmd = ["gemini", "mcp", "add", "--scope", "project"]
-        if transport:
-            cmd += ["--transport", transport]
-        cmd.append(name)
-        for pair in env_pairs:
-            cmd += ["-e", pair]
-        if url:
-            cmd.append(url)
-        else:
-            cmd += command or []
-        return cmd
-
     if engine == "codebuddy":
         # ``codebuddy mcp add [options] <name> <commandOrUrl> [args...]`` with
         # ``-s/--scope`` (local|project|user), ``-t/--transport``
         # (stdio|sse|http) and the same variadic ``-e/--env`` ordering hazard
-        # as claude/gemini — name before the -e flags, ``--`` before the
+        # as claude — name before the -e flags, ``--`` before the
         # command (verified live).
         cmd = ["codebuddy", "mcp", "add", "-s", "project"]
         if transport:
@@ -454,8 +422,8 @@ def add_server(
 
 def remove_server(engine: str, project_path: str, name: str) -> None:
     """Removes an MCP server — via CLI where it works, via direct config-file
-    edit for gemini/opencode, where the spike found the CLI path broken or
-    absent (see module docstring)."""
+    edit for opencode, where the spike found the CLI path absent (see module
+    docstring)."""
     _validate_engine(engine)
     _validate_name(name)
 
@@ -467,8 +435,6 @@ def remove_server(engine: str, project_path: str, name: str) -> None:
         _run_cli(
             ["codebuddy", "mcp", "remove", name, "-s", "project"], cwd=project_path
         )
-    elif engine == "gemini":
-        _remove_key(_gemini_settings_path(Path(project_path)), "mcpServers", name)
     else:
         _remove_key(_opencode_config_path(), "mcp", name)
 
@@ -518,7 +484,7 @@ def sync_servers(
 
     Args:
         source_engine: Engine to read definitions from.
-        project_path: Project directory; load-bearing only for claude/gemini.
+        project_path: Project directory; load-bearing only for claude.
         targets: Engines to write to. Defaults to every engine but the source.
         names: Only sync these servers. Defaults to all of the source's.
         overwrite: Replace a same-named server in the target instead of

@@ -50,7 +50,6 @@ docker run -d \
   -v "$(pwd)/.ca_task_logs:/app/.ca_task_logs" \
   -v "$HOME/.claude:/root/.claude" \
   -v "$HOME/.codex:/root/.codex" \
-  -v "$HOME/.gemini:/root/.gemini" \
   -v "$HOME/.opencode:/root/.config/opencode" \
   codeagent
 ```
@@ -145,17 +144,17 @@ Inside the container `$HOME` is `/root` (the image runs as root), which is why
 
 ### Provider CLI authentication
 
-CodeAgent drives the official `claude`/`gemini`/`codex`/`opencode` CLIs rather than talking to
+CodeAgent drives the official `claude`/`opencode`/`codex`/`codebuddy` CLIs rather than talking to
 any provider API directly, and does not manage their login/session storage itself — that's
 each CLI's own concern. `docker-compose.dev.yml` mounts the corresponding host directories
-into the container (`.claude` → `/root/.claude`, `.codex` → `/root/.codex`, `.gemini` →
-`/root/.gemini`, `.opencode` → `/root/.config/opencode`) so a container can reuse credentials
+into the container (`.claude` → `/root/.claude`, `.codex` → `/root/.codex`,
+`.opencode` → `/root/.config/opencode`) so a container can reuse credentials
 from a host that's already logged in to those CLIs. Note this is separate from CodeAgent's own
 per-project artifacts under each engine's dotfolder (e.g. skill symlinks, injected
 `settings.json`) — for the Claude and OpenCode engines those are written relative to the
 current working directory (`engines/start_claude_code.py`, `engines/start_opencode.py`), while
-Gemini and Codex resolve their plugin-link directories under `$HOME`
-(`engines/start_gemini.py`, `engines/start_codex.py`). The precise on-disk format each vendor
+Codex resolves its plugin-link directory under `$HOME`
+(`engines/start_codex.py`). The precise on-disk format each vendor
 CLI uses for its own login/session tokens is outside this repository's code and has not been
 independently verified here — treat the mounts above as "reuse whatever the host CLI already
 has," not as a guarantee of every file each CLI might need.

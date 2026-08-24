@@ -10,12 +10,12 @@ Endpoints:
 wins the match rather than being read as an engine name.
 
 Mutations shell out to each engine's own ``mcp`` CLI subcommand (or, for
-gemini/opencode where the spike found that broken/absent, edit the native
+opencode where the spike found that absent, edit the native
 config file directly) — see core/services/mcp_service.py and
 docs/mcp-cli-spike-results.md for the full rationale. codex and opencode
 are global-scoped (not per-project) in this CLI version; the ``project``
 query param is accepted for all four engines for a uniform API but is only
-load-bearing for claude/gemini.
+load-bearing for claude.
 """
 
 from __future__ import annotations

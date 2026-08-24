@@ -20,7 +20,6 @@ from core.session_history.parsers.claude_parser import (
     parse_claude_session,
 )
 from core.session_history.parsers.codex_parser import _ms_to_iso, parse_codex_session
-from core.session_history.parsers.gemini_parser import parse_gemini_session
 
 # ─── UnifiedSession model tests ───────────────────────────────────────
 
@@ -317,56 +316,6 @@ def test_codex_timestamp_parser_accepts_seconds_and_milliseconds():
     assert _ms_to_iso("2023-11-14T22:13:20Z") == "2023-11-14T22:13:20.000Z"
     assert _ms_to_iso(None) == ""
     assert _ms_to_iso("not-a-timestamp") == ""
-
-
-# ─── Gemini parser tests ──────────────────────────────────────────────
-
-
-def test_parse_gemini_session(tmp_path):
-    """Test parsing a minimal Gemini JSONL session file."""
-    chats_dir = tmp_path / ".gemini" / "tmp" / "test" / "chats"
-    chats_dir.mkdir(parents=True)
-    session_file = chats_dir / "session-2026-07-11T10-00-abc12345.jsonl"
-
-    lines = [
-        json.dumps(
-            {
-                "sessionId": "gem-123",
-                "startTime": "2026-07-11T10:00:00.000Z",
-                "lastUpdated": "2026-07-11T10:05:00.000Z",
-                "kind": "main",
-            }
-        ),
-        json.dumps(
-            {
-                "id": "msg-1",
-                "timestamp": "2026-07-11T10:00:01.000Z",
-                "type": "user",
-                "content": [{"text": "Explain the architecture"}],
-            }
-        ),
-        json.dumps(
-            {
-                "id": "msg-2",
-                "timestamp": "2026-07-11T10:00:10.000Z",
-                "type": "gemini",
-                "content": "The architecture uses a layered design.",
-                "model": "gemini-2.5-pro",
-                "toolCalls": [],
-                "tokens": {"input": 100, "output": 50, "total": 150},
-            }
-        ),
-    ]
-    session_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-    session = parse_gemini_session(session_file)
-
-    assert session is not None
-    assert session.engine == EngineType.GEMINI
-    assert session.model == "gemini-2.5-pro"
-    assert session.message_count == 2
-    assert session.messages[0].content == "Explain the architecture"
-    assert "layered design" in session.messages[1].content
 
 
 # ─── Round-trip conversion test ───────────────────────────────────────

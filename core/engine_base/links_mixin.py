@@ -120,7 +120,6 @@ class _LinksMixin:
         """Returns the directory where this engine's plugin links should be created.
 
         Each engine must override this to return its specific plugin directory:
-        - Gemini:   ~/.gemini/extensions/
         - Codex:    ~/.codex/plugins/
         - Claude:   <cwd>/.claude/plugins/
         - OpenCode: <cwd>/.opencode/plugins/

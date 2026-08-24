@@ -52,26 +52,3 @@ opencode run "what did I just ask you to say?" --format json --auto \
 opencode's skip-approval flag — this wasn't in `--help` output cited by the
 original design doc and had to be found by re-reading `opencode run --help`.
 
-## gemini — blocked, not confirmed
-
-```
-gemini -p "say hello and nothing else" -o json --approval-mode yolo \
-  --session-id <uuid>
-# -> Error authenticating: IneligibleTierError: This client is no longer
-#    supported for Gemini Code Assist for individuals. To continue using
-#    Gemini, please migrate to the Antigravity suite of products.
-```
-
-This is a Google account/product-tier decision (individual-tier Gemini Code
-Assist has been sunset in favor of Antigravity), not a local config problem
-— confirmed both by the error and independently by the project owner. It
-cannot be worked around by changing CodeAgent's code. `-r`/`--resume`'s
-exact ID-acceptance behavior (the `--help` text only mentions `"latest"` or
-an index) was never exercised against a real response.
-
-**Consequence for ChatPage v1:** `GeminiEngine.build_chat_command()` only
-builds new-session commands and raises `ValueError` if asked to resume, so
-the UI can gate "continue session" off for gemini (`supportsResume: false`)
-instead of building a resume path that looks like it works but doesn't.
-Re-run this spike once an account with working Gemini Code Assist (or a
-migrated Antigravity-based CLI) is available, and lift the gate then.

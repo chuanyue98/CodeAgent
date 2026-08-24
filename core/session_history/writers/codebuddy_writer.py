@@ -34,12 +34,9 @@ from core.utils.atomic_write import atomic_write
 def _codebuddy_cwd(path: str) -> str:
     """Returns the project path in CodeBuddy's on-disk ``cwd`` spelling.
 
-    Real ``~/.codebuddy/projects`` files store ``cwd`` with a lower-cased drive
-    letter and back-slashes (``e:\\demo\\CodeAgent``), so we mirror that *on
-    Windows paths only*. A POSIX path has to stay POSIX: back-slashing
-    ``/home/cy/x`` into ``\\home\\cy\\x`` names a directory that exists on no
-    Linux or macOS machine, so every session converted there pointed at a
-    working directory CodeBuddy could not resolve.
+    Windows paths get a lower-cased drive letter and back-slashes
+    (``e:\\demo\\CodeAgent``), matching real files. POSIX paths stay as they
+    are — back-slashing one names a directory that exists nowhere.
     """
     if not re.match(r"^[A-Za-z]:", path):
         return path
@@ -50,10 +47,7 @@ def _codebuddy_cwd(path: str) -> str:
 def _to_codebuddy_ts(value: str | None) -> int:
     """Normalizes a UnifiedSession timestamp to epoch milliseconds.
 
-    Returns an ``int``, not a string: real ``~/.codebuddy/projects`` rows store
-    ``"timestamp": 1787547364552`` as a JSON number, and this module used to
-    quote it. The parser here tolerates both, so the quoting only showed up
-    once CodeBuddy itself read the file back.
+    Returns an ``int``: real rows store the timestamp as a JSON number.
     """
     if not value:
         return int(time.time() * 1000)
@@ -93,8 +87,7 @@ def write_codebuddy_session(session: Any) -> str:
 
     lines: list[str] = []
 
-    # Title, if present. Stamped with the first turn's time and the session id,
-    # the way real ``ai-title`` rows carry them.
+    # Title, if present.
     if session.title:
         first_ts = _to_codebuddy_ts(
             getattr(session.messages[0], "timestamp", None)

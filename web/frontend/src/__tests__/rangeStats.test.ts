@@ -71,14 +71,14 @@ describe('buildRangeEngines', () => {
   test('aggregates daily rows per engine and counts sessions', () => {
     const daily = [
       day('2024-01-01', { target: 'claude', cost: 2 }),
-      day('2024-01-01', { target: 'gemini', cost: 1, inputTokens: 10 }),
+      day('2024-01-01', { target: 'codex', cost: 1, inputTokens: 10 }),
     ];
     const sessions: SessionUsage[] = [
       { sessionId: 'a', target: 'claude' } as SessionUsage,
       { sessionId: 'b', target: 'claude' } as SessionUsage,
     ];
     const engines = buildRangeEngines([], daily, sessions, 7);
-    expect(engines.map(e => e.target)).toEqual(['claude', 'gemini']);
+    expect(engines.map(e => e.target)).toEqual(['claude', 'codex']);
     const claude = engines[0];
     expect(claude.sessionCount).toBe(2);
     expect(claude.cost).toBe(2);
@@ -132,17 +132,17 @@ describe('buildSeries', () => {
   test('pivots daily rows into per-key cost/tokens columns per engine', () => {
     const daily = [
       day('2024-01-01', { target: 'claude', cost: 1 }),
-      day('2024-01-01', { target: 'gemini', cost: 2, inputTokens: 0, outputTokens: 10 }),
+      day('2024-01-01', { target: 'codex', cost: 2, inputTokens: 0, outputTokens: 10 }),
       day('2024-01-02', { target: 'claude', cost: 4 }),
     ];
     const series = buildSeries('day', [], daily);
-    expect(series.engines).toEqual(['claude', 'gemini']);
+    expect(series.engines).toEqual(['claude', 'codex']);
     expect(series.cost).toEqual([
-      { _key: '2024-01-01', claude: 1, gemini: 2 },
+      { _key: '2024-01-01', claude: 1, codex: 2 },
       { _key: '2024-01-02', claude: 4 },
     ]);
     // tokens = input + output per row, accumulated per engine+key.
-    expect(series.tokens[0]).toEqual({ _key: '2024-01-01', claude: 150, gemini: 10 });
+    expect(series.tokens[0]).toEqual({ _key: '2024-01-01', claude: 150, codex: 10 });
   });
 
   test('month granularity pivots the monthly rows instead', () => {

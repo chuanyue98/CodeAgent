@@ -167,15 +167,15 @@ def _seed_analytics_history() -> None:
         },
         {
             "timestamp": stamp(2, 14, 30),
-            "session_id": "e2e-session-gemini",
-            "model": "gemini-1.5-pro",
+            "session_id": "e2e-session-codebuddy",
+            "model": "hy3",
             "input_tokens": 500,
             "output_tokens": 300,
             "cache_creation_tokens": 0,
             "cache_read_tokens": 0,
             "cost": 0.004,
-            "project_path": "/tmp/e2e-gemini-project",
-            "target": "gemini",
+            "project_path": "/tmp/e2e-codebuddy-project",
+            "target": "codebuddy",
         },
     ]
     history_path.write_text(

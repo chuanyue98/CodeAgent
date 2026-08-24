@@ -35,7 +35,7 @@ let createdTasks: Record<string, unknown>[];
 
 const SCHEDULES: Schedule[] = [
   makeSchedule({ id: 'sched-1', taskName: 'code_review' }),
-  makeSchedule({ id: 'sched-2', taskName: 'dependency_check', engine: 'gemini', cronExpr: '0 0 * * 1' }),
+  makeSchedule({ id: 'sched-2', taskName: 'dependency_check', engine: 'codebuddy', cronExpr: '0 0 * * 1' }),
 ];
 
 let schedulesFixture: Schedule[];
@@ -79,7 +79,7 @@ describe('CronPage schedule search', () => {
     await screen.findByText('code_review');
     expect(screen.getByText('dependency_check')).toBeVisible();
 
-    fireEvent.change(screen.getByLabelText('Search schedules'), { target: { value: 'gemini' } });
+    fireEvent.change(screen.getByLabelText('Search schedules'), { target: { value: 'codebuddy' } });
 
     expect(screen.getByText('dependency_check')).toBeVisible();
     expect(screen.queryByText('code_review')).not.toBeInTheDocument();
