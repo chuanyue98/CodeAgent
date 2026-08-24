@@ -224,7 +224,9 @@ def test_mcp_drift_is_ok_when_all_engines_match(monkeypatch):
     monkeypatch.setattr(
         mcp_service,
         "list_servers",
-        _mcp_servers(dict.fromkeys(("claude", "codex", "gemini", "opencode"), ["fs"])),
+        _mcp_servers(
+            dict.fromkeys(("claude", "codex", "gemini", "opencode", "codebuddy"), ["fs"])
+        ),
     )
     section = doctor.Section("Parity")
 

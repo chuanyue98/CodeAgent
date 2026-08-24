@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import Analytics from '../components/Analytics';
@@ -65,7 +65,20 @@ const MODELS = [
   },
 ];
 
+let toolRequests: string[] = [];
+
+const TOOL_USAGE = {
+  tools: [
+    { name: 'Bash', count: 80, byEngine: { claude: 50, codex: 30 } },
+    { name: 'Read', count: 32, byEngine: { claude: 32 } },
+  ],
+  totalCalls: 112,
+  sessions: 9,
+  engines: { claude: 82, codex: 30 },
+};
+
 beforeEach(() => {
+  toolRequests = [];
   globalThis.fetch = vi.fn().mockImplementation((url: string) => {
     if (url.includes('/api/analytics/summary')) return jsonResponse({ session_count: 2 });
     if (url.includes('/api/analytics/engines')) {
@@ -82,6 +95,10 @@ beforeEach(() => {
     if (url.includes('/api/analytics/monthly')) return jsonResponse([]);
     if (url.includes('/api/analytics/sessions')) return jsonResponse([]);
     if (url.includes('/api/analytics/models')) return jsonResponse(MODELS);
+    if (url.includes('/api/analytics/tools')) {
+      toolRequests.push(url);
+      return jsonResponse(TOOL_USAGE);
+    }
     return Promise.reject(new Error(`Unhandled fetch to ${url}`));
   }) as unknown as typeof fetch;
 });
@@ -195,6 +212,10 @@ describe('Analytics empty range', () => {
       if (url.includes('/api/analytics/monthly')) return jsonResponse([]);
       if (url.includes('/api/analytics/sessions')) return jsonResponse([]);
       if (url.includes('/api/analytics/models')) return jsonResponse([]);
+      if (url.includes('/api/analytics/tools')) {
+        toolRequests.push(url);
+        return jsonResponse(TOOL_USAGE);
+      }
       return Promise.reject(new Error(`Unhandled fetch to ${url}`));
     }) as unknown as typeof fetch;
 
@@ -202,5 +223,33 @@ describe('Analytics empty range', () => {
 
     expect(await screen.findByText(/No usage in the last 30 days/)).toBeVisible();
     expect(screen.queryByText('No usage recorded yet')).not.toBeInTheDocument();
+  });
+});
+
+describe('Analytics tool ranking', () => {
+  test('ranks tools and shows the per-engine split', async () => {
+    renderAnalytics();
+
+    expect(await screen.findByText('Tool usage')).toBeVisible();
+    expect(await screen.findByText('Bash')).toBeVisible();
+    expect(screen.getByText('Read')).toBeVisible();
+
+    // The cross-engine split is the reason this exists: a single vendor CLI
+    // can only ever report its own column.
+    expect(screen.getByText(/Claude 50/)).toBeVisible();
+    expect(screen.getByText(/Codex 30/)).toBeVisible();
+  });
+
+  test('re-counts when the range changes', async () => {
+    renderAnalytics();
+    await screen.findByText('Bash');
+
+    expect(toolRequests.some(url => url.includes('days=30'))).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: '7 days' }));
+
+    await waitFor(() => {
+      expect(toolRequests.some(url => url.includes('days=7'))).toBe(true);
+    });
   });
 });

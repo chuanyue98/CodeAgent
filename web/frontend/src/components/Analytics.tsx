@@ -30,6 +30,7 @@ import {
   filterSessionsByRange,
   type RangeId,
 } from './analytics/rangeStats';
+import ToolRanking from './analytics/ToolRanking';
 
 // ── Main component ───────────────────────────────────────────────────────────
 const Analytics: React.FC = () => {
@@ -220,6 +221,9 @@ const Analytics: React.FC = () => {
         onSelectModel={setSelectedModel}
         totalCost={totals.cost}
       />
+
+      {/* ── Tool usage ─────────────────────────────────────────────────────── */}
+      <ToolRanking rangeDays={rangeDays} rangeLabel={rangeLabel} />
 
       {/* ── Detail table ───────────────────────────────────────────────────── */}
       <DetailTable

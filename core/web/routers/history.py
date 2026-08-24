@@ -88,6 +88,8 @@ def _validate_source_file_path(source_file: str, engine: str) -> Path:
     elif engine == "opencode":
         allowed_dirs.append((home / ".opencode").resolve())
         allowed_dirs.append((home / ".local" / "share" / "opencode").resolve())
+    elif engine == "codebuddy":
+        allowed_dirs.append((home / ".codebuddy" / "projects").resolve())
 
     for allowed in allowed_dirs:
         if file_path.is_relative_to(allowed):
@@ -338,6 +340,8 @@ def _resume_launch_command(engine: str, session_id: str, project: Path) -> list[
         # we minted, so a native-resume is not possible from here. Fall back
         # to launching the engine normally in the project directory.
         return ["gemini"]
+    if engine == "codebuddy":
+        return ["codebuddy", "--resume", session_id]
     raise ValueError(f"Unknown engine: {engine}")
 
 

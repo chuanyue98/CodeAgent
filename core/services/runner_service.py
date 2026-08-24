@@ -23,6 +23,7 @@ _CHAT_SESSION_ID_FIELDS: dict[str, tuple[str, ...]] = {
     "codex": ("thread_id",),
     "opencode": ("sessionID",),
     "gemini": ("session_id", "sessionId"),
+    "codebuddy": ("session_id", "sessionId"),
 }
 
 
@@ -310,6 +311,10 @@ class TaskRunner:
             from engines.start_gemini import GeminiEngine
 
             return GeminiEngine()
+        if engine == "codebuddy":
+            from engines.start_codebuddy import CodeBuddyEngine
+
+            return CodeBuddyEngine()
         raise ValueError(f"Invalid engine: {engine!r}")
 
     def _extract_chat_session_id(self, engine: str, log_path: Path) -> str | None:

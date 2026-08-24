@@ -92,6 +92,46 @@ def test_list_claude_missing_file_returns_empty(tmp_path):
     assert mcp_service.list_servers("claude", str(tmp_path)) == []
 
 
+def test_list_codebuddy_reads_project_mcp_json(tmp_path):
+    # codebuddy's project scope shares claude's ``.mcp.json`` filename
+    # (verified live); entries may carry codebuddy-specific extras
+    # (``print``) which normalization ignores.
+    (tmp_path / ".mcp.json").write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "srv1": {
+                        "type": "stdio",
+                        "command": "echo",
+                        "args": ["hi"],
+                        "env": {"FOO": "bar"},
+                        "print": True,
+                    }
+                },
+                "disabledMcpServers": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    servers = mcp_service.list_servers("codebuddy", str(tmp_path))
+
+    assert servers == [
+        {
+            "name": "srv1",
+            "scope": "project",
+            "transport": "stdio",
+            "command": ["echo", "hi"],
+            "url": None,
+            "env": {"FOO": "bar"},
+        }
+    ]
+
+
+def test_list_codebuddy_missing_file_returns_empty(tmp_path):
+    assert mcp_service.list_servers("codebuddy", str(tmp_path)) == []
+
+
 def test_list_gemini_reads_project_settings(tmp_path):
     gemini_dir = tmp_path / ".gemini"
     gemini_dir.mkdir()
@@ -293,6 +333,28 @@ def test_add_server_opencode_builds_expected_argv(tmp_path, fake_bin):
     assert argv == ["mcp", "add", "srv1", "--env", "FOO=bar", "--", "echo", "hi"]
 
 
+def test_add_server_codebuddy_builds_expected_argv(tmp_path, fake_bin):
+    write_fake_cli(fake_bin, "codebuddy")
+
+    mcp_service.add_server(
+        "codebuddy", str(tmp_path), "srv1", command=["echo", "hi"], env={"FOO": "bar"}
+    )
+
+    argv = recorded_argv(fake_bin, "codebuddy")
+    assert argv == [
+        "mcp",
+        "add",
+        "-s",
+        "project",
+        "srv1",
+        "-e",
+        "FOO=bar",
+        "--",
+        "echo",
+        "hi",
+    ]
+
+
 def test_add_server_url_variant(tmp_path, fake_bin):
     write_fake_cli(fake_bin, "codex")
 
@@ -334,6 +396,20 @@ def test_remove_server_codex_via_cli(tmp_path, fake_bin):
     mcp_service.remove_server("codex", str(tmp_path), "srv1")
 
     assert recorded_argv(fake_bin, "codex") == ["mcp", "remove", "srv1"]
+
+
+def test_remove_server_codebuddy_via_cli(tmp_path, fake_bin):
+    write_fake_cli(fake_bin, "codebuddy")
+
+    mcp_service.remove_server("codebuddy", str(tmp_path), "srv1")
+
+    assert recorded_argv(fake_bin, "codebuddy") == [
+        "mcp",
+        "remove",
+        "srv1",
+        "-s",
+        "project",
+    ]
 
 
 def test_remove_server_gemini_via_file_edit_preserves_others(tmp_path):
@@ -425,8 +501,12 @@ def test_sync_defaults_to_every_other_engine(tmp_path, home, calls):
 
     results = mcp_service.sync_servers("claude", str(tmp_path))
 
-    assert {r["engine"] for r in results} == {"codex", "gemini", "opencode"}
-    assert all(r["action"] == "added" for r in results)
+    assert {r["engine"] for r in results} == {"codex", "gemini", "opencode", "codebuddy"}
+    # codebuddy's project scope IS claude's ``.mcp.json`` (verified live), so
+    # it already "has" srv1 and correctly reports skipped rather than added.
+    for r in results:
+        expected_action = "skipped" if r["engine"] == "codebuddy" else "added"
+        assert r["action"] == expected_action
     assert {engine for kind, engine, *_ in calls if kind == "add"} == {
         "codex",
         "gemini",

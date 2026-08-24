@@ -78,6 +78,7 @@ def test_agent_gateway_settings_support_config_and_environment(monkeypatch):
         "claude": True,
         "opencode": True,
         "gemini": False,
+        "codebuddy": True,
     }
 
 

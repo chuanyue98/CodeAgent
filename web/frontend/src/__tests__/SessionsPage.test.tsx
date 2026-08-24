@@ -37,10 +37,14 @@ function jsonResponse(data: unknown) {
 }
 
 let deleteCalls: string[];
+let historyLoads: string[];
+let sessionsLoads: number;
 let sessionsFixture: SessionUsage[];
 
 beforeEach(() => {
   deleteCalls = [];
+  historyLoads = [];
+  sessionsLoads = 0;
   sessionsFixture = SESSIONS;
   globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     // SessionsPage now reads the workspace through ProjectProvider.
@@ -48,6 +52,7 @@ beforeEach(() => {
     if (url.includes('/api/projects')) return jsonResponse([]);
     if (url.includes('/api/groups')) return jsonResponse({});
     if (url.includes('/api/analytics/sessions')) {
+      sessionsLoads += 1;
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -57,6 +62,7 @@ beforeEach(() => {
     }
     // Opening a row loads that session's transcript in the detail panel.
     if (url.startsWith('/api/history/') && init?.method !== 'DELETE') {
+      historyLoads.push(url);
       return jsonResponse({
         session_id: 'session-a',
         engine: 'claude',
@@ -186,6 +192,26 @@ describe('SessionsPage session detail', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('session-detail')).not.toBeInTheDocument();
     });
+  });
+
+  test('refreshing the list leaves the open transcript untouched', async () => {
+    renderSessionsPage();
+    await screen.findByText('2 sessions');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open session session-a' }));
+    const panel = await screen.findByTestId('session-detail');
+    await within(panel).findByText('how do I ship this');
+    expect(historyLoads).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(sessionsLoads).toBe(2));
+
+    // Refresh used to swap the whole page for the loading skeleton, which
+    // unmounted this panel: the transcript was refetched and whatever you
+    // had scrolled to was gone. Same DOM node, no second fetch.
+    expect(screen.getByTestId('session-detail')).toBe(panel);
+    expect(historyLoads).toHaveLength(1);
+    expect(screen.queryByText('Loading sessions')).not.toBeInTheDocument();
   });
 
   test('deleting from the panel drops the row and closes the panel', async () => {

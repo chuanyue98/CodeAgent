@@ -216,11 +216,18 @@ export default function SessionsPage() {
     }
   };
 
-  if (loading) {
+  // Only the first load gets the skeleton. Refreshing used to swap the whole
+  // page for it, which unmounted the open session's detail panel -- so the
+  // transcript you were part-way through was refetched from scratch and lost
+  // its scroll position. With data already on screen, keep showing it and let
+  // the new response replace it underneath.
+  const firstLoad = sessions.length === 0;
+
+  if (loading && firstLoad) {
     return <FilterListSkeleton label={t('sessions.loading')} />;
   }
 
-  if (error) {
+  if (error && firstLoad) {
     return <ErrorState message={error} onRetry={reload} />;
   }
 
@@ -283,12 +290,20 @@ export default function SessionsPage() {
             ))}
             <button
               onClick={reload}
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+              disabled={loading}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <RefreshCw className="w-3 h-3" /> {t('common.refresh')}
+              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> {t('common.refresh')}
             </button>
           </div>
         </div>
+
+        {error && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-red-100 bg-red-50/60 px-3 py-2 text-xs text-red-600">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            {error}
+          </div>
+        )}
 
         {deleteError && (
           <div className="mb-3 flex items-center gap-2 rounded-lg border border-red-100 bg-red-50/60 px-3 py-2 text-xs text-red-600">

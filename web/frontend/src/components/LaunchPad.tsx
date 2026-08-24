@@ -22,6 +22,7 @@ const ENGINES: Engine[] = [
   { id: 'gemini',    name: 'Gemini',    description: 'Google · Gemini CLI',              color: 'bg-blue-50 border-blue-200 text-blue-700' },
   { id: 'opencode',  name: 'OpenCode',  descriptionKey: 'launch.opencodeDescription', color: 'bg-violet-50 border-violet-200 text-violet-700' },
   { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',               color: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+  { id: 'codebuddy', name: 'CodeBuddy', description: 'Tencent · CodeBuddy Code CLI',     color: 'bg-sky-50 border-sky-200 text-sky-700' },
 ];
 
 export default function LaunchPad() {

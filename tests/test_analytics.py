@@ -97,8 +97,9 @@ def test_incremental_history(mock_history_file):
 @patch("core.analytics.service.scan_gemini_usage")
 @patch("core.analytics.service.scan_codex_usage")
 @patch("core.analytics.service.scan_opencode_usage")
+@patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
 def test_service_incremental_collection(
-    mock_opencode, mock_codex, mock_gemini, mock_claude, mock_history_file
+    mock_codebuddy, mock_opencode, mock_codex, mock_gemini, mock_claude, mock_history_file
 ):
     # Setup initial history
     initial_entry = RawUsageEntry(
@@ -139,9 +140,10 @@ def test_service_incremental_collection(
 @patch("core.analytics.service.scan_claude_usage", return_value=[])
 @patch("core.analytics.service.scan_gemini_usage", return_value=[])
 @patch("core.analytics.service.scan_opencode_usage", return_value=[])
+@patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
 @patch("core.analytics.service.scan_codex_usage")
 def test_codex_session_snapshot_is_replaced(
-    mock_codex, _mock_opencode, _mock_gemini, _mock_claude, mock_history_file
+    mock_codex, _mock_codebuddy, _mock_opencode, _mock_gemini, _mock_claude, mock_history_file
 ):
     append_history(
         [
@@ -224,3 +226,149 @@ def test_concurrent_cache_misses_collect_once(monkeypatch, tmp_path):
 
     assert len(results) == 6
     assert calls["collect"] == 1
+
+
+def test_codebuddy_collector_extracts_usage(tmp_path):
+    """CodeBuddy's providerData.usage maps onto RawUsageEntry correctly."""
+    import json
+
+    from core.analytics.collectors.codebuddy_collector import scan_codebuddy_usage
+
+    project_dir = tmp_path / ".codebuddy" / "projects" / "e-demo-CodeAgent"
+    project_dir.mkdir(parents=True)
+    rows = [
+        {
+            "type": "message",
+            "role": "user",
+            "timestamp": 1787548456532,
+            "cwd": "e:\\demo\\CodeAgent",
+            "content": [{"type": "input_text", "text": "你好"}],
+        },
+        {
+            "type": "message",
+            "role": "assistant",
+            "status": "completed",
+            "timestamp": 1787548459000,
+            "cwd": "e:\\demo\\CodeAgent",
+            "providerData": {
+                "model": "hy3",
+                "usage": {
+                    "requests": 1,
+                    "inputTokens": 25949,
+                    "outputTokens": 50,
+                    "totalTokens": 25999,
+                    "inputTokensDetails": [{"cached_tokens": 384}],
+                },
+            },
+            "content": [{"type": "output_text", "text": "你好！"}],
+        },
+        # No usage block → skipped.
+        {
+            "type": "message",
+            "role": "assistant",
+            "status": "completed",
+            "timestamp": 1787548460000,
+            "cwd": "e:\\demo\\CodeAgent",
+            "providerData": {"model": "hy3"},
+            "content": [{"type": "output_text", "text": "ok"}],
+        },
+    ]
+    with (project_dir / "sess-1.jsonl").open("w", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    entries = scan_codebuddy_usage(home=tmp_path)
+
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.target == "codebuddy"
+    assert entry.session_id == "sess-1"
+    assert entry.model == "hy3"
+    assert entry.input_tokens == 25949
+    assert entry.output_tokens == 50
+    assert entry.cache_read_tokens == 384
+    assert entry.project_path == "e:\\demo\\CodeAgent"
+    # Epoch-ms converted to ISO 8601 (string-comparable for incremental scans).
+    assert entry.timestamp.startswith("2026-")
+    assert "T" in entry.timestamp
+
+
+def test_codebuddy_collector_incremental_skips_older(tmp_path):
+    import json
+
+    from core.analytics.collectors.codebuddy_collector import scan_codebuddy_usage
+
+    project_dir = tmp_path / ".codebuddy" / "projects" / "e-demo-CodeAgent"
+    project_dir.mkdir(parents=True)
+    with (project_dir / "sess-1.jsonl").open("w", encoding="utf-8") as f:
+        f.write(
+            json.dumps(
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "timestamp": 1787548459000,
+                    "cwd": "e:\\demo\\CodeAgent",
+                    "providerData": {
+                        "model": "hy3",
+                        "usage": {"inputTokens": 10, "outputTokens": 5},
+                    },
+                    "content": [{"type": "output_text", "text": "x"}],
+                }
+            )
+            + "\n"
+        )
+
+    all_entries = scan_codebuddy_usage(home=tmp_path)
+    assert len(all_entries) == 1
+    # With a since_timestamp at/after the entry's time, nothing new is returned.
+    assert scan_codebuddy_usage(home=tmp_path, since_timestamp=all_entries[0].timestamp) == []
+
+
+@patch("core.analytics.service.scan_claude_usage", return_value=[])
+@patch("core.analytics.service.scan_gemini_usage", return_value=[])
+@patch("core.analytics.service.scan_codex_usage", return_value=[])
+@patch("core.analytics.service.scan_opencode_usage", return_value=[])
+@patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
+def test_collect_all_purges_removed_targets(
+    _mock_codebuddy,
+    _mock_opencode,
+    _mock_codex,
+    _mock_gemini,
+    _mock_claude,
+    mock_history_file,
+):
+    """Stale trae/workbuddy snapshots are dropped from the history store."""
+    append_history(
+        [
+            RawUsageEntry(
+                timestamp="2026-05-01T10:00:00Z",
+                session_id="wb-1",
+                model="hy3",
+                input_tokens=100,
+                output_tokens=50,
+                target="workbuddy",
+            ),
+            RawUsageEntry(
+                timestamp="2026-05-01T10:00:00Z",
+                session_id="trae-1",
+                model="hy3",
+                input_tokens=100,
+                output_tokens=50,
+                target="trae",
+            ),
+            RawUsageEntry(
+                timestamp="2026-05-01T10:00:00Z",
+                session_id="claude-1",
+                model="gpt-4o",
+                input_tokens=100,
+                output_tokens=50,
+                target="claude",
+            ),
+        ]
+    )
+
+    entries = _collect_all()
+
+    assert {e.target for e in entries} == {"claude"}
+    assert {e.target for e in load_history()} == {"claude"}
+
