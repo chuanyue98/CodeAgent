@@ -73,5 +73,7 @@ uiux-review/
 codeagent-audit-report/
 
 # Other agent tools keep private working notes inside the repo; they are
-# local scratch, not project files.
+# local scratch, not project files. .workbuddy/ was added after a set of
+# those notes was committed to a public repository by a `git add -A`.
 .workbuddy/
+.codebuddy/

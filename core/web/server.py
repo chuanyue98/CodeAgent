@@ -102,6 +102,12 @@ def initialize_default_groups() -> None:
     def _modifier(config_data: dict) -> dict:
         skills_root, prompts_root, hooks_root = _get_roots()
         groups: dict = config_data.get("groups", {})
+        # Whether this config has ever been seeded, as opposed to which
+        # groups happen to exist right now. Keying the decision on presence
+        # made every deletion temporary: remove a template group in Settings
+        # and the next server start silently rebuilt it, with no way to say
+        # "I do not want this one".
+        first_run = "groups" not in config_data
         skill_scanner = SkillScanner(skills_root)
         scanned_skills, _ = skill_scanner.scan()
         prompt_scanner = PromptScanner(prompts_root)
@@ -119,7 +125,7 @@ def initialize_default_groups() -> None:
                 for prompt_group in DEFAULT_GROUP_PROMPTS.get(group_name, [])
                 if prompt_group in scanned_prompts
             ]
-            if group_name not in groups:
+            if first_run and group_name not in groups:
                 skills_list = [
                     f"{cat}/{skill}"
                     for cat in categories
@@ -143,7 +149,10 @@ def initialize_default_groups() -> None:
                     len(skills_list),
                 )
 
-            else:
+            # Deliberately `elif ... in groups` rather than a bare `else`:
+            # after the first run a deleted template group reaches here and
+            # must stay deleted, not be back-filled key by key.
+            elif group_name in groups:
                 if "prompts" not in groups[group_name]:
                     groups[group_name]["prompts"] = prompt_defaults
                     changed = True
