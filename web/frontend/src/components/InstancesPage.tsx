@@ -201,7 +201,7 @@ export default function InstancesPage() {
                     </span>
                     {instance.kind === 'chat' && (
                       <Link
-                        to="/agent/web"
+                        to={`/agent/web?session=${encodeURIComponent(instance.id)}`}
                         className="flex items-center gap-1 rounded-lg border border-primary/30 px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/10"
                       >
                         {t('instances.openChat')}

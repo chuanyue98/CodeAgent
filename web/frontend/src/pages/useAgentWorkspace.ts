@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
 import type { ConversationListItem } from '../utils/agentWorkspaceHelpers';
@@ -220,6 +221,21 @@ export default function useAgentWorkspace(): UseAgentWorkspaceReturn {
     hasOlderMessages, loadingOlderMessages,
     connect, selectSession, selectNativeSession, newSession, cancel, respondApproval,
   } = connection;
+
+  // 深链支持：/agent/web?session=<gateway会话id> 在 bootstrap 就绪后自动
+  // 选中并连接该会话。实例管理页的"打开聊天"跳转到这里直达对应会话。
+  // 会话列表只分页拉了最近 100 个，目标可能不在其中——selectSession 只
+  // 用 session.id，兜底直接按 id 恢复。
+  const [searchParams] = useSearchParams();
+  const deepLinkTarget = searchParams.get('session');
+  const deepLinkedSessionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!deepLinkTarget || deepLinkedSessionRef.current) return;
+    if (loading) return; // gateway 尚未就绪
+    deepLinkedSessionRef.current = deepLinkTarget;
+    const target = sessions.find(session => session.id === deepLinkTarget);
+    void selectSession(target ?? ({ id: deepLinkTarget } as AgentSession));
+  }, [deepLinkTarget, loading, sessions, selectSession]);
 
   const composerUI = useWorkspaceComposerUI({
     messages: state.messages,
