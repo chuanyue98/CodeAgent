@@ -13,6 +13,7 @@ dependencies = [
     "click>=8.0.0",
     "croniter>=2.0.0",
     "fastapi>=0.115.0",
+    "mcp>=1.28",
     "packaging==26.2",
     "pathspec==1.1.1",
     "psutil>=6.0",

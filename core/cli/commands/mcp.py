@@ -182,3 +182,42 @@ def mcp_sync(ctx, source, targets, names, overwrite, dry_run):  # type: ignore[n
     if failed:
         print(t("mcp.partial_failure", failed=failed, total=len(results)))
         sys.exit(1)
+
+
+@mcp.command(name="serve")
+@click.option(
+    "--http",
+    is_flag=True,
+    help="以 Streamable HTTP 模式运行(默认 stdio,桌面工具子进程拉起即用)。",
+)
+@click.option("--port", default=8525, type=int, help="HTTP 模式端口(默认 8525)。")
+@click.option(
+    "--group",
+    default=None,
+    help="按 config.json 的组过滤技能,如 --group work;默认挂载全部。",
+)
+@click.pass_context
+def mcp_serve(ctx, http, port, group):  # type: ignore[no-untyped-def]
+    """Serve CodeAgent assets (skills) as an MCP server (read-only).
+
+    把 CodeAgent 自己的 skills 按 MCP 标准暴露成 tools/resources,
+    让任何支持 MCP 的客户端(CodeBuddy / Trae / Cursor / claude / codex)
+    都能直接消费。默认只读,不接触任何 API 密钥。
+
+    在客户端里连接:
+      stdio:  uv run python -m core.services.mcp_server_service(或 ca mcp serve 的子进程命令)
+      http:   http://127.0.0.1:8525
+    """
+    _helpers._ensure_project_on_path(ctx.obj["root"])
+    from core.services.mcp_server_service import serve
+
+    try:
+        serve(
+            config=ctx.obj["config"],
+            group=group,
+            transport="http" if http else "stdio",
+            port=port,
+        )
+    except RuntimeError as exc:
+        print(click.style(f"✗ {exc}", fg="red"))
+        sys.exit(1)
