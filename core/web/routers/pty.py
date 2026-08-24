@@ -20,8 +20,10 @@ import struct
 import subprocess
 import sys
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
+from uuid import uuid4
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
@@ -54,6 +56,27 @@ _READ_CHUNK = 65536
 # 伪引擎标识：engine=shell 时不拉起任何 Agent CLI，而是给用户一个纯系统
 # shell（Windows 优先 Git Bash，兜底 PowerShell/cmd；POSIX 用 $SHELL）。
 SHELL_ENGINE = "shell"
+
+# 活跃 PTY 会话注册表，供实例管理页（routers/instances.py）列出与停止。
+# 只在事件循环内读写，普通 dict 即可。
+_ACTIVE_SESSIONS: dict[str, dict[str, Any]] = {}
+
+
+def list_active_sessions() -> list[dict[str, Any]]:
+    """返回活跃 PTY 会话的可序列化信息（不含会话对象本身）。"""
+    return [
+        {key: value for key, value in entry.items() if key != "session"}
+        for entry in _ACTIVE_SESSIONS.values()
+    ]
+
+
+async def stop_active_session(session_id: str) -> bool:
+    """终止一个活跃 PTY 会话；不存在时返回 False。"""
+    entry = _ACTIVE_SESSIONS.get(session_id)
+    if entry is None:
+        return False
+    await entry["session"].terminate()
+    return True
 
 
 def _shell_command() -> list[str]:
@@ -96,6 +119,17 @@ async def get_pty_status() -> dict:
     return pty_capability()
 
 
+@router.get("/sessions")
+async def list_pty_sessions() -> dict:
+    """活跃 PTY 会话列表，供实例管理页使用。"""
+    return {"sessions": list_active_sessions()}
+
+
+@router.post("/sessions/{session_id}/stop")
+async def stop_pty_session(session_id: str) -> dict:
+    return {"success": await stop_active_session(session_id)}
+
+
 def _resolve_registered_workspace(cwd: str) -> Path:
     config, warnings = ConfigService(get_config_path()).get_config()
     if warnings:
@@ -126,6 +160,8 @@ def _resolve_registered_workspace(cwd: str) -> Path:
 class PtySession(Protocol):
     def write(self, data: str) -> None: ...
     def resize(self, cols: int, rows: int) -> None: ...
+    @property
+    def pid(self) -> int | None: ...
     async def wait(self) -> int:
         """Blocks until the child exits and returns its exit code."""
         ...
@@ -150,6 +186,10 @@ class _PosixSession:
     def __init__(self, process, master_fd: int):
         self._process = process
         self._master_fd = master_fd
+
+    @property
+    def pid(self) -> int | None:
+        return self._process.pid
 
     def write(self, data: str) -> None:
         with contextlib.suppress(OSError):
@@ -260,6 +300,10 @@ class _WindowsSession:  # pragma: no cover - exercised only on Windows
             target=self._read_loop, daemon=True, name="pty-windows-reader"
         )
         self._reader_thread.start()
+
+    @property
+    def pid(self) -> int | None:
+        return self._pty.pid
 
     def _read_loop(self) -> None:
         while True:
@@ -404,6 +448,16 @@ async def pty_websocket(
             await websocket.close(code=1011, reason=f"Failed to start session: {exc}")
         return
 
+    session_id = uuid4().hex
+    _ACTIVE_SESSIONS[session_id] = {
+        "id": session_id,
+        "engine": engine,
+        "cwd": str(working_dir),
+        "pid": session.pid,
+        "started_at": datetime.now(UTC).isoformat(),
+        "session": session,
+    }
+
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
 
     async def pump_output() -> None:
@@ -463,6 +517,7 @@ async def pty_websocket(
     except WebSocketDisconnect:
         pass
     finally:
+        _ACTIVE_SESSIONS.pop(session_id, None)
         exit_wait_task.cancel()
         with contextlib.suppress(Exception, asyncio.CancelledError):
             await exit_wait_task

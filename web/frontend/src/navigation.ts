@@ -24,6 +24,7 @@ export const primaryNav: PrimaryNavItem[] = [
 export const AGENT_TABS: SectionTab[] = [
   { to: '/agent/web', labelKey: 'tab.agent.web' },
   { to: '/agent/terminal', labelKey: 'tab.agent.terminal' },
+  { to: '/agent/instances', labelKey: 'tab.agent.instances' },
 ];
 
 // Logs lives here, not under Activity: these are the run logs of the tasks
@@ -70,6 +71,7 @@ export const PAGE_LABEL_KEYS: Record<string, TranslationKey> = {
   '/home': 'nav.home',
   '/agent/web': 'tab.agent.web',
   '/agent/terminal': 'tab.agent.terminal',
+  '/agent/instances': 'tab.agent.instances',
   '/automations/tasks': 'tab.automations.tasks',
   '/automations/schedules': 'tab.automations.schedules',
   '/automations/logs': 'tab.automations.logs',
