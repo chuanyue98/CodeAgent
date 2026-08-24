@@ -537,6 +537,8 @@ export const en = {
   'agent.send': 'Send message',
   'agent.copied': 'Copied',
   'agent.copyMessage': 'Copy message',
+  'agent.toolsExecuted': '{count} tools executed',
+  'agent.toolsFailed': '{count} failed',
   'agent.copyCode': 'Copy code',
   'agent.activity': 'Activity',
   'agent.activitySubtitle': 'Tools, diffs, usage, and protocol events',
@@ -651,6 +653,8 @@ export const en = {
 
   // ── Local terminal ────────────────────────────────────────────────────────
   'launch.opencodeDescription': 'Local npm CLI with a full TUI',
+  'launch.shellName': 'Plain Terminal',
+  'launch.shellDescription': 'System shell (Git Bash / PowerShell), no agent started',
   'launch.detectFailed': 'Failed to detect browser terminal support',
   'launch.closeTerminal': 'Close terminal',
   'launch.intro': 'Opens the provider CLI in an in-browser terminal, running on the machine hosting CodeAgent.',

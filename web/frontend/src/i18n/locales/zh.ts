@@ -524,6 +524,8 @@ export const zh: Record<TranslationKey, string> = {
   'agent.send': '发送消息',
   'agent.copied': '已复制',
   'agent.copyMessage': '复制消息',
+  'agent.toolsExecuted': '{count} 个工具调用',
+  'agent.toolsFailed': '{count} 个失败',
   'agent.copyCode': '复制代码',
   'agent.activity': '回合事件',
   'agent.activitySubtitle': '工具、diff、用量和协议事件',
@@ -636,6 +638,8 @@ export const zh: Record<TranslationKey, string> = {
 
   // ── Local terminal ────────────────────────────────────────────────────────
   'launch.opencodeDescription': '本地 npm CLI，带完整 TUI',
+  'launch.shellName': '纯终端',
+  'launch.shellDescription': '系统 Shell（Git Bash / PowerShell），不启动任何智能体',
   'launch.detectFailed': '检测浏览器终端支持失败',
   'launch.closeTerminal': '关闭终端',
   'launch.intro': '在浏览器终端中打开引擎 CLI，运行在托管 CodeAgent 的本机上。',

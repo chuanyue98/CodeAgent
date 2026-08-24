@@ -15,6 +15,7 @@ import asyncio
 import codecs
 import contextlib
 import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -49,6 +50,35 @@ from core.web.security import verify_websocket
 router = APIRouter(prefix="/api/pty", tags=["pty"])
 
 _READ_CHUNK = 65536
+
+# 伪引擎标识：engine=shell 时不拉起任何 Agent CLI，而是给用户一个纯系统
+# shell（Windows 优先 Git Bash，兜底 PowerShell/cmd；POSIX 用 $SHELL）。
+SHELL_ENGINE = "shell"
+
+
+def _shell_command() -> list[str]:
+    """返回当前平台的交互式 shell 命令。"""
+    if sys.platform != "win32":
+        return [os.environ.get("SHELL") or "/bin/bash"]
+    # 与 CodeBuddy 同样的策略：优先 Git Bash（从 git 的安装位置向上推导
+    # Git 根目录，兼容 cmd/git.exe 与 mingw64/bin/git.exe 两种布局，
+    # 同时避开 WSL 的 System32\bash.exe）。
+    candidates: list[Path] = []
+    git = shutil.which("git")
+    if git:
+        for ancestor in Path(git).parents:
+            candidates.append(ancestor / "bin" / "bash.exe")
+            candidates.append(ancestor / "usr" / "bin" / "bash.exe")
+    for root in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
+        if root:
+            candidates.append(Path(root) / "Git" / "bin" / "bash.exe")
+    for path in candidates:
+        if path.is_file():
+            return [str(path), "--login", "-i"]
+    shell = shutil.which("pwsh") or shutil.which("powershell")
+    if shell:
+        return [shell]
+    return [os.environ.get("COMSPEC", "cmd.exe")]
 
 
 def pty_capability() -> dict:
@@ -164,10 +194,13 @@ async def _spawn_posix(
 
     try:
         try:
+            argv = (
+                _shell_command()
+                if engine == SHELL_ENGINE
+                else [sys.executable, str(_CA_LAUNCHER), engine]
+            )
             process = await asyncio.create_subprocess_exec(
-                sys.executable,
-                str(_CA_LAUNCHER),
-                engine,
+                *argv,
                 stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
@@ -309,13 +342,18 @@ async def _spawn_windows(  # pragma: no cover - exercised only on Windows
 ) -> _WindowsSession:
     loop = asyncio.get_running_loop()
     env = {**os.environ, "TERM": "xterm-256color"}
+    argv = (
+        _shell_command()
+        if engine == SHELL_ENGINE
+        else [sys.executable, str(_CA_LAUNCHER), engine]
+    )
     try:
         # PtyProcess.spawn() does a PATH lookup + creates the ConPTY
         # synchronously; it's fast, but run it off-thread anyway so a slow
         # PATH lookup on a loaded machine can't stall the event loop.
         pty_process = await asyncio.to_thread(
             winpty.PtyProcess.spawn,
-            [sys.executable, str(_CA_LAUNCHER), engine],
+            argv,
             cwd=str(working_dir),
             env=env,
             dimensions=(24, 80),
@@ -341,7 +379,7 @@ async def pty_websocket(
     if not capability["available"]:
         await websocket.close(code=1013, reason=capability["reason"])
         return
-    if engine not in ENGINES:
+    if engine != SHELL_ENGINE and engine not in ENGINES:
         await websocket.close(code=4400, reason=f"Unknown engine: {engine}")
         return
     try:

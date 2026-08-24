@@ -8,7 +8,9 @@ import BrowserTerminal from './BrowserTerminal';
 
 interface Engine {
   id: string;
-  name: string;
+  name?: string;
+  /** 非品牌名称（如纯终端）走 i18n。 */
+  nameKey?: TranslationKey;
   /** Brand blurb that stays as-is (product names), or a key when it is prose. */
   description?: string;
   descriptionKey?: TranslationKey;
@@ -23,6 +25,7 @@ const ENGINES: Engine[] = [
   { id: 'opencode',  name: 'OpenCode',  descriptionKey: 'launch.opencodeDescription', color: 'bg-violet-50 border-violet-200 text-violet-700' },
   { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',               color: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
   { id: 'codebuddy', name: 'CodeBuddy', description: 'Tencent · CodeBuddy Code CLI',     color: 'bg-sky-50 border-sky-200 text-sky-700' },
+  { id: 'shell',     nameKey: 'launch.shellName', descriptionKey: 'launch.shellDescription', color: 'bg-slate-50 border-slate-200 text-slate-700' },
 ];
 
 export default function LaunchPad() {
@@ -58,7 +61,10 @@ export default function LaunchPad() {
       <div className="flex h-full min-h-0 flex-col gap-2">
         <div className="flex shrink-0 items-center justify-between">
           <div className="text-sm font-medium text-slate-700">
-            {ENGINES.find(engine => engine.id === activeSession.engine)?.name} · {activeSession.cwd}
+            {(() => {
+              const engine = ENGINES.find(item => item.id === activeSession.engine);
+              return engine ? (engine.nameKey ? t(engine.nameKey) : engine.name) : activeSession.engine;
+            })()} · {activeSession.cwd}
           </div>
           <button
             onClick={() => setActiveSession(null)}
@@ -124,7 +130,7 @@ export default function LaunchPad() {
             className="glass-card p-6 flex items-center justify-between gap-4"
           >
             <div className="space-y-1">
-              <div className="font-semibold text-slate-800">{engine.name}</div>
+              <div className="font-semibold text-slate-800">{engine.nameKey ? t(engine.nameKey) : engine.name}</div>
               <div className="text-xs text-slate-500">{engine.descriptionKey ? t(engine.descriptionKey) : engine.description}</div>
             </div>
 

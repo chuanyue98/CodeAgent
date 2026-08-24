@@ -428,3 +428,78 @@ async def test_windows_spawn_raises_spawn_error_when_pty_process_spawn_fails(
     output_queue: asyncio.Queue = asyncio.Queue()
     with pytest.raises(pty_router.SpawnError):
         await pty_router._spawn_windows("claude", Path.cwd(), output_queue)
+
+
+# ── 纯 shell 模式（engine=shell）─────────────────────────────────────────
+
+
+def test_shell_command_posix_uses_env_shell(monkeypatch):
+    monkeypatch.setattr(pty_router.sys, "platform", "linux")
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    assert pty_router._shell_command() == ["/bin/zsh"]
+
+
+def test_shell_command_posix_fallback_without_env(monkeypatch):
+    monkeypatch.setattr(pty_router.sys, "platform", "linux")
+    monkeypatch.delenv("SHELL", raising=False)
+    assert pty_router._shell_command() == ["/bin/bash"]
+
+
+def test_shell_command_windows_prefers_git_bash(tmp_path, monkeypatch):
+    """Windows 上优先从 git 安装位置推导 Git Bash，避开 WSL 的 bash。"""
+    monkeypatch.setattr(pty_router.sys, "platform", "win32")
+    git_cmd = tmp_path / "Git" / "cmd"
+    git_cmd.mkdir(parents=True)
+    git_exe = git_cmd / "git.exe"
+    git_exe.write_text("", encoding="utf-8")
+    bash_exe = tmp_path / "Git" / "bin" / "bash.exe"
+    bash_exe.parent.mkdir()
+    bash_exe.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        pty_router.shutil,
+        "which",
+        lambda name: str(git_exe) if name == "git" else None,
+    )
+    monkeypatch.delenv("ProgramFiles", raising=False)
+    monkeypatch.delenv("ProgramFiles(x86)", raising=False)
+    assert pty_router._shell_command() == [str(bash_exe), "--login", "-i"]
+
+
+def test_shell_command_windows_handles_mingw64_git_layout(tmp_path, monkeypatch):
+    """git 也可能在 mingw64/bin 下（本机实测布局），要向上找到 Git 根。"""
+    monkeypatch.setattr(pty_router.sys, "platform", "win32")
+    git_exe = tmp_path / "Git" / "mingw64" / "bin" / "git.exe"
+    git_exe.parent.mkdir(parents=True)
+    git_exe.write_text("", encoding="utf-8")
+    bash_exe = tmp_path / "Git" / "bin" / "bash.exe"
+    bash_exe.parent.mkdir()
+    bash_exe.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        pty_router.shutil,
+        "which",
+        lambda name: str(git_exe) if name == "git" else None,
+    )
+    monkeypatch.delenv("ProgramFiles", raising=False)
+    monkeypatch.delenv("ProgramFiles(x86)", raising=False)
+    assert pty_router._shell_command() == [str(bash_exe), "--login", "-i"]
+
+
+def test_shell_command_windows_falls_back_to_modern_shell(monkeypatch):
+    monkeypatch.setattr(pty_router.sys, "platform", "win32")
+    monkeypatch.setattr(
+        pty_router.shutil,
+        "which",
+        lambda name: "C:/tools/pwsh.exe" if name == "pwsh" else None,
+    )
+    monkeypatch.delenv("ProgramFiles", raising=False)
+    monkeypatch.delenv("ProgramFiles(x86)", raising=False)
+    assert pty_router._shell_command() == ["C:/tools/pwsh.exe"]
+
+
+def test_shell_command_windows_last_resort_comspec(monkeypatch):
+    monkeypatch.setattr(pty_router.sys, "platform", "win32")
+    monkeypatch.setattr(pty_router.shutil, "which", lambda name: None)
+    monkeypatch.delenv("ProgramFiles", raising=False)
+    monkeypatch.delenv("ProgramFiles(x86)", raising=False)
+    monkeypatch.setenv("COMSPEC", "C:/Windows/System32/cmd.exe")
+    assert pty_router._shell_command() == ["C:/Windows/System32/cmd.exe"]
