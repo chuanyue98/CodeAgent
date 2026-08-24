@@ -62,6 +62,10 @@ export const en = {
   'tab.activity.usage': 'Usage',
   'tab.settings.workspace': 'Workspace',
   'tab.settings.resources': 'Resources',
+  'tab.settings.skills': 'Skills',
+  'tab.settings.prompts': 'Prompts',
+  'tab.settings.hooks': 'Hooks',
+  'tab.settings.plugins': 'Plugins',
   'tab.settings.mcp': 'MCP',
   'tab.settings.system': 'System',
 

@@ -58,6 +58,10 @@ export const zh: Record<TranslationKey, string> = {
   'tab.activity.usage': '用量',
   'tab.settings.workspace': '工作区',
   'tab.settings.resources': '资源',
+  'tab.settings.skills': '技能',
+  'tab.settings.prompts': '提示词',
+  'tab.settings.hooks': '钩子',
+  'tab.settings.plugins': '插件',
   'tab.settings.mcp': 'MCP',
   'tab.settings.system': '系统',
 
