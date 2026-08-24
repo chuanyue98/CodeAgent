@@ -1,0 +1,39 @@
+{
+  "_what": "The shape CodeBuddy Code itself writes into ~/.codebuddy/projects/<encoded>/<uuid>.jsonl, so the converter can be checked against CodeBuddy instead of against our own assumptions.",
+  "_why": "Third instance of one failure: the converter produced rows the target reads but does not fully populate. OpenCode crashed on a missing modelID, Claude got a stale model and three absent fields, and here user rows had no providerData and assistant rows no parentId -- so the replies chained to nothing.",
+  "_derived_from": {
+    "assistant_samples": 306,
+    "user_samples": 103,
+    "files": 5,
+    "note": "'required' are the keys present in every sampled row of that role. Row types the converter does not emit (reasoning, file-history-snapshot, summary) are out of scope."
+  },
+  "_refresh": "Re-derive against a real ~/.codebuddy/projects after a CodeBuddy upgrade: read the newest session files, key rows by type (and by role for type='message'), intersect the key sets. A stale fixture is visible and fixable; an assumption baked into a test is neither.",
+  "row_required_keys": {
+    "user": [
+      "content",
+      "cwd",
+      "id",
+      "providerData",
+      "role",
+      "sessionId",
+      "timestamp",
+      "type"
+    ],
+    "assistant": [
+      "content",
+      "cwd",
+      "id",
+      "parentId",
+      "providerData",
+      "role",
+      "sessionId",
+      "status",
+      "timestamp",
+      "type"
+    ]
+  },
+  "observed_values": {
+    "providerData": "on assistant rows carries messageId, and skipRun/error on interrupted turns; on user rows it is present but usually empty",
+    "model": "'hy3' -- CodeBuddy model ids follow no prefix pattern, so the source engine is the only reliable test for whether a model may be carried over"
+  }
+}

@@ -25,10 +25,47 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from core.session_history.models import EngineType
 from core.session_history.parsers.codebuddy_parser import (
     _encode_codebuddy_project_dir,
 )
 from core.utils.atomic_write import atomic_write
+
+
+def _recent_native_model(home: Path | None = None, scan_files: int = 6) -> str:
+    """The model CodeBuddy most recently recorded in this install.
+
+    CodeBuddy keeps it on ``providerData.model``. Read from its own files so
+    a converted session names a model it can actually serve.
+
+    Returns:
+        The model id, or ``""`` when this install has no usable history.
+    """
+    root = (home or Path.home()) / ".codebuddy" / "projects"
+    try:
+        files = sorted(
+            root.glob("*/*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True
+        )[:scan_files]
+    except OSError:
+        return ""
+
+    for path in files:
+        try:
+            content = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line in reversed(content.splitlines()):
+            if '"model"' not in line:
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            provider = (row or {}).get("providerData") or {}
+            model = provider.get("model") if isinstance(provider, dict) else None
+            if isinstance(model, str) and model:
+                return model
+    return ""
 
 
 def _codebuddy_cwd(path: str) -> str:
@@ -108,6 +145,15 @@ def write_codebuddy_session(session: Any) -> str:
             )
         )
 
+    # Only a session that came *from* CodeBuddy carries a model CodeBuddy can
+    # serve; "claude-opus-5" or "gpt-5-codex" in a CodeBuddy file names
+    # nothing. CodeBuddy's own ids ("hy3") follow no pattern worth sniffing,
+    # so the source engine is the only reliable test.
+    source_model = session.model if session.engine == EngineType.CODEBUDDY else ""
+    fallback_model = source_model or _recent_native_model() or ""
+
+    previous_id: str | None = None
+
     for msg in session.messages:
         ts = _to_codebuddy_ts(getattr(msg, "timestamp", None))
 
@@ -115,31 +161,48 @@ def write_codebuddy_session(session: Any) -> str:
             # Annotated because the assistant branch below reassigns `row`
             # with a different value shape; without it the type is inferred
             # from this first literal alone and the two disagree.
+            msg_id = str(uuid.uuid4())
+            # Annotated because the assistant branch below reassigns `row`
+            # with a different value shape; without it the type is inferred
+            # from this first literal alone and the two disagree.
             row: dict[str, Any] = {
-                "id": str(uuid.uuid4()),
+                "id": msg_id,
                 "type": "message",
                 "role": "user",
                 "content": [{"type": "input_text", "text": msg.content}],
+                # Present on every one of CodeBuddy's own user rows. Empty is
+                # fine -- absent is not, and that is the distinction the
+                # OpenCode modelID crash was about.
+                "providerData": {},
                 "timestamp": ts,
                 "cwd": cwd,
                 "sessionId": new_session_id,
             }
             lines.append(json.dumps(row, ensure_ascii=False))
+            previous_id = msg_id
 
         elif msg.role == "assistant":
-            model = msg.model or session.model or ""
+            msg_id = str(uuid.uuid4())
+            model = (msg.model if session.engine == EngineType.CODEBUDDY else "") or (
+                fallback_model
+            )
             row = {
-                "id": str(uuid.uuid4()),
+                "id": msg_id,
                 "type": "message",
                 "role": "assistant",
                 "status": "completed",
                 "content": [{"type": "output_text", "text": msg.content}],
                 "providerData": {"model": model} if model else {},
+                # Chains the reply to the turn it answers. CodeBuddy writes
+                # it on every assistant row; without it the transcript is a
+                # flat list of orphans.
+                "parentId": previous_id,
                 "timestamp": ts,
                 "cwd": cwd,
                 "sessionId": new_session_id,
             }
             lines.append(json.dumps(row, ensure_ascii=False))
+            previous_id = msg_id
 
             # Tool calls are emitted as separate function_call / result lines
             # so the parser re-attaches them to this assistant message.

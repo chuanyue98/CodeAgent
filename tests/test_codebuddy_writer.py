@@ -25,10 +25,15 @@ from core.session_history.writers import write_session
 from core.session_history.writers.codebuddy_writer import write_codebuddy_session
 
 
-def _sample_session() -> UnifiedSession:
+def _sample_session(engine: EngineType = EngineType.CODEBUDDY) -> UnifiedSession:
+    # CodeBuddy by default: "hy3" is a CodeBuddy model, and the writer only
+    # carries a source model over when the source engine is CodeBuddy -- a
+    # Claude session's model names nothing CodeBuddy can serve. The fixture
+    # used to pair EngineType.CLAUDE with model="hy3", which is a session
+    # that cannot exist.
     return UnifiedSession(
         session_id="source-1",
-        engine=EngineType.CLAUDE,
+        engine=engine,
         project_path="E:/demo/CodeAgent",
         started_at="2025-08-24T10:00:00.000Z",
         ended_at="2025-08-24T10:05:00.000Z",
