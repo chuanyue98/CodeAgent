@@ -946,3 +946,68 @@ def test_codex_writer_model_provider_defaults_to_openai(tmp_path):
     codex_dir.mkdir()
     (codex_dir / "config.toml").write_text('model = "gpt-5.6-sol"\n', encoding="utf-8")
     assert _configured_model_provider(tmp_path) == "openai"
+
+
+def test_codex_parser_does_not_double_assistant_turns(tmp_path):
+    """Codex records one assistant turn twice; only one belongs in the session.
+
+    ``event_msg``/``agent_message`` drives the UI and ``response_item``/
+    ``message`` is the model transcript. Counting both showed every Codex reply
+    twice in the Sessions list and duplicated it into every conversion.
+    """
+    rows = [
+        {
+            "timestamp": "2026-08-24T10:00:00.000Z",
+            "type": "session_meta",
+            "payload": {
+                "id": "s1",
+                "cwd": "/home/cy/demo",
+                "timestamp": "2026-08-24T10:00:00.000Z",
+            },
+        },
+        {
+            "timestamp": "2026-08-24T10:00:01.000Z",
+            "type": "event_msg",
+            "payload": {"type": "user_message", "message": "后台启动"},
+        },
+        {
+            "timestamp": "2026-08-24T10:00:02.000Z",
+            "type": "response_item",
+            "payload": {
+                "type": "function_call",
+                "name": "shell",
+                "arguments": '{"cmd": "npm run dev"}',
+                "call_id": "call_1",
+            },
+        },
+        {
+            "timestamp": "2026-08-24T10:00:03.000Z",
+            "type": "event_msg",
+            "payload": {"type": "agent_message", "message": "已启动", "phase": "final"},
+        },
+        {
+            "timestamp": "2026-08-24T10:00:03.000Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "已启动"}],
+                "phase": "final",
+            },
+        },
+    ]
+    path = tmp_path / "rollout-2026-08-24T10-00-00-s1.jsonl"
+    path.write_text(
+        "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    session = parse_codex_session(path)
+
+    assert session is not None
+    assert [(m.role, m.content) for m in session.messages] == [
+        ("user", "后台启动"),
+        ("assistant", "已启动"),
+    ]
+    # The surviving copy keeps the tool call, which only the response_item has.
+    assert [tc.name for tc in session.messages[1].tool_calls] == ["shell"]
