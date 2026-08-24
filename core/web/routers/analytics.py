@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 
@@ -18,6 +19,31 @@ async def _data() -> dict:
     # engine's history); running it on the loop would stall other requests,
     # including the WebSocket agent transport.
     return await asyncio.to_thread(get_analytics_data)
+
+
+# (engine, session_id) -> title, from the session_history subsystem. The
+# analytics usage entries carry no titles of their own, so the sessions list
+# joins against the native history. Disk scans are expensive, so the map is
+# cached briefly; /refresh drops it alongside the analytics cache.
+_title_map_cache: tuple[float, dict[tuple[str, str], str]] | None = None
+_TITLE_MAP_TTL = 120.0
+
+
+async def _session_title_map() -> dict[tuple[str, str], str]:
+    global _title_map_cache
+    now = time.monotonic()
+    if _title_map_cache is not None and now - _title_map_cache[0] < _TITLE_MAP_TTL:
+        return _title_map_cache[1]
+
+    def _build() -> dict[tuple[str, str], str]:
+        return {
+            (s.engine.value, s.session_id): s.to_summary_dict()["title"]
+            for s in find_all_sessions()
+        }
+
+    title_map = await asyncio.to_thread(_build)
+    _title_map_cache = (now, title_map)
+    return title_map
 
 
 @router.get("/summary")
@@ -54,6 +80,17 @@ async def get_sessions(
     """
     data = await _data()
     sessions = data["sessions"]
+    title_map = await _session_title_map()
+    # Don't mutate the cached dicts — copy before attaching titles.
+    sessions = [
+        {
+            **s,
+            "title": title_map.get(
+                (s.get("target", ""), s.get("sessionId", "")), ""
+            ),
+        }
+        for s in sessions
+    ]
     if project:
         target = normalize_project_path(project)
         sessions = [
@@ -172,5 +209,7 @@ async def get_tool_usage(
 
 @router.post("/refresh")
 async def refresh():
+    global _title_map_cache
+    _title_map_cache = None
     data = await asyncio.to_thread(refresh_analytics_data)
     return {"status": "refreshed", "summary": data["summary"]}

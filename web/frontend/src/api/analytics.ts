@@ -35,6 +35,8 @@ export interface SessionUsage {
   sessionId: string;
   target: string;
   projectPath: string;
+  /** Session title joined from native history (may be empty). */
+  title?: string;
   inputTokens: number;
   outputTokens: number;
   cacheCreationTokens: number;

@@ -1,11 +1,19 @@
 import type { AgentEvent, AgentSession, ApprovalRequest } from '../types/agent';
 
+export interface ToolCallMeta {
+  label: string;
+  kind: string | null;
+  status: 'running' | 'completed' | 'failed';
+}
+
 export interface AgentMessage {
   id: string;
-  role: 'user' | 'assistant' | 'error';
+  role: 'user' | 'assistant' | 'error' | 'tool';
   text: string;
   turnId?: string | null;
   pending?: boolean;
+  /** role === 'tool' 时携带的工具调用信息 */
+  tool?: ToolCallMeta;
 }
 
 /** Live connectivity of the provider backing this session. */
@@ -57,6 +65,26 @@ function eventMessageId(event: AgentEvent, role: 'user' | 'assistant'): string {
   const turnScope = event.turnId || `sequence-${event.sequence}`;
   const itemScope = event.itemId || role;
   return `${turnScope}:${itemScope}`;
+}
+
+/** 各引擎工具事件的 payload 形状不同，这里归一化出展示所需字段。 */
+function toolMeta(data: Record<string, unknown>, completed: boolean): ToolCallMeta {
+  const tool = (typeof data.tool === 'object' && data.tool !== null ? data.tool : {}) as Record<string, unknown>;
+  const label =
+    (typeof tool.title === 'string' && tool.title) ||
+    (typeof tool.name === 'string' && tool.name) ||
+    (typeof tool.command === 'string' && tool.command) ||
+    (typeof tool.kind === 'string' && tool.kind) ||
+    (typeof tool.type === 'string' && tool.type) ||
+    'tool';
+  const status = completed
+    ? tool.status === 'failed' ? 'failed' : 'completed'
+    : 'running';
+  return {
+    label,
+    kind: typeof tool.kind === 'string' ? tool.kind : null,
+    status,
+  };
 }
 
 function replayMessages(events: AgentEvent[]): AgentMessage[] {
@@ -149,6 +177,26 @@ export function agentSessionReducer(
         ? { ...message, text: hasVisibleText(text) ? text : message.text, pending: false }
         : message)
       : [...state.messages, { id, role: 'assistant', text, turnId: event.turnId }];
+  } else if (event.type === 'tool.started' || event.type === 'tool.completed') {
+    const completed = event.type === 'tool.completed';
+    // 以 itemId（toolCallId）为主键：同一次调用的 started/completed 两条事件
+    // 更新同一条消息，历史回放时也不会重复。
+    const id = `tool:${event.turnId || 'turn'}:${event.itemId ?? event.sequence}`;
+    const meta = toolMeta(event.data, completed);
+    const existing = state.messages.find(message => message.id === id);
+    // completed 事件的 payload 常缺少 title/name，合并时保留已有的好标签。
+    next.messages = existing
+      ? state.messages.map(message => message.id === id
+        ? {
+            ...message,
+            tool: {
+              ...meta,
+              label: meta.label !== 'tool' || !message.tool ? meta.label : message.tool.label,
+              kind: meta.kind ?? message.tool?.kind ?? null,
+            },
+          }
+        : message)
+      : [...state.messages, { id, role: 'tool' as const, text: '', turnId: event.turnId, tool: meta }];
   } else if (event.type === 'approval.request') {
     const approval = event.data.approval;
     if (approval && typeof approval === 'object') {

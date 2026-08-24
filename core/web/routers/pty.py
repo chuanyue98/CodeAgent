@@ -15,12 +15,15 @@ import asyncio
 import codecs
 import contextlib
 import os
+import shutil
 import struct
 import subprocess
 import sys
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
+from uuid import uuid4
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
@@ -50,6 +53,56 @@ router = APIRouter(prefix="/api/pty", tags=["pty"])
 
 _READ_CHUNK = 65536
 
+# 伪引擎标识：engine=shell 时不拉起任何 Agent CLI，而是给用户一个纯系统
+# shell（Windows 优先 Git Bash，兜底 PowerShell/cmd；POSIX 用 $SHELL）。
+SHELL_ENGINE = "shell"
+
+# 活跃 PTY 会话注册表，供实例管理页（routers/instances.py）列出与停止。
+# 只在事件循环内读写，普通 dict 即可。
+_ACTIVE_SESSIONS: dict[str, dict[str, Any]] = {}
+
+
+def list_active_sessions() -> list[dict[str, Any]]:
+    """返回活跃 PTY 会话的可序列化信息（不含会话对象本身）。"""
+    return [
+        {key: value for key, value in entry.items() if key != "session"}
+        for entry in _ACTIVE_SESSIONS.values()
+    ]
+
+
+async def stop_active_session(session_id: str) -> bool:
+    """终止一个活跃 PTY 会话；不存在时返回 False。"""
+    entry = _ACTIVE_SESSIONS.get(session_id)
+    if entry is None:
+        return False
+    await entry["session"].terminate()
+    return True
+
+
+def _shell_command() -> list[str]:
+    """返回当前平台的交互式 shell 命令。"""
+    if sys.platform != "win32":
+        return [os.environ.get("SHELL") or "/bin/bash"]
+    # 与 CodeBuddy 同样的策略：优先 Git Bash（从 git 的安装位置向上推导
+    # Git 根目录，兼容 cmd/git.exe 与 mingw64/bin/git.exe 两种布局，
+    # 同时避开 WSL 的 System32\bash.exe）。
+    candidates: list[Path] = []
+    git = shutil.which("git")
+    if git:
+        for ancestor in Path(git).parents:
+            candidates.append(ancestor / "bin" / "bash.exe")
+            candidates.append(ancestor / "usr" / "bin" / "bash.exe")
+    for root in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
+        if root:
+            candidates.append(Path(root) / "Git" / "bin" / "bash.exe")
+    for path in candidates:
+        if path.is_file():
+            return [str(path), "--login", "-i"]
+    shell = shutil.which("pwsh") or shutil.which("powershell")
+    if shell:
+        return [shell]
+    return [os.environ.get("COMSPEC", "cmd.exe")]
+
 
 def pty_capability() -> dict:
     """Reports whether this server can attach a browser-streamed PTY."""
@@ -64,6 +117,17 @@ def pty_capability() -> dict:
 @router.get("/status")
 async def get_pty_status() -> dict:
     return pty_capability()
+
+
+@router.get("/sessions")
+async def list_pty_sessions() -> dict:
+    """活跃 PTY 会话列表，供实例管理页使用。"""
+    return {"sessions": list_active_sessions()}
+
+
+@router.post("/sessions/{session_id}/stop")
+async def stop_pty_session(session_id: str) -> dict:
+    return {"success": await stop_active_session(session_id)}
 
 
 def _resolve_registered_workspace(cwd: str) -> Path:
@@ -96,6 +160,8 @@ def _resolve_registered_workspace(cwd: str) -> Path:
 class PtySession(Protocol):
     def write(self, data: str) -> None: ...
     def resize(self, cols: int, rows: int) -> None: ...
+    @property
+    def pid(self) -> int | None: ...
     async def wait(self) -> int:
         """Blocks until the child exits and returns its exit code."""
         ...
@@ -120,6 +186,10 @@ class _PosixSession:
     def __init__(self, process, master_fd: int):
         self._process = process
         self._master_fd = master_fd
+
+    @property
+    def pid(self) -> int | None:
+        return self._process.pid
 
     def write(self, data: str) -> None:
         with contextlib.suppress(OSError):
@@ -164,10 +234,13 @@ async def _spawn_posix(
 
     try:
         try:
+            argv = (
+                _shell_command()
+                if engine == SHELL_ENGINE
+                else [sys.executable, str(_CA_LAUNCHER), engine]
+            )
             process = await asyncio.create_subprocess_exec(
-                sys.executable,
-                str(_CA_LAUNCHER),
-                engine,
+                *argv,
                 stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
@@ -227,6 +300,10 @@ class _WindowsSession:  # pragma: no cover - exercised only on Windows
             target=self._read_loop, daemon=True, name="pty-windows-reader"
         )
         self._reader_thread.start()
+
+    @property
+    def pid(self) -> int | None:
+        return self._pty.pid
 
     def _read_loop(self) -> None:
         while True:
@@ -309,13 +386,18 @@ async def _spawn_windows(  # pragma: no cover - exercised only on Windows
 ) -> _WindowsSession:
     loop = asyncio.get_running_loop()
     env = {**os.environ, "TERM": "xterm-256color"}
+    argv = (
+        _shell_command()
+        if engine == SHELL_ENGINE
+        else [sys.executable, str(_CA_LAUNCHER), engine]
+    )
     try:
         # PtyProcess.spawn() does a PATH lookup + creates the ConPTY
         # synchronously; it's fast, but run it off-thread anyway so a slow
         # PATH lookup on a loaded machine can't stall the event loop.
         pty_process = await asyncio.to_thread(
             winpty.PtyProcess.spawn,
-            [sys.executable, str(_CA_LAUNCHER), engine],
+            argv,
             cwd=str(working_dir),
             env=env,
             dimensions=(24, 80),
@@ -341,7 +423,7 @@ async def pty_websocket(
     if not capability["available"]:
         await websocket.close(code=1013, reason=capability["reason"])
         return
-    if engine not in ENGINES:
+    if engine != SHELL_ENGINE and engine not in ENGINES:
         await websocket.close(code=4400, reason=f"Unknown engine: {engine}")
         return
     try:
@@ -365,6 +447,16 @@ async def pty_websocket(
         with contextlib.suppress(Exception):
             await websocket.close(code=1011, reason=f"Failed to start session: {exc}")
         return
+
+    session_id = uuid4().hex
+    _ACTIVE_SESSIONS[session_id] = {
+        "id": session_id,
+        "engine": engine,
+        "cwd": str(working_dir),
+        "pid": session.pid,
+        "started_at": datetime.now(UTC).isoformat(),
+        "session": session,
+    }
 
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
 
@@ -425,6 +517,7 @@ async def pty_websocket(
     except WebSocketDisconnect:
         pass
     finally:
+        _ACTIVE_SESSIONS.pop(session_id, None)
         exit_wait_task.cancel()
         with contextlib.suppress(Exception, asyncio.CancelledError):
             await exit_wait_task

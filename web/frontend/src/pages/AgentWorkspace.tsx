@@ -5,6 +5,7 @@ import AgentComposer from '../components/AgentComposer';
 import AgentMessage from '../components/AgentMessage';
 import AgentSessionBanner from '../components/AgentSessionBanner';
 import AgentToolbar from '../components/AgentToolbar';
+import AgentToolGroup from '../components/AgentToolGroup';
 import AgentWorkspaceSidebar from '../components/AgentWorkspaceSidebar';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import useAgentWorkspace from './useAgentWorkspace';
@@ -183,9 +184,26 @@ export default function AgentWorkspace() {
                 )}
               </div>
             )}
-            {workspace.state.messages.filter(message => message.role !== 'assistant' || message.text.trim()).map(message => (
-              <AgentMessage key={message.id} role={message.role} text={message.text} />
-            ))}
+            {(() => {
+              // 连续的工具调用归为一组折叠展示，避免长任务刷屏。
+              type Block =
+                | { kind: 'message'; message: (typeof workspace.state.messages)[number] }
+                | { kind: 'tools'; key: string; tools: NonNullable<(typeof workspace.state.messages)[number]['tool']>[] };
+              const blocks: Block[] = [];
+              for (const message of workspace.state.messages) {
+                if (message.role === 'assistant' && !message.text.trim()) continue;
+                if (message.role === 'tool' && message.tool) {
+                  const last = blocks.at(-1);
+                  if (last?.kind === 'tools') last.tools.push(message.tool);
+                  else blocks.push({ kind: 'tools', key: message.id, tools: [message.tool] });
+                } else {
+                  blocks.push({ kind: 'message', message });
+                }
+              }
+              return blocks.map(block => block.kind === 'tools'
+                ? <AgentToolGroup key={block.key} tools={block.tools} />
+                : <AgentMessage key={block.message.id} role={block.message.role} text={block.message.text} />);
+            })()}
             {workspace.state.activeTurnId && !workspace.state.messages.some(message => message.pending) && (
               <div className="flex max-w-[85%] items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-400">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t('agentPage.working')}

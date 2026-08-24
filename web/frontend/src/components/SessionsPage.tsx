@@ -114,7 +114,8 @@ export default function SessionsPage() {
       const q = search.toLowerCase();
       result = result.filter(s =>
         s.projectPath.toLowerCase().includes(q) ||
-        s.sessionId.toLowerCase().includes(q)
+        s.sessionId.toLowerCase().includes(q) ||
+        (s.title || '').toLowerCase().includes(q)
       );
     }
     if (selectedEngines.length > 0) {
@@ -358,7 +359,7 @@ export default function SessionsPage() {
                     />
                     <div className="flex flex-col min-w-0">
                       <span className="text-sm font-medium text-slate-700 truncate">
-                        {session.projectPath.split(/[\\/]/).pop() || session.projectPath || '—'}
+                        {session.title || session.projectPath.split(/[\\/]/).pop() || session.projectPath || '—'}
                       </span>
                       <span className="text-xs text-slate-400 truncate" title={session.projectPath}>
                         {session.projectPath}

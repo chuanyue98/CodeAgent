@@ -21,6 +21,7 @@ from core.web.routers import (
     config,
     history,
     hooks,
+    instances,
     launch,
     logs,
     mcp,
@@ -264,6 +265,7 @@ app.include_router(chat.router, dependencies=_authenticated)
 app.include_router(config.router, dependencies=_authenticated)
 app.include_router(history.router, dependencies=_authenticated)
 app.include_router(hooks.router, dependencies=_authenticated)
+app.include_router(instances.router, dependencies=_authenticated)
 app.include_router(launch.router, dependencies=_authenticated)
 app.include_router(logs.router, dependencies=_authenticated)
 app.include_router(mcp.router, dependencies=_authenticated)

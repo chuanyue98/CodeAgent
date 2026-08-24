@@ -27,7 +27,7 @@ const TaskDashboard = lazy(() => import('./components/TaskDashboard'));
 const ResourceHub = lazy(() => import('./components/ResourceHub'));
 const Analytics = lazy(() => import('./components/Analytics'));
 const LaunchPad = lazy(() => import('./components/LaunchPad'));
-const LogViewer = lazy(() => import('./components/LogViewer'));
+const InstancesPage = lazy(() => import('./components/InstancesPage'));const LogViewer = lazy(() => import('./components/LogViewer'));
 const SessionsPage = lazy(() => import('./components/SessionsPage'));
 const AgentWorkspace = lazy(() => import('./pages/AgentWorkspace'));
 const CronPage = lazy(() => import('./components/CronPage'));
@@ -157,6 +157,7 @@ function App() {
                 <Route index element={<Navigate to="web" replace />} />
                 <Route path="web" element={page(<AgentWorkspace />)} />
                 <Route path="terminal" element={page(<LaunchPad />)} />
+                <Route path="instances" element={page(<InstancesPage />)} />
               </Route>
 
               <Route
