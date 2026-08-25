@@ -546,6 +546,9 @@ export const en = {
   'agent.permissionReadHint': 'The agent may read files only. It cannot modify anything in the workspace.',
   'agent.startsNewSession':
     'Changing this starts a new session — this one is bound to its current settings and stays in the list.',
+  'agent.usageTokens': '{input} in / {output} out',
+  'agent.usageCache': 'cache {read} read / {write} written',
+  'agent.filesChanged': '{count} files changed',
   'agent.canEditFiles': 'Can edit files',
   'agent.readOnly': 'Read only',
   'agent.resourcesFromGroup': 'Resources will be attached from the "{group}" group when this session starts',

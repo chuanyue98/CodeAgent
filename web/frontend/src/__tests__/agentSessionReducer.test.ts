@@ -157,3 +157,132 @@ describe('agentSessionReducer', () => {
     expect(state.messages[0].text).toBe('model refused');
   });
 });
+
+describe('agentSessionReducer: events that used to be dropped', () => {
+  // The gateway has always pushed these three. The reducer had no branch for
+  // any of them, so file changes, real cost and live command output reached
+  // the browser and were thrown away.
+
+  function apply(events: AgentEvent[]) {
+    let state = initialAgentSessionState;
+    for (const next of events) {
+      state = agentSessionReducer(state, { type: 'event', event: next });
+    }
+    return state;
+  }
+
+  test('usage.updated is read whichever spelling the engine uses', () => {
+    const snake = apply([
+      event(1, 'usage.updated', {
+        usage: {
+          input_tokens: 100,
+          output_tokens: 20,
+          cache_read_input_tokens: 5,
+          cache_creation_input_tokens: 7,
+        },
+      }),
+    ]);
+    expect(snake.usage).toMatchObject({
+      inputTokens: 100,
+      outputTokens: 20,
+      cacheReadTokens: 5,
+      cacheWriteTokens: 7,
+    });
+
+    const camel = apply([
+      event(1, 'usage.updated', {
+        usage: { inputTokens: 3, outputTokens: 4 },
+      }),
+    ]);
+    expect(camel.usage).toMatchObject({ inputTokens: 3, outputTokens: 4 });
+  });
+
+  test('cost accumulates while tokens hold the latest snapshot', () => {
+    const state = apply([
+      event(1, 'usage.updated', { usage: { input_tokens: 10 }, cost: 0.25 }),
+      event(2, 'usage.updated', { usage: { input_tokens: 40 }, cost: 0.5 }),
+    ]);
+
+    // Per-turn costs add up to a session cost; token counts do not, because
+    // some engines report a running total for the whole thread.
+    expect(state.usage?.costUsd).toBeCloseTo(0.75);
+    expect(state.usage?.inputTokens).toBe(40);
+  });
+
+  test('a usage payload without a cost leaves the running cost alone', () => {
+    const state = apply([
+      event(1, 'usage.updated', { usage: { input_tokens: 10 }, cost: 0.25 }),
+      event(2, 'usage.updated', { usage: { input_tokens: 40 } }),
+    ]);
+
+    expect(state.usage?.costUsd).toBeCloseTo(0.25);
+  });
+
+  test('command.output streams onto the tool row that started it', () => {
+    const state = apply([
+      event(1, 'tool.started', { tool: { title: 'pytest', kind: 'command' } }),
+      event(2, 'command.output', { commandId: 'item-1', delta: '12 passed' }),
+      event(3, 'command.output', { commandId: 'item-1', delta: ' in 3.4s' }),
+    ]);
+
+    const tool = state.messages.find(message => message.role === 'tool');
+    expect(tool?.tool?.output).toBe('12 passed in 3.4s');
+  });
+
+  test('command output is trimmed rather than grown without bound', () => {
+    const state = apply([
+      event(1, 'tool.started', { tool: { title: 'build' } }),
+      event(2, 'command.output', { commandId: 'item-1', delta: 'x'.repeat(9000) }),
+    ]);
+
+    const tool = state.messages.find(message => message.role === 'tool');
+    expect(tool?.tool?.output?.length).toBe(4000);
+  });
+
+  test('output for a tool that was never announced is ignored', () => {
+    const state = apply([
+      event(1, 'command.output', { commandId: 'nope', delta: 'orphan' }),
+    ]);
+
+    expect(state.messages).toHaveLength(0);
+  });
+
+  test('file.diff names the changed files on the tool row', () => {
+    const state = apply([
+      event(1, 'tool.started', { tool: { title: 'edit', kind: 'fileChange' } }),
+      event(2, 'file.diff', {
+        diff: [{ path: 'core/a.py' }, { path: 'core/b.py' }],
+      }),
+    ]);
+
+    const tool = state.messages.find(message => message.role === 'tool');
+    expect(tool?.tool?.files).toEqual(['core/a.py', 'core/b.py']);
+  });
+
+  test('file.diff digs paths out of a nested payload and de-duplicates', () => {
+    const state = apply([
+      event(1, 'tool.started', { tool: { title: 'edit' } }),
+      event(2, 'file.diff', {
+        diff: { changes: [{ file: 'x.ts', hunks: [{ path: 'x.ts' }] }] },
+      }),
+    ]);
+
+    const tool = state.messages.find(message => message.role === 'tool');
+    expect(tool?.tool?.files).toEqual(['x.ts']);
+  });
+
+  test('replayed history keeps the usage totals', () => {
+    const state = agentSessionReducer(initialAgentSessionState, {
+      type: 'history.replace',
+      events: [
+        event(1, 'message.completed', { text: 'done' }),
+        event(2, 'usage.updated', { usage: { input_tokens: 11 }, cost: 1.5 }),
+      ],
+    });
+
+    // A reconnect replays history; dropping usage here blanked a cost that
+    // had already been reported.
+    expect(state.usage?.costUsd).toBeCloseTo(1.5);
+    expect(state.usage?.inputTokens).toBe(11);
+  });
+});

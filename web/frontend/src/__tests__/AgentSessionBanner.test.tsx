@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
 import AgentSessionBanner from '../components/AgentSessionBanner';
+import type { SessionUsage } from '../state/agentSessionReducer';
 import type { AgentSession, ResourceSnapshot } from '../types/agent';
 
 vi.mock('../api/agent', () => ({
@@ -42,7 +43,7 @@ function makeSession(overrides: Partial<AgentSession> = {}): AgentSession {
   };
 }
 
-function renderBanner(props: { snapshot?: ResourceSnapshot }) {
+function renderBanner(props: { snapshot?: ResourceSnapshot; usage?: SessionUsage }) {
   const snapshot = props.snapshot;
   return render(
     <AgentSessionBanner
@@ -57,6 +58,7 @@ function renderBanner(props: { snapshot?: ResourceSnapshot }) {
         + (snapshot?.prompts?.length ?? 0)
         + (snapshot?.hooks?.length ?? 0)
         + (snapshot?.plugins?.length ?? 0)}
+      usage={props.usage ?? null}
       onConnect={() => {}}
       onRemoveSession={() => {}}
     />,
@@ -113,5 +115,61 @@ describe('AgentSessionBanner resource honesty', () => {
 
     expect(screen.queryByText('not applied')).not.toBeInTheDocument();
     expect(screen.queryByText('applied')).not.toBeInTheDocument();
+  });
+});
+
+
+describe('AgentSessionBanner usage', () => {
+  // usage.updated has always been streamed; the reducer had no branch for it,
+  // so a session's real cost never reached the page.
+
+  test('shows nothing until the provider reports usage', () => {
+    renderBanner({});
+
+    expect(screen.queryByText(/in \//)).not.toBeInTheDocument();
+  });
+
+  test('reports cost and tokens once they arrive', () => {
+    renderBanner({
+      usage: {
+        inputTokens: 12_500,
+        outputTokens: 800,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        costUsd: 0.4237,
+      },
+    });
+
+    expect(screen.getByText('$0.424')).toBeInTheDocument();
+    expect(screen.getByText('12.5K in / 800 out')).toBeInTheDocument();
+  });
+
+  test('a sub-cent cost keeps enough digits to be readable', () => {
+    renderBanner({
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        costUsd: 0.0004,
+      },
+    });
+
+    // Two decimals would render this as "$0.00".
+    expect(screen.getByText('$0.0004')).toBeInTheDocument();
+  });
+
+  test('cache totals only appear when there are any', () => {
+    renderBanner({
+      usage: {
+        inputTokens: 10,
+        outputTokens: 5,
+        cacheReadTokens: 2_000,
+        cacheWriteTokens: 300,
+        costUsd: null,
+      },
+    });
+
+    expect(screen.getByText('cache 2.0K read / 300 written')).toBeInTheDocument();
   });
 });

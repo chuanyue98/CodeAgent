@@ -4,6 +4,28 @@ export interface ToolCallMeta {
   label: string;
   kind: string | null;
   status: 'running' | 'completed' | 'failed';
+  /** Live stdout/stderr, for tools that stream it (`command.output`). */
+  output?: string;
+  /** Files this tool reported changing (`file.diff`). */
+  files?: string[];
+}
+
+/**
+ * Token and cost totals as last reported by the provider.
+ *
+ * The engines do not agree on what a `usage.updated` payload means: Codex
+ * pushes a running total for the whole thread, while Claude emits one at the
+ * end of each turn covering only that turn. Tokens therefore hold the latest
+ * snapshot rather than a sum -- summing would double-count Codex badly --
+ * while cost accumulates across the events that carry one, which is what
+ * makes a per-turn number add up to a session number.
+ */
+export interface SessionUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  costUsd: number | null;
 }
 
 export interface AgentMessage {
@@ -33,6 +55,7 @@ export interface AgentSessionState {
   activeTurnId: string | null;
   lastSequence: number;
   provider: ProviderConnectivity | null;
+  usage: SessionUsage | null;
 }
 
 export const initialAgentSessionState: AgentSessionState = {
@@ -43,6 +66,7 @@ export const initialAgentSessionState: AgentSessionState = {
   activeTurnId: null,
   lastSequence: 0,
   provider: null,
+  usage: null,
 };
 
 export type AgentSessionAction =
@@ -87,12 +111,90 @@ function toolMeta(data: Record<string, unknown>, completed: boolean): ToolCallMe
   };
 }
 
-function replayMessages(events: AgentEvent[]): AgentMessage[] {
+/** Longest stretch of a command's output kept per tool row. */
+const MAX_TOOL_OUTPUT = 4000;
+
+/** Reads the first numeric field present, since each engine names them differently. */
+function pickNumber(source: Record<string, unknown>, keys: string[]): number {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return 0;
+}
+
+function usageFrom(
+  data: Record<string, unknown>,
+  previous: SessionUsage | null,
+): SessionUsage {
+  const usage = (
+    typeof data.usage === 'object' && data.usage !== null ? data.usage : {}
+  ) as Record<string, unknown>;
+  const reportedCost =
+    typeof data.cost === 'number' && Number.isFinite(data.cost)
+      ? data.cost
+      : null;
+  return {
+    inputTokens: pickNumber(usage, ['input_tokens', 'inputTokens', 'input']),
+    outputTokens: pickNumber(usage, ['output_tokens', 'outputTokens', 'output']),
+    cacheReadTokens: pickNumber(usage, [
+      'cache_read_input_tokens',
+      'cacheReadInputTokens',
+      'cached_input_tokens',
+      'cacheReadTokens',
+    ]),
+    cacheWriteTokens: pickNumber(usage, [
+      'cache_creation_input_tokens',
+      'cacheCreationInputTokens',
+      'cacheWriteTokens',
+    ]),
+    costUsd:
+      reportedCost === null
+        ? (previous?.costUsd ?? null)
+        : (previous?.costUsd ?? 0) + reportedCost,
+  };
+}
+
+/**
+ * Best-effort file paths out of a `file.diff` payload.
+ *
+ * The shape genuinely differs per engine -- Codex forwards whatever the
+ * provider sent under `changes`/`diff`, CodeBuddy a list of content blocks --
+ * so this collects the path-ish fields it recognizes rather than asserting a
+ * schema. An unrecognized payload yields no names and the row still shows
+ * that something changed.
+ */
+function diffFiles(value: unknown, found: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const item of value) diffFiles(item, found);
+    return found;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const record = value as Record<string, unknown>;
+    for (const key of ['path', 'file', 'filePath', 'file_path', 'uri']) {
+      const candidate = record[key];
+      if (typeof candidate === 'string' && candidate && !found.includes(candidate)) {
+        found.push(candidate);
+      }
+    }
+    for (const nested of Object.values(record)) {
+      if (typeof nested === 'object' && nested !== null) diffFiles(nested, found);
+    }
+  }
+  return found;
+}
+
+/** The message id `tool.started`/`tool.completed` gave this call. */
+function toolMessageId(turnId: string | null | undefined, itemId: string): string {
+  return `tool:${turnId || 'turn'}:${itemId}`;
+}
+
+function replayState(events: AgentEvent[]): AgentSessionState {
   let replay = initialAgentSessionState;
   for (const event of events) {
     replay = agentSessionReducer(replay, { type: 'event', event });
   }
-  return replay.messages;
+  return replay;
 }
 
 export function agentSessionReducer(
@@ -115,15 +217,18 @@ export function agentSessionReducer(
     };
   }
   if (action.type === 'history.replace') {
-    const messages = replayMessages(action.events);
+    const replay = replayState(action.events);
     return {
       ...state,
-      messages,
+      messages: replay.messages,
+      // Replayed history carries the usage totals too; dropping them meant a
+      // reconnect blanked the cost that had already been reported.
+      usage: replay.usage ?? state.usage,
       lastSequence: action.events.at(-1)?.sequence ?? 0,
     };
   }
   if (action.type === 'history.prepend') {
-    const page = replayMessages(action.events);
+    const page = replayState(action.events).messages;
     const existingIds = new Set(state.messages.map(message => message.id));
     return {
       ...state,
@@ -197,6 +302,41 @@ export function agentSessionReducer(
           }
         : message)
       : [...state.messages, { id, role: 'tool' as const, text: '', turnId: event.turnId, tool: meta }];
+  } else if (event.type === 'usage.updated') {
+    next.usage = usageFrom(event.data, state.usage);
+  } else if (event.type === 'command.output') {
+    // Streamed stdout/stderr from a running command, keyed to the tool row
+    // that started it. Kept trimmed: a build can emit megabytes.
+    const commandId =
+      event.itemId || dataString(event.data, 'commandId') || null;
+    const delta = dataString(event.data, 'delta');
+    if (!commandId || !delta) return next;
+    const id = toolMessageId(event.turnId, commandId);
+    next.messages = state.messages.map(message =>
+      message.id === id && message.tool
+        ? {
+            ...message,
+            tool: {
+              ...message.tool,
+              output: ((message.tool.output ?? '') + delta).slice(-MAX_TOOL_OUTPUT),
+            },
+          }
+        : message);
+  } else if (event.type === 'file.diff') {
+    const itemId = event.itemId;
+    const files = diffFiles(event.data.diff ?? event.data);
+    if (!itemId) return next;
+    const id = toolMessageId(event.turnId, itemId);
+    next.messages = state.messages.map(message =>
+      message.id === id && message.tool
+        ? {
+            ...message,
+            tool: {
+              ...message.tool,
+              files: Array.from(new Set([...(message.tool.files ?? []), ...files])),
+            },
+          }
+        : message);
   } else if (event.type === 'approval.request') {
     const approval = event.data.approval;
     if (approval && typeof approval === 'object') {

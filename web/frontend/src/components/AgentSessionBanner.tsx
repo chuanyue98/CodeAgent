@@ -3,8 +3,21 @@ import { Loader2, Trash2, WifiOff } from 'lucide-react';
 import { reconnectAgentProvider } from '../api/agent';
 import { useLanguageCode, useT } from '../i18n/context';
 import type { AgentSession, ResourceSnapshot } from '../types/agent';
-import type { ProviderConnectivity } from '../state/agentSessionReducer';
+import type { ProviderConnectivity, SessionUsage } from '../state/agentSessionReducer';
 import { relativeTime, workspaceLabel } from '../utils/agentWorkspaceHelpers';
+
+/** Sub-cent costs are the common case here, so two decimals would read $0.00. */
+function formatCost(value: number): string {
+  if (value >= 1) return `$${value.toFixed(2)}`;
+  if (value >= 0.01) return `$${value.toFixed(3)}`;
+  return `$${value.toFixed(4)}`;
+}
+
+function formatTokens(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return String(value);
+}
 
 type Props = {
   session: AgentSession;
@@ -15,6 +28,8 @@ type Props = {
   sessionResourceSnapshot: ResourceSnapshot | undefined;
   sessionResourceGroup: string;
   resourceCount: number;
+  /** Totals the provider reported; null until it reports any. */
+  usage: SessionUsage | null;
   onConnect: () => void;
   onRemoveSession: () => void;
 };
@@ -77,6 +92,7 @@ export default function AgentSessionBanner({
   sessionResourceSnapshot,
   sessionResourceGroup,
   resourceCount,
+  usage,
   onConnect,
   onRemoveSession,
 }: Props) {
@@ -110,6 +126,29 @@ export default function AgentSessionBanner({
           {session.provider} · {workspaceLabel(session.cwd)} ·{' '}
           {relativeTime(session.updatedAt, language)}
         </p>
+        {/* The gateway has always streamed usage.updated; the reducer had no
+            branch for it, so what a session cost never reached the page. */}
+        {usage && (
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-500">
+            {usage.costUsd !== null && (
+              <span className="font-semibold text-slate-700">
+                {formatCost(usage.costUsd)}
+              </span>
+            )}
+            <span>{t('agent.usageTokens', {
+              input: formatTokens(usage.inputTokens),
+              output: formatTokens(usage.outputTokens),
+            })}</span>
+            {(usage.cacheReadTokens > 0 || usage.cacheWriteTokens > 0) && (
+              <span className="text-slate-400">
+                {t('agent.usageCache', {
+                  read: formatTokens(usage.cacheReadTokens),
+                  write: formatTokens(usage.cacheWriteTokens),
+                })}
+              </span>
+            )}
+          </p>
+        )}
         <details className="mt-1 text-[10px] text-slate-500">
           <summary className="cursor-pointer font-medium text-primary hover:underline">
             {t('agent.configuredResources', { group: sessionResourceGroup, count: resourceCount })}

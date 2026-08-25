@@ -1,9 +1,10 @@
-"""Browser-based PTY sessions for the interactive terminal launcher.
+"""Browser-based PTY sessions -- the only terminal this server opens.
 
-Spawns the same engine command the native-terminal launcher (``launch.py``)
-uses, but attaches it to a pseudo-terminal streamed over a WebSocket instead
-of a separate GUI terminal window, so the CLI is usable directly in the
-browser. POSIX uses the standard library's `pty` module; Windows uses
+Attaches an engine CLI to a pseudo-terminal streamed over a WebSocket, so it
+is usable directly in the page. This replaced a launcher that opened a GUI
+terminal window on whatever machine ran the server, which was unreachable
+whenever the browser was somewhere else and simply unavailable on a headless
+host. POSIX uses the standard library's `pty` module; Windows uses
 ConPTY via `pywinpty`. Both paths converge on the same `output_queue` /
 `pump_output` machinery below, so the message loop and cleanup logic don't
 need to branch on platform.
@@ -49,6 +50,11 @@ from core.constants import ENGINES
 from core.resource_locator import CODE_ROOT
 from core.services.config_service import ConfigService
 from core.services.resume_commands import is_safe_session_id, resume_command
+from core.services.workspace_service import (
+    WorkspaceConfigError,
+    WorkspaceNotRegisteredError,
+    resolve_registered_workspace,
+)
 from core.web.routers.config import get_config_path
 from core.web.security import verify_websocket
 
@@ -154,20 +160,23 @@ async def stop_pty_session(session_id: str) -> dict:
 
 
 def _resolve_registered_workspace(cwd: str) -> Path:
-    config, warnings = ConfigService(get_config_path()).get_config()
-    if warnings:
-        raise ValueError(warnings[0])
-    requested = Path(cwd).expanduser().resolve()
-    if not requested.is_dir():
-        raise ValueError("Selected workspace is unavailable")
-    for project in config.get("project_registry", []):
-        if not isinstance(project, dict) or not isinstance(project.get("path"), str):
-            continue
-        if Path(project["path"]).expanduser().resolve() == requested:
-            return requested
-    raise ValueError(
-        "Select a workspace registered in Settings before opening a terminal"
-    )
+    """The directory this terminal may open in.
+
+    Delegates rather than comparing paths itself: this used to require an
+    exact registry match, so a terminal could not be opened in a subdirectory
+    of a registered project even though the agent gateway happily started a
+    session there. Resuming a session lands here too, and those sessions
+    routinely live in subdirectories.
+    """
+    try:
+        registered = resolve_registered_workspace(ConfigService(get_config_path()), cwd)
+    except WorkspaceNotRegisteredError as exc:
+        raise ValueError(
+            "Select a workspace registered in Settings before opening a terminal"
+        ) from exc
+    except WorkspaceConfigError as exc:
+        raise ValueError(str(exc)) from exc
+    return Path(registered.path)
 
 
 # ── Uniform session interface ─────────────────────────────────────────────
