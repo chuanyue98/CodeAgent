@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Query
 
 from core.analytics.service import get_analytics_data, refresh_analytics_data
+from core.session_history.parse_cache import clear_parse_cache
 from core.session_history.paths import normalize_project_path
 from core.session_history.session_finder import find_all_sessions
 
@@ -23,27 +23,24 @@ async def _data() -> dict:
 
 # (engine, session_id) -> title, from the session_history subsystem. The
 # analytics usage entries carry no titles of their own, so the sessions list
-# joins against the native history. Disk scans are expensive, so the map is
-# cached briefly; /refresh drops it alongside the analytics cache.
-_title_map_cache: tuple[float, dict[tuple[str, str], str]] | None = None
-_TITLE_MAP_TTL = 120.0
+# joins against the native history.
+#
+# This used to be held behind a 120 s TTL because building it re-read every
+# engine's history -- ~900 MB of JSONL, ~2.2 s -- and one request in three paid
+# for it. ``session_history.parse_cache`` now memoizes that parse per file, so
+# a rebuild costs ~0.2 s of stat calls and the TTL is gone with it: a session
+# started a moment ago shows up on the next request instead of up to two
+# minutes later.
 
 
 async def _session_title_map() -> dict[tuple[str, str], str]:
-    global _title_map_cache
-    now = time.monotonic()
-    if _title_map_cache is not None and now - _title_map_cache[0] < _TITLE_MAP_TTL:
-        return _title_map_cache[1]
-
     def _build() -> dict[tuple[str, str], str]:
         return {
             (s.engine.value, s.session_id): s.to_summary_dict()["title"]
             for s in find_all_sessions()
         }
 
-    title_map = await asyncio.to_thread(_build)
-    _title_map_cache = (now, title_map)
-    return title_map
+    return await asyncio.to_thread(_build)
 
 
 @router.get("/summary")
@@ -207,7 +204,9 @@ async def get_tool_usage(
 
 @router.post("/refresh")
 async def refresh():
-    global _title_map_cache
-    _title_map_cache = None
+    # The parse cache invalidates itself on a file's mtime, but an explicit
+    # refresh is what you press when you suspect something is stale -- so drop
+    # it rather than explain why it was not dropped.
+    clear_parse_cache()
     data = await asyncio.to_thread(refresh_analytics_data)
     return {"status": "refreshed", "summary": data["summary"]}

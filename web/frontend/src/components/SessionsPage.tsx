@@ -240,7 +240,7 @@ export default function SessionsPage() {
         searchPlaceholder={t('sessions.searchPlaceholder')}
       />
 
-      <div data-testid="session-list" className="animate-fade-rise stagger-2 flex-1 min-w-0 glass-card p-5 flex flex-col">
+      <div data-testid="session-list" className="animate-fade-rise stagger-2 flex-1 min-w-0 glass-card-flat p-5 flex flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-xs text-slate-400 font-medium cursor-pointer select-none">
@@ -406,7 +406,7 @@ export default function SessionsPage() {
           own horizontal scrollbar. Steps up on larger screens, where the list
           has width to spare. */}
       {openSession && (
-        <div className="w-full xl:w-[38rem] xl:max-w-[45%] 2xl:w-[46rem] shrink-0 glass-card p-5 xl:h-full xl:min-h-0">
+        <div className="w-full xl:w-[38rem] xl:max-w-[45%] 2xl:w-[46rem] shrink-0 glass-card-flat p-5 xl:h-full xl:min-h-0">
           <SessionDetailPanel
             key={selectedKey}
             engine={openSession.target}

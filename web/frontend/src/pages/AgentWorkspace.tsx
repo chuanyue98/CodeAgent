@@ -83,6 +83,7 @@ export default function AgentWorkspace() {
           onProviderChange={workspace.onProviderChange}
           onShowActivityChange={workspace.onShowActivityChange}
           onPermissionModeChange={workspace.onPermissionModeChange}
+          onNewSession={workspace.onNewSession}
         />
 
         {workspace.validProjects.length === 0 && (

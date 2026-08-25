@@ -363,7 +363,7 @@ export default function ResourceHub() {
                           setOpenItem(hit);
                         }
                       }}
-                      className={`animate-fade-rise stagger-${Math.min(i + 3, 7)} group glass-card relative cursor-pointer overflow-hidden p-6 transition-all hover:border-primary/20 hover:bg-slate-50/50 ${
+                      className={`animate-fade-rise stagger-${Math.min(i + 3, 7)} group glass-card-flat relative cursor-pointer overflow-hidden p-6 transition-all hover:border-primary/20 hover:bg-slate-50/50 ${
                         !active ? 'border-slate-200 bg-slate-50/60' : ''
                       }`}
                     >

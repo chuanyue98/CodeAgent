@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Wrench } from 'lucide-react';
 import { useT } from '../../i18n/context';
 import { engineLabel } from '../../utils/engines';
 import request from '../../utils/request';
 import LoadingState from '../shared/LoadingState';
+import ShowMoreToggle from './ShowMoreToggle';
 
 interface ToolUsage {
   name: string;
@@ -37,12 +38,43 @@ const VISIBLE_ROWS = 12;
  */
 export default function ToolRanking({ rangeDays, rangeLabel }: ToolRankingProps) {
   const t = useT();
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [data, setData] = useState<ToolUsageResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  // Seeded from the capability check rather than flipped inside the effect:
+  // IntersectionObserver is absent under jsdom and in older browsers, and
+  // there the panel should just load the way it always did.
+  const [inView, setInView] = useState(
+    () => typeof IntersectionObserver === 'undefined',
+  );
+
+  // This panel sits below several screens of charts, and its endpoint reads
+  // the parsed history rather than the analytics cache -- the slowest request
+  // the page makes, paid on every mount whether or not anyone scrolled far
+  // enough to see it. Wait until it is nearly on screen.
+  useEffect(() => {
+    if (inView) return;
+    const element = containerRef.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries.some(entry => entry.isIntersecting)) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      // Start slightly early so the data is usually there by the time the
+      // panel is actually read.
+      { rootMargin: '200px' },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [inView]);
 
   useEffect(() => {
+    if (!inView) return;
     let active = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
@@ -64,14 +96,14 @@ export default function ToolRanking({ rangeDays, rangeLabel }: ToolRankingProps)
     return () => {
       active = false;
     };
-  }, [rangeDays, t]);
+  }, [inView, rangeDays, t]);
 
   const tools = data?.tools ?? [];
   const shown = expanded ? tools : tools.slice(0, VISIBLE_ROWS);
   const max = tools[0]?.count ?? 0;
 
   return (
-    <div className="glass-card p-5">
+    <div ref={containerRef} className="glass-card p-5">
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
         <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
           <Wrench className="h-4 w-4" /> {t('tools.title')}
@@ -87,13 +119,14 @@ export default function ToolRanking({ rangeDays, rangeLabel }: ToolRankingProps)
         )}
       </div>
 
-      {loading && <LoadingState message={t('tools.loading')} />}
-      {!loading && error && <p className="text-xs text-slate-400">{error}</p>}
-      {!loading && !error && tools.length === 0 && (
+      {!inView && <div className="h-24" aria-hidden />}
+      {inView && loading && <LoadingState message={t('tools.loading')} />}
+      {inView && !loading && error && <p className="text-xs text-slate-400">{error}</p>}
+      {inView && !loading && !error && tools.length === 0 && (
         <p className="py-6 text-center text-sm text-slate-400">{t('tools.empty')}</p>
       )}
 
-      {!loading && !error && tools.length > 0 && (
+      {inView && !loading && !error && tools.length > 0 && (
         <>
           <ul className="space-y-2">
             {shown.map(tool => {
@@ -131,14 +164,11 @@ export default function ToolRanking({ rangeDays, rangeLabel }: ToolRankingProps)
           </ul>
 
           {tools.length > VISIBLE_ROWS && (
-            <button
-              onClick={() => setExpanded(value => !value)}
-              className="mt-3 text-xs font-medium text-primary transition-opacity hover:opacity-80"
-            >
-              {expanded
-                ? t('tools.showLess')
-                : t('tools.showAll', { count: String(tools.length) })}
-            </button>
+            <ShowMoreToggle
+              expanded={expanded}
+              total={tools.length}
+              onToggle={() => setExpanded(value => !value)}
+            />
           )}
         </>
       )}

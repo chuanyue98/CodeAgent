@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { fmtCost, fmtTokens, type DailyUsage, type MonthlyUsage } from '../../api/analytics';
 import { useT } from '../../i18n/context';
 import { eb } from './present';
 import { SectionTitle } from './ChartCards';
+import ShowMoreToggle from './ShowMoreToggle';
 
 export interface DetailTableProps {
   granularity: 'day' | 'month';
@@ -11,13 +13,34 @@ export interface DetailTableProps {
   hasRows: boolean;
 }
 
+/**
+ * Rows shown before the tail is folded away. One row per day *per engine*, so
+ * a 30-day range across four engines is well over a hundred — the table was
+ * the single tallest thing on the page and the rows below the first screen
+ * are ones you scrolled past, not to.
+ */
+const VISIBLE_ROWS = 15;
+
 export default function DetailTable({
   granularity, monthly, rangeDaily, rangeLabel, hasRows,
 }: DetailTableProps) {
   const t = useT();
+  const [expanded, setExpanded] = useState(false);
   if (!hasRows) return null;
+
+  const rows = granularity === 'month'
+    ? [...monthly].reverse().map(m => ({
+        key: `${m.month}-${m.target}`, label: m.month, target: m.target,
+        inputTokens: m.inputTokens, outputTokens: m.outputTokens, cost: m.cost,
+      }))
+    : [...rangeDaily].reverse().map(d => ({
+        key: `${d.date}-${d.target}`, label: d.date, target: d.target,
+        inputTokens: d.inputTokens, outputTokens: d.outputTokens, cost: d.cost,
+      }));
+  const shown = expanded ? rows : rows.slice(0, VISIBLE_ROWS);
+
   return (
-    <div className="animate-fade-rise stagger-6 glass-card p-5">
+    <div className="animate-fade-rise stagger-6 glass-card-flat p-5">
       <SectionTitle>
         {granularity === 'month' ? t('detail.byMonth') : t('detail.byRange', { range: rangeLabel })}
       </SectionTitle>
@@ -35,16 +58,7 @@ export default function DetailTable({
             </tr>
           </thead>
           <tbody>
-            {(granularity === 'month'
-              ? [...monthly].reverse().map(m => ({
-                  key: `${m.month}-${m.target}`, label: m.month, target: m.target,
-                  inputTokens: m.inputTokens, outputTokens: m.outputTokens, cost: m.cost,
-                }))
-              : [...rangeDaily].reverse().map(d => ({
-                  key: `${d.date}-${d.target}`, label: d.date, target: d.target,
-                  inputTokens: d.inputTokens, outputTokens: d.outputTokens, cost: d.cost,
-                }))
-            ).map(row => (
+            {shown.map(row => (
               <tr key={row.key} className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
                 <td className="py-1.5 pr-4 font-mono text-slate-500">{row.label}</td>
                 <td className="py-1.5 pr-4">
@@ -60,6 +74,13 @@ export default function DetailTable({
           </tbody>
         </table>
       </div>
+      {rows.length > VISIBLE_ROWS && (
+        <ShowMoreToggle
+          expanded={expanded}
+          total={rows.length}
+          onToggle={() => setExpanded(value => !value)}
+        />
+      )}
     </div>
   );
 }

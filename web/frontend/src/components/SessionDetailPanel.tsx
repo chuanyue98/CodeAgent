@@ -1,5 +1,15 @@
-import { useEffect, useState } from 'react';
-import { AlertCircle, Check, Loader2, TerminalSquare, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  AlertCircle,
+  ArrowDownToLine,
+  ArrowUpToLine,
+  Check,
+  ChevronUp,
+  Loader2,
+  TerminalSquare,
+  Trash2,
+  X,
+} from 'lucide-react';
 import {
   convertAndLaunchSession,
   deleteHistorySession,
@@ -11,6 +21,13 @@ import { ALL_ENGINES, READ_ONLY_ENGINES, engineLabel } from '../utils/engines';
 import ConfirmDialog from './shared/ConfirmDialog';
 import { useT } from '../i18n/context';
 import MarkdownMessage from './MarkdownMessage';
+
+/**
+ * Transcript messages rendered at once. A long session is ~1,700 messages
+ * of markdown, which committed in one synchronous render and left you at
+ * message 1 of a conversation you opened to read the end of.
+ */
+const TRANSCRIPT_PAGE = 50;
 
 type ConvertState =
   | { status: 'idle' }
@@ -53,6 +70,50 @@ export default function SessionDetailPanel({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [visibleCount, setVisibleCount] = useState(TRANSCRIPT_PAGE);
+  /** Distance from the bottom to restore after prepending older messages. */
+  const anchorFromBottomRef = useRef<number | null>(null);
+
+  const messages = detail?.messages ?? [];
+  const hiddenCount = Math.max(0, messages.length - visibleCount);
+  const visibleMessages = hiddenCount > 0 ? messages.slice(hiddenCount) : messages;
+
+  const scrollTo = useCallback((edge: 'top' | 'bottom') => {
+    const element = scrollRef.current;
+    if (!element) return;
+    element.scrollTo({
+      top: edge === 'top' ? 0 : element.scrollHeight,
+      behavior: 'smooth',
+    });
+  }, []);
+
+  // A transcript is read from the end: the last thing the engine said is why
+  // you opened it. Jump there once the messages land, without animating
+  // through everything above.
+  useEffect(() => {
+    if (!detail) return;
+    const element = scrollRef.current;
+    if (element) element.scrollTop = element.scrollHeight;
+  }, [detail]);
+
+  // Prepending older messages moves everything down by their height. Restore
+  // the distance from the bottom so the row you were reading stays put.
+  useLayoutEffect(() => {
+    const anchor = anchorFromBottomRef.current;
+    if (anchor === null) return;
+    anchorFromBottomRef.current = null;
+    const element = scrollRef.current;
+    if (element) element.scrollTop = element.scrollHeight - anchor;
+  }, [visibleCount]);
+
+  const loadEarlier = useCallback(() => {
+    const element = scrollRef.current;
+    anchorFromBottomRef.current = element
+      ? element.scrollHeight - element.scrollTop
+      : null;
+    setVisibleCount(previous => previous + TRANSCRIPT_PAGE);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -62,6 +123,7 @@ export default function SessionDetailPanel({
     setDetail(null);
     setConvertState({ status: 'idle' });
     setDeleteError(null);
+    setVisibleCount(TRANSCRIPT_PAGE);
 
     fetchSessionDetail(engine, sessionId, projectPath)
       .then(data => {
@@ -151,7 +213,10 @@ export default function SessionDetailPanel({
           other axis compute to `auto`, so the whole panel picked up a
           horizontal scrollbar whenever one line of a transcript was long.
           Code blocks keep their own — wrapping code would mangle it. */}
-      <div className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden pt-3">
+      <div
+        ref={scrollRef}
+        className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden pt-3"
+      >
         {usage && (
           <section>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
@@ -189,23 +254,57 @@ export default function SessionDetailPanel({
         )}
 
         <section>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
-            {t('sessionDetail.conversation')}
-          </p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+              {t('sessionDetail.conversation')}
+            </p>
+            {messages.length > 0 && (
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  aria-label={t('sessionDetail.toTop')}
+                  title={t('sessionDetail.toTop')}
+                  onClick={() => scrollTo('top')}
+                  className="rounded-md border border-slate-200 p-1 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600"
+                >
+                  <ArrowUpToLine className="h-3 w-3" />
+                </button>
+                <button
+                  aria-label={t('sessionDetail.toBottom')}
+                  title={t('sessionDetail.toBottom')}
+                  onClick={() => scrollTo('bottom')}
+                  className="rounded-md border border-slate-200 p-1 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600"
+                >
+                  <ArrowDownToLine className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
           {loading && (
             <p className="flex items-center gap-2 text-xs text-slate-400">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t('sessionDetail.loadingConversation')}
             </p>
           )}
           {!loading && loadError && <p className="text-xs text-slate-400">{loadError}</p>}
-          {!loading && !loadError && detail?.messages.length === 0 && (
+          {!loading && !loadError && detail && messages.length === 0 && (
             <p className="text-xs text-slate-400">{t('sessionDetail.noMessages')}</p>
           )}
-          {!loading && !loadError && detail && detail.messages.length > 0 && (
+          {!loading && !loadError && detail && messages.length > 0 && (
             <div className="space-y-3">
-              {detail.messages.map((msg, i) => (
+              {hiddenCount > 0 && (
+                <button
+                  onClick={loadEarlier}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-200 py-2 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                  {t('sessionDetail.loadEarlier', {
+                    shown: String(visibleMessages.length),
+                    total: String(messages.length),
+                  })}
+                </button>
+              )}
+              {visibleMessages.map((msg, i) => (
                 <div
-                  key={`${msg.timestamp}-${msg.role}-${i}`}
+                  key={`${msg.timestamp}-${msg.role}-${hiddenCount + i}`}
                   className="rounded-lg border border-slate-100 p-3"
                 >
                   <div className="mb-1 flex items-center justify-between">

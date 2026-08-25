@@ -106,8 +106,13 @@ const Analytics: React.FC = () => {
   return (
     <div className="flex flex-col gap-5 pb-6">
 
-      {/* ── Toolbar ────────────────────────────────────────────────────────── */}
-      <div className="animate-fade-rise stagger-1 flex flex-wrap items-center justify-between gap-2">
+      {/* ── Toolbar ───────────────────────────────────────────────────────────
+          Pinned: the range buttons govern every panel below them, and this
+          page is several screens tall — changing the range meant scrolling
+          back up to the only control that could do it. Opaque rather than
+          blurred, so a pinned bar does not re-filter the page behind it on
+          every scrolled frame. */}
+      <div className="animate-fade-rise stagger-1 sticky top-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-2 bg-background px-1 py-2">
         <div
           className="flex gap-1 bg-slate-100 p-1 rounded-xl"
           role="group"

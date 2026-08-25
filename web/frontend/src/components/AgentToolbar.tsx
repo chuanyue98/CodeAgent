@@ -18,6 +18,7 @@ type Props = {
   onProviderChange: (value: string) => void;
   onShowActivityChange: (value: boolean) => void;
   onPermissionModeChange: (value: PermissionMode) => void;
+  onNewSession: () => void;
 };
 
 export default function AgentToolbar({
@@ -35,10 +36,33 @@ export default function AgentToolbar({
   onProviderChange,
   onShowActivityChange,
   onPermissionModeChange,
+  onNewSession,
 }: Props) {
   const t = useT();
-  const disabled = Boolean(stateSessionId) || Boolean(stateActiveTurnId);
+  // All three of these are bound when the session is created --
+  // useAgentMessageSend passes workspace, provider and permission mode to
+  // createAgentSession -- so they cannot be re-pointed at a session that
+  // already exists. That is two different situations, and they used to share
+  // one `disabled`:
+  //   * a turn is in flight -> there is nothing to do but wait, keep it shut;
+  //   * an idle session exists -> the change is meaningful, it just has to
+  //     apply to a new session rather than this one.
+  // Locking the controls for the entire life of a session made the second
+  // case look like the first, and left no way to switch workspace without
+  // finding the New button first.
+  const turnInFlight = Boolean(stateActiveTurnId);
+  const rebindsSession = Boolean(stateSessionId) && !turnInFlight;
   const activeProject = validProjects.find(project => project.path === workspace);
+
+  /** Applies a session-bound setting, starting a fresh session when one is open. */
+  const applySetting = (apply: () => void) => {
+    // Non-destructive: newSession only drops the connection and clears the
+    // view. The previous session stays on the backend and in the list.
+    if (rebindsSession) onNewSession();
+    apply();
+  };
+
+  const rebindHint = rebindsSession ? t('agent.startsNewSession') : undefined;
 
   return (
     <div className="mb-3 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-3">
@@ -51,11 +75,13 @@ export default function AgentToolbar({
           <select
             aria-label={t('filters.workspace')}
             value={workspace}
-            disabled={disabled}
+            disabled={turnInFlight}
+            title={rebindHint}
             onChange={event => {
               // Selecting a workspace also switches the resource group --
               // ProjectContext owns that pairing, so no extra call here.
-              onWorkspaceChange(event.target.value);
+              const value = event.target.value;
+              applySetting(() => onWorkspaceChange(value));
             }}
             className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-8 text-xs outline-none focus:border-primary disabled:opacity-60"
           >
@@ -81,9 +107,11 @@ export default function AgentToolbar({
         <select
           aria-label={t('filters.engine')}
           value={selectedProvider}
-          disabled={disabled}
+          disabled={turnInFlight}
+          title={rebindHint}
           onChange={event => {
-            onProviderChange(event.target.value);
+            const value = event.target.value;
+            applySetting(() => onProviderChange(value));
           }}
           className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-primary disabled:opacity-60"
         >
@@ -107,14 +135,18 @@ export default function AgentToolbar({
           // Permission mode is the highest-consequence control here, and
           // "workspace-write" says nothing about what it permits. Spell out
           // the blast radius rather than assuming the term is understood.
-          title={
+          title={[
             permissionMode === 'workspace-write'
               ? t('agent.permissionWriteHint')
-              : t('agent.permissionReadHint')
-          }
+              : t('agent.permissionReadHint'),
+            rebindHint,
+          ].filter(Boolean).join(' ')}
           value={permissionMode}
-          disabled={disabled}
-          onChange={event => onPermissionModeChange(event.target.value as PermissionMode)}
+          disabled={turnInFlight}
+          onChange={event => {
+            const value = event.target.value as PermissionMode;
+            applySetting(() => onPermissionModeChange(value));
+          }}
           className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-primary disabled:opacity-60"
         >
           <option value="workspace-write">{t('agent.canEditFiles')}</option>

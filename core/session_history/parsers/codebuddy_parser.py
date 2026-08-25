@@ -40,6 +40,7 @@ from core.session_history.models import (
     UnifiedMessage,
     UnifiedSession,
 )
+from core.session_history.parse_cache import cached_file_parser
 from core.session_history.parsers._synthetic import is_synthetic_user_content
 from core.session_history.paths import (
     normalize_project_path,
@@ -140,6 +141,7 @@ def _codebuddy_dir_matches(dir_name: str, target_path: str) -> bool:
     return dir_name.lower() == _encode_codebuddy_project_dir(normalized_target).lower()
 
 
+@cached_file_parser
 def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
     """Parses a single CodeBuddy JSONL session file into a UnifiedSession.
 
