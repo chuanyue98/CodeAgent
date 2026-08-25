@@ -11,13 +11,20 @@ type ConnectionState = 'connecting' | 'open' | 'closed' | 'error';
 interface BrowserTerminalProps {
   engine: string;
   cwd: string;
+  /** Resume this session rather than starting a fresh one. */
+  sessionId?: string;
   onExit?: (code: number | null) => void;
 }
 
 /** Coalesces the burst of resize events a drag produces into one fit. */
 const RESIZE_DEBOUNCE_MS = 100;
 
-export default function BrowserTerminal({ engine, cwd, onExit }: BrowserTerminalProps) {
+export default function BrowserTerminal({
+  engine,
+  cwd,
+  sessionId,
+  onExit,
+}: BrowserTerminalProps) {
   const t = useT();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<ConnectionState>('connecting');
@@ -59,7 +66,7 @@ export default function BrowserTerminal({ engine, cwd, onExit }: BrowserTerminal
     setState('connecting');
     setMessage(null);
     let exitHandled = false;
-    const socket = new WebSocket(ptyWebSocketUrl(engine, cwd));
+    const socket = new WebSocket(ptyWebSocketUrl(engine, cwd, sessionId));
 
     const sendResize = () => {
       if (socket.readyState === WebSocket.OPEN) {
@@ -125,7 +132,7 @@ export default function BrowserTerminal({ engine, cwd, onExit }: BrowserTerminal
       socket.close();
       term.dispose();
     };
-  }, [engine, cwd, attempt, t]);
+  }, [engine, cwd, sessionId, attempt, t]);
 
   const canRestart = state === 'closed' || state === 'error';
 

@@ -45,12 +45,16 @@ try:
 except ImportError:  # pragma: no cover - exercised only on POSIX
     winpty = None  # type: ignore[assignment]
 
+from core.constants import ENGINES
+from core.resource_locator import CODE_ROOT
 from core.services.config_service import ConfigService
+from core.services.resume_commands import is_safe_session_id, resume_command
 from core.web.routers.config import get_config_path
-from core.web.routers.launch import _CA_LAUNCHER, ENGINES
 from core.web.security import verify_websocket
 
 router = APIRouter(prefix="/api/pty", tags=["pty"])
+
+_CA_LAUNCHER = CODE_ROOT / "ca_launcher.py"
 
 _READ_CHUNK = 65536
 
@@ -103,6 +107,24 @@ def _shell_command() -> list[str]:
     if shell:
         return [shell]
     return [os.environ.get("COMSPEC", "cmd.exe")]
+
+
+def _engine_argv(
+    engine: str, working_dir: Path, session_id: str | None
+) -> list[str]:
+    """What this PTY should run.
+
+    Three shapes: a bare shell, a fresh engine session through
+    ``ca_launcher.py`` (which injects prompts/skills/plugins), or an existing
+    session handed straight back to its engine. The last one is why the
+    endpoint takes a session id at all -- resuming used to mean opening a GUI
+    terminal window on whatever machine happened to be running the server.
+    """
+    if engine == SHELL_ENGINE:
+        return _shell_command()
+    if session_id:
+        return resume_command(engine, session_id, working_dir)
+    return [sys.executable, str(_CA_LAUNCHER), engine]
 
 
 def pty_capability() -> dict:
@@ -236,7 +258,10 @@ class _PosixSession:
 
 
 async def _spawn_posix(
-    engine: str, working_dir: Path, output_queue: asyncio.Queue[bytes | str | None]
+    engine: str,
+    working_dir: Path,
+    output_queue: asyncio.Queue[bytes | str | None],
+    session_id: str | None = None,
 ) -> _PosixSession:
     import pty  # POSIX-only; imported lazily so the module still loads on Windows.
 
@@ -251,11 +276,7 @@ async def _spawn_posix(
 
     try:
         try:
-            argv = (
-                _shell_command()
-                if engine == SHELL_ENGINE
-                else [sys.executable, str(_CA_LAUNCHER), engine]
-            )
+            argv = _engine_argv(engine, working_dir, session_id)
             process = await asyncio.create_subprocess_exec(
                 *argv,
                 stdin=slave_fd,
@@ -399,15 +420,14 @@ class _WindowsSession:  # pragma: no cover - exercised only on Windows
 
 
 async def _spawn_windows(  # pragma: no cover - exercised only on Windows
-    engine: str, working_dir: Path, output_queue: asyncio.Queue[bytes | str | None]
+    engine: str,
+    working_dir: Path,
+    output_queue: asyncio.Queue[bytes | str | None],
+    session_id: str | None = None,
 ) -> _WindowsSession:
     loop = asyncio.get_running_loop()
     env = {**os.environ, "TERM": "xterm-256color"}
-    argv = (
-        _shell_command()
-        if engine == SHELL_ENGINE
-        else [sys.executable, str(_CA_LAUNCHER), engine]
-    )
+    argv = _engine_argv(engine, working_dir, session_id)
     try:
         # PtyProcess.spawn() does a PATH lookup + creates the ConPTY
         # synchronously; it's fast, but run it off-thread anyway so a slow
@@ -429,6 +449,10 @@ async def pty_websocket(
     websocket: WebSocket,
     engine: str = Query(...),
     cwd: str = Query(...),
+    session_id: str | None = Query(
+        None,
+        description="Resume this existing session instead of starting a new one",
+    ),
 ) -> None:
     # Authenticate before anything else: this endpoint hands the caller an
     # interactive shell, and a WebSocket handshake is not subject to the
@@ -443,6 +467,17 @@ async def pty_websocket(
     if engine != SHELL_ENGINE and engine not in ENGINES:
         await websocket.close(code=4400, reason=f"Unknown engine: {engine}")
         return
+    if session_id is not None:
+        # The id becomes an argv element. Nothing reaches a shell, but one
+        # starting with "-" would be read by the engine CLI as a flag.
+        if engine == SHELL_ENGINE:
+            await websocket.close(
+                code=4400, reason="A plain shell has no session to resume"
+            )
+            return
+        if not is_safe_session_id(session_id):
+            await websocket.close(code=4400, reason="Malformed session id")
+            return
     try:
         working_dir = _resolve_registered_workspace(cwd)
     except ValueError as exc:
@@ -456,10 +491,12 @@ async def pty_websocket(
     try:
         if sys.platform == "win32":  # pragma: no cover - exercised only on Windows
             session: PtySession = await _spawn_windows(
-                engine, working_dir, output_queue
+                engine, working_dir, output_queue, session_id
             )
         else:
-            session = await _spawn_posix(engine, working_dir, output_queue)
+            session = await _spawn_posix(
+                engine, working_dir, output_queue, session_id
+            )
     except SpawnError as exc:
         with contextlib.suppress(Exception):
             await websocket.close(code=1011, reason=f"Failed to start session: {exc}")
@@ -470,6 +507,7 @@ async def pty_websocket(
         "id": session_id,
         "engine": engine,
         "cwd": str(working_dir),
+        "resumed_session_id": session_id,
         "pid": session.pid,
         "started_at": datetime.now(UTC).isoformat(),
         "session": session,

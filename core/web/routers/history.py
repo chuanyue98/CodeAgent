@@ -30,6 +30,7 @@ from pydantic import field_validator
 
 from core.constants import ENGINES
 from core.services.config_service import ConfigService
+from core.services.resume_commands import resume_command
 from core.services.workspace_service import (
     WorkspaceConfigError,
     WorkspaceResolutionError,
@@ -139,7 +140,11 @@ class ConvertResponse(ProtocolModel):
 
 
 class ConvertAndLaunchResponse(ConvertResponse):
-    terminal: str | None = None
+    #: Where the caller should attach a browser PTY. The session is not
+    #: started here -- the websocket does that when the terminal opens.
+    engine: str | None = None
+    session_id: str | None = None
+    project: str | None = None
 
 
 class DeleteSessionResponse(ProtocolModel):
@@ -309,35 +314,6 @@ def _resolve_history_workspace(project_path: str) -> str:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-def _resume_launch_command(engine: str, session_id: str, project: Path) -> list[str]:
-    """Builds the raw engine CLI command that resumes a converted session.
-
-    Conversion writes the session into the target engine's native storage
-    (e.g. ``~/.local/share/opencode/opencode.db``), so resuming hands control
-    straight to that engine with the new session id -- no CodeAgent
-    prompt/skill/plugin injection, since the conversation is already
-    materialized. ``launch_in_terminal`` is engine-agnostic; on Windows the
-    ``cmd /k`` shim resolves the ``*.cmd`` entry points npm installs.
-
-    Args:
-        engine: Target engine name (``opencode``, ``claude``, ``codex``).
-        session_id: The converted session id in the target engine's format.
-        project: Project working directory the converted session belongs to.
-
-    Returns:
-        list[str]: argv for ``launch_in_terminal``.
-    """
-    if engine == "opencode":
-        return ["opencode", str(project), "-s", session_id]
-    if engine == "claude":
-        return ["claude", "--resume", session_id]
-    if engine == "codex":
-        return ["codex", "resume", session_id]
-    if engine == "codebuddy":
-        return ["codebuddy", "--resume", session_id]
-    raise ValueError(f"Unknown engine: {engine}")
-
-
 @router.post("/history/convert-and-launch")
 async def convert_and_launch(req: ConvertRequest) -> dict:
     """Converts a session and launches the target engine.
@@ -366,25 +342,21 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
             status_code=500, detail={"error": f"Conversion failed: {e}"}
         ) from e
 
-    from core.web.routers.launch import launch_in_terminal
-
-    cmd = _resume_launch_command(req.target_engine, new_id, Path(validated_project))
-
+    # Validates the argv is buildable (known engine, well-formed id) before
+    # telling the caller to open a terminal on it.
     try:
-        terminal = launch_in_terminal(cmd, cwd=Path(validated_project))
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except OSError as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to open terminal: {exc}"
-        ) from exc
+        resume_command(req.target_engine, new_id, Path(validated_project))
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return wire(
         ConvertAndLaunchResponse(
-            status="launched",
+            status="ready",
             new_session_id=new_id,
             target_engine=req.target_engine,
-            terminal=terminal,
+            engine=req.target_engine,
+            session_id=new_id,
+            project=validated_project,
         )
     )
 
@@ -395,12 +367,17 @@ async def continue_session(
     session_id: str,
     project: str = Query(..., description="Project directory path"),
 ) -> dict:
-    """Resumes a session in its native engine, in a visible terminal.
+    """Reports how to resume a session in the browser terminal.
 
-    Nothing is converted — this hands the already-native session straight
-    back to its engine CLI (``opencode -s``, ``claude --resume``,
-    ``codex resume``...), again with no CodeAgent prompt/skill injection,
-    so a session browser can "Continue" any existing session directly.
+    Nothing is converted — the already-native session is handed straight back
+    to its engine CLI (``opencode -s``, ``claude --resume``, ``codex
+    resume``...) with no CodeAgent prompt/skill injection.
+
+    This used to open a GUI terminal window on whatever machine was running
+    the server, which is useless the moment the browser is somewhere else
+    (remote, container, headless) and returned 503 there. The engine now runs
+    in the PTY the page already has: this endpoint validates and answers with
+    what ``/api/pty/ws`` needs, and the websocket spawns it.
 
     Args:
         engine: The engine that owns *session_id*.
@@ -408,7 +385,7 @@ async def continue_session(
         project: The project directory path the session belongs to.
 
     Returns:
-        dict: Launch result including the terminal used.
+        dict: The engine, session id and project to attach a browser PTY to.
     """
     validated_project = _resolve_history_workspace(project)
     if engine not in ENGINES:
@@ -427,24 +404,16 @@ async def continue_session(
             },
         )
 
-    from core.web.routers.launch import launch_in_terminal
-
-    cmd = _resume_launch_command(engine, session_id, Path(validated_project))
-
     try:
-        terminal = launch_in_terminal(cmd, cwd=Path(validated_project))
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except OSError as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to open terminal: {exc}"
-        ) from exc
+        resume_command(engine, session_id, Path(validated_project))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {
-        "status": "launched",
+        "status": "ready",
         "engine": engine,
         "session_id": session_id,
-        "terminal": terminal,
+        "project": validated_project,
     }
 
 

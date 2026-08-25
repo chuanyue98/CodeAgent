@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import SessionDetailPanel from '../components/SessionDetailPanel';
 
@@ -30,13 +31,17 @@ function mockTranscript(count: number) {
 }
 
 function renderPanel() {
+  // The Continue button navigates to the terminal page, so the panel needs a
+  // router in context.
   return render(
-    <SessionDetailPanel
-      engine="claude"
-      sessionId="session-a"
-      projectPath="/workspace/project-a"
-      onClose={() => {}}
-    />,
+    <MemoryRouter>
+      <SessionDetailPanel
+        engine="claude"
+        sessionId="session-a"
+        projectPath="/workspace/project-a"
+        onClose={() => {}}
+      />
+    </MemoryRouter>,
   );
 }
 
@@ -91,5 +96,77 @@ describe('SessionDetailPanel transcript window', () => {
 
     expect(await screen.findByRole('button', { name: 'Jump to the latest' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Jump to the start' })).toBeInTheDocument();
+  });
+});
+
+
+describe('SessionDetailPanel resume', () => {
+  test('Continue asks the server, then opens the browser terminal', async () => {
+    const detail = {
+      session_id: 'session-a',
+      engine: 'claude',
+      project_path: '/workspace/project-a',
+      title: 'A session',
+      messages: [message(0)],
+    };
+    const calls: string[] = [];
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      calls.push(url);
+      if (url.includes('/continue')) {
+        const target = {
+          status: 'ready',
+          engine: 'claude',
+          sessionId: 'session-a',
+          project: '/workspace/project-a',
+        };
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(target),
+          json: async () => target,
+        });
+      }
+      if (url.includes('/api/history/')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(detail),
+          json: async () => detail,
+        });
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    }) as typeof fetch;
+
+    let location = '';
+    function LocationProbe() {
+      const current = useLocation();
+      location = `${current.pathname}${current.search}`;
+      return null;
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/activity/sessions']}>
+        <LocationProbe />
+        <SessionDetailPanel
+          engine="claude"
+          sessionId="session-a"
+          projectPath="/workspace/project-a"
+          onClose={() => {}}
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Continue in terminal/ }));
+
+    await waitFor(() =>
+      expect(calls.some(url => url.includes('/continue'))).toBe(true),
+    );
+
+    // Lands on the in-page terminal, not on anything the server opened for
+    // itself.
+    await waitFor(() => expect(location).toContain('/agent/terminal'));
+    expect(location).toContain('engine=claude');
+    expect(location).toContain('session=session-a');
+    expect(location).toContain(encodeURIComponent('/workspace/project-a'));
   });
 });

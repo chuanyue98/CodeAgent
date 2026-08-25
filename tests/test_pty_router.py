@@ -555,3 +555,75 @@ def test_shell_command_windows_last_resort_comspec(monkeypatch):
     monkeypatch.delenv("ProgramFiles(x86)", raising=False)
     monkeypatch.setenv("COMSPEC", "C:/Windows/System32/cmd.exe")
     assert pty_router._shell_command() == ["C:/Windows/System32/cmd.exe"]
+
+
+# ─── What the PTY actually runs ───────────────────────────────────────────
+#
+# Resuming an existing session used to mean opening a GUI terminal window on
+# the machine running the server. It now runs in the PTY the page already has,
+# which is what the session id on this endpoint is for.
+
+
+def test_engine_argv_starts_a_fresh_session_through_the_launcher():
+    argv = pty_router._engine_argv("claude", Path("/work/p"), None)
+
+    # ca_launcher.py, not the bare CLI: a new session gets CodeAgent's
+    # prompt/skill/plugin injection.
+    assert argv[0] == sys.executable
+    assert argv[1].endswith("ca_launcher.py")
+    assert argv[2] == "claude"
+
+
+def test_engine_argv_resumes_through_the_engine_cli():
+    argv = pty_router._engine_argv("claude", Path("/work/p"), "sess-1")
+
+    # No launcher: the conversation is already materialized in the engine's
+    # own storage, so nothing needs injecting.
+    assert argv == ["claude", "--resume", "sess-1"]
+
+
+def test_engine_argv_ignores_a_session_id_for_a_plain_shell():
+    argv = pty_router._engine_argv(pty_router.SHELL_ENGINE, Path("/work/p"), None)
+
+    assert argv == pty_router._shell_command()
+
+
+def test_engine_argv_refuses_a_session_id_shaped_like_a_flag():
+    with pytest.raises(ValueError, match="Unsafe session id"):
+        pty_router._engine_argv("claude", Path("/work/p"), "--resume-all")
+
+
+def test_pty_websocket_rejects_a_malformed_session_id(tmp_path, monkeypatch):
+    if sys.platform == "win32":
+        pytest.skip("PTY sessions are POSIX-only")
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(
+                "/api/pty/ws",
+                params={
+                    "engine": "claude",
+                    "cwd": app.state.workspace,
+                    "session_id": "--resume-all",
+                },
+            ) as ws:
+                ws.receive_json()
+    assert exc_info.value.code == 4400
+
+
+def test_pty_websocket_rejects_resuming_a_plain_shell(tmp_path, monkeypatch):
+    if sys.platform == "win32":
+        pytest.skip("PTY sessions are POSIX-only")
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(
+                "/api/pty/ws",
+                params={
+                    "engine": pty_router.SHELL_ENGINE,
+                    "cwd": app.state.workspace,
+                    "session_id": "sess-1",
+                },
+            ) as ws:
+                ws.receive_json()
+    assert exc_info.value.code == 4400

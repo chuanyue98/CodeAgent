@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { AlertTriangle, TerminalSquare, X } from 'lucide-react';
 import { fetchPtyStatus } from '../api/pty';
 import { useProject } from '../context/ProjectContext';
@@ -37,7 +38,25 @@ export default function LaunchPad() {
 
   const [available, setAvailable] = useState<boolean | null>(null);
   const [reason, setReason] = useState<string | null>(null);
-  const [activeSession, setActiveSession] = useState<{ engine: string; cwd: string } | null>(null);
+  const [activeSession, setActiveSession] = useState<
+    { engine: string; cwd: string; sessionId?: string } | null
+  >(null);
+  const [searchParams] = useSearchParams();
+
+  // Deep link from the session browser: `?engine=&cwd=&session=` opens that
+  // session in the terminal here. Resuming used to open a GUI terminal on the
+  // machine running the server, which the browser could not reach.
+  const openedDeepLinkRef = useRef<string | null>(null);
+  useEffect(() => {
+    const engine = searchParams.get('engine');
+    const cwd = searchParams.get('cwd');
+    if (!engine || !cwd) return;
+    const sessionId = searchParams.get('session') ?? undefined;
+    const key = `${engine}|${cwd}|${sessionId ?? ''}`;
+    if (openedDeepLinkRef.current === key) return;
+    openedDeepLinkRef.current = key;
+    setActiveSession({ engine, cwd, sessionId });
+  }, [searchParams]);
 
   useEffect(() => {
     fetchPtyStatus()
@@ -64,6 +83,11 @@ export default function LaunchPad() {
               const engine = ENGINES.find(item => item.id === activeSession.engine);
               return engine ? (engine.nameKey ? t(engine.nameKey) : engine.name) : activeSession.engine;
             })()} · {activeSession.cwd}
+            {activeSession.sessionId && (
+              <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                {t('launch.resumed')}
+              </span>
+            )}
           </div>
           <button
             onClick={() => setActiveSession(null)}
@@ -75,6 +99,7 @@ export default function LaunchPad() {
         <BrowserTerminal
           engine={activeSession.engine}
           cwd={activeSession.cwd}
+          sessionId={activeSession.sessionId}
           onExit={() => {}}
         />
       </div>
