@@ -83,10 +83,43 @@ export async function fetchMonthly(): Promise<MonthlyUsage[]> {
   return request('/api/analytics/monthly');
 }
 
-export async function fetchSessions(limit = 100, project?: string): Promise<SessionUsage[]> {
+export interface SessionPage {
+  sessions: SessionUsage[];
+  /** Pass back as `cursor` for the next page; null when this was the last. */
+  nextCursor: string | null;
+  /** How many sessions match the filters, ignoring the page size. */
+  total: number;
+}
+
+export interface SessionPageParams {
+  limit?: number;
+  project?: string;
+  /** Matched server-side against title, id, project path and engine. */
+  search?: string;
+  cursor?: string | null;
+}
+
+/** One page of sessions, with the cursor for the next. */
+export async function fetchSessionPage({
+  limit = 100,
+  project,
+  search,
+  cursor,
+}: SessionPageParams = {}): Promise<SessionPage> {
   const query = new URLSearchParams({ limit: String(limit) });
   if (project) query.set('project', project);
+  if (search) query.set('search', search);
+  if (cursor) query.set('cursor', cursor);
   return request(`/api/analytics/sessions?${query}`);
+}
+
+/**
+ * The first page as a plain array, for callers that only ever wanted the most
+ * recent handful (the home page, the command palette, the usage totals).
+ */
+export async function fetchSessions(limit = 100, project?: string): Promise<SessionUsage[]> {
+  const page = await fetchSessionPage({ limit, project });
+  return page.sessions;
 }
 
 export async function fetchEngines(): Promise<EngineSummary[]> {

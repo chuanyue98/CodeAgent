@@ -24,6 +24,8 @@ export interface RunStatus {
   log_path: string;
   start_time: number;
   workspace?: string;
+  end_time?: number;
+  exit_code?: number;
 }
 
 export interface Task {

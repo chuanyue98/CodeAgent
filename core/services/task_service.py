@@ -66,6 +66,38 @@ class TaskService:
             raise FileExistsError(f"Task '{name}' already exists") from exc
         return self._parse_task(path, full_content=True)
 
+    def update_task(self, name: str, content: str) -> dict:
+        """Overwrites an existing task blueprint with the given markdown content.
+
+        Unlike ``create_task`` which assembles a fixed four-section template,
+        this accepts the full raw markdown so any structure (stages, custom
+        sections) is preserved. The task must already exist.
+        """
+        if not _SAFE_NAME_RE.match(name):
+            raise ValueError("Task name must match [\\w.-]+")
+
+        path = self.tasks_root / f"{name}.md"
+        if not path.resolve().is_relative_to(self.tasks_root.resolve()):
+            raise ValueError("Invalid task name")
+        if not path.exists():
+            raise FileNotFoundError(f"Task '{name}' not found")
+
+        path.write_text(content, encoding="utf-8")
+        return self._parse_task(path, full_content=True)
+
+    def delete_task(self, name: str) -> bool:
+        """Removes a task blueprint file. Returns False if it did not exist."""
+        if not _SAFE_NAME_RE.match(name):
+            raise ValueError("Task name must match [\\w.-]+")
+
+        path = self.tasks_root / f"{name}.md"
+        if not path.resolve().is_relative_to(self.tasks_root.resolve()):
+            raise ValueError("Invalid task name")
+        if not path.exists():
+            return False
+        path.unlink()
+        return True
+
     def get_task(self, name: str, log_path: str | None = None) -> dict | None:
         if not _SAFE_NAME_RE.match(name):
             return None

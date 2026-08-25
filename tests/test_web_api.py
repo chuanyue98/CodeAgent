@@ -193,6 +193,105 @@ async def test_run_task_uses_registered_group_and_atomic_overlap(mock_env, monke
 
 
 @pytest.mark.asyncio
+async def test_update_task_route(mock_env):
+    (mock_env / "tasks" / "review.md").write_text("# Old\nold body", encoding="utf-8")
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.put(
+            "/api/tasks/review", json={"content": "# New\nnew body"}
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "New"
+    assert "new body" in data["content"]
+    assert (mock_env / "tasks" / "review.md").read_text(encoding="utf-8") == "# New\nnew body"
+
+
+@pytest.mark.asyncio
+async def test_update_task_route_404_for_missing(mock_env):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.put("/api/tasks/missing", json={"content": "# x\n"})
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_task_route(mock_env):
+    (mock_env / "tasks" / "review.md").write_text("# Review\n", encoding="utf-8")
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.delete("/api/tasks/review")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "deleted", "name": "review"}
+    assert not (mock_env / "tasks" / "review.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_task_route_409_when_active(mock_env, monkeypatch):
+    (mock_env / "tasks" / "review.md").write_text("# Review\n", encoding="utf-8")
+
+    class FakeRunner:
+        def has_active_task(self, name, workspace=None):
+            return True
+
+    monkeypatch.setattr(tasks_router, "_runner", FakeRunner())
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.delete("/api/tasks/review")
+    assert resp.status_code == 409
+    # File must still exist — the active-run guard blocks deletion.
+    assert (mock_env / "tasks" / "review.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_list_task_runs_route_queries_history_by_task_name(
+    mock_env, monkeypatch
+):
+    """The route asks the store for one task's history rather than filtering
+    the in-memory map, which is what lets a finished run outlive the process
+    that produced it."""
+    from core.services.runner_service import TaskRunStatus
+
+    calls = {}
+
+    class FakeRunner:
+        def list_history(self, *, task_name=None, limit=50):
+            calls["task_name"] = task_name
+            calls["limit"] = limit
+            return [
+                TaskRunStatus(
+                    task_id="review_1",
+                    engine="codex",
+                    pid=1,
+                    status="completed",
+                    log_path="/tmp/a.log",
+                    start_time=100,
+                    end_time=200,
+                    exit_code=0,
+                    task_name="review",
+                )
+            ]
+
+    monkeypatch.setattr(tasks_router, "_runner", FakeRunner())
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.get("/api/tasks/review/runs")
+
+    assert resp.status_code == 200
+    assert calls == {"task_name": "review", "limit": 50}
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["task_id"] == "review_1"
+    assert data[0]["exit_code"] == 0
+    assert data[0]["end_time"] == 200
+
+
+@pytest.mark.asyncio
 async def test_list_skills_with_frontmatter(mock_env):
     skill_dir = mock_env / "skills" / "base" / "fancy-skill"
     skill_dir.mkdir(parents=True)

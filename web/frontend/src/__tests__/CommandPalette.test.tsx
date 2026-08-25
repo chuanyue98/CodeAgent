@@ -21,7 +21,8 @@ beforeEach(() => {
       return jsonResponse([{ path: '/workspace/proj-a', group: 'codeagent', available: true }]);
     }
     if (url.includes('/api/groups')) return jsonResponse({});
-    if (url.includes('/api/analytics/sessions')) return jsonResponse([]);
+    if (url.includes('/api/analytics/sessions'))
+    return jsonResponse({ sessions: [], nextCursor: null, total: 0 });
     if (url.endsWith('/api/tasks')) return jsonResponse([]);
     return Promise.reject(new Error(`Unhandled fetch to ${url}`));
   }) as unknown as typeof fetch;

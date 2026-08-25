@@ -36,6 +36,10 @@ class TaskRunStatus:
     start_time: float
     session_id: str | None = None
     workspace: str | None = None
+    end_time: float | None = None
+    exit_code: int | None = None
+    task_name: str | None = None
+    schedule_id: str | None = None
 
 
 class TaskAlreadyRunningError(ValueError):
@@ -81,8 +85,13 @@ class TaskRunner:
         tasks_root: Path | None = None,
         workspace: str | None = None,
         prevent_overlap: bool = False,
+        schedule_id: str | None = None,
     ) -> TaskRunStatus:
-        """Starts a task in the background using the specified engine."""
+        """Starts a task in the background using the specified engine.
+
+        ``schedule_id`` is recorded on the run when a schedule fired it, so the
+        schedule can later report what the run actually did.
+        """
         import time
 
         if not _SAFE_NAME_RE.match(task_name):
@@ -151,6 +160,8 @@ class TaskRunner:
                     log_path=str(log_file),
                     start_time=time.time(),
                     workspace=str(working_dir),
+                    task_name=task_name,
+                    schedule_id=schedule_id,
                 )
                 self.active_runs[task_id] = status
                 self._processes[task_id] = process
@@ -165,6 +176,9 @@ class TaskRunner:
                     log_path=str(log_file),
                     start_time=time.time(),
                     workspace=str(working_dir),
+                    task_name=task_name,
+                    schedule_id=schedule_id,
+                    end_time=time.time(),
                 )
                 self.active_runs[task_id] = status
                 self._persist(status)
@@ -257,20 +271,27 @@ class TaskRunner:
                 self._persist(status)
             return status
 
+    @staticmethod
+    def _status_from_record(record: TaskRunRecord) -> TaskRunStatus:
+        return TaskRunStatus(
+            task_id=record.task_id,
+            engine=record.engine,
+            pid=record.pid,
+            status=record.status,
+            log_path=record.log_path,
+            start_time=record.start_time,
+            session_id=record.session_id,
+            workspace=record.workspace,
+            end_time=record.end_time,
+            exit_code=record.exit_code,
+            task_name=record.task_name,
+            schedule_id=record.schedule_id,
+        )
+
     def _load_persisted_runs(self):
         """Reload runs from the SQLite store so they survive restarts."""
         for record in self._run_store.list_running():
-            status = TaskRunStatus(
-                task_id=record.task_id,
-                engine=record.engine,
-                pid=record.pid,
-                status=record.status,
-                log_path=record.log_path,
-                start_time=record.start_time,
-                session_id=record.session_id,
-                workspace=record.workspace,
-            )
-            self.active_runs[record.task_id] = status
+            self.active_runs[record.task_id] = self._status_from_record(record)
 
     def _persist(self, run: TaskRunStatus):
         if not isinstance(run, TaskRunStatus):
@@ -285,6 +306,10 @@ class TaskRunner:
                 start_time=run.start_time,
                 session_id=run.session_id,
                 workspace=run.workspace,
+                end_time=run.end_time,
+                exit_code=run.exit_code,
+                task_name=run.task_name,
+                schedule_id=run.schedule_id,
             )
         )
 
@@ -342,6 +367,43 @@ class TaskRunner:
                 self.get_status(task_id)
             return list(self.active_runs.values())
 
+    def get_run(self, task_id: str) -> TaskRunStatus | None:
+        """One run by id, falling back to the store.
+
+        ``get_status`` only knows ``active_runs``, so it answers None for any
+        run this process did not launch -- including every run made before the
+        last restart. Callers that are following a specific run (a schedule
+        waiting on its last fire) need the persisted row too.
+        """
+        with self._run_lock:
+            if task_id in self.active_runs:
+                return self.get_status(task_id)
+            record = self._run_store.get(task_id)
+        return self._status_from_record(record) if record else None
+
+    def list_history(
+        self,
+        *,
+        task_name: str | None = None,
+        schedule_id: str | None = None,
+        limit: int = 50,
+    ) -> list[TaskRunStatus]:
+        """Runs newest first, including ones that ended before this process started.
+
+        ``list_runs`` only ever sees ``active_runs``, which holds what this
+        process launched plus whatever was still marked running at boot. Every
+        run has been written to SQLite all along; this reads it back.
+        """
+        with self._run_lock:
+            # Settle any live run first so a just-finished process is recorded
+            # with its exit code before the history is read.
+            for task_id in list(self.active_runs.keys()):
+                self.get_status(task_id)
+            records = self._run_store.list_history(
+                task_name=task_name, schedule_id=schedule_id, limit=limit
+            )
+        return [self._status_from_record(record) for record in records]
+
     def has_active_task(self, task_name: str, workspace: str | None = None) -> bool:
         """Return whether a task with this name is already running.
 
@@ -383,7 +445,11 @@ class TaskRunner:
             proc = self._processes.get(task_id)
             rc = proc.poll() if proc is not None else None
             if rc is not None:
+                import time
+
                 run.status = "completed" if rc == 0 else "failed"
+                run.end_time = time.time()
+                run.exit_code = rc
                 self._processes.pop(task_id, None)
                 if run.session_id is None and run.log_path.endswith(".jsonl"):
                     run.session_id = self._extract_chat_session_id(
@@ -391,7 +457,10 @@ class TaskRunner:
                     )
                 self._persist(run)
             elif proc is None and not self._is_process_running(run.pid):
+                import time
+
                 run.status = "failed"
+                run.end_time = time.time()
                 self._persist(run)
 
             return run
@@ -433,7 +502,10 @@ class TaskRunner:
             try:
                 if self._processes.get(task_id) is proc:
                     self._processes.pop(task_id, None)
+                import time
+
                 run.status = "stopped"
+                run.end_time = time.time()
                 self._persist(run)
                 return True
             except Exception:

@@ -1,8 +1,11 @@
 import { useState } from 'react';
-import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, Code, Play, StopCircle, Terminal } from 'lucide-react';
+import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, Code, History, Pencil, Play, StopCircle, Terminal, Trash2 } from 'lucide-react';
 import LogViewer from '../LogViewer';
+import ConfirmDialog from '../shared/ConfirmDialog';
+import EditTaskModal from './EditTaskModal';
 import { classifyStageStatus, type Engine, type RunStatus, type Task } from './types';
 import { useT } from '../../i18n/context';
+import request from '../../utils/request';
 
 function stageIcon(status: string) {
   const state = classifyStageStatus(status);
@@ -22,13 +25,44 @@ function stageBadge(status: string) {
   return 'border-slate-100 text-slate-400 bg-slate-50';
 }
 
+/** Formats a duration in seconds as a compact human string (e.g. "12s", "3m 4s"). */
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '—';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+
+function runDuration(run: RunStatus): number {
+  const end = run.end_time ?? (run.status === 'running' ? Date.now() / 1000 : 0);
+  return end ? end - run.start_time : 0;
+}
+
+function runBadgeClass(status: RunStatus['status']): string {
+  switch (status) {
+    case 'running':
+      return 'border-emerald-200 text-emerald-600 bg-emerald-50 animate-pulse';
+    case 'completed':
+      return 'border-primary/20 text-primary bg-primary/10';
+    case 'failed':
+      return 'border-red-200 text-red-600 bg-red-50';
+    case 'stopped':
+      return 'border-slate-200 text-slate-500 bg-slate-50';
+    default:
+      return 'border-slate-100 text-slate-400 bg-slate-50';
+  }
+}
+
 export default function TaskDetail({
   task,
   engines,
   activeRun,
+  runHistory,
   onBack,
   onRun,
   onStop,
+  onDeleted,
+  onTaskUpdated,
   workspace,
   projects,
   onWorkspaceChange,
@@ -36,18 +70,60 @@ export default function TaskDetail({
   task: Task;
   engines: Engine[];
   activeRun?: RunStatus;
+  runHistory: RunStatus[];
   onBack: () => void;
   onRun: (engine: string) => void;
   onStop: (id: string) => void;
+  onDeleted: () => void;
+  onTaskUpdated: (updated: Task) => void;
   workspace: string;
   projects: { path: string; group: string; available?: boolean }[];
   onWorkspaceChange: (workspace: string) => void;
 }) {
   const t = useT();
   const [selectedEngine, setSelectedEngine] = useState(engines[0]?.id || 'opencode');
+  const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Which run's log to display in the LogViewer. Defaults to the active run;
+  // clicking a history entry swaps it to inspect that run's log.
+  const [viewedLogId, setViewedLogId] = useState<string | null>(null);
+
+  // Reset the viewed log whenever the selected task changes so a stale id
+  // from a previous task doesn't leak into the LogViewer. Adjusting state
+  // during render (rather than in an effect) avoids the cascading render the
+  // react-hooks/set-state-in-effect rule guards against.
+  const [trackedName, setTrackedName] = useState(task.name);
+  if (task.name !== trackedName) {
+    setTrackedName(task.name);
+    setViewedLogId(null);
+  }
+
+  // While a run is active, always show its live log regardless of what the
+  // user previously selected from history.
+  const logTaskId = activeRun ? activeRun.task_id : viewedLogId;
 
   const done = task.stages.filter(s => classifyStageStatus(s.status) === 'done').length;
   const pct = task.stages.length > 0 ? Math.round((done / task.stages.length) * 100) : 0;
+
+  // The most recent run (active first, otherwise the first history entry) is
+  // what the metadata row summarizes.
+  const metaRun = activeRun ?? runHistory[0];
+  const hasPriorRuns = runHistory.length > 0;
+  const runLabel = hasPriorRuns ? t('common.retry') : t('taskDetail.run');
+
+  const handleDelete = async () => {
+    setDeleteError(null);
+    // The backend refuses to delete a task with an active run (409). Surface
+    // that as an inline error rather than navigating away.
+    try {
+      await request(`/api/tasks/${task.name}`, { method: 'DELETE' });
+      onDeleted();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : t('taskDetail.deleteFailed'));
+      setConfirmDelete(false);
+    }
+  };
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-6 pb-20">
@@ -58,6 +134,23 @@ export default function TaskDetail({
         </button>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setEditing(true)}
+            className="flex items-center gap-2 px-3 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors"
+          >
+            <Pencil className="w-4 h-4" />
+            {t('common.edit')}
+          </button>
+          <button
+            onClick={() => setConfirmDelete(true)}
+            disabled={!!activeRun}
+            title={activeRun ? t('taskDetail.deleteBlocked') : undefined}
+            className="flex items-center gap-2 px-3 py-2 border border-red-100 text-red-500 rounded-xl text-sm font-medium hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            {t('common.delete')}
+          </button>
+
           {activeRun ? (
             <button
               onClick={() => onStop(activeRun.task_id)}
@@ -93,12 +186,18 @@ export default function TaskDetail({
                 className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
               >
                 <Play className="w-4 h-4" />
-                {t('taskDetail.run')}
+                {runLabel}
               </button>
             </>
           )}
         </div>
       </div>
+
+      {deleteError && (
+        <div className="p-3 bg-red-50 border border-red-100 text-red-600 rounded-xl text-sm">
+          {deleteError}
+        </div>
+      )}
 
       <div className="flex justify-between items-start">
         <div className="flex-1">
@@ -113,6 +212,29 @@ export default function TaskDetail({
           {task.description && <p className="text-sm text-slate-500 mt-1">{task.description}</p>}
         </div>
       </div>
+
+      {/* Run metadata: summarizes the active or most-recent run. */}
+      {metaRun && (
+        <div className="glass-card p-4 border-slate-100 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+          <span className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('filters.engine')}</span>
+            <span className="font-medium text-slate-700">{metaRun.engine}</span>
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('taskDetail.duration')}</span>
+            <span className="font-medium text-slate-700">{formatDuration(runDuration(metaRun))}</span>
+          </span>
+          {metaRun.exit_code !== undefined && metaRun.exit_code !== null && (
+            <span className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('taskDetail.exitCode')}</span>
+              <span className="font-mono font-medium text-slate-700">{metaRun.exit_code}</span>
+            </span>
+          )}
+          <span className={`text-[10px] px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider border ${runBadgeClass(metaRun.status)}`}>
+            {metaRun.status}
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
@@ -158,19 +280,19 @@ export default function TaskDetail({
             </>
           )}
 
-          {activeRun && (
+          {logTaskId && (
             <section className="space-y-3">
               <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                 <Terminal className="w-4 h-4" />
                 {t('taskDetail.logs')}
               </h2>
               <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 400 }}>
-                <LogViewer taskId={activeRun.task_id} />
+                <LogViewer taskId={logTaskId} />
               </div>
             </section>
           )}
 
-          {!task.hasStages && task.content && !activeRun && (
+          {!task.hasStages && task.content && !logTaskId && (
             <section className="glass-card p-6 border-slate-100">
               <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{task.content}</pre>
             </section>
@@ -230,8 +352,72 @@ export default function TaskDetail({
               )}
             </div>
           </section>
+
+          {/* Run history: every run for this task in the current server session. */}
+          <section className="space-y-3">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <History className="w-3.5 h-3.5" />
+              {t('taskDetail.runHistory')}
+            </h2>
+            {runHistory.length > 0 ? (
+              <div className="space-y-2">
+                {runHistory.map(run => {
+                  const isActive = activeRun?.task_id === run.task_id;
+                  const isViewed = viewedLogId === run.task_id;
+                  return (
+                    <button
+                      key={run.task_id}
+                      onClick={() => setViewedLogId(run.task_id)}
+                      className={`w-full text-left glass-card p-3 border transition-all flex items-center justify-between gap-3 ${
+                        isActive || isViewed ? 'border-primary/30 bg-primary/5' : 'border-slate-100 hover:bg-slate-50/50'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-slate-800 truncate">{run.engine}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-lg font-bold uppercase tracking-wider border ${runBadgeClass(run.status)}`}>
+                            {run.status}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {new Date(run.start_time * 1000).toLocaleString()} · {formatDuration(runDuration(run))}
+                          {run.exit_code !== undefined && run.exit_code !== null && ` · ${t('taskDetail.exitCode')} ${run.exit_code}`}
+                        </p>
+                      </div>
+                      {(isActive || isViewed) && <Terminal className="w-3.5 h-3.5 text-primary shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-xs text-slate-400 italic p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                {t('taskDetail.noRuns')}
+              </div>
+            )}
+          </section>
         </div>
       </div>
+
+      {editing && (
+        <EditTaskModal
+          task={task}
+          onClose={() => setEditing(false)}
+          onSaved={updated => {
+            setEditing(false);
+            onTaskUpdated(updated);
+          }}
+        />
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title={t('taskDetail.confirmDeleteTitle')}
+          description={t('taskDetail.confirmDeleteDescription', { name: task.title })}
+          confirmLabel={t('common.delete')}
+          onConfirm={() => void handleDelete()}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }

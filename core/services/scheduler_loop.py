@@ -20,9 +20,13 @@ from core.services.workspace_service import (
 TICK_INTERVAL_SECONDS = 30.0
 logger = get_logger(__name__)
 
-# Statuses that mean the schedule did NOT fail (either it started fine, or
-# it was deliberately skipped because an overlapping run was still active).
-_NON_FAILURE_STATUSES = {"started", "completed", "success"}
+# Statuses that mean the schedule did NOT fail: it started fine, it finished,
+# it was deliberately skipped because an overlapping run was still active, or
+# somebody stopped it by hand.
+_NON_FAILURE_STATUSES = {"started", "completed", "success", "stopped"}
+
+#: What a schedule's status says between firing a run and that run finishing.
+_PENDING_STATUS = "started"
 
 
 def _is_failure_status(status: str) -> bool:
@@ -38,6 +42,8 @@ async def _record_and_notify(
     record: dict,
     status: str,
     advance_schedule: bool = True,
+    run_id: str | None = None,
+    set_run_at: bool = True,
 ) -> None:
     """Persists a schedule run outcome, then fires a webhook on failure.
 
@@ -46,7 +52,12 @@ async def _record_and_notify(
     the event loop thread since it does blocking network I/O.
     """
     await asyncio.to_thread(
-        schedule_service.record_run, record["id"], status, advance_schedule
+        schedule_service.record_run,
+        record["id"],
+        status,
+        advance_schedule,
+        run_id,
+        set_run_at,
     )
     if not _is_failure_status(status):
         return
@@ -68,6 +79,44 @@ async def _record_and_notify(
             "status": status,
         },
     )
+
+
+async def _settle_finished_runs(
+    schedule_service: ScheduleService,
+    task_runner: TaskRunner,
+    schedules: list[dict],
+) -> None:
+    """Replaces "started" with what the run it fired actually did.
+
+    A schedule used to report the instant of launch and nothing after it: a
+    task that failed thirty seconds later still read as ``started`` forever,
+    and the failure webhook -- the entire point of recording an outcome --
+    never fired. Each tick now looks at the run the previous fire produced and
+    writes back its terminal status, without advancing ``next_run_at`` (this
+    is not a new fire) or ``last_run_at`` (which means when the run started).
+
+    ``schedules`` is mutated in place so the caller's copy stays truthful for
+    the rest of this tick.
+    """
+    for record in schedules:
+        if record.get("last_run_status") != _PENDING_STATUS:
+            continue
+        run_id = record.get("last_run_id")
+        if not run_id:
+            continue
+
+        run = await asyncio.to_thread(task_runner.get_run, run_id)
+        if run is None or run.status == "running":
+            continue
+
+        record["last_run_status"] = run.status
+        await _record_and_notify(
+            schedule_service,
+            record,
+            run.status,
+            advance_schedule=False,
+            set_run_at=False,
+        )
 
 
 async def scheduler_tick_loop(
@@ -106,6 +155,7 @@ async def tick_once(
     """
     now = time.time()
     schedules = await asyncio.to_thread(schedule_service.list_schedules)
+    await _settle_finished_runs(schedule_service, task_runner, schedules)
     for record in schedules:
         try:
             if not record.get("enabled"):
@@ -156,6 +206,7 @@ async def tick_once(
                     tasks_root=tasks_root,
                     workspace=registered_workspace.path,
                     prevent_overlap=True,
+                    schedule_id=record["id"],
                 )
             except TaskAlreadyRunningError:
                 await _record_and_notify(
@@ -171,7 +222,12 @@ async def tick_once(
                 recorded_status = str(result_status)
             else:
                 recorded_status = f"failed: {result_status}"
-            await _record_and_notify(schedule_service, record, recorded_status)
+            await _record_and_notify(
+                schedule_service,
+                record,
+                recorded_status,
+                run_id=getattr(status, "task_id", None),
+            )
         except ValueError as exc:
             await _record_and_notify(schedule_service, record, f"failed: {exc}")
         except Exception as exc:

@@ -53,11 +53,18 @@ beforeEach(() => {
     if (url.includes('/api/groups')) return jsonResponse({});
     if (url.includes('/api/analytics/sessions')) {
       sessionsLoads += 1;
+      // The endpoint returns one page plus the cursor for the next, not a
+      // bare array.
+      const page = {
+        sessions: sessionsFixture,
+        nextCursor: null,
+        total: sessionsFixture.length,
+      };
       return Promise.resolve({
         ok: true,
         status: 200,
-        text: async () => JSON.stringify(sessionsFixture),
-        json: async () => sessionsFixture,
+        text: async () => JSON.stringify(page),
+        json: async () => page,
       });
     }
     // Opening a row loads that session's transcript in the detail panel.

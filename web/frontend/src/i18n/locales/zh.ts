@@ -186,6 +186,9 @@ export const zh: Record<TranslationKey, string> = {
   'sessions.sortTokens': 'Token 数',
   'sessions.open': '打开会话 {id}',
   'sessions.select': '选择会话 {id}',
+  'sessions.loadMore': '加载更多',
+  'sessions.loadingMore': '加载中…',
+  'sessions.loadedOfTotal': '已显示 {loaded} / 共 {total} 个匹配会话',
   'sessions.empty': '没有符合筛选条件的会话',
   'sessions.deleteTitleOne': '删除 {count} 个会话？',
   'sessions.deleteTitle': '删除 {count} 个会话？',
@@ -698,6 +701,10 @@ export const zh: Record<TranslationKey, string> = {
   'groupSwitcher.resourceCount': '已配置 {count} 项资源',
 
   // ── Task modals ───────────────────────────────────────────────────────────
+  'taskModal.editTitle': '编辑任务',
+  'taskModal.editAria': '编辑任务',
+  'taskModal.contentLabel': '任务内容（Markdown）',
+  'taskModal.updateFailed': '保存任务失败',
   'taskModal.aiIncomplete': 'AI 未完成任务文件的编写（运行状态：{status}）。请重试，或手动填写。',
   'taskModal.generateFailed': '生成任务失败',
   'taskModal.generateAria': 'AI 生成任务',
@@ -737,6 +744,15 @@ export const zh: Record<TranslationKey, string> = {
   'taskDetail.noSkills': '未挂载技能',
   'taskDetail.injectedPrompts': '注入的提示词',
   'taskDetail.noPrompts': '未注入提示词',
+  'taskDetail.runHistory': '运行历史',
+  'taskDetail.noRuns': '暂无运行记录',
+  'taskDetail.duration': '耗时',
+  'taskDetail.exitCode': '退出码',
+  'taskDetail.confirmDeleteTitle': '删除这个任务？',
+  'taskDetail.confirmDeleteDescription': '"{name}" 将被永久删除，此操作不可撤销。',
+  'taskDetail.editFailed': '更新任务失败',
+  'taskDetail.deleteFailed': '删除任务失败',
+  'taskDetail.deleteBlocked': '请先停止该任务正在运行的实例，再执行删除。',
 
   // ── Language ──────────────────────────────────────────────────────────────
   'language.label': '语言',

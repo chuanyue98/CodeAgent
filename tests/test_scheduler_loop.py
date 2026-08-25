@@ -11,10 +11,19 @@ from core.services.scheduler_loop import tick_once
 
 
 class _FakeTaskRunner:
-    def __init__(self, raise_error: bool = False, already_running: bool = False):
+    def __init__(
+        self,
+        raise_error: bool = False,
+        already_running: bool = False,
+        finished_runs: dict[str, str] | None = None,
+    ):
         self.calls: list[tuple] = []
+        self.schedule_ids: list[str | None] = []
         self._raise_error = raise_error
         self._already_running = already_running
+        #: run id -> terminal status, for the settle pass to find.
+        self._finished_runs = finished_runs or {}
+        self._next_run_id = "run-1"
 
     def run_task(
         self,
@@ -24,13 +33,23 @@ class _FakeTaskRunner:
         tasks_root=None,
         workspace=None,
         prevent_overlap=False,
+        schedule_id=None,
     ):
         self.calls.append((task_name, engine, group, workspace))
+        self.schedule_ids.append(schedule_id)
         if self._already_running:
             raise TaskAlreadyRunningError("Task is already running")
         if self._raise_error:
             raise ValueError("boom")
-        return type("Status", (), {"status": "running"})()
+        return type(
+            "Status", (), {"status": "running", "task_id": self._next_run_id}
+        )()
+
+    def get_run(self, task_id):
+        status = self._finished_runs.get(task_id)
+        if status is None:
+            return None
+        return type("Status", (), {"status": status, "task_id": task_id})()
 
 
 @pytest.fixture
@@ -248,3 +267,129 @@ async def test_tick_records_atomic_overlap_skip(schedule_service, tasks_root):
         schedule_service.get_schedule(record["id"])["last_run_status"]
         == "skipped: already_running"
     )
+
+
+# ─── Settling a fired run's real outcome ──────────────────────────────────
+#
+# A schedule used to stop at "started": the run's real outcome was never
+# written back, so `last_run_status` said "started" forever and the failure
+# webhook never fired for a task that failed after launching.
+
+
+def _make_due_schedule(schedule_service, tasks_root, task_name="nightly-review"):
+    record = schedule_service.create_schedule(
+        task_name, "claude", "common", "* * * * *", workspace=str(tasks_root)
+    )
+    config, _ = schedule_service.config_service.get_config()
+    config["schedules"][0]["next_run_at"] = time.time() - 1
+    schedule_service.config_service.update_config(config)
+    return record
+
+
+@pytest.mark.asyncio
+async def test_tick_passes_schedule_id_to_the_run(schedule_service, tasks_root):
+    record = _make_due_schedule(schedule_service, tasks_root)
+
+    runner = _FakeTaskRunner()
+    await tick_once(schedule_service, runner, lambda: tasks_root)
+
+    assert runner.schedule_ids == [record["id"]]
+    saved = schedule_service.get_schedule(record["id"])
+    assert saved["last_run_id"] == "run-1"
+    assert saved["last_run_status"] == "started"
+
+
+@pytest.mark.asyncio
+async def test_next_tick_replaces_started_with_the_real_outcome(
+    schedule_service, tasks_root
+):
+    record = _make_due_schedule(schedule_service, tasks_root)
+
+    runner = _FakeTaskRunner()
+    await tick_once(schedule_service, runner, lambda: tasks_root)
+    fired = schedule_service.get_schedule(record["id"])
+    assert fired["last_run_status"] == "started"
+
+    # The run has since finished. Nothing is due now, so this tick only settles.
+    runner._finished_runs = {"run-1": "failed"}
+    await tick_once(schedule_service, runner, lambda: tasks_root)
+
+    settled = schedule_service.get_schedule(record["id"])
+    assert settled["last_run_status"] == "failed"
+    # Settling is not a new fire: neither the schedule nor the run's start
+    # time moves.
+    assert settled["next_run_at"] == fired["next_run_at"]
+    assert settled["last_run_at"] == fired["last_run_at"]
+
+
+@pytest.mark.asyncio
+async def test_a_still_running_run_is_left_alone(schedule_service, tasks_root):
+    record = _make_due_schedule(schedule_service, tasks_root)
+
+    runner = _FakeTaskRunner()
+    await tick_once(schedule_service, runner, lambda: tasks_root)
+
+    runner._finished_runs = {"run-1": "running"}
+    await tick_once(schedule_service, runner, lambda: tasks_root)
+
+    assert schedule_service.get_schedule(record["id"])["last_run_status"] == "started"
+
+
+@pytest.mark.asyncio
+async def test_settling_a_failure_notifies_the_webhook(schedule_service, tasks_root):
+    config, _ = schedule_service.config_service.get_config()
+    config["notifications"] = {"webhooks": ["https://example.com/hook"]}
+    schedule_service.config_service.update_config(config)
+
+    record = _make_due_schedule(schedule_service, tasks_root)
+
+    import core.services.scheduler_loop as scheduler_loop_module
+
+    notify_calls = []
+    original_notify = scheduler_loop_module.notify
+    scheduler_loop_module.notify = lambda cfg, event, payload: notify_calls.append(
+        (event, payload)
+    )
+    try:
+        runner = _FakeTaskRunner()
+        await tick_once(schedule_service, runner, lambda: tasks_root)
+        assert notify_calls == [], "launching successfully is not a failure"
+
+        runner._finished_runs = {"run-1": "failed"}
+        await tick_once(schedule_service, runner, lambda: tasks_root)
+    finally:
+        scheduler_loop_module.notify = original_notify
+
+    assert len(notify_calls) == 1
+    event, payload = notify_calls[0]
+    assert event == "schedule.failed"
+    assert payload["schedule_id"] == record["id"]
+    assert payload["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_a_stopped_run_does_not_notify(schedule_service, tasks_root):
+    """Somebody stopped it by hand; that is not a schedule failure."""
+    config, _ = schedule_service.config_service.get_config()
+    config["notifications"] = {"webhooks": ["https://example.com/hook"]}
+    schedule_service.config_service.update_config(config)
+
+    record = _make_due_schedule(schedule_service, tasks_root)
+
+    import core.services.scheduler_loop as scheduler_loop_module
+
+    notify_calls = []
+    original_notify = scheduler_loop_module.notify
+    scheduler_loop_module.notify = lambda cfg, event, payload: notify_calls.append(
+        (event, payload)
+    )
+    try:
+        runner = _FakeTaskRunner()
+        await tick_once(schedule_service, runner, lambda: tasks_root)
+        runner._finished_runs = {"run-1": "stopped"}
+        await tick_once(schedule_service, runner, lambda: tasks_root)
+    finally:
+        scheduler_loop_module.notify = original_notify
+
+    assert notify_calls == []
+    assert schedule_service.get_schedule(record["id"])["last_run_status"] == "stopped"

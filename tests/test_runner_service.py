@@ -126,6 +126,26 @@ def test_overlap_guard_refreshes_completed_process_status(tmp_path):
     assert runner.get_status(run.task_id).status == "completed"
 
 
+def test_get_status_records_end_time_and_exit_code_on_completion(tmp_path):
+    (tmp_path / "ca_launcher.py").write_text("pass\n", encoding="utf-8")
+    runner = TaskRunner(tmp_path)
+    run = runner.run_task("review", "codex", "common")
+
+    deadline = time.time() + 5
+    status = None
+    while time.time() < deadline:
+        status = runner.get_status(run.task_id)
+        if status and status.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert status is not None
+    assert status.status == "completed"
+    assert status.exit_code == 0
+    assert status.end_time is not None
+    assert status.end_time >= status.start_time
+
+
 def test_overlap_guard_is_atomic_and_scoped_to_workspace(tmp_path):
     (tmp_path / "ca_launcher.py").write_text(
         "import time\ntime.sleep(10)\n", encoding="utf-8"

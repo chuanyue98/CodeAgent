@@ -190,6 +190,9 @@ export const en = {
   'sessions.sortTokens': 'Tokens',
   'sessions.open': 'Open session {id}',
   'sessions.select': 'Select session {id}',
+  'sessions.loadMore': 'Load more',
+  'sessions.loadingMore': 'Loading…',
+  'sessions.loadedOfTotal': 'Showing {loaded} of {total} matching sessions',
   'sessions.empty': 'No sessions match your filters',
   'sessions.deleteTitleOne': 'Delete {count} session?',
   'sessions.deleteTitle': 'Delete {count} sessions?',
@@ -715,6 +718,10 @@ export const en = {
   'groupSwitcher.resourceCount': '{count} configured resources',
 
   // ── Task modals ───────────────────────────────────────────────────────────
+  'taskModal.editTitle': 'Edit Task',
+  'taskModal.editAria': 'Edit task',
+  'taskModal.contentLabel': 'Task content (Markdown)',
+  'taskModal.updateFailed': 'Failed to save task',
   'taskModal.aiIncomplete': 'AI did not finish writing the task file (run status: {status}). Try again, or fill it in manually.',
   'taskModal.generateFailed': 'Failed to generate task',
   'taskModal.generateAria': 'Generate task with AI',
@@ -755,6 +762,15 @@ export const en = {
   'taskDetail.noSkills': 'No skills mounted',
   'taskDetail.injectedPrompts': 'Injected Prompts',
   'taskDetail.noPrompts': 'No prompts injected',
+  'taskDetail.runHistory': 'Run History',
+  'taskDetail.noRuns': 'No runs yet',
+  'taskDetail.duration': 'Duration',
+  'taskDetail.exitCode': 'Exit code',
+  'taskDetail.confirmDeleteTitle': 'Delete this task?',
+  'taskDetail.confirmDeleteDescription': '"{name}" will be permanently removed. This cannot be undone.',
+  'taskDetail.editFailed': 'Failed to update task',
+  'taskDetail.deleteFailed': 'Failed to delete task',
+  'taskDetail.deleteBlocked': 'Stop the active run before deleting this task.',
 
   // ── Language ──────────────────────────────────────────────────────────────
   'language.label': 'Language',
