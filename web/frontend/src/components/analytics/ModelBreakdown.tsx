@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { fmtCost, fmtTokens } from '../../api/analytics';
 import { useT } from '../../i18n/context';
 import { eb, ec } from './present';
 import { SectionTitle } from './ChartCards';
 import type { RangeModelStat } from './rangeStats';
+import ShowMoreToggle from './ShowMoreToggle';
 
 export interface ModelBreakdownProps {
   rangeModels: RangeModelStat[];
@@ -11,6 +13,9 @@ export interface ModelBreakdownProps {
   totalCost: number;
 }
 
+/** Models listed before the tail is folded away. */
+const VISIBLE_MODELS = 8;
+
 export default function ModelBreakdown({
   rangeModels,
   selectedModel,
@@ -18,15 +23,18 @@ export default function ModelBreakdown({
   totalCost,
 }: ModelBreakdownProps) {
   const t = useT();
+  const [expanded, setExpanded] = useState(false);
   if (rangeModels.length === 0) return null;
   const activeModel = rangeModels.find(m => m.model === selectedModel) ?? null;
+  // Ranked by cost, so the tail is the part nobody scrolls to on purpose.
+  const shownModels = expanded ? rangeModels : rangeModels.slice(0, VISIBLE_MODELS);
 
   return (
-    <div className="animate-fade-rise stagger-6 glass-card p-5">
+    <div className="animate-fade-rise stagger-6 glass-card-flat p-5">
       <SectionTitle>{t('model.breakdown')}</SectionTitle>
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 space-y-1.5 min-w-0">
-          {rangeModels.map(m => {
+          {shownModels.map(m => {
             const pct = totalCost > 0 ? (m.cost / totalCost) * 100 : 0;
             const isSelected = selectedModel === m.model;
             return (
@@ -62,6 +70,13 @@ export default function ModelBreakdown({
               </button>
             );
           })}
+          {rangeModels.length > VISIBLE_MODELS && (
+            <ShowMoreToggle
+              expanded={expanded}
+              total={rangeModels.length}
+              onToggle={() => setExpanded(value => !value)}
+            />
+          )}
         </div>
 
         {activeModel && (() => {

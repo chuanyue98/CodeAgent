@@ -93,7 +93,8 @@ beforeEach(() => {
     }
     if (url.includes('/api/analytics/daily')) return jsonResponse(DAILY);
     if (url.includes('/api/analytics/monthly')) return jsonResponse([]);
-    if (url.includes('/api/analytics/sessions')) return jsonResponse([]);
+    if (url.includes('/api/analytics/sessions'))
+      return jsonResponse({ sessions: [], nextCursor: null, total: 0 });
     if (url.includes('/api/analytics/models')) return jsonResponse(MODELS);
     if (url.includes('/api/analytics/tools')) {
       toolRequests.push(url);
@@ -210,7 +211,8 @@ describe('Analytics empty range', () => {
       if (url.includes('/api/analytics/engines')) return jsonResponse([]);
       if (url.includes('/api/analytics/daily')) return jsonResponse([daily(dayAgo(120), 'claude', 5)]);
       if (url.includes('/api/analytics/monthly')) return jsonResponse([]);
-      if (url.includes('/api/analytics/sessions')) return jsonResponse([]);
+      if (url.includes('/api/analytics/sessions'))
+      return jsonResponse({ sessions: [], nextCursor: null, total: 0 });
       if (url.includes('/api/analytics/models')) return jsonResponse([]);
       if (url.includes('/api/analytics/tools')) {
         toolRequests.push(url);

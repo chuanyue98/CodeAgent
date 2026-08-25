@@ -15,6 +15,7 @@ const TaskDashboard: React.FC = () => {
   const t = useT();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [runs, setRuns] = useState<RunStatus[]>([]);
+  const [runHistory, setRunHistory] = useState<RunStatus[]>([]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [selected, setSelected] = useState<Task | null>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -63,6 +64,21 @@ const TaskDashboard: React.FC = () => {
     }
   }, []);
 
+  // Per-task history comes from its own endpoint rather than by filtering
+  // `runs`: /api/tasks/runs reports what this server process is currently
+  // tracking, so filtering it showed nothing from before the last restart.
+  // /api/tasks/{name}/runs reads the persisted rows.
+  const fetchRunHistory = useCallback(async (name: string) => {
+    try {
+      const next = await request<RunStatus[]>(`/api/tasks/${name}/runs`);
+      setRunHistory(prev =>
+        JSON.stringify(prev) === JSON.stringify(next) ? prev : next,
+      );
+    } catch (e) {
+      console.error('Failed to fetch run history', e);
+    }
+  }, []);
+
   const fetchEngines = useCallback(async () => {
     try {
       setEngines(await request<Engine[]>('/api/engines'));
@@ -77,6 +93,8 @@ const TaskDashboard: React.FC = () => {
       if (currentGroup) params.append('group', currentGroup);
       const task = await request<Task>(`/api/tasks/${name}?${params.toString()}`);
       setSelected(task);
+      setRunHistory([]);
+      void fetchRunHistory(name);
 
       // Check if this task is already running
       const active = runs.find(r => r.task_id.startsWith(name) && r.status === 'running');
@@ -85,7 +103,7 @@ const TaskDashboard: React.FC = () => {
     } catch (e) {
       setError(e instanceof Error ? e.message : t('tasks.error'));
     }
-  }, [currentGroup, runs, t]);
+  }, [currentGroup, runs, t, fetchRunHistory]);
 
   // Deep link from the command palette: `?task=<name>` opens that task's
   // detail once the task list has loaded, then clears the param so it
@@ -170,10 +188,21 @@ const TaskDashboard: React.FC = () => {
   usePolling(() => {
     void fetchTasks();
     void fetchRuns();
+    if (selected) void fetchRunHistory(selected.name);
   }, 5000, !activeRunId, { immediate: false });
 
   // Poll the active run every 2s while one is running.
   usePolling(() => void pollActiveRun(), 2000, !!activeRunId, { immediate: false });
+
+  // A finished run is a new history row, and the 5s poll above is paused while
+  // one is active — so refresh the moment the active run clears.
+  const previousActiveRunId = useRef<string | null>(null);
+  useEffect(() => {
+    if (previousActiveRunId.current && !activeRunId && selected) {
+      void fetchRunHistory(selected.name);
+    }
+    previousActiveRunId.current = activeRunId;
+  }, [activeRunId, selected, fetchRunHistory]);
 
   if (loading)
     return (
@@ -200,9 +229,15 @@ const TaskDashboard: React.FC = () => {
         task={selected}
         engines={engines}
         activeRun={activeRun}
+        runHistory={runHistory}
         onBack={() => setSelected(null)}
         onRun={runTask}
         onStop={stopTask}
+        onDeleted={() => {
+          setSelected(null);
+          void fetchTasks();
+        }}
+        onTaskUpdated={updated => setSelected(updated)}
         workspace={workspace}
         projects={projects}
         onWorkspaceChange={setWorkspace}

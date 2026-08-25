@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-import time
+import base64
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from core.analytics.service import get_analytics_data, refresh_analytics_data
+from core.session_history.parse_cache import clear_parse_cache
 from core.session_history.paths import normalize_project_path
 from core.session_history.session_finder import find_all_sessions
 
@@ -23,27 +24,24 @@ async def _data() -> dict:
 
 # (engine, session_id) -> title, from the session_history subsystem. The
 # analytics usage entries carry no titles of their own, so the sessions list
-# joins against the native history. Disk scans are expensive, so the map is
-# cached briefly; /refresh drops it alongside the analytics cache.
-_title_map_cache: tuple[float, dict[tuple[str, str], str]] | None = None
-_TITLE_MAP_TTL = 120.0
+# joins against the native history.
+#
+# This used to be held behind a 120 s TTL because building it re-read every
+# engine's history -- ~900 MB of JSONL, ~2.2 s -- and one request in three paid
+# for it. ``session_history.parse_cache`` now memoizes that parse per file, so
+# a rebuild costs ~0.2 s of stat calls and the TTL is gone with it: a session
+# started a moment ago shows up on the next request instead of up to two
+# minutes later.
 
 
 async def _session_title_map() -> dict[tuple[str, str], str]:
-    global _title_map_cache
-    now = time.monotonic()
-    if _title_map_cache is not None and now - _title_map_cache[0] < _TITLE_MAP_TTL:
-        return _title_map_cache[1]
-
     def _build() -> dict[tuple[str, str], str]:
         return {
             (s.engine.value, s.session_id): s.to_summary_dict()["title"]
             for s in find_all_sessions()
         }
 
-    title_map = await asyncio.to_thread(_build)
-    _title_map_cache = (now, title_map)
-    return title_map
+    return await asyncio.to_thread(_build)
 
 
 @router.get("/summary")
@@ -64,31 +62,68 @@ async def get_monthly():
     return data["monthly"]
 
 
+def _encode_cursor(session: dict) -> str:
+    """Opaque keyset cursor for one session row.
+
+    Keyed on ``(lastActivity, sessionId)`` rather than an offset: the list is
+    rebuilt per request, and an offset silently skips or repeats rows whenever
+    a session's activity changes between two pages.
+    """
+    raw = f"{session.get('lastActivity', '')}|{session.get('sessionId', '')}"
+    return base64.urlsafe_b64encode(raw.encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[str, str] | None:
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+    except (ValueError, UnicodeDecodeError):
+        return None
+    activity, separator, session_id = raw.partition("|")
+    return (activity, session_id) if separator else None
+
+
+def _sort_key(session: dict) -> tuple[str, str]:
+    return (str(session.get("lastActivity") or ""), str(session.get("sessionId") or ""))
+
+
 @router.get("/sessions")
 async def get_sessions(
-    limit: int = 100,
+    limit: int = Query(100, ge=1, le=1000),
     project: str | None = Query(
         None,
         description="Project directory path; omit to include every project",
     ),
+    search: str | None = Query(
+        None,
+        description="Case-insensitive substring of the title, id, project or engine",
+    ),
+    cursor: str | None = Query(
+        None,
+        description="`nextCursor` from a previous page; omit for the first page",
+    ),
 ):
-    """Returns the most recent sessions, newest first.
+    """One page of sessions, newest first.
 
-    Filtering happens before ``limit`` is applied: narrowing to a project has
-    to search the whole set, or a busy neighbouring project would crowd the
-    requested one out of the window and the response would look empty.
+    Returns ``{sessions, nextCursor, total}``. The list used to be a bare array
+    capped at whatever ``limit`` the caller hard-coded, so a machine with more
+    sessions than that had the remainder truncated before they reached the
+    browser -- and every client-side filter then ran against that partial
+    window.
+
+    Narrowing happens before the page is cut, or a busy neighbouring project
+    would crowd the requested one out and the response would look empty.
+    Titles are attached only to the rows actually returned: joining them onto
+    the whole set meant copying every session dict on every request.
     """
     data = await _data()
     sessions = data["sessions"]
     title_map = await _session_title_map()
-    # Don't mutate the cached dicts — copy before attaching titles.
-    sessions = [
-        {
-            **s,
-            "title": title_map.get((s.get("target", ""), s.get("sessionId", "")), ""),
-        }
-        for s in sessions
-    ]
+
+    def _title(session: dict) -> str:
+        return title_map.get(
+            (session.get("target", ""), session.get("sessionId", "")), ""
+        )
+
     if project:
         target = normalize_project_path(project)
         sessions = [
@@ -96,7 +131,38 @@ async def get_sessions(
             for s in sessions
             if normalize_project_path(s.get("projectPath") or "") == target
         ]
-    return sessions[:limit]
+
+    if search:
+        needle = search.strip().lower()
+        if needle:
+            sessions = [
+                s
+                for s in sessions
+                if needle in _title(s).lower()
+                or needle in str(s.get("sessionId") or "").lower()
+                or needle in str(s.get("projectPath") or "").lower()
+                or needle in str(s.get("target") or "").lower()
+            ]
+
+    total = len(sessions)
+
+    # `data["sessions"]` arrives sorted by last activity, but the cursor
+    # compares against a specific key, so make the ordering explicit here.
+    sessions = sorted(sessions, key=_sort_key, reverse=True)
+
+    if cursor:
+        after = _decode_cursor(cursor)
+        if after is None:
+            raise HTTPException(status_code=400, detail="Malformed cursor")
+        sessions = [s for s in sessions if _sort_key(s) < after]
+
+    page = sessions[:limit]
+    has_more = len(sessions) > limit
+    return {
+        "sessions": [{**s, "title": _title(s)} for s in page],
+        "nextCursor": _encode_cursor(page[-1]) if page and has_more else None,
+        "total": total,
+    }
 
 
 @router.get("/engines")
@@ -207,7 +273,9 @@ async def get_tool_usage(
 
 @router.post("/refresh")
 async def refresh():
-    global _title_map_cache
-    _title_map_cache = None
+    # The parse cache invalidates itself on a file's mtime, but an explicit
+    # refresh is what you press when you suspect something is stale -- so drop
+    # it rather than explain why it was not dropped.
+    clear_parse_cache()
     data = await asyncio.to_thread(refresh_analytics_data)
     return {"status": "refreshed", "summary": data["summary"]}

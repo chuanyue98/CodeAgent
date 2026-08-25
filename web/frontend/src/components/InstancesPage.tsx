@@ -176,7 +176,7 @@ export default function InstancesPage() {
               {group.items.map(instance => (
                 <div
                   key={`${instance.kind}:${instance.id}`}
-                  className="group glass-card flex items-center gap-4 px-4 py-3 transition-all duration-200 hover:-translate-y-px hover:shadow-[0_24px_36px_-14px_rgba(15,23,42,0.14)]"
+                  className="group glass-card-flat flex items-center gap-4 px-4 py-3 transition-all duration-200 hover:-translate-y-px hover:shadow-[0_24px_36px_-14px_rgba(15,23,42,0.14)]"
                 >
                   <StatusDot status={instance.status} />
 

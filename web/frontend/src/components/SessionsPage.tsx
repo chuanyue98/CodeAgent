@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 import { ChevronRight, Clock, DollarSign, FileText, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
-import { fetchSessions, type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
+import { fetchSessionPage, type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
 import { deleteHistorySession } from '../api/audit';
 import useActivityFilters from '../hooks/useActivityFilters';
 import { useT } from '../i18n/context';
@@ -14,6 +14,17 @@ import FilterListSkeleton from './shared/FilterListSkeleton';
 
 type SortKey = 'lastActivity' | 'cost' | 'tokens';
 type SortDir = 'asc' | 'desc';
+
+/**
+ * Sessions fetched per request. The list used to ask for a hard-coded 500 --
+ * more than fits on any screen, and still fewer than some machines have, so
+ * the remainder was cut off before it reached the browser and every filter
+ * below ran against that partial window.
+ */
+const PAGE_SIZE = 100;
+
+/** Typing a query should not put one request per keystroke on the wire. */
+const SEARCH_DEBOUNCE_MS = 250;
 
 /**
  * A session is identified by (engine, id), not by id alone — the backend
@@ -42,6 +53,16 @@ export default function SessionsPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [matchCount, setMatchCount] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // `search` updates on every keystroke (it lives in the URL); the request
+  // follows it only once typing settles.
+  const [activeSearch, setActiveSearch] = useState(search);
+  useEffect(() => {
+    const timer = setTimeout(() => setActiveSearch(search), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   // Guards setState calls in the async fetch below from firing after the
   // component has unmounted (e.g. a fast page switch while the request is
@@ -53,18 +74,24 @@ export default function SessionsPage() {
     };
   }, []);
 
-  // Project narrowing happens server-side: the response is capped at 500
-  // sessions across every project, so filtering here instead would let a busy
-  // neighbouring project crowd the selected one out of the window.
+  // Project narrowing and text search both happen server-side, and the page
+  // is cut after them: filtering a fixed window here instead would let a busy
+  // neighbouring project crowd the selected one out of it.
   useEffect(() => {
     if (!ready) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
-    fetchSessions(500, project || undefined)
-      .then(data => {
+    fetchSessionPage({
+      limit: PAGE_SIZE,
+      project: project || undefined,
+      search: activeSearch || undefined,
+    })
+      .then(page => {
         if (!mountedRef.current) return;
-        setSessions(data);
+        setSessions(page.sessions);
+        setNextCursor(page.nextCursor);
+        setMatchCount(page.total);
         setLoading(false);
       })
       .catch(() => {
@@ -72,7 +99,30 @@ export default function SessionsPage() {
         setLoading(false);
         setError(t('sessions.loadFailed'));
       });
-  }, [project, ready, reloadNonce, t]);
+  }, [project, activeSearch, ready, reloadNonce, t]);
+
+  const loadMore = useCallback(() => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    fetchSessionPage({
+      limit: PAGE_SIZE,
+      project: project || undefined,
+      search: activeSearch || undefined,
+      cursor: nextCursor,
+    })
+      .then(page => {
+        if (!mountedRef.current) return;
+        setSessions(previous => [...previous, ...page.sessions]);
+        setNextCursor(page.nextCursor);
+        setMatchCount(page.total);
+        setLoadingMore(false);
+      })
+      .catch(() => {
+        if (!mountedRef.current) return;
+        setLoadingMore(false);
+        setError(t('sessions.loadFailed'));
+      });
+  }, [nextCursor, loadingMore, project, activeSearch, t]);
 
   const reload = useCallback(() => setReloadNonce(n => n + 1), []);
 
@@ -108,16 +158,11 @@ export default function SessionsPage() {
     return Array.from(set).sort();
   }, [sessions]);
 
+  // No text search here: the server matched it against the whole set, not
+  // just the pages that happen to be loaded. Engine and date narrowing stay
+  // client-side -- they apply to what has been fetched so far.
   const filtered = useMemo(() => {
     let result = sessions;
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(s =>
-        s.projectPath.toLowerCase().includes(q) ||
-        s.sessionId.toLowerCase().includes(q) ||
-        (s.title || '').toLowerCase().includes(q)
-      );
-    }
     if (selectedEngines.length > 0) {
       result = result.filter(s => selectedEngines.includes(s.target));
     }
@@ -136,7 +181,7 @@ export default function SessionsPage() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return result;
-  }, [sessions, search, selectedEngines, dateStart, dateEnd, sortKey, sortDir]);
+  }, [sessions, selectedEngines, dateStart, dateEnd, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -240,7 +285,7 @@ export default function SessionsPage() {
         searchPlaceholder={t('sessions.searchPlaceholder')}
       />
 
-      <div data-testid="session-list" className="animate-fade-rise stagger-2 flex-1 min-w-0 glass-card p-5 flex flex-col">
+      <div data-testid="session-list" className="animate-fade-rise stagger-2 flex-1 min-w-0 glass-card-flat p-5 flex flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-xs text-slate-400 font-medium cursor-pointer select-none">
@@ -395,6 +440,24 @@ export default function SessionsPage() {
           {filtered.length === 0 && (
             <p className="text-sm text-slate-400 text-center py-8">{t('sessions.empty')}</p>
           )}
+
+          {nextCursor && (
+            <div className="flex flex-col items-center gap-1 py-4">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="rounded-lg border border-slate-200 px-4 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+              >
+                {loadingMore ? t('sessions.loadingMore') : t('sessions.loadMore')}
+              </button>
+              <p className="text-[11px] text-slate-400">
+                {t('sessions.loadedOfTotal', {
+                  loaded: String(sessions.length),
+                  total: String(matchCount),
+                })}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -406,7 +469,7 @@ export default function SessionsPage() {
           own horizontal scrollbar. Steps up on larger screens, where the list
           has width to spare. */}
       {openSession && (
-        <div className="w-full xl:w-[38rem] xl:max-w-[45%] 2xl:w-[46rem] shrink-0 glass-card p-5 xl:h-full xl:min-h-0">
+        <div className="w-full xl:w-[38rem] xl:max-w-[45%] 2xl:w-[46rem] shrink-0 glass-card-flat p-5 xl:h-full xl:min-h-0">
           <SessionDetailPanel
             key={selectedKey}
             engine={openSession.target}

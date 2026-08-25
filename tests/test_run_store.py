@@ -175,3 +175,115 @@ def test_delete_removes_record(store):
 
 def test_delete_missing_task_id_is_a_no_op(store):
     store.delete("does-not-exist")
+
+
+# ─── Reading history back ─────────────────────────────────────────────────
+#
+# Rows were written on every status change and then only ever queried for
+# `status = 'running'`, so a completed run existed on disk but vanished from
+# the UI as soon as the process that produced it went away.
+
+
+def _run(task_id, *, task_name=None, status="completed", start_time=1000.0, **kw):
+    return TaskRunRecord(
+        task_id=task_id,
+        engine="claude",
+        pid=1,
+        status=status,
+        log_path=f"/tmp/{task_id}.log",
+        start_time=start_time,
+        task_name=task_name,
+        **kw,
+    )
+
+
+def test_list_history_returns_finished_runs_newest_first(store):
+    store.upsert(_run("review_1", task_name="review", start_time=100.0))
+    store.upsert(_run("review_2", task_name="review", start_time=300.0))
+    store.upsert(_run("review_3", task_name="review", start_time=200.0))
+
+    history = store.list_history()
+
+    assert [r.task_id for r in history] == ["review_2", "review_3", "review_1"]
+
+
+def test_list_history_narrows_to_one_task(store):
+    store.upsert(_run("review_1", task_name="review"))
+    store.upsert(_run("deploy_1", task_name="deploy"))
+
+    assert [r.task_id for r in store.list_history(task_name="review")] == ["review_1"]
+
+
+def test_list_history_narrows_to_one_schedule(store):
+    store.upsert(_run("review_1", task_name="review", schedule_id="sched-a"))
+    store.upsert(_run("review_2", task_name="review", schedule_id="sched-b"))
+
+    found = store.list_history(schedule_id="sched-a")
+
+    assert [r.task_id for r in found] == ["review_1"]
+
+
+def test_list_history_honours_the_limit(store):
+    for i in range(5):
+        store.upsert(_run(f"review_{i}", task_name="review", start_time=float(i)))
+
+    assert len(store.list_history(limit=2)) == 2
+
+
+def test_list_history_includes_running_rows(store):
+    store.upsert(_run("review_1", task_name="review", status="running"))
+
+    assert [r.status for r in store.list_history()] == ["running"]
+
+
+def test_exit_code_and_end_time_survive_the_round_trip(store):
+    store.upsert(_run("review_1", task_name="review", end_time=2000.0, exit_code=137))
+
+    (found,) = store.list_history(task_name="review")
+
+    # 137 is OOM-killed, and telling it apart from a plain rc=1 is the whole
+    # reason the column exists.
+    assert found.exit_code == 137
+    assert found.end_time == 2000.0
+
+
+def test_legacy_rows_get_a_task_name_on_migration(tmp_path):
+    """Rows written before the column existed are keyed only by task_id.
+
+    Without a backfill every run made before the migration is unreachable,
+    because history is queried by task name.
+    """
+    import sqlite3
+
+    db_path = tmp_path / "runs.db"
+    con = sqlite3.connect(db_path)
+    with con:
+        con.execute(
+            """
+            CREATE TABLE runs (
+                task_id TEXT PRIMARY KEY,
+                engine TEXT,
+                pid INTEGER,
+                status TEXT,
+                log_path TEXT,
+                start_time REAL,
+                session_id TEXT,
+                workspace TEXT
+            )
+            """
+        )
+        con.executemany(
+            "INSERT INTO runs (task_id, engine, pid, status, log_path, start_time) "
+            "VALUES (?, 'claude', 1, 'completed', '/tmp/x.log', 100.0)",
+            [("nightly_review_1700000000123",), ("chat_claude_1700000000456",)],
+        )
+    con.close()
+
+    store = RunStore(db_path)
+
+    (found,) = store.list_history(task_name="nightly_review")
+    assert found.task_id == "nightly_review_1700000000123"
+    # A chat turn has no blueprint behind it, so it is left null rather than
+    # being guessed at as a task called "chat_claude".
+    chat = store.get("chat_claude_1700000000456")
+    assert chat is not None and chat.task_name is None

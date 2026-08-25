@@ -161,6 +161,21 @@
       0 10px 20px -8px rgba(15, 23, 42, 0.06);
     @apply rounded-[1.5rem];
   }
+  /* The same surface as .glass-card, minus the backdrop blur.
+     backdrop-filter re-computes the blurred backdrop on every frame that
+     anything above it moves, so a card holding a few hundred scrolling rows
+     pays for it continuously. These cards sit on an opaque page ground where
+     the blur was buying close to nothing — the border, shadow and radius are
+     what actually read as a card. */
+  .glass-card-flat {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.6) inset,
+      0 20px 30px -12px rgba(15, 23, 42, 0.08),
+      0 6px 12px -6px rgba(15, 23, 42, 0.05);
+    @apply rounded-[1.25rem];
+  }
 }
 
 /* ===== Motion system =====
@@ -201,19 +216,28 @@
   to   { transform: scaleY(1); }
 }
 
-.animate-fade-rise  { animation: fade-rise 620ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-.animate-slide-left { animation: slide-in-left 620ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-.animate-fade-in    { animation: fade-in 700ms ease-out both; }
-.animate-scale-in   { animation: scale-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+/* Entrance durations are deliberately short. At the previous 620ms, stacked
+   on a stagger that reached 540ms, the last block of a page landed ~1.2s
+   after the data had already arrived — the page read as slow when only the
+   animation was. */
+.animate-fade-rise  { animation: fade-rise 120ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-slide-left { animation: slide-in-left 120ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in    { animation: fade-in 140ms ease-out both; }
+.animate-scale-in   { animation: scale-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 
-/* Staggered entrance — pair with .animate-fade-rise etc. */
-.stagger-1 { animation-delay: 0ms; }
-.stagger-2 { animation-delay: 90ms; }
-.stagger-3 { animation-delay: 180ms; }
-.stagger-4 { animation-delay: 270ms; }
-.stagger-5 { animation-delay: 360ms; }
-.stagger-6 { animation-delay: 450ms; }
-.stagger-7 { animation-delay: 540ms; }
+/* Staggered entrance — pair with .animate-fade-rise etc.
+   The delays are now zero. `both` fill mode holds an element at opacity 0 for
+   the whole delay, so a stagger is time the content is on screen but not
+   visible. The classes stay (some are built as `stagger-${n}` template
+   strings) so call sites need no edit, and a future cascade has a place to
+   live. */
+.stagger-1,
+.stagger-2,
+.stagger-3,
+.stagger-4,
+.stagger-5,
+.stagger-6,
+.stagger-7 { animation-delay: 0ms; }
 
 .animate-pulse-soft { animation: pulse-soft 2.4s ease-in-out infinite; }
 .animate-pulse-ring { animation: pulse-ring 2.4s ease-out infinite; }

@@ -189,6 +189,47 @@ async def get_task(name: str, group: str = Query(None)):
     return task
 
 
+@router.put("/tasks/{name}")
+async def update_task(name: str, content: str = Body(..., embed=True)):
+    """Overwrites an existing task blueprint's full markdown content."""
+    try:
+        return TaskService(get_tasks_root()).update_task(name, content)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/tasks/{name}")
+async def delete_task(name: str):
+    """Deletes a task blueprint. Blocked while the task has an active run."""
+    if _runner.has_active_task(name):
+        raise HTTPException(
+            status_code=409,
+            detail="Task has an active run; stop it before deleting",
+        )
+    try:
+        deleted = TaskService(get_tasks_root()).delete_task(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"status": "deleted", "name": name}
+
+
+@router.get("/tasks/{name}/runs")
+async def list_task_runs(name: str, limit: int = Query(50, ge=1, le=500)):
+    """Returns the run history for a single task blueprint, newest first.
+
+    Read from the SQLite store rather than from the runner's in-memory map:
+    every run has always been written there, but nothing read it back, so a
+    completed run disappeared from this list the moment the server restarted.
+    """
+    if not is_valid_task_name(name):
+        raise HTTPException(status_code=400, detail="Task name must match [\\w.-]+")
+    return _runner.list_history(task_name=name, limit=limit)
+
+
 @router.post("/tasks/{name}/run")
 async def run_task(
     name: str,

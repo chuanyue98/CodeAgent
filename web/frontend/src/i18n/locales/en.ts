@@ -12,6 +12,8 @@
 export const en = {
   // ── Common ────────────────────────────────────────────────────────────────
   'common.retry': 'Retry',
+  'common.showAll': 'Show all {count}',
+  'common.showLess': 'Show fewer',
   'common.refresh': 'Refresh',
   'common.loading': 'Loading…',
   'common.cancel': 'Cancel',
@@ -188,6 +190,9 @@ export const en = {
   'sessions.sortTokens': 'Tokens',
   'sessions.open': 'Open session {id}',
   'sessions.select': 'Select session {id}',
+  'sessions.loadMore': 'Load more',
+  'sessions.loadingMore': 'Loading…',
+  'sessions.loadedOfTotal': 'Showing {loaded} of {total} matching sessions',
   'sessions.empty': 'No sessions match your filters',
   'sessions.deleteTitleOne': 'Delete {count} session?',
   'sessions.deleteTitle': 'Delete {count} sessions?',
@@ -407,8 +412,6 @@ export const en = {
   'tools.loading': 'Counting tool calls',
   'tools.loadFailed': 'Failed to load tool usage',
   'tools.empty': 'No tool calls recorded in this range.',
-  'tools.showAll': 'Show all {count}',
-  'tools.showLess': 'Show fewer',
 
   // ── Task templates ────────────────────────────────────────────────────────
   // Blueprint bodies are written verbatim into tasks/<id>.md, so they are
@@ -541,6 +544,8 @@ export const en = {
   'agent.permissionWriteHint':
     'The agent may read and write files inside the selected workspace, and ask before running commands.',
   'agent.permissionReadHint': 'The agent may read files only. It cannot modify anything in the workspace.',
+  'agent.startsNewSession':
+    'Changing this starts a new session — this one is bound to its current settings and stays in the list.',
   'agent.canEditFiles': 'Can edit files',
   'agent.readOnly': 'Read only',
   'agent.resourcesFromGroup': 'Resources will be attached from the "{group}" group when this session starts',
@@ -649,6 +654,9 @@ export const en = {
   'sessionDetail.out': 'out: {tokens}',
   'sessionDetail.cacheWrite': 'Cache write: {tokens}',
   'sessionDetail.cacheRead': 'Cache read: {tokens}',
+  'sessionDetail.loadEarlier': 'Load earlier — showing the last {shown} of {total}',
+  'sessionDetail.toTop': 'Jump to the start',
+  'sessionDetail.toBottom': 'Jump to the latest',
   'sessionDetail.conversation': 'Conversation',
   'sessionDetail.loadingConversation': 'Loading conversation…',
   'sessionDetail.noMessages': 'This session has no messages.',
@@ -679,6 +687,12 @@ export const en = {
   'launch.unavailable': 'Browser terminal unavailable',
   'launch.registerFirst': 'Register a project in Settings before opening a terminal.',
   'launch.openTerminal': 'Open terminal',
+  'terminal.sessionEnded': 'Session ended (exit code {code})',
+  'terminal.connectionError': 'Terminal connection error',
+  'terminal.connectionClosed': 'Connection closed',
+  'terminal.startNew': 'Start new',
+  'terminal.startNewHint':
+    'Starts a fresh terminal session. The previous one has ended — its scrollback is not restored.',
 
   // ── Logs ──────────────────────────────────────────────────────────────────
   'logs.loadFailed': 'Failed to load log files',
@@ -704,6 +718,10 @@ export const en = {
   'groupSwitcher.resourceCount': '{count} configured resources',
 
   // ── Task modals ───────────────────────────────────────────────────────────
+  'taskModal.editTitle': 'Edit Task',
+  'taskModal.editAria': 'Edit task',
+  'taskModal.contentLabel': 'Task content (Markdown)',
+  'taskModal.updateFailed': 'Failed to save task',
   'taskModal.aiIncomplete': 'AI did not finish writing the task file (run status: {status}). Try again, or fill it in manually.',
   'taskModal.generateFailed': 'Failed to generate task',
   'taskModal.generateAria': 'Generate task with AI',
@@ -744,6 +762,15 @@ export const en = {
   'taskDetail.noSkills': 'No skills mounted',
   'taskDetail.injectedPrompts': 'Injected Prompts',
   'taskDetail.noPrompts': 'No prompts injected',
+  'taskDetail.runHistory': 'Run History',
+  'taskDetail.noRuns': 'No runs yet',
+  'taskDetail.duration': 'Duration',
+  'taskDetail.exitCode': 'Exit code',
+  'taskDetail.confirmDeleteTitle': 'Delete this task?',
+  'taskDetail.confirmDeleteDescription': '"{name}" will be permanently removed. This cannot be undone.',
+  'taskDetail.editFailed': 'Failed to update task',
+  'taskDetail.deleteFailed': 'Failed to delete task',
+  'taskDetail.deleteBlocked': 'Stop the active run before deleting this task.',
 
   // ── Language ──────────────────────────────────────────────────────────────
   'language.label': 'Language',

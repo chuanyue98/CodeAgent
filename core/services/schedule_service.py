@@ -78,6 +78,7 @@ class ScheduleService:
             "created_at": time.time(),
             "last_run_at": None,
             "last_run_status": None,
+            "last_run_id": None,
             "next_run_at": _compute_next_run(cron_expr),
         }
 
@@ -151,15 +152,29 @@ class ScheduleService:
             raise KeyError(f"Schedule not found: {schedule_id}")
 
     def record_run(
-        self, schedule_id: str, status: str, advance_schedule: bool = True
+        self,
+        schedule_id: str,
+        status: str,
+        advance_schedule: bool = True,
+        run_id: str | None = None,
+        set_run_at: bool = True,
     ) -> None:
-        """Persists the outcome of a fired schedule (atomic RMW)."""
+        """Persists the outcome of a fired schedule (atomic RMW).
+
+        ``run_id`` ties the schedule to the run it produced, which is what
+        lets a later tick replace the launch-time status with the real one.
+        Those later writes pass ``set_run_at=False``: ``last_run_at`` means
+        when the run started, not when its outcome was noticed.
+        """
 
         def _modifier(schedules):
             for record in schedules:
                 if record["id"] == schedule_id:
-                    record["last_run_at"] = time.time()
+                    if set_run_at:
+                        record["last_run_at"] = time.time()
                     record["last_run_status"] = status
+                    if run_id is not None:
+                        record["last_run_id"] = run_id
                     if advance_schedule:
                         record["next_run_at"] = _compute_next_run(record["cron_expr"])
                     break

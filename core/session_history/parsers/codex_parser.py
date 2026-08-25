@@ -21,6 +21,7 @@ from core.session_history.models import (
     UnifiedMessage,
     UnifiedSession,
 )
+from core.session_history.parse_cache import cached_file_parser
 from core.session_history.paths import normalize_project_path
 from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_files, long_path
@@ -66,6 +67,7 @@ def _ms_to_iso(timestamp: object) -> str:
         return ""
 
 
+@cached_file_parser
 def parse_codex_session(file_path: Path) -> UnifiedSession | None:
     """Parses a single Codex JSONL session file into a UnifiedSession.
 
