@@ -41,9 +41,7 @@ class _FakeTaskRunner:
             raise TaskAlreadyRunningError("Task is already running")
         if self._raise_error:
             raise ValueError("boom")
-        return type(
-            "Status", (), {"status": "running", "task_id": self._next_run_id}
-        )()
+        return type("Status", (), {"status": "running", "task_id": self._next_run_id})()
 
     def get_run(self, task_id):
         status = self._finished_runs.get(task_id)

@@ -142,6 +142,7 @@ def test_sessions_keep_distinct_projects_apart():
 
     assert [s["sessionId"] for s in _rows(response)] == ["a"]
 
+
 # ─── Paging and server-side search ────────────────────────────────────────
 #
 # The list was a bare array capped at whatever limit the caller hard-coded,
@@ -156,7 +157,10 @@ def _dated_session(session_id: str, last_activity: str) -> dict:
 
 
 def test_sessions_envelope_reports_the_unpaged_total():
-    response = _get([_dated_session(str(i), f"2026-08-{i + 10}T10:00:00Z") for i in range(5)], limit=2)
+    response = _get(
+        [_dated_session(str(i), f"2026-08-{i + 10}T10:00:00Z") for i in range(5)],
+        limit=2,
+    )
 
     body = response.json()
     assert len(body["sessions"]) == 2
@@ -196,7 +200,9 @@ def test_malformed_cursor_is_rejected():
 
 
 def test_search_matches_the_session_id():
-    response = _get([_session("wanted", "/work/one"), _session("other", "/work/one")], search="want")
+    response = _get(
+        [_session("wanted", "/work/one"), _session("other", "/work/one")], search="want"
+    )
 
     assert [s["sessionId"] for s in _rows(response)] == ["wanted"]
 

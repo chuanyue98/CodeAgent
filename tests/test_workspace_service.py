@@ -99,7 +99,9 @@ def test_the_nearest_enclosing_rule_wins(tmp_path):
         ],
     )
 
-    assert resolve_registered_workspace(config_service, str(deeper)).group == "codeagent"
+    assert (
+        resolve_registered_workspace(config_service, str(deeper)).group == "codeagent"
+    )
 
 
 def test_a_sibling_sharing_a_name_prefix_is_not_covered(tmp_path):

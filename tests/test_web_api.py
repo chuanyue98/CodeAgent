@@ -198,14 +198,14 @@ async def test_update_task_route(mock_env):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
-        resp = await ac.put(
-            "/api/tasks/review", json={"content": "# New\nnew body"}
-        )
+        resp = await ac.put("/api/tasks/review", json={"content": "# New\nnew body"})
     assert resp.status_code == 200
     data = resp.json()
     assert data["title"] == "New"
     assert "new body" in data["content"]
-    assert (mock_env / "tasks" / "review.md").read_text(encoding="utf-8") == "# New\nnew body"
+    assert (mock_env / "tasks" / "review.md").read_text(
+        encoding="utf-8"
+    ) == "# New\nnew body"
 
 
 @pytest.mark.asyncio
@@ -248,9 +248,7 @@ async def test_delete_task_route_409_when_active(mock_env, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_list_task_runs_route_queries_history_by_task_name(
-    mock_env, monkeypatch
-):
+async def test_list_task_runs_route_queries_history_by_task_name(mock_env, monkeypatch):
     """The route asks the store for one task's history rather than filtering
     the in-memory map, which is what lets a finished run outlive the process
     that produced it."""

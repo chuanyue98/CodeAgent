@@ -115,9 +115,7 @@ def _shell_command() -> list[str]:
     return [os.environ.get("COMSPEC", "cmd.exe")]
 
 
-def _engine_argv(
-    engine: str, working_dir: Path, session_id: str | None
-) -> list[str]:
+def _engine_argv(engine: str, working_dir: Path, session_id: str | None) -> list[str]:
     """What this PTY should run.
 
     Three shapes: a bare shell, a fresh engine session through
@@ -503,9 +501,7 @@ async def pty_websocket(
                 engine, working_dir, output_queue, session_id
             )
         else:
-            session = await _spawn_posix(
-                engine, working_dir, output_queue, session_id
-            )
+            session = await _spawn_posix(engine, working_dir, output_queue, session_id)
     except SpawnError as exc:
         with contextlib.suppress(Exception):
             await websocket.close(code=1011, reason=f"Failed to start session: {exc}")
