@@ -46,7 +46,7 @@ test('New session clears the conversation', async ({ page }) => {
   await expect(page.getByText(/Start a new conversation/i)).toBeVisible();
 });
 
-test('an active session locks workspace and provider selection until New is clicked', async ({ page }) => {
+test('an idle session keeps settings editable until New is clicked', async ({ page }) => {
   await gotoChat(page);
   await selectProvider(page, 'fake');
   await input(page).fill('hello e2e');
@@ -55,12 +55,17 @@ test('an active session locks workspace and provider selection until New is clic
     timeout: 20000,
   });
 
-  await expect(page.getByLabel('Workspace', { exact: true })).toBeDisabled();
-  await expect(page.getByLabel('Engine')).toBeDisabled();
+  // Since ab36ddc the dropdowns only lock while a turn is in flight. An idle
+  // session keeps them usable: changing a value rebinds by starting a new
+  // session (the previous one stays in the list), which the control's title
+  // hints at.
+  await expect(page.getByLabel('Workspace', { exact: true })).toBeEnabled();
+  await expect(page.getByLabel('Engine')).toBeEnabled();
 
   await page.getByRole('button', { name: 'New', exact: true }).click();
   await expect(page.getByLabel('Workspace', { exact: true })).toBeEnabled();
   await expect(page.getByLabel('Engine')).toBeEnabled();
+  await expect(page.getByText(/Start a new conversation/i)).toBeVisible();
 });
 
 test('sessions from unregistered workspaces are listed but cannot be opened', async ({ page }) => {

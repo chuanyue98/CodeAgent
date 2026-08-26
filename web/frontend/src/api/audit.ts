@@ -89,8 +89,31 @@ export interface ConvertSessionResult {
   message?: string;
 }
 
-export interface ConvertAndLaunchResult extends ConvertSessionResult {
-  terminal?: string;
+/**
+ * Where to attach a browser terminal. Nothing has been started yet -- the
+ * websocket spawns the engine when the terminal opens. This used to report a
+ * GUI terminal the server had opened on its own desktop, which was unreachable
+ * whenever the browser was somewhere else.
+ */
+export interface ResumeTarget {
+  engine: string;
+  sessionId: string;
+  project: string;
+}
+
+export interface ConvertAndLaunchResult extends ConvertSessionResult, ResumeTarget {}
+
+/** Asks where to resume an existing session; starts nothing by itself. */
+export async function continueSession(
+  engine: string,
+  sessionId: string,
+  projectPath: string,
+): Promise<ResumeTarget & { status: string }> {
+  const query = new URLSearchParams({ project: projectPath });
+  return request(
+    `/api/history/${encodeURIComponent(engine)}/${encodeURIComponent(sessionId)}/continue?${query}`,
+    { method: 'POST' },
+  );
 }
 
 function convertBody(params: ConvertSessionParams) {

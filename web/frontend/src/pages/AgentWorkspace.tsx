@@ -138,6 +138,7 @@ export default function AgentWorkspace() {
               sessionResourceSnapshot={workspace.sessionResourceSnapshot}
               sessionResourceGroup={workspace.sessionResourceGroup}
               resourceCount={workspace.resourceCount}
+              usage={workspace.state.usage}
               onConnect={() => workspace.onConnect(session, workspace.state.lastSequence, false)}
               onRemoveSession={() => workspace.onRemoveSession(session)}
             />

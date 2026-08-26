@@ -22,8 +22,11 @@ test('creates a structured session and streams provider-neutral events', async (
 
   await expect(page.locator('main')).toContainText('Echo: hello gateway');
   await expect(page.locator('main')).toContainText('Connected');
-  await expect(page.getByLabel('Workspace', { exact: true })).toBeDisabled();
-  await expect(page.getByLabel('Engine')).toBeDisabled();
+  // The echo has completed, so the turn is over — since ab36ddc an idle
+  // session leaves the session-bound dropdowns editable (changing one starts
+  // a new session); only an in-flight turn locks them.
+  await expect(page.getByLabel('Workspace', { exact: true })).toBeEnabled();
+  await expect(page.getByLabel('Engine')).toBeEnabled();
 });
 
 test('activity drawer keeps protocol details out of the conversation by default', async ({ page }) => {

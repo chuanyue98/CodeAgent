@@ -183,3 +183,38 @@ describe('ResourceHub failures', () => {
     expect(screen.getByText(/Could not load/)).toBeVisible();
   });
 });
+
+describe('ResourceHub cards and detail view', () => {
+  test('switching category swaps the listed cards', async () => {
+    renderHub();
+    await screen.findByText('code-review');
+    expect(screen.getByText('lint-fix')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^ops/ }));
+
+    // dev's two cards leave with their category; ops' single one replaces them.
+    await waitFor(() => expect(screen.getByText('deploy')).toBeVisible());
+    expect(screen.queryByText('code-review')).not.toBeInTheDocument();
+  });
+
+  test('clicking a card opens the detail view, back returns to the list', async () => {
+    renderHub();
+    const card = (await screen.findByText('code-review')).closest(
+      '[role="button"]',
+    ) as HTMLElement;
+    fireEvent.click(card);
+
+    // Detail replaces the gallery; its primary heading is the item name.
+    const detailHeading = await screen.findByRole('heading', {
+      level: 1,
+      name: 'code-review',
+    });
+    expect(detailHeading).toBeInTheDocument();
+    expect(screen.queryByText('lint-fix')).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Back to the resource list' }),
+    );
+    await waitFor(() => expect(screen.getByText('lint-fix')).toBeVisible());
+  });
+});

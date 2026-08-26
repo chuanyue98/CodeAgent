@@ -6,14 +6,18 @@ import {
   Check,
   ChevronUp,
   Loader2,
+  Play,
   TerminalSquare,
   Trash2,
   X,
 } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import {
+  continueSession,
   convertAndLaunchSession,
   deleteHistorySession,
   fetchSessionDetail,
+  type ResumeTarget,
   type SessionDetail,
 } from '../api/audit';
 import { type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
@@ -63,7 +67,9 @@ export default function SessionDetailPanel({
   onDeleted,
 }: SessionDetailPanelProps) {
   const t = useT();
+  const navigate = useNavigate();
   const [detail, setDetail] = useState<SessionDetail | null>(null);
+  const [resumeError, setResumeError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [convertState, setConvertState] = useState<ConvertState>({ status: 'idle' });
@@ -142,6 +148,30 @@ export default function SessionDetailPanel({
     };
   }, [engine, sessionId, projectPath, t]);
 
+  /** Hands a session to the terminal on the Agent page. */
+  const openInBrowserTerminal = (target: ResumeTarget) => {
+    const query = new URLSearchParams({
+      engine: target.engine,
+      cwd: target.project,
+      session: target.sessionId,
+    });
+    navigate(`/agent/terminal?${query}`);
+  };
+
+  const handleContinue = async () => {
+    setResumeError(null);
+    try {
+      // The endpoint validates the workspace and the session, then says what
+      // to attach a terminal to -- it does not start anything itself.
+      const target = await continueSession(engine, sessionId, projectPath);
+      openInBrowserTerminal(target);
+    } catch (err) {
+      setResumeError(
+        err instanceof Error ? err.message : t('sessionDetail.resumeFailed'),
+      );
+    }
+  };
+
   const handleConvert = async (targetEngine: string) => {
     setConvertState({ status: 'loading', targetEngine });
     try {
@@ -156,6 +186,9 @@ export default function SessionDetailPanel({
         targetEngine,
         message: t('sessionDetail.opened', { engine: engineLabel(targetEngine), id: result.newSessionId }),
       });
+      // The converted session is addressed like any other, so it opens in the
+      // same terminal rather than in a window on the server's desktop.
+      openInBrowserTerminal(result);
     } catch (err) {
       setConvertState({
         status: 'error',
@@ -338,7 +371,20 @@ export default function SessionDetailPanel({
       </div>
 
       <div className="space-y-2 border-t border-slate-100 pt-3">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+        <button
+          onClick={() => void handleContinue()}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary/90"
+        >
+          <Play className="h-3.5 w-3.5" />
+          {t('sessionDetail.continue')}
+        </button>
+        {resumeError && (
+          <p className="flex items-center gap-1.5 text-xs text-red-600">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {resumeError}
+          </p>
+        )}
+
+        <p className="pt-1 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
           {t('sessionDetail.openInAnother')}
         </p>
         <div className="flex flex-wrap gap-2">

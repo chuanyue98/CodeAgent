@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.project_groups import resolve_project_group
 from core.services.config_service import ConfigService
 
 
@@ -27,7 +28,19 @@ class RegisteredWorkspace:
 def resolve_registered_workspace(
     config_service: ConfigService, workspace: str
 ) -> RegisteredWorkspace:
-    """Resolve a workspace and return its authoritative registered group."""
+    """Resolve a workspace and return its authoritative registered group.
+
+    A registry entry is a rule covering everything beneath it, not an
+    inventory row -- see ``core.project_groups``, which owns that matching and
+    is what the CLI and the agent gateway already use. This function used to
+    compare for equality instead, so in a subdirectory of a registered project
+    you could start an agent session and resolve a resource group, but could
+    not run a task or create a schedule: the same config answered differently
+    depending on which half of the app asked.
+
+    ``path`` is the directory actually asked for -- that is where the work
+    runs; ``group`` comes from the nearest enclosing rule.
+    """
     try:
         requested = Path(workspace).expanduser().resolve()
     except (OSError, ValueError) as exc:
@@ -39,20 +52,16 @@ def resolve_registered_workspace(
     if warnings:
         raise WorkspaceConfigError(warnings[0])
 
-    for item in config.get("project_registry", []):
-        if not isinstance(item, dict):
-            continue
-        path = item.get("path")
-        group = item.get("group")
-        if not isinstance(path, str) or not isinstance(group, str) or not group:
-            continue
-        try:
-            resolved_path = Path(path).expanduser().resolve()
-        except (OSError, ValueError):
-            continue
-        if resolved_path == requested:
-            return RegisteredWorkspace(path=str(requested), group=group)
-
-    raise WorkspaceNotRegisteredError(
-        "Workspace must be registered in Settings before running a task"
-    )
+    # An entry naming no group is malformed rather than a rule for "no
+    # resources"; drop it so a valid enclosing rule can still win.
+    registry = [
+        entry
+        for entry in config.get("project_registry", [])
+        if isinstance(entry, dict) and entry.get("group")
+    ]
+    group = resolve_project_group(requested, registry)
+    if group is None:
+        raise WorkspaceNotRegisteredError(
+            "Workspace must be registered in Settings before running a task"
+        )
+    return RegisteredWorkspace(path=str(requested), group=group)

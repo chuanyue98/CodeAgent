@@ -75,7 +75,14 @@ class TaskRunner:
         self._run_store.clear()
         for pattern in ("*.log", "*.jsonl"):
             for f in self.log_dir.glob(pattern):
-                f.unlink(missing_ok=True)
+                # Windows 上「上一个用例启动的引擎进程还没退出」时，日志文件
+                # 句柄仍被握着（假引擎会 sleep 数秒），unlink 会抛
+                # PermissionError；POSIX 允许删除打开中的文件所以从不触发。
+                # 删不掉就留着——scratch 环境随后会被整体丢弃。
+                try:
+                    f.unlink(missing_ok=True)
+                except PermissionError:
+                    pass
 
     def run_task(
         self,

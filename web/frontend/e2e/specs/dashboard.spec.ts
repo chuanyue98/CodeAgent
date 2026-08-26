@@ -37,5 +37,9 @@ test('running a task shows execution logs and a Stop control', async ({
   await expect(page.getByText('Execution Logs')).toBeVisible({ timeout: 15000 });
   await expect(page.locator('button').filter({ hasText: 'Stop Execution' })).toBeVisible();
   await page.locator('button').filter({ hasText: 'Stop Execution' }).click();
-  await expect(page.getByRole('button', { name: 'Run Task' })).toBeVisible();
+  // Once a task has runs in its history, the detail's primary action reads
+  // Retry rather than Run Task — stopping a run lands you there.
+  await expect(
+    page.getByRole('button', { name: /Run Task|Retry/ }),
+  ).toBeVisible();
 });

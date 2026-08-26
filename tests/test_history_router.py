@@ -157,17 +157,15 @@ async def test_list_sessions_without_project_searches_all_projects(two_project_h
 
 
 @pytest.mark.asyncio
-async def test_continue_session_launches_native_resume(
+async def test_continue_session_answers_with_a_browser_terminal_target(
     two_project_history, monkeypatch
 ):
-    """POST /api/history/{engine}/{id}/continue resumes via the native CLI."""
-    launched: list[list[str]] = []
+    """POST /api/history/{engine}/{id}/continue no longer opens anything.
 
-    def fake_launch(cmd, cwd=None):
-        launched.append(list(cmd))
-        return "cmd"
-
-    monkeypatch.setattr("core.web.routers.launch.launch_in_terminal", fake_launch)
+    It used to shell out to a GUI terminal on whatever machine ran the
+    server -- useless from a remote browser, and a 503 on a headless host.
+    The endpoint now validates and hands back what /api/pty/ws needs.
+    """
     monkeypatch.setattr(
         "core.web.routers.history._resolve_history_workspace", lambda p: p
     )
@@ -181,18 +179,16 @@ async def test_continue_session_launches_native_resume(
         )
 
     assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "launched"
-    assert data["engine"] == "claude"
-    assert data["session_id"] == "sess-a"
-    assert launched == [["claude", "--resume", "sess-a"]]
+    assert response.json() == {
+        "status": "ready",
+        "engine": "claude",
+        "session_id": "sess-a",
+        "project": "E:/demo/project-a",
+    }
 
 
 @pytest.mark.asyncio
 async def test_continue_session_unknown_engine(two_project_history, monkeypatch):
-    monkeypatch.setattr(
-        "core.web.routers.launch.launch_in_terminal", lambda cmd, cwd=None: "x"
-    )
     monkeypatch.setattr(
         "core.web.routers.history._resolve_history_workspace", lambda p: p
     )
@@ -210,7 +206,6 @@ async def test_continue_session_unknown_engine(two_project_history, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_continue_session_not_found(two_project_history, monkeypatch):
-    monkeypatch.setattr("core.web.routers.launch.launch_in_terminal", lambda cmd: cmd)
     monkeypatch.setattr(
         "core.web.routers.history._resolve_history_workspace", lambda p: p
     )
@@ -481,9 +476,6 @@ async def test_convert_and_launch_success(two_project_history, monkeypatch):
     monkeypatch.setattr(
         "core.session_history.writers.write_session", lambda s, e: "new-id-456"
     )
-    monkeypatch.setattr(
-        "core.web.routers.launch.launch_in_terminal", lambda cmd, cwd=None: "terminal-x"
-    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -498,23 +490,27 @@ async def test_convert_and_launch_success(two_project_history, monkeypatch):
             },
         )
     assert res.status_code == 200
-    assert res.json()["status"] == "launched"
-    assert res.json()["newSessionId"] == "new-id-456"
+    body = res.json()
+    assert body["status"] == "ready"
+    assert body["newSessionId"] == "new-id-456"
+    # The converted session is addressed the same way an existing one is, so
+    # the caller opens one kind of terminal either way.
+    assert body["engine"] == "opencode"
+    assert body["sessionId"] == "new-id-456"
+    assert body["project"] == "E:/demo/project-a"
 
 
 @pytest.mark.asyncio
-async def test_convert_and_launch_launch_failure(two_project_history, monkeypatch):
+async def test_convert_and_launch_rejects_an_unusable_session_id(
+    two_project_history, monkeypatch
+):
+    """A written id that would read as a CLI flag must not reach an argv."""
     monkeypatch.setattr(
         "core.web.routers.history._resolve_history_workspace", lambda p: p
     )
     monkeypatch.setattr(
-        "core.session_history.writers.write_session", lambda s, e: "new-id-789"
+        "core.session_history.writers.write_session", lambda s, e: "--resume-all"
     )
-
-    def fail_launch(cmd, cwd=None):
-        raise RuntimeError("no terminal")
-
-    monkeypatch.setattr("core.web.routers.launch.launch_in_terminal", fail_launch)
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -528,7 +524,7 @@ async def test_convert_and_launch_launch_failure(two_project_history, monkeypatc
                 "projectPath": "E:/demo/project-a",
             },
         )
-    assert res.status_code == 503
+    assert res.status_code == 500
 
 
 @pytest.mark.asyncio

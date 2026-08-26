@@ -143,7 +143,10 @@ jobs:
   # ── Playwright E2E (real backend, real browser, fake engine CLIs) ─────────
   e2e:
     name: E2E — Playwright
-    needs: [backend, frontend]
+    # 只依赖 frontend（要它的 dist 产物）。不依赖 backend：本 job 自己
+    # uv sync 装后端依赖，若被 backend 的 lint/format 失败连坐跳过，
+    # E2E 就会一连几天没跑过还无人察觉（PR #131 的教训）。
+    needs: [frontend]
     runs-on: ubuntu-latest
     defaults:
       run:
