@@ -32,10 +32,12 @@ export async function typeSearch(page: Page, term: string): Promise<void> {
   await box.fill(term);
 }
 
-/** Returns the list-card element (a `.glass-card`) whose subtree contains
- *  `text` — used to locate a specific skill/plugin/prompt/hook card. */
+/** Returns the list-card element whose subtree contains `text` — used to
+ *  locate a specific skill/plugin/prompt/hook card. Cards come in two visual
+ *  weights since ab36ddc: `.glass-card` (panels) and `.glass-card-flat`
+ *  (long galleries), so both are matched here. */
 export function cardByText(page: Page, text: string): Locator {
-  return page.locator('div.glass-card', { hasText: text });
+  return page.locator('div.glass-card, div.glass-card-flat', { hasText: text });
 }
 
 // ── Resources page (ResourceHub) ─────────────────────────────────────────
@@ -90,12 +92,12 @@ export async function typeResourceSearch(page: Page, term: string): Promise<void
   await box.fill(term);
 }
 
-/** A resource card — a `role="button"` glass-card whose heading is the item
- *  name. Matching the heading rather than the card's text keeps one fixture
- *  name from also selecting another that contains it. */
+/** A resource card — a `role="button"` glass-card (flat variant since ab36ddc)
+ *  whose heading is the item name. Matching the heading rather than the card's
+ *  text keeps one fixture name from also selecting another that contains it. */
 export function resourceCard(page: Page, name: string): Locator {
   return page
-    .locator('div.glass-card[role="button"]')
+    .locator('div.glass-card[role="button"], div.glass-card-flat[role="button"]')
     .filter({ has: page.getByRole('heading', { level: 2, name, exact: true }) });
 }
 
