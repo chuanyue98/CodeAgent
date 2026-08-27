@@ -346,8 +346,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh": "在 {path} 找到 {count} 个会话:\n",
     },
     "history.show_hint": {
-        "en": "\nUse: ca history show <engine> <session_id>",
-        "zh": "\n查看详情: ca history show <engine> <session_id>",
+        "en": (
+            "\nShow one:      ca history show <engine> <session_id>"
+            "\nContinue it elsewhere:  ca switch <engine> [number]"
+        ),
+        "zh": (
+            "\n查看详情:      ca history show <engine> <session_id>"
+            "\n换个引擎继续:  ca switch <引擎> [编号]"
+        ),
     },
     "history.not_found": {
         "en": "[X] Session not found: {engine}/{session_id}",
@@ -414,6 +420,54 @@ MESSAGES: dict[str, dict[str, str]] = {
     "convert.failed": {
         "en": "[X] Conversion failed: {error}",
         "zh": "[X] 转换失败: {error}",
+    },
+    # --- ca switch ---
+    "select.no_sessions": {
+        "en": ("[X] No sessions found for {path}.\nStart one first, e.g.:  ca claude"),
+        "zh": ("[X] 在 {path} 没有找到任何会话。\n请先开一个,例如:  ca claude"),
+    },
+    "select.index_out_of_range": {
+        "en": "[X] No session [{index}] -- this project has {count}. Run `ca history` to see them.",
+        "zh": "[X] 没有第 [{index}] 个会话 —— 这个项目共 {count} 个。运行 `ca history` 查看。",
+    },
+    "select.not_found": {
+        "en": "[X] No session matching {selector!r} in this project.",
+        "zh": "[X] 这个项目里没有匹配 {selector!r} 的会话。",
+    },
+    "switch.unknown_engine": {
+        "en": "[X] Unknown engine: {engine}",
+        "zh": "[X] 未知引擎: {engine}",
+    },
+    "switch.known_engines": {
+        "en": "    Known engines: {engines}",
+        "zh": "    可用引擎: {engines}",
+    },
+    "switch.converting": {
+        "en": "Carrying {source} -> {target}  ({count} msgs)  {title}",
+        "zh": "正在从 {source} 切换到 {target}  (共 {count} 条消息)  {title}",
+    },
+    "switch.already_native": {
+        "en": "Already a {engine} session, resuming it as-is:  {title}",
+        "zh": "这本来就是 {engine} 的会话,直接继续:  {title}",
+    },
+    "switch.launching": {
+        "en": "Handing it to {engine}...\n",
+        "zh": "正在交给 {engine}...\n",
+    },
+    "switch.no_resume_command": {
+        "en": "[X] Cannot build a resume command: {error}",
+        "zh": "[X] 无法构造恢复命令: {error}",
+    },
+    "switch.engine_not_installed": {
+        "en": (
+            "[!] The session was converted, but the {engine} CLI is not on "
+            "PATH, so it could not be launched."
+        ),
+        "zh": "[!] 会话已经转换好了,但 PATH 上找不到 {engine} 的 CLI,没能拉起来。",
+    },
+    "switch.resume_manually": {
+        "en": "    Resume it with:  {command}",
+        "zh": "    继续这个会话:  {command}",
     },
     # --- ca ps / ca stop ---
     "ps.none_running": {"en": "No running tasks.", "zh": "没有正在运行的任务。"},
