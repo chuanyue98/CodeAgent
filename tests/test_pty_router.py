@@ -337,18 +337,19 @@ def test_pty_websocket_rejects_unknown_engine(tmp_path, monkeypatch):
     assert exc_info.value.code == 4400
 
 
-def test_pty_websocket_rejects_unregistered_workspace(tmp_path, monkeypatch):
+def test_pty_websocket_opens_in_an_unregistered_workspace_on_loopback(
+    tmp_path, monkeypatch
+):
     if sys.platform == "win32":
         pytest.skip("PTY sessions are POSIX-only")
+    monkeypatch.delenv("CA_UI_HOST", raising=False)
     app = _app(tmp_path, monkeypatch)
     with TestClient(app) as client:
-        with pytest.raises(WebSocketDisconnect) as exc_info:
-            with client.websocket_connect(
-                "/api/pty/ws",
-                params={"engine": "claude", "cwd": str(tmp_path)},
-            ) as ws:
-                ws.receive_json()
-    assert exc_info.value.code == 4400
+        with client.websocket_connect(
+            "/api/pty/ws",
+            params={"engine": "claude", "cwd": str(tmp_path)},
+        ) as ws:
+            assert ws.receive_json()["type"] == "output"
 
 
 # ── Windows (ConPTY via pywinpty) ──────────────────────────────────────────

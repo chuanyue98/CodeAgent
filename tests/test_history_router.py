@@ -222,7 +222,10 @@ async def test_continue_session_not_found(two_project_history, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_continue_session_unregistered_workspace(two_project_history, tmp_path):
+async def test_continue_session_in_an_unregistered_workspace(
+    two_project_history, tmp_path
+):
+    """No entry needed on loopback -- see resolve_registered_workspace."""
     unreg = tmp_path / "unreg-workspace-continue"
     unreg.mkdir()
     async with AsyncClient(
@@ -233,7 +236,9 @@ async def test_continue_session_unregistered_workspace(two_project_history, tmp_
             params={"project": str(unreg)},
         )
 
-    assert response.status_code == 400
+    # Past the registry, and now failing for the honest reason: that
+    # directory has no such session, rather than "you did not register it".
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -450,7 +455,9 @@ async def test_convert_session_not_found(two_project_history, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_convert_session_unregistered_workspace(two_project_history, tmp_path):
+async def test_convert_session_in_an_unregistered_workspace(
+    two_project_history, tmp_path
+):
     unreg = tmp_path / "unreg-workspace-convert"
     unreg.mkdir()
     async with AsyncClient(
@@ -465,7 +472,7 @@ async def test_convert_session_unregistered_workspace(two_project_history, tmp_p
                 "projectPath": str(unreg),
             },
         )
-    assert res.status_code == 400
+    assert res.status_code == 404
 
 
 @pytest.mark.asyncio

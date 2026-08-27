@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from core.project_groups import resolve_project_group
 from core.services.config_service import ConfigService
+
+
+def _bound_to_loopback() -> bool:
+    """Whether the Web UI is only reachable from this machine."""
+    from core.web.security import is_loopback_hostname
+
+    return is_loopback_hostname(os.environ.get("CA_UI_HOST", "127.0.0.1"))
 
 
 class WorkspaceResolutionError(ValueError):
@@ -26,7 +34,10 @@ class RegisteredWorkspace:
 
 
 def resolve_registered_workspace(
-    config_service: ConfigService, workspace: str
+    config_service: ConfigService,
+    workspace: str,
+    *,
+    interactive: bool = False,
 ) -> RegisteredWorkspace:
     """Resolve a workspace and return its authoritative registered group.
 
@@ -60,8 +71,34 @@ def resolve_registered_workspace(
         if isinstance(entry, dict) and entry.get("group")
     ]
     group = resolve_project_group(requested, registry)
-    if group is None:
+    if group is not None:
+        return RegisteredWorkspace(path=str(requested), group=group)
+
+    # Nothing matched. Whether that is fatal depends on who is asking and on
+    # who can reach this port.
+    #
+    # Unattended work -- scheduled runs, batch tasks -- always needs an entry.
+    # There the registry is not a security control but a statement of intent:
+    # removing a project is how you say "stop acting here on your own", and a
+    # schedule that kept firing afterwards would ignore that.
+    #
+    # An interactive request on a loopback bind is the opposite case. Someone
+    # is sitting here having just named this directory, and the registry
+    # blocks nobody: a drive-by page is refused by the Host and Origin checks
+    # (see core.web.security), and another process running as this user can
+    # already execute commands regardless of what ``cwd`` this endpoint
+    # accepts. So an entry buys no safety and charges a setup step for it --
+    # which is why opening a session in a fresh directory used to fail the
+    # PTY handshake with an unexplained 403.
+    #
+    # Bind anywhere else and it is a boundary again: the port is reachable
+    # from the network, the token is the only thing in front of it, and
+    # confining ``cwd`` to configured trees limits the damage if it leaks.
+    if not interactive or not _bound_to_loopback():
         raise WorkspaceNotRegisteredError(
-            "Workspace must be registered in Settings before running a task"
+            "Workspace must be registered in Settings before it can be used"
         )
-    return RegisteredWorkspace(path=str(requested), group=group)
+
+    config_default = config.get("default_group")
+    default_group = config_default if isinstance(config_default, str) else "common"
+    return RegisteredWorkspace(path=str(requested), group=default_group)

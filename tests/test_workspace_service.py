@@ -111,12 +111,41 @@ def test_a_sibling_sharing_a_name_prefix_is_not_covered(tmp_path):
     sibling.mkdir()
     config_service = _registry(tmp_path, [{"path": str(registered), "group": "web"}])
 
-    # Ancestry, not string prefix.
-    with pytest.raises(WorkspaceNotRegisteredError):
-        resolve_registered_workspace(config_service, str(sibling))
+    # Ancestry, not string prefix: the sibling falls through to the default
+    # group rather than inheriting the registered one.
+    assert (
+        resolve_registered_workspace(
+            config_service, str(sibling), interactive=True
+        ).group
+        != "web"
+    )
 
 
-def test_an_unregistered_tree_is_still_refused(tmp_path):
+def test_an_unregistered_tree_is_usable_on_a_loopback_bind(tmp_path):
+    """Requiring an entry here would protect nobody.
+
+    A drive-by page is already refused by the Host and Origin checks, and
+    another process running as this user can execute commands regardless of
+    what ``cwd`` this endpoint accepts. Charging a setup step for it made
+    working in a fresh directory fail the PTY handshake with a bare 403.
+    """
+    registered = tmp_path / "demo"
+    registered.mkdir()
+    elsewhere = tmp_path / "somewhere-else"
+    elsewhere.mkdir()
+    config_service = _registry(tmp_path, [{"path": str(registered), "group": "web"}])
+
+    resolved = resolve_registered_workspace(
+        config_service, str(elsewhere), interactive=True
+    )
+
+    assert resolved.path == str(elsewhere.resolve())
+    assert resolved.group == "common"
+
+
+def test_an_unregistered_tree_is_refused_on_a_non_loopback_bind(tmp_path, monkeypatch):
+    """Reachable from the network, the registry is a real boundary again."""
+    monkeypatch.setenv("CA_UI_HOST", "0.0.0.0")
     registered = tmp_path / "demo"
     registered.mkdir()
     elsewhere = tmp_path / "somewhere-else"
@@ -124,7 +153,24 @@ def test_an_unregistered_tree_is_still_refused(tmp_path):
     config_service = _registry(tmp_path, [{"path": str(registered), "group": "web"}])
 
     with pytest.raises(WorkspaceNotRegisteredError):
-        resolve_registered_workspace(config_service, str(elsewhere))
+        resolve_registered_workspace(config_service, str(elsewhere), interactive=True)
+
+    # A registered tree keeps working there.
+    assert resolve_registered_workspace(config_service, str(registered)).group == "web"
+
+
+def test_the_configured_default_group_is_used_for_unmatched_directories(tmp_path):
+    elsewhere = tmp_path / "somewhere-else"
+    elsewhere.mkdir()
+    config_service = ConfigService(tmp_path / "config.json")
+    config_service.update_config({"project_registry": [], "default_group": "work"})
+
+    assert (
+        resolve_registered_workspace(
+            config_service, str(elsewhere), interactive=True
+        ).group
+        == "work"
+    )
 
 
 def test_an_entry_without_a_group_does_not_shadow_an_enclosing_rule(tmp_path):
@@ -141,3 +187,13 @@ def test_an_entry_without_a_group_does_not_shadow_an_enclosing_rule(tmp_path):
     )
 
     assert resolve_registered_workspace(config_service, str(inner)).group == "web"
+
+
+def test_unattended_work_still_requires_an_entry_on_loopback(tmp_path):
+    """Removing a project is how you say "stop acting here on your own"."""
+    elsewhere = tmp_path / "somewhere-else"
+    elsewhere.mkdir()
+    config_service = _registry(tmp_path, [])
+
+    with pytest.raises(WorkspaceNotRegisteredError):
+        resolve_registered_workspace(config_service, str(elsewhere))
