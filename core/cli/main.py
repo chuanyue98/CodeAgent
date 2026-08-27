@@ -15,6 +15,7 @@ from .commands.history import history
 from .commands.mcp import mcp
 from .commands.project import project
 from .commands.resources import resources
+from .commands.switch import switch
 from .commands.tasks import batch_run, doctor, new, ps, stop, ui
 from .helpers import init_cli_runtime
 
@@ -145,6 +146,7 @@ cli.add_command(batch_run)
 cli.add_command(doctor)
 cli.add_command(new)
 cli.add_command(ui)
+cli.add_command(switch)
 
 
 def main():  # type: ignore[no-untyped-def]

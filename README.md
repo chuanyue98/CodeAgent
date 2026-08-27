@@ -151,6 +151,20 @@ Opens the dashboard at `http://127.0.0.1:8524`. Features:
 - Session history browser
 - Task monitoring
 
+### Switch Engines Mid-Conversation
+
+The point of CodeAgent: a conversation outlives the tool it started in.
+
+```bash
+ca switch codex          # carry the most recent session here into Codex, and open it
+ca switch claude 3       # session [3] from `ca history`, into Claude
+ca switch codex --no-launch   # convert only, print the resume command
+```
+
+One step: it converts the session into the target engine's native format and
+hands it straight to that engine's CLI. The source session is left untouched,
+and switching to the engine a session is already in just resumes it.
+
 ### Session History
 
 ```bash
@@ -161,7 +175,7 @@ ca history list --engine opencode  # Filter by engine
 # View session details
 ca history show opencode <session_id>
 
-# Convert sessions between engine formats
+# Convert without launching (`ca switch` is usually what you want)
 ca history convert claude <session_id> opencode
 ```
 

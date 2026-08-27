@@ -90,6 +90,25 @@ Opens the dashboard at `http://127.0.0.1:8524`.
 
 `ca ui --dev` (equivalently `CA_UI_DEV=1`) starts Vite on `http://127.0.0.1:5173` and points you there, so frontend edits need no rebuild. It reuses a dev server already listening on that port, and falls back to the built bundle if Vite cannot start.
 
+### `switch`
+
+Continue an existing session in a different engine.
+
+```bash
+ca switch <target_engine> [selector]
+```
+
+`selector` is the number `ca history` printed, or a session id; omit it to take the most recent session in the current project.
+
+Converts the session into the target engine's native format and hands it straight to that engine's CLI — the CLI equivalent of the Web UI's convert-and-launch. The source session is left untouched, so this is additive and runs without a confirmation prompt.
+
+| Option | Effect |
+|---|---|
+| `--engine <name>` | Only consider sessions from this engine when picking the source |
+| `--no-launch` | Convert and print the resume command, but do not start the engine |
+
+Switching to the engine a session is already in skips conversion and resumes it as-is, rather than forking a duplicate.
+
 ### `history`
 
 Session history management across all engine formats.
