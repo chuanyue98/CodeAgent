@@ -1,7 +1,8 @@
-import os
 import signal
 import sys
 from pathlib import Path
+
+from core.host_env import child_environ
 
 
 def register_signal_handler() -> None:
@@ -45,6 +46,6 @@ class EnvironmentManager:
         Returns:
             dict: A dictionary containing environment variables, including 'CODEAGENT_PATH'.
         """
-        env = os.environ.copy()
+        env = child_environ()
         env["CODEAGENT_PATH"] = str(self.root_dir.absolute()).replace("\\", "/")
         return env

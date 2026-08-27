@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core.constants import ENGINES
+from core.host_env import child_environ
 from core.services.run_store import RunStore, TaskRunRecord
 
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
@@ -139,7 +140,7 @@ class TaskRunner:
                 "-y",
                 "--non-interactive",
             ]
-            env = os.environ.copy()
+            env = child_environ()
             env["CA_PROJECT_GROUP"] = group
             if tasks_root is not None:
                 env["CA_TASKS_ROOT"] = str(tasks_root.resolve())

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import os
 import secrets
 import shutil
 import socket
@@ -15,6 +14,7 @@ import urllib.request
 from collections.abc import AsyncIterator
 from typing import Any
 
+from core.host_env import child_environ
 from core.logging_config import get_logger
 from core.services.agent_adapters._event_queue import (
     iter_events,
@@ -78,7 +78,7 @@ class OpenCodeAdapter:
         self._stopping = False
         self._loop = asyncio.get_running_loop()
         self._password = secrets.token_urlsafe(32)
-        env = os.environ.copy()
+        env = child_environ()
         env["OPENCODE_SERVER_PASSWORD"] = self._password
 
         # _reserve_port() closes its probe socket before the child process
