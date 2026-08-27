@@ -3,7 +3,7 @@ import { FolderGit2, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
-import { workspaceLabel } from '../utils/agentWorkspaceHelpers';
+import { workspaceLabel } from '../utils/workspaceFormat';
 
 /**
  * Header-level switcher for the shared workspace selection. The workspace

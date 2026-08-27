@@ -46,7 +46,7 @@ test('compact layout stacks session filters above results', async ({ page }) => 
 
 test('nested workspace routes avoid page-level overflow at supported widths', async ({ page }) => {
   const routes = [
-    { path: '/agent/web', label: 'Web Agent' },
+    { path: '/agent/terminal', label: 'Local Terminal' },
     { path: '/automations/tasks', label: 'Tasks' },
     { path: '/activity/sessions', label: 'Sessions' },
     { path: '/settings/resources', label: 'Resources' },

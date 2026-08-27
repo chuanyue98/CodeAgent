@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Plus, Search } from 'lucide-react';
 import { fetchSessionPage, type SessionUsage } from '../api/analytics';
-import { relativeTime, workspaceLabel } from '../utils/agentWorkspaceHelpers';
+import { relativeTime, workspaceLabel } from '../utils/workspaceFormat';
 import { useLanguageCode } from '../i18n/context';
 import { useT } from '../i18n/context';
 

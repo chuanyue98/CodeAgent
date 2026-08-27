@@ -21,13 +21,14 @@ export const primaryNav: PrimaryNavItem[] = [
   { to: '/settings/workspace', matchPrefix: '/settings', labelKey: 'nav.settings', icon: Settings },
 ];
 
-// Terminal first: it streams the engine's own TUI, so it has every feature the
-// vendor ships — model pickers, slash commands, approvals — the moment they
-// ship it. The Web Agent renders a chat over the gateway's structured events,
-// which only covers what its four per-engine adapters implement.
+// The terminal streams the engine's own TUI, so it has every feature the vendor
+// ships — model pickers, slash commands, approvals — the moment they ship it.
+// A chat rendered over the gateway's structured events could only ever cover
+// what its four per-engine adapters implemented, which is why the Web Agent tab
+// that sat here was retired. Its session list lives on as the terminal's own
+// sidebar, reading engine-native history rather than the gateway's store.
 export const AGENT_TABS: SectionTab[] = [
   { to: '/agent/terminal', labelKey: 'tab.agent.terminal' },
-  { to: '/agent/web', labelKey: 'tab.agent.web' },
   { to: '/agent/instances', labelKey: 'tab.agent.instances' },
 ];
 
@@ -73,7 +74,6 @@ export const SETTINGS_TABS: SectionTab[] = [
 // destination list for the command palette, so keep it exhaustive.
 export const PAGE_LABEL_KEYS: Record<string, TranslationKey> = {
   '/home': 'nav.home',
-  '/agent/web': 'tab.agent.web',
   '/agent/terminal': 'tab.agent.terminal',
   '/agent/instances': 'tab.agent.instances',
   '/automations/tasks': 'tab.automations.tasks',

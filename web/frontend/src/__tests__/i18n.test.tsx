@@ -39,7 +39,7 @@ describe('locale dictionaries stay in sync', () => {
   test('no translation is left as the untranslated English string', () => {
     // Brand names and shared symbols legitimately match; anything else that is
     // byte-identical is almost certainly an untranslated copy-paste.
-    const BRANDS = new Set(['nav.agent', 'tab.agent.web', 'tab.settings.mcp', 'language.en', 'language.zh']);
+    const BRANDS = new Set(['nav.agent', 'tab.settings.mcp', 'language.en', 'language.zh']);
     const identical = Object.keys(en).filter(
       key => !BRANDS.has(key) && en[key as keyof typeof en] === zh[key as keyof typeof en],
     );

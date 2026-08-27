@@ -29,7 +29,6 @@ const Analytics = lazy(() => import('./components/Analytics'));
 const LaunchPad = lazy(() => import('./components/LaunchPad'));
 const InstancesPage = lazy(() => import('./components/InstancesPage'));const LogViewer = lazy(() => import('./components/LogViewer'));
 const SessionsPage = lazy(() => import('./components/SessionsPage'));
-const AgentWorkspace = lazy(() => import('./pages/AgentWorkspace'));
 const CronPage = lazy(() => import('./components/CronPage'));
 const McpPage = lazy(() => import('./components/McpPage'));
 
@@ -155,7 +154,6 @@ function App() {
                 element={<SectionLayout labelKey="nav.agent" descriptionKey="section.agent.description" tabs={AGENT_TABS} />}
               >
                 <Route index element={<Navigate to="terminal" replace />} />
-                <Route path="web" element={page(<AgentWorkspace />)} />
                 <Route path="terminal" element={page(<LaunchPad />)} />
                 <Route path="instances" element={page(<InstancesPage />)} />
               </Route>
@@ -191,10 +189,13 @@ function App() {
               </Route>
 
               <Route path="/launch" element={<Navigate to="/agent/terminal" replace />} />
-              <Route path="/chat" element={<Navigate to="/agent/web" replace />} />
-              {/* The legacy engine-direct Chat page was removed: Web Agent is
-                  the only chat surface now. Old links land on it. */}
-              <Route path="/agent/legacy" element={<Navigate to="/agent/web" replace />} />
+              {/* Two generations of chat surface have now been retired -- the
+                  engine-direct Chat page, then the Web Agent that replaced it.
+                  Old links land on the terminal, which is the surface that
+                  outlived both. */}
+              <Route path="/chat" element={<Navigate to="/agent/terminal" replace />} />
+              <Route path="/agent/legacy" element={<Navigate to="/agent/terminal" replace />} />
+              <Route path="/agent/web" element={<Navigate to="/agent/terminal" replace />} />
               <Route path="/dashboard" element={<Navigate to="/automations/tasks" replace />} />
               <Route path="/cron" element={<Navigate to="/automations/schedules" replace />} />
               <Route path="/logs" element={<Navigate to="/automations/logs" replace />} />
