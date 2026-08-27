@@ -54,6 +54,7 @@ from core.services.resume_commands import is_safe_session_id, resume_command
 from core.services.workspace_service import (
     WorkspaceConfigError,
     WorkspaceNotRegisteredError,
+    WorkspaceResolutionError,
     resolve_registered_workspace,
 )
 from core.web.routers.config import get_config_path
@@ -172,9 +173,15 @@ def _resolve_registered_workspace(cwd: str) -> Path:
             ConfigService(get_config_path()), cwd, interactive=True
         )
     except WorkspaceNotRegisteredError as exc:
+        # Only reachable off loopback now -- on a local bind any existing
+        # directory resolves. See core.services.workspace_service.
         raise ValueError(
-            "Select a workspace registered in Settings before opening a terminal"
+            f"{cwd} is not a registered workspace, which this server requires "
+            "because it is reachable from the network"
         ) from exc
+    except WorkspaceResolutionError as exc:
+        # "not a directory" / "invalid path" -- say which one, and which path.
+        raise ValueError(f"{cwd}: {exc}") from exc
     except WorkspaceConfigError as exc:
         raise ValueError(str(exc)) from exc
     return Path(registered.path)
@@ -470,6 +477,14 @@ async def pty_websocket(
     # open one. verify_websocket() closes the socket itself on failure.
     if not await verify_websocket(websocket):
         return
+    # Accept before the remaining checks so their close frames carry a reason
+    # the browser can actually read. A close *before* the handshake completes
+    # is just a rejected upgrade: the reason never reaches JavaScript, which
+    # is why an unusable cwd or a missing engine used to surface as a bare
+    # "connection closed" with nothing to act on. Authentication stays above
+    # this line -- an unauthenticated caller gets no socket at all.
+    await websocket.accept()
+
     capability = pty_capability()
     if not capability["available"]:
         await websocket.close(code=1013, reason=capability["reason"])
@@ -493,8 +508,6 @@ async def pty_websocket(
     except ValueError as exc:
         await websocket.close(code=4400, reason=str(exc))
         return
-
-    await websocket.accept()
 
     output_queue: asyncio.Queue[bytes | str | None] = asyncio.Queue()
 

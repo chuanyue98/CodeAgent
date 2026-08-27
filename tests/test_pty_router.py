@@ -337,6 +337,45 @@ def test_pty_websocket_rejects_unknown_engine(tmp_path, monkeypatch):
     assert exc_info.value.code == 4400
 
 
+def test_a_bad_workspace_closes_with_a_reason_the_browser_can_read(
+    tmp_path, monkeypatch
+):
+    """The close frame has to arrive *after* the handshake to carry text.
+
+    Closing before accept() is a rejected upgrade: JavaScript sees code 1006
+    and an empty reason, which is how an unusable directory used to surface
+    as a bare "connection closed" with nothing to act on.
+    """
+    if sys.platform == "win32":
+        pytest.skip("PTY sessions are POSIX-only")
+    app = _app(tmp_path, monkeypatch)
+    missing = tmp_path / "no-such-directory"
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(
+                "/api/pty/ws",
+                params={"engine": "claude", "cwd": str(missing)},
+            ) as ws:
+                ws.receive_json()
+    assert exc_info.value.code == 4400
+    assert str(missing) in exc_info.value.reason
+    assert "directory" in exc_info.value.reason
+
+
+def test_an_unknown_engine_also_explains_itself(tmp_path, monkeypatch):
+    if sys.platform == "win32":
+        pytest.skip("PTY sessions are POSIX-only")
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(
+                "/api/pty/ws",
+                params={"engine": "nope", "cwd": str(tmp_path)},
+            ) as ws:
+                ws.receive_json()
+    assert "nope" in exc_info.value.reason
+
+
 def test_pty_websocket_opens_in_an_unregistered_workspace_on_loopback(
     tmp_path, monkeypatch
 ):

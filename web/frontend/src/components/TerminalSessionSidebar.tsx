@@ -54,7 +54,11 @@ export default function TerminalSessionSidebar({
   // query rather than from synchronously blanking state inside the effect.
   const [result, setResult] = useState<PageResult | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Tracks the groups whose state differs from the default, which is "only
+  // the workspace you are pointed at is open". Listing every workspace
+  // expanded turned a handful of projects into a wall you had to scroll past
+  // to reach the one you were working in.
+  const [toggled, setToggled] = useState<Set<string>>(new Set());
 
   const fresh = result?.query === query ? result : null;
   const sessions = fresh?.sessions ?? null;
@@ -128,12 +132,24 @@ export default function TerminalSessionSidebar({
   }, [sessions, currentWorkspace]);
 
   const toggle = (path: string) =>
-    setCollapsed(previous => {
+    setToggled(previous => {
       const next = new Set(previous);
       if (next.has(path)) next.delete(path);
       else next.add(path);
       return next;
     });
+
+  // Open by default: the workspace you are pointed at, or -- when it has
+  // nothing in it -- the one with the most recent work, so the sidebar never
+  // greets you as an empty list of folder names.
+  const defaultOpen = useMemo(() => {
+    const current = groups.find(group => group.path === currentWorkspace);
+    return current?.sessions.length ? current.path : (groups[0]?.path ?? '');
+  }, [groups, currentWorkspace]);
+
+  const isOpen = (path: string) =>
+    // A search is a request to see what matched, wherever it lives.
+    Boolean(query) || (path === defaultOpen) !== toggled.has(path);
 
   return (
     <aside className="flex w-64 shrink-0 flex-col gap-2 overflow-hidden">
@@ -169,7 +185,7 @@ export default function TerminalSessionSidebar({
         )}
 
         {groups.map(group => {
-          const open = !collapsed.has(group.path);
+          const open = isOpen(group.path);
           return (
             <div key={group.path}>
               <button

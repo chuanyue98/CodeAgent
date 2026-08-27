@@ -1,18 +1,7 @@
 {
   "language": "auto",
+  "default_group": "common",
   "groups": {
-    "codeagent": {
-      "skills": [
-        "base/architect-planning",
-        "base/commit-message",
-        "base/interview-model",
-        "base/skill-creator",
-        "base/task-authoring"
-      ],
-      "prompts": ["base"],
-      "hooks": [],
-      "plugins": ["base/superpowers"]
-    },
     "common": {
       "skills": [
         "base/architect-planning",
@@ -21,11 +10,15 @@
         "base/skill-creator",
         "base/task-authoring"
       ],
-      "prompts": ["base"],
+      "prompts": [
+        "base"
+      ],
       "hooks": [],
-      "plugins": ["base/superpowers"]
+      "plugins": [
+        "base/superpowers"
+      ]
     },
-    "work": {
+    "codeagent": {
       "skills": [
         "base/architect-planning",
         "base/commit-message",
@@ -33,21 +26,13 @@
         "base/skill-creator",
         "base/task-authoring"
       ],
-      "prompts": ["base"],
-      "hooks": [],
-      "plugins": ["base/superpowers"]
-    },
-    "web": {
-      "skills": [
-        "base/architect-planning",
-        "base/commit-message",
-        "base/interview-model",
-        "base/skill-creator",
-        "base/task-authoring"
+      "prompts": [
+        "base"
       ],
-      "prompts": ["base"],
       "hooks": [],
-      "plugins": ["base/superpowers"]
+      "plugins": [
+        "base/superpowers"
+      ]
     }
   },
   "project_registry": []

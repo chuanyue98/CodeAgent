@@ -455,3 +455,17 @@ def test_zero_skills_warns_instead_of_reporting_green(tmp_path, monkeypatch):
     assert "no skills will be mounted" in skills_check.detail
     # The hint must not promise --fix: seeding only applies to a missing file.
     assert "--fix" not in skills_check.fix_hint
+
+
+def test_every_supported_engine_is_probed():
+    """A gap here is invisible: the engine simply never appears in the report.
+
+    codebuddy was missing for exactly that reason -- launchable, resumable,
+    offered in the terminal picker, and absent from the health check, so a
+    broken install produced no diagnosis and a missing one produced no hint.
+    """
+    from core.constants import ENGINES
+    from core.doctor import ENGINE_BINARIES, ENGINE_INSTALL_HINTS
+
+    assert set(ENGINE_BINARIES) == set(ENGINES)
+    assert set(ENGINE_INSTALL_HINTS) == set(ENGINES)
