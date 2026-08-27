@@ -692,6 +692,8 @@ export const en = {
   'launch.unavailable': 'Browser terminal unavailable',
   'launch.registerFirst': 'Register a project in Settings before opening a terminal.',
   'launch.openTerminal': 'Open terminal',
+  'launch.openTerminals': 'Open terminals',
+  'launch.newTerminal': 'New terminal',
   'launch.resumed': 'Resumed',
   'terminal.sessionEnded': 'Session ended (exit code {code})',
   'terminal.connectionError': 'Terminal connection error',

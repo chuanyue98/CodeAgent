@@ -40,6 +40,13 @@ export default function BrowserTerminal({
   useEffect(() => {
     onExitRef.current = onExit;
   }, [onExit]);
+  // `t` changes identity when the language does. Held in the effect's deps it
+  // tore the socket down and spawned a *new* PTY on every language switch,
+  // which with several terminals open would kill all of them at once.
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   const restart = useCallback(() => setAttempt(previous => previous + 1), []);
 
@@ -58,10 +65,21 @@ export default function BrowserTerminal({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
-    fit.fit();
+
+    /** True when the fit actually happened; a hidden tab measures 0x0. */
+    const fitIfVisible = (): boolean => {
+      if (!container.clientWidth || !container.clientHeight) return false;
+      fit.fit();
+      return true;
+    };
+    const isVisible = () => container.clientWidth > 0 && container.clientHeight > 0;
+
+    fitIfVisible();
     // Without this the caret is in the page, not the shell: opening a
     // terminal and typing sent the keystrokes nowhere until you clicked it.
-    term.focus();
+    // Only for the tab actually on screen -- a background tab whose socket
+    // opens later must not steal the caret out of the one being typed in.
+    if (isVisible()) term.focus();
 
     setState('connecting');
     setMessage(null);
@@ -76,9 +94,8 @@ export default function BrowserTerminal({
 
     socket.onopen = () => {
       setState('open');
-      fit.fit();
-      sendResize();
-      term.focus();
+      if (fitIfVisible()) sendResize();
+      if (isVisible()) term.focus();
     };
     socket.onmessage = (event) => {
       let payload: { type?: string; data?: string; code?: number };
@@ -92,18 +109,18 @@ export default function BrowserTerminal({
       } else if (payload.type === 'exit') {
         exitHandled = true;
         setState('closed');
-        setMessage(t('terminal.sessionEnded', { code: String(payload.code ?? 'unknown') }));
+        setMessage(tRef.current('terminal.sessionEnded', { code: String(payload.code ?? 'unknown') }));
         onExitRef.current?.(typeof payload.code === 'number' ? payload.code : null);
       }
     };
     socket.onerror = () => {
       setState('error');
-      setMessage(t('terminal.connectionError'));
+      setMessage(tRef.current('terminal.connectionError'));
     };
     socket.onclose = (event) => {
       if (exitHandled) return;
       setState('closed');
-      setMessage(event.reason || t('terminal.connectionClosed'));
+      setMessage(event.reason || tRef.current('terminal.connectionClosed'));
     };
 
     const dataDisposable = term.onData((data) => {
@@ -119,8 +136,9 @@ export default function BrowserTerminal({
     const resizeObserver = new ResizeObserver(() => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
-        fit.fit();
-        sendResize();
+        // Hiding a tab fires this at 0x0; showing it again fires it with the
+        // real box, which is what re-fits the buffer.
+        if (fitIfVisible()) sendResize();
       }, RESIZE_DEBOUNCE_MS);
     });
     resizeObserver.observe(container);
@@ -132,7 +150,7 @@ export default function BrowserTerminal({
       socket.close();
       term.dispose();
     };
-  }, [engine, cwd, sessionId, attempt, t]);
+  }, [engine, cwd, sessionId, attempt]);
 
   const canRestart = state === 'closed' || state === 'error';
 
