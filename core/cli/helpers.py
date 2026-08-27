@@ -15,6 +15,7 @@ from pathlib import Path
 
 from core.console import configure_console_encoding
 from core.constants import ENGINES  # noqa: F401
+from core.host_env import child_environ
 from core.i18n import ENV_VAR as CA_LANG_ENV  # noqa: F401
 from core.i18n import resolve_language, t  # noqa: F401
 from core.logging_config import configure_root_logging
@@ -148,7 +149,7 @@ def build_proxy_env(config: dict) -> tuple[dict[str, str], str, int, str]:
     proxy_host, selected_port = _select_active_proxy(candidates)
     proxy_scheme = "socks5" if selected_port == 3066 else "http"
     proxy_url = f"{proxy_scheme}://{proxy_host}:{selected_port}"
-    child_env = os.environ.copy()
+    child_env = child_environ()
     child_env["HTTP_PROXY"] = proxy_url
     child_env["HTTPS_PROXY"] = proxy_url
     child_env["ALL_PROXY"] = proxy_url

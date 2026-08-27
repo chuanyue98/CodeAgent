@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import sys
 
 import click
 
+from core.host_env import child_environ
 from core.i18n import ENV_VAR as CA_LANG_ENV
 from core.i18n import resolve_language, t
 
@@ -110,7 +110,7 @@ def cli(ctx, proxy, yolo):  # type: ignore[no-untyped-def]
             config
         )
         print(t("proxy.enabled", scheme=proxy_scheme, host=proxy_host, port=proxy_port))
-    child_env = child_env if child_env is not None else os.environ.copy()
+    child_env = child_env if child_env is not None else child_environ()
     child_env[CA_LANG_ENV] = resolve_language()
     ctx.obj.update(
         config=config,

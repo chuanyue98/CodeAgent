@@ -47,6 +47,7 @@ except ImportError:  # pragma: no cover - exercised only on POSIX
     winpty = None  # type: ignore[assignment]
 
 from core.constants import ENGINES
+from core.host_env import child_environ
 from core.resource_locator import CODE_ROOT
 from core.services.config_service import ConfigService
 from core.services.resume_commands import is_safe_session_id, resume_command
@@ -275,7 +276,7 @@ async def _spawn_posix(
     master_fd, slave_fd = pty.openpty()  # type: ignore[attr-defined]
     _resize_fd(master_fd, cols=80, rows=24)
     env = {
-        **os.environ,
+        **child_environ(),
         "TERM": "xterm-256color",
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
@@ -433,7 +434,7 @@ async def _spawn_windows(  # pragma: no cover - exercised only on Windows
     session_id: str | None = None,
 ) -> _WindowsSession:
     loop = asyncio.get_running_loop()
-    env = {**os.environ, "TERM": "xterm-256color"}
+    env = {**child_environ(), "TERM": "xterm-256color"}
     argv = _engine_argv(engine, working_dir, session_id)
     try:
         # PtyProcess.spawn() does a PATH lookup + creates the ConPTY
