@@ -168,7 +168,9 @@ def _resolve_registered_workspace(cwd: str) -> Path:
     routinely live in subdirectories.
     """
     try:
-        registered = resolve_registered_workspace(ConfigService(get_config_path()), cwd)
+        registered = resolve_registered_workspace(
+            ConfigService(get_config_path()), cwd, interactive=True
+        )
     except WorkspaceNotRegisteredError as exc:
         raise ValueError(
             "Select a workspace registered in Settings before opening a terminal"

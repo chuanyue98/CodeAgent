@@ -305,7 +305,7 @@ def _resolve_history_workspace(project_path: str) -> str:
 
     try:
         ws = resolve_registered_workspace(
-            ConfigService(get_config_path()), project_path
+            ConfigService(get_config_path()), project_path, interactive=True
         )
         return ws.path
     except WorkspaceConfigError as exc:
