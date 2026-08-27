@@ -27,6 +27,23 @@ vi.mock('../components/BrowserTerminal', async () => {
   return { default: MockTerminal };
 });
 
+const SIDEBAR_SESSIONS = [
+  {
+    sessionId: 'ses_abc',
+    target: 'opencode',
+    projectPath: '/workspace/proj',
+    title: '\u4fee\u590d\u767b\u5f55',
+    lastActivity: '2026-08-27T10:00:00Z',
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    cost: 0,
+    modelsUsed: [],
+    modelBreakdowns: [],
+  },
+];
+
 function jsonResponse(data: unknown) {
   return Promise.resolve({
     ok: true,
@@ -46,6 +63,9 @@ beforeEach(() => {
     }
     if (url.includes('/api/config')) return jsonResponse({});
     if (url.includes('/api/groups')) return jsonResponse({});
+    if (url.includes('/api/analytics/sessions')) {
+      return jsonResponse({ sessions: SIDEBAR_SESSIONS, nextCursor: null });
+    }
     return jsonResponse({});
   });
 });
@@ -118,5 +138,31 @@ describe('LaunchPad terminal tabs', () => {
     renderLaunchPad('/agent/terminal?engine=opencode&cwd=/workspace/proj&session=ses_abc');
     await screen.findByTestId('term-opencode:ses_abc');
     expect(screen.getAllByRole('tab')).toHaveLength(1);
+  });
+
+  test('picking a session from the sidebar resumes it in a terminal', async () => {
+    renderLaunchPad();
+    fireEvent.click(await screen.findByTitle('修复登录'));
+    await screen.findByTestId('term-opencode:ses_abc');
+  });
+
+  test('the sidebar is there before any terminal is open', async () => {
+    renderLaunchPad();
+    // The launcher used to be the whole screen until you opened a terminal,
+    // which is why there was no way to reach a session from here.
+    expect(await screen.findByTitle('修复登录')).toBeTruthy();
+    expect(screen.queryAllByRole('tab')).toHaveLength(0);
+  });
+
+  test('resuming a session that already has a tab focuses it instead of forking a second PTY', async () => {
+    renderLaunchPad();
+    fireEvent.click(await screen.findByTitle('修复登录'));
+    await screen.findByTestId('term-opencode:ses_abc');
+
+    fireEvent.click(screen.getByLabelText(/new terminal/i));
+    fireEvent.click(screen.getByTitle('修复登录'));
+
+    await waitFor(() => expect(screen.getAllByRole('tab')).toHaveLength(1));
+    expect(screen.getAllByTestId('term-opencode:ses_abc')).toHaveLength(1);
   });
 });

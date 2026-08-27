@@ -6,6 +6,7 @@ import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
 import type { TranslationKey } from '../i18n/locales/en';
 import BrowserTerminal from './BrowserTerminal';
+import TerminalSessionSidebar from './TerminalSessionSidebar';
 
 interface Engine {
   id: string;
@@ -57,7 +58,23 @@ export default function LaunchPad() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
 
+  const tabsRef = useRef<TerminalTab[]>([]);
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
+
   const openTab = useCallback((engine: string, cwd: string, sessionId?: string) => {
+    // Resuming a session that already has a tab focuses it. Opening a second
+    // PTY on one conversation gives two terminals writing the same history.
+    if (sessionId) {
+      const existing = tabsRef.current.find(
+        tab => tab.sessionId === sessionId && tab.engine === engine,
+      );
+      if (existing) {
+        setActiveTabId(existing.id);
+        return;
+      }
+    }
     const id = `tab-${nextTabId++}`;
     setTabs(previous => [...previous, { id, engine, cwd, sessionId }]);
     setActiveTabId(id);
@@ -186,11 +203,15 @@ export default function LaunchPad() {
     </div>
   );
 
-  if (tabs.length === 0) return launcher;
+  const activeTab = tabs.find(tab => tab.id === activeTabId);
 
-  return (
-    <div className="flex h-full min-h-0 flex-col gap-2">
-      <div role="tablist" aria-label={t('launch.openTerminals')} className="flex shrink-0 items-center gap-1 overflow-x-auto">
+  const workspace = (
+    <div className="flex min-w-0 flex-1 flex-col gap-2">
+      <div
+        role="tablist"
+        aria-label={t('launch.openTerminals')}
+        className={`shrink-0 items-center gap-1 overflow-x-auto ${tabs.length === 0 ? 'hidden' : 'flex'}`}
+      >
         {tabs.map(tab => {
           const active = tab.id === activeTabId;
           return (
@@ -261,6 +282,18 @@ export default function LaunchPad() {
           </div>
         ))}
       </div>
+    </div>
+  );
+
+  return (
+    <div className="flex h-full min-h-0 gap-3">
+      <TerminalSessionSidebar
+        currentWorkspace={effectiveProject}
+        activeSessionId={activeTab?.sessionId}
+        onOpenSession={openTab}
+        onNewSession={() => setActiveTabId(null)}
+      />
+      {workspace}
     </div>
   );
 }
