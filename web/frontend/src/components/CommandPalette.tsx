@@ -102,8 +102,8 @@ export default function CommandPalette() {
         icon: FolderGit2,
         run: () => {
           // Switching workspaces is a global scope change, not navigation:
-          // stay on the current page (the old forced jump to /agent/web bound
-          // "change workspace" to "go to the chat page" for no reason).
+          // stay on the current page (this used to force a jump to the chat
+          // page, binding "change workspace" to "go there" for no reason).
           setSelectedWorkspace(project.path);
         },
       }));

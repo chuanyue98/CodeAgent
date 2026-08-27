@@ -1,7 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Link } from 'react-router';
 import {
-  ArrowUpRight,
   Clock3,
   MessageSquareText,
   Square,
@@ -199,15 +197,6 @@ export default function InstancesPage() {
                     <span className="font-mono text-[11px] text-slate-400 tabular-nums">
                       {elapsedLabel(instance.started_at)}
                     </span>
-                    {instance.kind === 'chat' && (
-                      <Link
-                        to={`/agent/web?session=${encodeURIComponent(instance.id)}`}
-                        className="flex items-center gap-1 rounded-lg border border-primary/30 px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/10"
-                      >
-                        {t('instances.openChat')}
-                        <ArrowUpRight className="h-3 w-3" />
-                      </Link>
-                    )}
                     {instance.stoppable && (
                       <button
                         type="button"

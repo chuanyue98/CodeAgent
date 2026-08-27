@@ -3,7 +3,6 @@ import {
   Activity,
   ArrowRight,
   ArrowUpRight,
-  Bot,
   Clock3,
   Cpu,
   HardDrive,
@@ -104,14 +103,8 @@ export default function HomePage() {
                 navigation; these are just the two most common starts. */}
             <div className="mt-4 flex flex-wrap gap-2">
               <Link
-                to="/agent/web"
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-all hover:opacity-90"
-              >
-                <Bot className="h-3.5 w-3.5" /> {t('home.newConversation')}
-              </Link>
-              <Link
                 to="/agent/terminal"
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-4 py-2 text-xs font-semibold text-slate-600 transition-colors hover:border-primary/30 hover:text-primary"
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-all hover:opacity-90"
               >
                 <Terminal className="h-3.5 w-3.5" /> {t('home.openTerminal')}
               </Link>

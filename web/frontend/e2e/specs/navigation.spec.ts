@@ -19,8 +19,7 @@ test('sidebar nav links navigate and mark the active route', async ({ page }) =>
   const primaryNav = page.getByRole('navigation', { name: 'Primary navigation' });
   const agentLink = primaryNav.getByRole('link', { name: 'Agent', exact: true });
   await agentLink.click();
-  // Agent opens on the terminal: it carries every feature the engine CLI has,
-  // where the Web Agent only covers what its adapters implement.
+  // Agent opens on the terminal: it carries every feature the engine CLI has.
   await waitForH2(page, 'Local Terminal');
   await expect(page).toHaveURL(/\/agent\/terminal$/);
   await expect(agentLink).toHaveClass(/bg-primary\/10/);
@@ -47,15 +46,18 @@ test('legacy routes redirect into the new hierarchy', async ({ page }) => {
   await expect(page).toHaveURL(/\/settings\/resources\?kind=plugins$/);
 });
 
-test('Agent workspace combines Web Agent and Local Terminal modes', async ({ page }) => {
-  await page.goto('/chat');
-  await waitForH2(page, 'Web Agent');
-  const sections = page.getByRole('navigation', { name: 'Agent sections' });
-  await expect(sections.getByRole('link', { name: 'Web Agent' })).toHaveAttribute('aria-current', 'page');
+test('links to the retired Web Agent land on the terminal', async ({ page }) => {
+  // /chat and /agent/web were two generations of chat surface. Both redirect
+  // rather than 404 -- these paths are in people's bookmarks and history.
+  for (const legacy of ['/chat', '/agent/web', '/agent/legacy']) {
+    await page.goto(legacy);
+    await waitForH2(page, 'Local Terminal');
+    await expect(page).toHaveURL(/\/agent\/terminal$/);
+  }
 
-  await sections.getByRole('link', { name: 'Local Terminal' }).click();
-  await waitForH2(page, 'Local Terminal');
-  await expect(page).toHaveURL(/\/agent\/terminal$/);
+  const sections = page.getByRole('navigation', { name: 'Agent sections' });
+  await expect(sections.getByRole('link', { name: 'Local Terminal' })).toHaveAttribute('aria-current', 'page');
+  await expect(sections.getByRole('link', { name: 'Web Agent' })).toHaveCount(0);
   await expect(page.getByText('Opens the provider CLI in an in-browser terminal, running on the machine hosting CodeAgent.')).toBeVisible();
 });
 

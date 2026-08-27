@@ -12,7 +12,6 @@ import AxeBuilder from '@axe-core/playwright';
 // all for an empty array, rather than a real empty-state message.
 const PAGES: { path: string; label: string; screenshotSlug: string; emptyStateHint?: RegExp }[] = [
   { path: '/launch', label: 'Local Terminal', screenshotSlug: 'launch' },
-  { path: '/chat', label: 'Web Agent', screenshotSlug: 'chat' },
   // The four resource galleries were merged into one Resources page; their
   // old paths now redirect to /settings/resources?kind=<id>.
   { path: '/settings/resources', label: 'Resources', screenshotSlug: 'resources' },
