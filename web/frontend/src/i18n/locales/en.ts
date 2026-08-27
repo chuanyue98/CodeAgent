@@ -41,7 +41,7 @@ export const en = {
   'instances.intro': 'Unified view of chat sessions, browser terminals, and background tasks. Auto-refreshes every 5 seconds.',
   'instances.summary': '{count} instances running',
   'instances.empty': 'No running instances',
-  'instances.emptyHint': 'Start a chat in "Web Agent" or launch an engine in "Local Terminal" — instances will appear here.',
+  'instances.emptyHint': 'Launch an engine in "Local Terminal" — running instances will appear here.',
   'instances.kind.chat': 'Chat',
   'instances.kind.terminal': 'Terminal',
   'instances.kind.task': 'Task',
@@ -60,7 +60,7 @@ export const en = {
 
   // ── Section shells ────────────────────────────────────────────────────────
   'section.nav': '{label} sections',
-  'section.agent.description': 'Conversations and local provider terminals in one workspace.',
+  'section.agent.description': 'Your sessions and the provider CLIs that run them.',
   'section.automations.description': 'Run repeatable work, manage schedules, and read run logs.',
   'section.activity.description': 'Past sessions and what they cost.',
   'section.settings.description': 'Workspace configuration, capabilities, and system health.',
@@ -550,10 +550,11 @@ export const en = {
   'launch.detectFailed': 'Failed to detect browser terminal support',
   'launch.closeTerminal': 'Close terminal',
   'launch.intro': 'Opens the provider CLI in an in-browser terminal, running on the machine hosting CodeAgent.',
-  'launch.introDetail':
-    "The CLI must already be installed and signed in on this machine. Unlike Web Agent, the terminal shows the provider's own interface — CodeAgent only sets the working directory and injects your configured resources.",
+  'launch.introDetail': "The CLI must already be installed and signed in on this machine. The terminal shows the provider's own interface — CodeAgent only sets the working directory and injects your configured resources.",
+  'launch.workspacePlaceholder': '/path/to/your/project',
+  'launch.workspaceHint': 'Any existing directory on the machine running CodeAgent. Previously used ones are suggested.',
   'launch.unavailable': 'Browser terminal unavailable',
-  'launch.registerFirst': 'Register a project in Settings before opening a terminal.',
+  'launch.registerFirst': 'Type or paste the directory you want to work in.',
   'launch.openTerminal': 'Open terminal',
   'terminalSidebar.title': 'Sessions',
   'terminalSidebar.new': 'New',

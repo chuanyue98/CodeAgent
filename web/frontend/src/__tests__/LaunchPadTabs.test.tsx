@@ -134,6 +134,24 @@ describe('LaunchPad terminal tabs', () => {
     expect(screen.getByTestId('term-claude:new').parentElement?.className).not.toContain('hidden');
   });
 
+  test('an unregistered directory can be typed in and launched', async () => {
+    // On a fresh install nothing is registered. As a <select> that left the
+    // picker empty and every launch button disabled -- the page was a dead
+    // end for exactly the person meeting it first.
+    renderLaunchPad();
+    const field = await screen.findByLabelText(/workspace/i);
+    fireEvent.change(field, { target: { value: '/somewhere/brand-new' } });
+
+    const launch = screen
+      .getAllByRole('button', { name: /open terminal/i })
+      .find(button => button.closest('.glass-card')?.textContent?.includes('Claude'));
+    expect(launch).toBeTruthy();
+    expect((launch as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(launch as HTMLButtonElement);
+
+    await screen.findByTestId('term-claude:new');
+  });
+
   test('a resume deep link opens as its own tab', async () => {
     renderLaunchPad('/agent/terminal?engine=opencode&cwd=/workspace/proj&session=ses_abc');
     await screen.findByTestId('term-opencode:ses_abc');

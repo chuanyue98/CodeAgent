@@ -61,16 +61,21 @@ class Section:
 
 # ── Engine binary map ─────────────────────────────────────────────────────────
 
+#: Keep in step with :data:`core.constants.ENGINES` -- an engine missing here
+#: is one the health check silently says nothing about, so a user with it
+#: broken gets no diagnosis and a user without it gets no install hint.
 ENGINE_BINARIES = {
     "claude": ["claude", "claude.cmd"],
     "opencode": ["opencode", "opencode.cmd"],
     "codex": ["codex", "codex.cmd"],
+    "codebuddy": ["codebuddy", "codebuddy.cmd"],
 }
 
 ENGINE_INSTALL_HINTS = {
     "claude": "npm install -g @anthropic-ai/claude-code",
     "opencode": "npm install -g opencode-ai",
     "codex": "npm install -g @openai/codex",
+    "codebuddy": "npm install -g @tencent-ai/codebuddy-code",
 }
 
 # ── Individual check functions ────────────────────────────────────────────────

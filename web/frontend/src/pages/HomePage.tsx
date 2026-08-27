@@ -35,11 +35,22 @@ function formatCompactAgo(timestamp: string): string {
   return `${Math.floor(diffHr / 24)}d`;
 }
 
+/**
+ * What this event was, in the words of the work rather than of the schema.
+ *
+ * This used to render the event's own type path -- `claude.message.assistant`,
+ * `claude.tool.Bash` -- which reads as a log line, not as activity: three
+ * assistant replies in a row were three identical rows telling you nothing
+ * about what any of them was. The payload already carries the session's title
+ * and a preview of the content, so use those and keep the engine as a tag.
+ */
 function describeAuditEvent(event: AuditEvent): string {
   if (event.event_type === 'tool_call') {
-    return event.tool_name ? `${event.engine}.tool.${event.tool_name}` : `${event.engine}.tool_call`;
+    return event.tool_name || 'tool';
   }
-  return event.role === 'user' ? `${event.engine}.message.user` : `${event.engine}.message.assistant`;
+  const preview = event.content_preview?.trim();
+  if (preview) return preview;
+  return event.session_title?.trim() || event.engine;
 }
 
 function toneForEvent(event: AuditEvent): 'live' | 'ok' | 'idle' {
@@ -150,6 +161,9 @@ export default function HomePage() {
                               : 'bg-slate-300'
                             }`}
                           />
+                          <span className="shrink-0 rounded bg-slate-100 px-1 font-mono text-[9px] uppercase text-slate-500">
+                            {event.engine}
+                          </span>
                           <span className="truncate">{describeAuditEvent(event)}</span>
                         </span>
                         <span className="shrink-0 text-slate-400">{formatCompactAgo(event.timestamp)}</span>

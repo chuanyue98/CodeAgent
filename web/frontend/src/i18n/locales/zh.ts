@@ -37,7 +37,7 @@ export const zh: Record<TranslationKey, string> = {
   'instances.intro': '聊天会话、浏览器终端与后台任务的统一视图，每 5 秒自动刷新',
   'instances.summary': '{count} 个实例运行中',
   'instances.empty': '当前没有正在运行的实例',
-  'instances.emptyHint': '在「Web Agent」发起聊天，或在「本地终端」启动一个引擎，实例会出现在这里。',
+  'instances.emptyHint': '在「本地终端」里启动一个引擎 —— 正在运行的实例会出现在这里。',
   'instances.kind.chat': '聊天',
   'instances.kind.terminal': '终端',
   'instances.kind.task': '任务',
@@ -56,7 +56,7 @@ export const zh: Record<TranslationKey, string> = {
 
   // ── Section shells ────────────────────────────────────────────────────────
   'section.nav': '{label}分区',
-  'section.agent.description': '会话与本地引擎终端，同在一个工作区。',
+  'section.agent.description': '你的会话,以及运行它们的引擎命令行。',
   'section.automations.description': '运行可复用的任务、管理定时计划、查看运行日志。',
   'section.activity.description': '过往会话与用量。',
   'section.settings.description': '工作区配置、能力资源与系统健康。',
@@ -539,10 +539,11 @@ export const zh: Record<TranslationKey, string> = {
   'launch.detectFailed': '检测浏览器终端支持失败',
   'launch.closeTerminal': '关闭终端',
   'launch.intro': '在浏览器终端中打开引擎 CLI，运行在托管 CodeAgent 的本机上。',
-  'launch.introDetail':
-    '相应 CLI 必须已在本机安装并登录。与 Web Agent 不同，终端展示的是引擎自己的界面——CodeAgent 只负责设置工作目录并注入你配置的资源。',
+  'launch.introDetail': '命令行工具需要已经装好并登录。终端里显示的是引擎自己的界面 —— CodeAgent 只负责设定工作目录并注入你配置的资源。',
+  'launch.workspacePlaceholder': '/项目/所在/路径',
+  'launch.workspaceHint': '运行 CodeAgent 那台机器上的任意已存在目录。用过的会出现在建议里。',
   'launch.unavailable': '浏览器终端不可用',
-  'launch.registerFirst': '打开终端前请先在“设置”中注册一个工作区。',
+  'launch.registerFirst': '输入或粘贴你想工作的目录。',
   'launch.openTerminal': '打开终端',
   'terminalSidebar.title': '会话',
   'terminalSidebar.new': '新建',

@@ -125,7 +125,13 @@ export default function LaunchPad() {
 
   const effectiveProject = validProjects.some(project => project.path === selectedWorkspace)
     ? selectedWorkspace
-    : (validProjects[0]?.path ?? '');
+    : (selectedWorkspace.trim() || validProjects[0]?.path || '');
+
+  // An override rather than a mirror: until something is typed the field just
+  // shows the shared selection, so there is no state to keep in sync (and no
+  // effect writing state during render, which cascades).
+  const [typedWorkspace, setTypedWorkspace] = useState<string | null>(null);
+  const workspaceInput = typedWorkspace ?? effectiveProject;
 
   const engineLabel = (id: string) => {
     const engine = ENGINES.find(item => item.id === id);
@@ -154,25 +160,32 @@ export default function LaunchPad() {
         </div>
       )}
 
-      {validProjects.length === 0 ? (
-        <div role="status" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          {t('launch.registerFirst')}
-        </div>
-      ) : (
-        <div className="max-w-sm space-y-1">
-          <label htmlFor="launchpad-project" className="text-xs font-medium text-slate-500">{t('filters.workspace')}</label>
-          <select
-            id="launchpad-project"
-            value={effectiveProject}
-            onChange={event => setSelectedWorkspace(event.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-          >
-            {validProjects.map(project => (
-              <option key={project.path} value={project.path}>{project.path}</option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* A combobox, not a select: any existing directory works now (see
+          core.services.workspace_service), so the registered ones are
+          suggestions rather than the whole world. As a select this page was a
+          dead end on a fresh install -- nothing registered meant no options,
+          which meant every launch button stayed disabled. */}
+      <div className="max-w-xl space-y-1">
+        <label htmlFor="launchpad-project" className="text-xs font-medium text-slate-500">
+          {t('filters.workspace')}
+        </label>
+        <input
+          id="launchpad-project"
+          list="launchpad-known-workspaces"
+          value={workspaceInput}
+          onChange={event => setTypedWorkspace(event.target.value)}
+          onBlur={() => setSelectedWorkspace(workspaceInput.trim())}
+          placeholder={t('launch.workspacePlaceholder')}
+          spellCheck={false}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm"
+        />
+        <datalist id="launchpad-known-workspaces">
+          {validProjects.map(project => (
+            <option key={project.path} value={project.path} />
+          ))}
+        </datalist>
+        <p className="text-[11px] text-slate-400">{t('launch.workspaceHint')}</p>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {ENGINES.map((engine) => (
@@ -186,10 +199,10 @@ export default function LaunchPad() {
             </div>
 
             <button
-              onClick={() => openTab(engine.id, effectiveProject)}
-              disabled={!available || !effectiveProject}
+              onClick={() => openTab(engine.id, workspaceInput.trim())}
+              disabled={!available || !workspaceInput.trim()}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all
-                ${!available || !effectiveProject
+                ${!available || !workspaceInput.trim()
                   ? 'opacity-50 cursor-not-allowed'
                   : 'hover:scale-105 active:scale-95 cursor-pointer'}
                 ${engine.color}`}
