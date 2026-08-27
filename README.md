@@ -314,15 +314,18 @@ pytest --cov=core --cov-report=term-missing
 The analytics dashboard is built with React + Vite + TypeScript + Tailwind:
 
 ```bash
+# Day-to-day frontend work -- no build step, live reload:
+ca ui --dev        # starts Vite (127.0.0.1:5173) and the API together
+
+# Working on the production bundle instead:
 cd web/frontend
 bun install        # or npm install
-bun run dev        # Start Vite directly for development
 bun run build      # Production build
 
-# `web/frontend/dist/` is a build artifact and is not committed to git.
-# From the repository root, `ca ui` serves that build, so run `bun run build`
-# (or `npm run build`) at least once after cloning. Set CA_UI_DEV=1 only when
-# you explicitly want it to manage a Vite dev server instead.
+# `web/frontend/dist/` is a build artifact and is not committed to git, so a
+# fresh clone needs `bun run build` once before plain `ca ui` has a UI to
+# serve. After a pull that touches the frontend, `ca ui` warns that the
+# bundle predates the sources -- rebuild, or switch to `ca ui --dev`.
 ```
 
 ## Documentation

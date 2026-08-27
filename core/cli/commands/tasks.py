@@ -204,8 +204,16 @@ def doctor(ctx, fix, dry_run):  # type: ignore[no-untyped-def]
     is_flag=True,
     help="Print the Web UI token and exit, for opening the UI manually.",
 )
+@click.option(
+    "--dev",
+    is_flag=True,
+    help=(
+        "Serve the frontend from a live-reloading Vite dev server instead of "
+        "the built bundle, so frontend edits need no rebuild."
+    ),
+)
 @click.pass_context
-def ui(ctx, show_token):  # type: ignore[no-untyped-def]
+def ui(ctx, show_token, dev):  # type: ignore[no-untyped-def]
     if show_token:
         from core.web.security import get_ui_token
 
@@ -213,4 +221,4 @@ def ui(ctx, show_token):  # type: ignore[no-untyped-def]
         return 0
     from .. import ui as _ui_mod
 
-    return _ui_mod.run_ui_command()
+    return _ui_mod.run_ui_command(dev=dev)

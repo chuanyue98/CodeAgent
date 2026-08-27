@@ -266,7 +266,7 @@ a JSON body shaped like:
 |----------|----------|-------------|
 | `WOODPECKER_TOKEN` | For CI | Woodpecker CI personal access token |
 | `GITHUB_TOKEN` | For CI | GitHub token (from `gh auth token`) |
-| `CA_UI_DEV` | No | Set to `1` to have `ca ui` manage a Vite dev server instead of serving the built `web/frontend/dist/` |
+| `CA_UI_DEV` | No | Set to `1` to have `ca ui` manage a Vite dev server instead of serving the built `web/frontend/dist/`; the `ca ui --dev` flag does the same |
 | `CA_UI_HOST` | No | Bind host for `ca ui`'s API server. Default `127.0.0.1`; use `0.0.0.0` for container/remote access |
 | `CA_UI_TOKEN` | No | Pins the Web UI token instead of using the generated `~/.codeagent/ui-token`. For containers and test harnesses |
 | `CA_UI_AUTH` | No | Set to `0`/`off` to disable Web UI **token** checking. Host and Origin checks still apply. Only when an authenticating proxy sits in front |

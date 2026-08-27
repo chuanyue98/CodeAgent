@@ -80,10 +80,15 @@ Checks are grouped into five sections (see `core/doctor.py`):
 Start the Web UI analytics dashboard.
 
 ```bash
-ca ui
+ca ui              # serve the built UI from web/frontend/dist/
+ca ui --dev        # manage a Vite dev server instead, with live reload
 ```
 
-Opens the dashboard at `http://127.0.0.1:8524` and serves the built static UI. Run Vite directly from `web/frontend` for development; set `CA_UI_DEV=1` when `ca ui` should manage that dev server.
+Opens the dashboard at `http://127.0.0.1:8524`.
+
+`ca ui` serves the static bundle in `web/frontend/dist/`, which is gitignored — after a pull that touches the frontend it warns that the bundle predates the sources, and you rebuild with `bun run build`.
+
+`ca ui --dev` (equivalently `CA_UI_DEV=1`) starts Vite on `http://127.0.0.1:5173` and points you there, so frontend edits need no rebuild. It reuses a dev server already listening on that port, and falls back to the built bundle if Vite cannot start.
 
 ### `history`
 
