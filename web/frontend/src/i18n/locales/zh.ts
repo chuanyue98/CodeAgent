@@ -676,6 +676,8 @@ export const zh: Record<TranslationKey, string> = {
   'launch.unavailable': '浏览器终端不可用',
   'launch.registerFirst': '打开终端前请先在“设置”中注册一个工作区。',
   'launch.openTerminal': '打开终端',
+  'launch.openTerminals': '已打开的终端',
+  'launch.newTerminal': '新终端',
   'launch.resumed': '已续接',
   'terminal.sessionEnded': '会话已结束（退出码 {code}）',
   'terminal.connectionError': '终端连接出错',

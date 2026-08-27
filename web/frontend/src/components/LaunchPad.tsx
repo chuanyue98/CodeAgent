@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { AlertTriangle, TerminalSquare, X } from 'lucide-react';
+import { AlertTriangle, Plus, TerminalSquare, X } from 'lucide-react';
 import { fetchPtyStatus } from '../api/pty';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
@@ -28,6 +28,16 @@ const ENGINES: Engine[] = [
   { id: 'shell',     nameKey: 'launch.shellName', descriptionKey: 'launch.shellDescription', color: 'bg-slate-50 border-slate-200 text-slate-700' },
 ];
 
+interface TerminalTab {
+  /** Stable across re-renders so React keeps the same xterm instance mounted. */
+  id: string;
+  engine: string;
+  cwd: string;
+  sessionId?: string;
+}
+
+let nextTabId = 0;
+
 export default function LaunchPad() {
   const t = useT();
   const {
@@ -38,10 +48,36 @@ export default function LaunchPad() {
 
   const [available, setAvailable] = useState<boolean | null>(null);
   const [reason, setReason] = useState<string | null>(null);
-  const [activeSession, setActiveSession] = useState<
-    { engine: string; cwd: string; sessionId?: string } | null
-  >(null);
+  // Every open terminal stays mounted; only the active one is displayed.
+  // Unmounting a tab to switch away would close its socket, and the PTY
+  // endpoint spawns a process per connection -- the session would be gone,
+  // not backgrounded.
+  const [tabs, setTabs] = useState<TerminalTab[]>([]);
+  // null means the launcher is showing while the open terminals sit hidden.
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
+
+  const openTab = useCallback((engine: string, cwd: string, sessionId?: string) => {
+    const id = `tab-${nextTabId++}`;
+    setTabs(previous => [...previous, { id, engine, cwd, sessionId }]);
+    setActiveTabId(id);
+  }, []);
+
+  const closeTab = useCallback((id: string) => {
+    setTabs(previous => {
+      const index = previous.findIndex(tab => tab.id === id);
+      if (index === -1) return previous;
+      const remaining = previous.filter(tab => tab.id !== id);
+      setActiveTabId(current => {
+        if (current !== id) return current;
+        // Land on the neighbour rather than dumping the user back at the
+        // launcher while other terminals are still running.
+        const neighbour = remaining[index] ?? remaining[index - 1];
+        return neighbour?.id ?? null;
+      });
+      return remaining;
+    });
+  }, []);
 
   // Deep link from the session browser: `?engine=&cwd=&session=` opens that
   // session in the terminal here. Resuming used to open a GUI terminal on the
@@ -55,8 +91,8 @@ export default function LaunchPad() {
     const key = `${engine}|${cwd}|${sessionId ?? ''}`;
     if (openedDeepLinkRef.current === key) return;
     openedDeepLinkRef.current = key;
-    setActiveSession({ engine, cwd, sessionId });
-  }, [searchParams]);
+    openTab(engine, cwd, sessionId);
+  }, [searchParams, openTab]);
 
   useEffect(() => {
     fetchPtyStatus()
@@ -74,39 +110,13 @@ export default function LaunchPad() {
     ? selectedWorkspace
     : (validProjects[0]?.path ?? '');
 
-  if (activeSession) {
-    return (
-      <div className="flex h-full min-h-0 flex-col gap-2">
-        <div className="flex shrink-0 items-center justify-between">
-          <div className="text-sm font-medium text-slate-700">
-            {(() => {
-              const engine = ENGINES.find(item => item.id === activeSession.engine);
-              return engine ? (engine.nameKey ? t(engine.nameKey) : engine.name) : activeSession.engine;
-            })()} · {activeSession.cwd}
-            {activeSession.sessionId && (
-              <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                {t('launch.resumed')}
-              </span>
-            )}
-          </div>
-          <button
-            onClick={() => setActiveSession(null)}
-            className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-          >
-            <X size={14} /> {t('launch.closeTerminal')}
-          </button>
-        </div>
-        <BrowserTerminal
-          engine={activeSession.engine}
-          cwd={activeSession.cwd}
-          sessionId={activeSession.sessionId}
-          onExit={() => {}}
-        />
-      </div>
-    );
-  }
+  const engineLabel = (id: string) => {
+    const engine = ENGINES.find(item => item.id === id);
+    if (!engine) return id;
+    return engine.nameKey ? t(engine.nameKey) : engine.name;
+  };
 
-  return (
+  const launcher = (
     <div className="space-y-6">
       <div className="space-y-2">
         <p className="text-sm text-slate-600">
@@ -159,7 +169,7 @@ export default function LaunchPad() {
             </div>
 
             <button
-              onClick={() => setActiveSession({ engine: engine.id, cwd: effectiveProject })}
+              onClick={() => openTab(engine.id, effectiveProject)}
               disabled={!available || !effectiveProject}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all
                 ${!available || !effectiveProject
@@ -170,6 +180,84 @@ export default function LaunchPad() {
               <TerminalSquare size={15} />
               {t('launch.openTerminal')}
             </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (tabs.length === 0) return launcher;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <div role="tablist" aria-label={t('launch.openTerminals')} className="flex shrink-0 items-center gap-1 overflow-x-auto">
+        {tabs.map(tab => {
+          const active = tab.id === activeTabId;
+          return (
+            <div
+              key={tab.id}
+              className={`group flex shrink-0 items-center gap-2 rounded-t-lg border-b-2 px-3 py-1.5 text-xs transition-colors ${
+                active
+                  ? 'border-primary bg-primary/5 font-semibold text-primary'
+                  : 'border-transparent text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <button
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveTabId(tab.id)}
+                className="flex items-center gap-1.5"
+                title={tab.cwd}
+              >
+                <TerminalSquare size={13} className="shrink-0" />
+                <span className="max-w-40 truncate">{engineLabel(tab.engine)}</span>
+                {tab.sessionId && (
+                  <span className="rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">
+                    {t('launch.resumed')}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => closeTab(tab.id)}
+                aria-label={t('launch.closeTerminal')}
+                title={t('launch.closeTerminal')}
+                className="rounded p-0.5 text-slate-400 opacity-0 transition-opacity hover:bg-slate-200 hover:text-slate-700 focus:opacity-100 group-hover:opacity-100"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          );
+        })}
+        <button
+          onClick={() => setActiveTabId(null)}
+          aria-label={t('launch.newTerminal')}
+          title={t('launch.newTerminal')}
+          className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors ${
+            activeTabId === null
+              ? 'bg-primary/10 font-semibold text-primary'
+              : 'text-slate-500 hover:bg-slate-50'
+          }`}
+        >
+          <Plus size={13} />
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1">
+        {activeTabId === null && (
+          <div className="custom-scrollbar h-full overflow-y-auto pr-1">{launcher}</div>
+        )}
+        {/* Every terminal stays mounted -- see the `tabs` state comment. */}
+        {tabs.map(tab => (
+          <div
+            key={tab.id}
+            className={tab.id === activeTabId ? 'flex h-full min-h-0 flex-col' : 'hidden'}
+          >
+            <BrowserTerminal
+              engine={tab.engine}
+              cwd={tab.cwd}
+              sessionId={tab.sessionId}
+              onExit={() => {}}
+            />
           </div>
         ))}
       </div>
