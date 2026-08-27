@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import time
 from unittest.mock import MagicMock, patch
@@ -6,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import ca_launcher
+import core.cli.ui as core_ui
 
 
 def _wait_for(predicate, timeout=2.0):
@@ -205,6 +207,76 @@ def test_run_ui_command_falls_back_to_dist_when_vite_start_fails(capsys, monkeyp
     )
     captured = capsys.readouterr()
     assert "falling back to built UI" in captured.out
+
+
+def test_run_ui_command_dev_flag_starts_vite_without_the_env_var(capsys, monkeypatch):
+    monkeypatch.delenv("CA_UI_DEV", raising=False)
+    mock_uvicorn = MagicMock()
+    mock_server = MagicMock(app=object())
+    fake_modules = {"uvicorn": mock_uvicorn, "core.web.server": mock_server}
+
+    with patch.dict(sys.modules, fake_modules):
+        with patch("core.cli.ui._frontend_source_exists", return_value=True):
+            with patch("core.cli.ui._is_ui_dev_server_running", return_value=True):
+                with patch("core.cli.ui._open_browser", MagicMock()):
+                    with patch("core.cli.helpers.is_tcp_port_open", return_value=True):
+                        assert ca_launcher.run_ui_command(dev=True) == 0
+
+    mock_uvicorn.run.assert_called_once_with(
+        mock_server.app, host="127.0.0.1", port=8524, log_level="info"
+    )
+    assert "Detected Vite dev server" in capsys.readouterr().out
+
+
+def test_run_ui_command_warns_when_the_built_ui_predates_the_sources(
+    capsys, monkeypatch
+):
+    monkeypatch.delenv("CA_UI_DEV", raising=False)
+    mock_uvicorn = MagicMock()
+    mock_server = MagicMock(app=object())
+    fake_modules = {"uvicorn": mock_uvicorn, "core.web.server": mock_server}
+
+    with patch.dict(sys.modules, fake_modules):
+        with patch("core.cli.ui._frontend_dist_exists", return_value=True):
+            with patch(
+                "core.cli.ui._frontend_sources_newer_than_dist", return_value=True
+            ):
+                with patch("core.cli.helpers.find_available_port", return_value=8123):
+                    with patch("core.cli.ui._open_browser", MagicMock()):
+                        with patch(
+                            "core.cli.helpers.is_tcp_port_open", return_value=True
+                        ):
+                            assert ca_launcher.run_ui_command() == 0
+
+    captured = capsys.readouterr()
+    assert "older than the frontend sources" in captured.out
+    assert "ca ui --dev" in captured.out
+
+
+def test_frontend_sources_newer_than_dist_ignores_node_modules(tmp_path, monkeypatch):
+    frontend = tmp_path / "web" / "frontend"
+    (frontend / "dist").mkdir(parents=True)
+    (frontend / "src").mkdir()
+    (frontend / "node_modules").mkdir()
+
+    index = frontend / "dist" / "index.html"
+    index.write_text("<html></html>")
+    source = frontend / "src" / "main.tsx"
+    source.write_text("export {}")
+    os.utime(source, (1_000, 1_000))
+    os.utime(index, (2_000, 2_000))
+
+    monkeypatch.setattr("core.cli.ui._frontend_root", lambda: frontend)
+    assert core_ui._frontend_sources_newer_than_dist() is False
+
+    # A dependency install churns node_modules without invalidating the build.
+    churn = frontend / "node_modules" / "some-package.js"
+    churn.write_text("")
+    os.utime(churn, (3_000, 3_000))
+    assert core_ui._frontend_sources_newer_than_dist() is False
+
+    os.utime(source, (3_000, 3_000))
+    assert core_ui._frontend_sources_newer_than_dist() is True
 
 
 def test_main_new_command(monkeypatch):

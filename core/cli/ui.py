@@ -35,6 +35,32 @@ def _frontend_dist_exists() -> bool:
     return (_frontend_root() / "dist" / "index.html").exists()
 
 
+_BUILD_INPUT_SKIP_DIRS = {"dist", "node_modules", ".git", ".vite"}
+
+
+def _frontend_sources_newer_than_dist() -> bool:
+    """True when a frontend source file postdates the built UI.
+
+    ``dist/`` is gitignored, so a pull that touches the frontend leaves a
+    stale bundle on disk that still loads and still looks correct.
+    """
+    frontend_root = _frontend_root()
+    try:
+        built_at = (frontend_root / "dist" / "index.html").stat().st_mtime
+    except OSError:
+        return False
+
+    for current, dirnames, filenames in os.walk(frontend_root):
+        dirnames[:] = [d for d in dirnames if d not in _BUILD_INPUT_SKIP_DIRS]
+        for name in filenames:
+            try:
+                if os.stat(os.path.join(current, name)).st_mtime > built_at:
+                    return True
+            except OSError:
+                continue
+    return False
+
+
 def _frontend_source_exists() -> bool:
     frontend_root = _frontend_root()
     return (frontend_root / "package.json").exists() and (
@@ -150,7 +176,7 @@ def _wait_for_api_then_open_browser(api_host: str, api_port: int, url: str) -> N
     _open_browser(url)
 
 
-def run_ui_command() -> int:
+def run_ui_command(dev: bool = False) -> int:
     try:
         root = _helpers._project_root()
         if str(root) not in sys.path:
@@ -164,7 +190,8 @@ def run_ui_command() -> int:
         return 1
 
     use_dev_server = False
-    if os.environ.get("CA_UI_DEV") == "1" and _frontend_source_exists():
+    want_dev = dev or os.environ.get("CA_UI_DEV") == "1"
+    if want_dev and _frontend_source_exists():
         if _is_ui_dev_server_running():
             use_dev_server = True
         else:
@@ -197,6 +224,8 @@ def run_ui_command() -> int:
             return 1
         port = _helpers.find_available_port(UI_API_PORT)
         url = f"http://127.0.0.1:{port}"
+        if _frontend_sources_newer_than_dist():
+            print(t("ui.dist_stale", frontend_root=_frontend_root()))
         print(t("ui.starting", url=url))
 
     api_host = os.environ.get("CA_UI_HOST", "127.0.0.1")

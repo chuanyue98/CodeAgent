@@ -276,8 +276,8 @@ MESSAGES: dict[str, dict[str, str]] = {
             "  cd {frontend_root}\n"
             "  bun install && bun run build      # or: npm install && npm run build\n"
             "\n"
-            "Then run `ca ui` again. For live-reloading frontend work, set "
-            "CA_UI_DEV=1 instead to have `ca ui` manage a Vite dev server."
+            "Then run `ca ui` again. For live-reloading frontend work, run "
+            "`ca ui --dev` instead to have `ca ui` manage a Vite dev server."
         ),
         "zh": (
             "[X] Web UI 尚未构建 (期望文件: {index_path})。\n"
@@ -286,8 +286,21 @@ MESSAGES: dict[str, dict[str, str]] = {
             "  cd {frontend_root}\n"
             "  bun install && bun run build      # 或: npm install && npm run build\n"
             "\n"
-            "然后重新运行 `ca ui`。如果需要前端热更新开发，改为设置 "
-            "CA_UI_DEV=1，让 `ca ui` 托管 Vite 开发服务器。"
+            "然后重新运行 `ca ui`。如果需要前端热更新开发，改用 "
+            "`ca ui --dev`，让 `ca ui` 托管 Vite 开发服务器。"
+        ),
+    },
+    "ui.dist_stale": {
+        "en": (
+            "[!] The built UI is older than the frontend sources, so this may "
+            "be a stale bundle.\n"
+            "    Rebuild:      cd {frontend_root} && bun run build\n"
+            "    Or live-reload instead:  ca ui --dev"
+        ),
+        "zh": (
+            "[!] 已构建的界面早于前端源码，看到的可能是旧版本。\n"
+            "    重新构建:  cd {frontend_root} && bun run build\n"
+            "    或改用热更新:  ca ui --dev"
         ),
     },
     "ui.starting": {
