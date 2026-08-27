@@ -96,6 +96,27 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   useEffect(() => {
     currentGroupRef.current = currentGroup;
   }, [currentGroup]);
+  // The restored workspace has a group, but nothing adopted it: currentGroup
+  // starts at a literal and only moves when the user *changes* workspace, so
+  // a reload left the header chip naming whichever group that literal happens
+  // to be. Adopt it once, on the first load that can answer -- after that the
+  // group is the user's to set (header switcher, Config Hub, palette) and
+  // must not be overwritten behind them.
+  const groupHydratedRef = useRef(false);
+  const selectedWorkspaceRef = useRef(selectedWorkspace);
+  useEffect(() => {
+    selectedWorkspaceRef.current = selectedWorkspace;
+  }, [selectedWorkspace]);
+
+  /**
+   * Setting the group is always a decision -- the user's, or a workspace
+   * change following its rule. Either way the one-time adoption above must
+   * not fire later and overwrite it.
+   */
+  const selectGroup = useCallback((group: string) => {
+    groupHydratedRef.current = true;
+    setCurrentGroup(group);
+  }, []);
 
   const refreshConfig = useCallback(async () => {
     try {
@@ -124,6 +145,20 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
 
       const groupList = Array.from(groupSet).sort();
       setAvailableGroups(groupList);
+
+      if (!groupHydratedRef.current) {
+        const restored = projectsArr.find(
+          project => project.path === selectedWorkspaceRef.current,
+        );
+        if (restored?.group) {
+          groupHydratedRef.current = true;
+          setCurrentGroup(restored.group);
+        } else if (projectsArr.length > 0) {
+          // Nothing to adopt from, but the answer is now known to be "none";
+          // don't keep asking on every later refresh.
+          groupHydratedRef.current = true;
+        }
+      }
 
       // Only re-point the selection when it no longer resolves. Falling back to
       // the first real group rather than a hardcoded "codeagent", which is not
@@ -184,8 +219,10 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     // here means no page has to remember to keep the two in sync (and the
     // Group chip in the header never disagrees with the open project).
     const project = projectsRef.current.find(item => item.path === path);
-    if (project?.group) setCurrentGroup(project.group);
-  }, []);
+    if (project?.group) selectGroup(project.group);
+    // selectGroup is stable (useCallback with no deps), so this keeps the
+    // stable identity the mount-only effects below rely on.
+  }, [selectGroup]);
 
   // Heal a selection that no longer resolves (project removed, path gone
   // missing, or nothing chosen yet) by falling back to the first usable one.
@@ -198,7 +235,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const value = useMemo<ProjectContextType>(() => ({
     currentGroup,
-    setCurrentGroup,
+    setCurrentGroup: selectGroup,
     config,
     projects,
     validProjects,
@@ -211,7 +248,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     error,
   }), [
     currentGroup,
-    setCurrentGroup,
+    selectGroup,
     config,
     projects,
     validProjects,
