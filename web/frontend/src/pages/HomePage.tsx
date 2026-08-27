@@ -14,7 +14,7 @@ import { fetchAuditEvents, type AuditEvent } from '../api/audit';
 import { fetchSessions, type SessionUsage } from '../api/analytics';
 import request from '../utils/request';
 import { useSystemMetrics } from '../context/SystemMetricsContext';
-import { buildSessionLink } from '../utils/sessionLink';
+import { buildResumeLink } from '../utils/sessionLink';
 import { useT } from '../i18n/context';
 
 const EQ_BARS = [0.4, 0.7, 1, 0.55, 0.85, 0.35, 0.65, 0.5, 0.9, 0.3, 0.75, 0.45];
@@ -220,7 +220,7 @@ export default function HomePage() {
               recentSessions.map(session => (
                 <li key={session.sessionId}>
                   <Link
-                    to={buildSessionLink(session.target, session.sessionId, session.projectPath || '')}
+                    to={buildResumeLink(session.target, session.sessionId, session.projectPath || '')}
                     className="group flex items-center justify-between gap-3 py-2.5"
                   >
                     <span className="flex min-w-0 items-center gap-3">
