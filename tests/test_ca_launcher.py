@@ -9,6 +9,25 @@ import pytest
 import ca_launcher
 import core.cli.ui as core_ui
 
+#: The launcher hands the engine a copy of ``os.environ`` plus whatever it
+#: decides to add, so the proxy assertions below only mean "the launcher set
+#: this" on a machine that had no proxy set already. Clearing them keeps
+#: "not in env" honest and stops "in env" from passing on ambient values.
+_PROXY_VARS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+)
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_proxy(monkeypatch):
+    for name in _PROXY_VARS:
+        monkeypatch.delenv(name, raising=False)
+
 
 def _wait_for(predicate, timeout=2.0):
     """Polls until `predicate()` is truthy or `timeout` seconds elapse.

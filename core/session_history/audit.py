@@ -21,11 +21,11 @@ def build_audit_events(sessions: list[UnifiedSession]) -> list[dict]:
             ``find_all_sessions()``.
 
     Returns:
-        list[dict]: One row per message plus one row per tool call within
-        that message, sorted by ``timestamp`` descending (most recent
-        first). Tool-call rows inherit their parent message's timestamp,
-        role, and model, since ``ToolCallSummary`` carries no timestamp
-        of its own.
+        list[dict]: One row per message that has content, plus one row per
+        tool call within that message, sorted by ``timestamp`` descending
+        (most recent first). Tool-call rows inherit their parent message's
+        timestamp, role, and model, since ``ToolCallSummary`` carries no
+        timestamp of its own.
     """
     events: list[dict] = []
 
@@ -34,20 +34,26 @@ def build_audit_events(sessions: list[UnifiedSession]) -> list[dict]:
         session_title = session.title or session.first_user_message
 
         for msg_idx, message in enumerate(session.messages):
-            events.append(
-                {
-                    "event_id": f"{engine}:{session.session_id}:{msg_idx}",
-                    "event_type": "message",
-                    "engine": engine,
-                    "project_path": session.project_path,
-                    "session_id": session.session_id,
-                    "session_title": session_title,
-                    "timestamp": message.timestamp or "",
-                    "role": message.role,
-                    "model": message.model,
-                    "content_preview": message.content,
-                }
-            )
+            # An assistant turn that only calls tools carries no content of its
+            # own, and its tool-call rows below already say what it did. Emitting
+            # the empty message too puts a row on the timeline with nothing to
+            # show -- 83% of message rows on a real history -- which a consumer
+            # can only render as the session title, repeated once per turn.
+            if message.content.strip():
+                events.append(
+                    {
+                        "event_id": f"{engine}:{session.session_id}:{msg_idx}",
+                        "event_type": "message",
+                        "engine": engine,
+                        "project_path": session.project_path,
+                        "session_id": session.session_id,
+                        "session_title": session_title,
+                        "timestamp": message.timestamp or "",
+                        "role": message.role,
+                        "model": message.model,
+                        "content_preview": message.content,
+                    }
+                )
 
             for tc_idx, tool_call in enumerate(message.tool_calls):
                 events.append(

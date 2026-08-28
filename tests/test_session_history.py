@@ -838,6 +838,43 @@ def test_build_audit_events_flattens_messages_and_tool_calls():
     assert all(e["session_title"] == "Debug session" for e in events)
 
 
+def test_a_tool_only_turn_contributes_no_empty_message_row():
+    from core.session_history.audit import build_audit_events
+
+    session = UnifiedSession(
+        session_id="s1",
+        engine=EngineType.CLAUDE,
+        project_path="E:/demo/test",
+        title="Debug session",
+        messages=[
+            UnifiedMessage(
+                role="user", content="hi", timestamp="2026-07-10T10:00:00.000Z"
+            ),
+            # An assistant turn that only calls tools: no content of its own.
+            UnifiedMessage(
+                role="assistant",
+                content="",
+                timestamp="2026-07-10T10:00:05.000Z",
+                tool_calls=[
+                    ToolCallSummary(name="Bash", args_preview="{}", result_preview="ok")
+                ],
+            ),
+        ],
+    )
+
+    events = build_audit_events([session])
+
+    # The tool call is still reported; the contentless turn around it is not.
+    assert [e["event_type"] for e in events] == ["tool_call", "message"]
+    assert [e["event_type"] for e in events if e["event_type"] == "message"] == [
+        "message"
+    ]
+    assert (
+        next(e for e in events if e["event_type"] == "message")["content_preview"]
+        == "hi"
+    )
+
+
 def test_build_audit_events_sorted_descending():
     from core.session_history.audit import build_audit_events
 

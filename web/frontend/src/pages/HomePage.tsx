@@ -36,17 +36,44 @@ function formatCompactAgo(timestamp: string): string {
 }
 
 /**
+ * The single most identifying string in a tool call's JSON arguments.
+ *
+ * Every engine serialises the arguments differently, so rather than model
+ * four schemas this takes the longest string value -- the command, the path,
+ * the pattern -- which is the part a person recognises the call by.
+ */
+function toolCallSubject(argsPreview: string | undefined): string {
+  if (!argsPreview) return '';
+  try {
+    const parsed: unknown = JSON.parse(argsPreview);
+    if (typeof parsed === 'string') return parsed;
+    if (typeof parsed !== 'object' || parsed === null) return '';
+    return Object.values(parsed as Record<string, unknown>)
+      .filter((v): v is string => typeof v === 'string')
+      .reduce((longest, v) => (v.length > longest.length ? v : longest), '');
+  } catch {
+    // Previews are truncated to 200 chars at parse time, so anything longer
+    // arrives as JSON that stops mid-string. Read the first value out by hand
+    // rather than showing the reader the braces and quotes around it.
+    const firstValue = /"(?:[^"\\]|\\.)*"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(argsPreview);
+    const raw = firstValue ? firstValue[1] : argsPreview;
+    return raw.replace(/\\n/g, ' ').replace(/\\(.)/g, '$1');
+  }
+}
+
+/**
  * What this event was, in the words of the work rather than of the schema.
  *
- * This used to render the event's own type path -- `claude.message.assistant`,
- * `claude.tool.Bash` -- which reads as a log line, not as activity: three
- * assistant replies in a row were three identical rows telling you nothing
- * about what any of them was. The payload already carries the session's title
- * and a preview of the content, so use those and keep the engine as a tag.
+ * A row has to differ from the one above it or the card is a wall of repeats:
+ * a run of tool calls is nearly always the same tool over and over, so the
+ * name alone ("Bash", "Bash", "Bash") identifies nothing. The arguments carry
+ * what each call actually did.
  */
 function describeAuditEvent(event: AuditEvent): string {
   if (event.event_type === 'tool_call') {
-    return event.tool_name || 'tool';
+    const name = event.tool_name || 'tool';
+    const subject = toolCallSubject(event.args_preview).replace(/\s+/g, ' ').trim();
+    return subject ? `${name} · ${subject}` : name;
   }
   const preview = event.content_preview?.trim();
   if (preview) return preview;
@@ -227,11 +254,16 @@ export default function HomePage() {
                       <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-slate-500">
                         {session.target}
                       </span>
-                    <span className="min-w-0 truncate text-xs font-medium text-slate-700 group-hover:text-primary">
-                      {workspaceLabel(session.projectPath || '') || t('home.unknownWorkspace')}
-                    </span>
+                      <span className="min-w-0 truncate text-xs font-medium text-slate-700 group-hover:text-primary">
+                        {session.title?.trim() ||
+                          workspaceLabel(session.projectPath || '') ||
+                          t('home.unknownWorkspace')}
+                      </span>
                     </span>
                     <span className="flex shrink-0 items-center gap-2 text-[10px] text-slate-400">
+                      <span className="hidden max-w-[9rem] truncate sm:inline">
+                        {workspaceLabel(session.projectPath || '')}
+                      </span>
                       <span>{formatCompactAgo(session.lastActivity)}</span>
                       <ArrowRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
                     </span>
