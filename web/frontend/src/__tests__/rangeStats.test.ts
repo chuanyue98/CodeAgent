@@ -8,6 +8,7 @@ import {
   filterDailyByRange,
 } from '../components/analytics/rangeStats';
 import type { DailyUsage, ModelStat, SessionUsage } from '../api/analytics';
+import { localDayOffset } from '../utils/dateRange';
 
 function day(date: string, overrides: Partial<DailyUsage> = {}): DailyUsage {
   return {
@@ -135,14 +136,30 @@ describe('buildSeries', () => {
       day('2024-01-01', { target: 'codex', cost: 2, inputTokens: 0, outputTokens: 10 }),
       day('2024-01-02', { target: 'claude', cost: 4 }),
     ];
-    const series = buildSeries('day', [], daily);
+    const series = buildSeries('day', [], daily, null);
     expect(series.engines).toEqual(['claude', 'codex']);
+    // codex is 0 on Jan 2, not absent: recharts draws an absent key as a break
+    // in the line, which reads as missing data rather than as a quiet day.
     expect(series.cost).toEqual([
       { _key: '2024-01-01', claude: 1, codex: 2 },
-      { _key: '2024-01-02', claude: 4 },
+      { _key: '2024-01-02', claude: 4, codex: 0 },
     ]);
     // tokens = input + output per row, accumulated per engine+key.
     expect(series.tokens[0]).toEqual({ _key: '2024-01-01', claude: 150, codex: 10 });
+  });
+
+  test('a day with no work at all still gets a row', () => {
+    const twoDaysAgo = localDayOffset(2);
+
+    const series = buildSeries('day', [], [day(twoDaysAgo, { cost: 3 })], 3);
+
+    // Three days requested, three plotted -- the two idle ones as zeroes.
+    expect(series.cost.map(r => r._key)).toEqual([
+      twoDaysAgo,
+      localDayOffset(1),
+      localDayOffset(0),
+    ]);
+    expect(series.cost.map(r => r.claude)).toEqual([3, 0, 0]);
   });
 
   test('month granularity pivots the monthly rows instead', () => {
@@ -150,6 +167,7 @@ describe('buildSeries', () => {
       'month',
       [{ month: '2024-01', target: 'claude', inputTokens: 1, outputTokens: 1, cost: 5 } as never],
       [day('2024-01-01')],
+      null,
     );
     expect(series.cost).toEqual([{ _key: '2024-01', claude: 5 }]);
   });

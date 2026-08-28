@@ -83,8 +83,8 @@ const Analytics: React.FC = () => {
   const rangeLabel = t(RANGE_LABEL_KEYS[range]).toLowerCase();
 
   const series = useMemo(
-    () => buildSeries(granularity, monthly, rangeDaily),
-    [granularity, monthly, rangeDaily],
+    () => buildSeries(granularity, monthly, rangeDaily, rangeDays),
+    [granularity, monthly, rangeDaily, rangeDays],
   );
 
   const pieData = useMemo(

@@ -11,13 +11,15 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { fetchAuditEvents, type AuditEvent } from '../api/audit';
-import { fetchSessions, type SessionUsage } from '../api/analytics';
+import { fetchDaily, fetchSessions, type SessionUsage } from '../api/analytics';
 import request from '../utils/request';
 import { useSystemMetrics } from '../context/SystemMetricsContext';
 import { buildResumeLink } from '../utils/sessionLink';
 import { useT } from '../i18n/context';
 
-const EQ_BARS = [0.4, 0.7, 1, 0.55, 0.85, 0.35, 0.65, 0.5, 0.9, 0.3, 0.75, 0.45];
+//: Days of history in the hero's bar strip. Twelve fits the column at the
+//: bar width without the strip becoming a chart that needs axes.
+const ACTIVITY_BAR_DAYS = 12;
 
 const RECENT_ACTIVITY_LIMIT = 6;
 const RECENT_SESSIONS_LIMIT = 5;
@@ -106,6 +108,7 @@ export default function HomePage() {
   const t = useT();
   const recentEvents = useRecentActivity(RECENT_ACTIVITY_LIMIT);
   const recentSessions = useRecentSessions(RECENT_SESSIONS_LIMIT);
+  const activityBars = useActivityBars(ACTIVITY_BAR_DAYS);
   const runs = useRunningTasks();
   const { metrics } = useSystemMetrics();
 
@@ -150,12 +153,18 @@ export default function HomePage() {
           </div>
 
           <div className="relative mt-8 space-y-3">
-            <div aria-hidden className="flex h-10 items-end gap-[3px]">
-              {EQ_BARS.map((h, i) => (
+            <div
+              className="flex h-10 items-end gap-[3px]"
+              title={t('home.activityBars', { days: ACTIVITY_BAR_DAYS })}
+            >
+              {(activityBars ?? Array.from({ length: ACTIVITY_BAR_DAYS }, () => 0)).map((h, i) => (
                 <span
                   key={i}
-                  className="eq-bar w-1.5 rounded-full bg-gradient-to-t from-primary/30 to-primary"
-                  style={{ height: `${h * 100}%`, animationDelay: `${i * 70}ms` }}
+                  // A day with no work still gets a stub: dropping it to zero
+                  // height would silently shorten the strip and misplace every
+                  // day after it.
+                  className={`eq-bar w-1.5 rounded-full ${h > 0 ? 'bg-gradient-to-t from-primary/30 to-primary' : 'bg-slate-200'}`}
+                  style={{ height: `${Math.max(h * 100, 6)}%`, animationDelay: `${i * 70}ms` }}
                 />
               ))}
             </div>
@@ -348,6 +357,44 @@ function MetricRow({ icon, label, value, extra }: {
       </div>
     </div>
   );
+}
+
+/**
+ * Cost per day for the last `days` days, scaled to 0..1 against the busiest.
+ *
+ * The strip above the activity card used to be twelve hardcoded heights.
+ * Sitting directly over a panel of real numbers, a bar chart is read as one,
+ * so it now plots the days it appears to plot. Days with no work stay in the
+ * series as zeroes rather than being dropped, which is what makes the strip
+ * read as a calendar instead of a shape.
+ */
+function useActivityBars(days: number): number[] | null {
+  const [bars, setBars] = useState<number[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchDaily()
+      .then(daily => {
+        if (cancelled) return;
+        const byDay = new Map<string, number>();
+        for (const row of daily) {
+          byDay.set(row.date, (byDay.get(row.date) ?? 0) + row.cost);
+        }
+        const today = new Date();
+        const series = Array.from({ length: days }, (_, i) => {
+          const day = new Date(today);
+          day.setDate(day.getDate() - (days - 1 - i));
+          const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+          return byDay.get(key) ?? 0;
+        });
+        const peak = Math.max(...series);
+        setBars(peak > 0 ? series.map(v => v / peak) : series.map(() => 0));
+      })
+      .catch(() => { if (!cancelled) setBars([]); });
+    return () => { cancelled = true; };
+  }, [days]);
+
+  return bars;
 }
 
 function useRecentActivity(limit: number): AuditEvent[] | null {

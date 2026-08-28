@@ -19,6 +19,10 @@ import { useT } from '../../i18n/context';
 import { ec, formatDate, formatMonth } from './present';
 import type { TimeSeries } from './rangeStats';
 
+// Daily and monthly aggregates are discrete measurements, so the areas are
+// drawn with straight segments. A monotone curve invents the shape between
+// two points -- on this data it drew $300 peaks on days that never had one.
+
 // ── Stat card ────────────────────────────────────────────────────────────────
 export function StatCard({
   label, value, sub, Icon, iconColor, iconBg, stagger = 'stagger-1',
@@ -129,7 +133,7 @@ export function CostTrendCard({ series, granularity, rangeLabel }: TrendCardsPro
           />
           {series.engines.map(eng => (
             <Area
-              key={eng} type="monotone" dataKey={eng} name={eng}
+              key={eng} type="linear" dataKey={eng} name={eng}
               stroke={ec(eng)} strokeWidth={2} fill={`url(#grad-${eng})`}
             />
           ))}
@@ -195,7 +199,7 @@ export function TokensTrendCard({ series, granularity, rangeLabel }: TrendCardsP
               )}
             />
             {series.engines.map(eng => (
-              <Area key={eng} type="monotone" dataKey={eng} name={eng}
+              <Area key={eng} type="linear" dataKey={eng} name={eng}
                 stroke={ec(eng)} strokeWidth={2} fill={`url(#tgrad-${eng})`} />
             ))}
           </AreaChart>

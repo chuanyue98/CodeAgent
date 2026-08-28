@@ -408,8 +408,17 @@ export default function SessionsPage() {
                       <span className="text-sm font-medium text-slate-700 truncate">
                         {session.title || session.projectPath.split(/[\\/]/).pop() || session.projectPath || '—'}
                       </span>
-                      <span className="text-xs text-slate-400 truncate" title={session.projectPath}>
-                        {session.projectPath}
+                      {/* Under a workspace filter the path is the filter value
+                          repeated on every row, so the line goes to the models
+                          that actually ran the session -- which the list shows
+                          nowhere else. */}
+                      <span
+                        className="text-xs text-slate-400 truncate"
+                        title={session.projectPath}
+                      >
+                        {project
+                          ? session.modelsUsed.join(', ')
+                          : session.projectPath}
                       </span>
                     </div>
                     <span className="shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full uppercase bg-slate-100 text-slate-600">

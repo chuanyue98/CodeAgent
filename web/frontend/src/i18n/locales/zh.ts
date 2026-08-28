@@ -481,6 +481,7 @@ export const zh: Record<TranslationKey, string> = {
   'home.headingAccent': '工作',
   'home.headingSuffix': '开始。',
   'home.openTerminal': '打开终端',
+  'home.activityBars': '每日成本,近 {days} 天',
   'home.recentActivity': '最近事件',
   'home.viewAll': '查看全部',
   'home.noActivity': '还没有动态——开始一次会话后就会显示在这里。',
