@@ -170,3 +170,65 @@ describe('SessionDetailPanel resume', () => {
     expect(location).toContain(encodeURIComponent('/workspace/project-a'));
   });
 });
+
+describe('SessionDetailPanel progress', () => {
+  test('summarizes turns, duration and the last actions above the transcript', async () => {
+    const detail = {
+      session_id: 'session-a',
+      engine: 'claude',
+      project_path: '/workspace/project-a',
+      title: 'A session',
+      messages: [
+        { ...message(0), timestamp: '2026-07-20T10:00:00Z' },
+        {
+          ...message(1),
+          timestamp: '2026-07-20T11:23:00Z',
+          tool_calls: [
+            { name: 'Edit', args_preview: '{"file_path": "core/web/routers/history.py"}', result_preview: '' },
+            { name: 'Bash', args_preview: '{"command": "pytest -q"}', result_preview: '' },
+          ],
+        },
+      ],
+    };
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/history/')) {
+        const text = JSON.stringify(detail);
+        return Promise.resolve({ ok: true, status: 200, text: async () => text, json: async () => detail });
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    }) as typeof fetch;
+
+    renderPanel();
+
+    const strip = await screen.findByTestId('session-progress');
+    expect(strip).toHaveTextContent('1 turns');
+    expect(strip).toHaveTextContent('1h23m');
+    expect(strip).toHaveTextContent('1 files');
+    // Newest action first, and a file operand is shown as the path rather
+    // than the raw argument JSON.
+    expect(strip).toHaveTextContent('Bash');
+    expect(strip).toHaveTextContent('core/web/routers/history.py');
+  });
+
+  test('renders nothing when there is no transcript to summarize', async () => {
+    const detail = {
+      session_id: 'session-a',
+      engine: 'claude',
+      project_path: '/workspace/project-a',
+      title: 'A session',
+      messages: [],
+    };
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/history/')) {
+        const text = JSON.stringify(detail);
+        return Promise.resolve({ ok: true, status: 200, text: async () => text, json: async () => detail });
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    }) as typeof fetch;
+
+    renderPanel();
+
+    await screen.findByText('This session has no messages.');
+    expect(screen.queryByTestId('session-progress')).not.toBeInTheDocument();
+  });
+});

@@ -25,6 +25,7 @@ import { ALL_ENGINES, READ_ONLY_ENGINES, engineLabel } from '../utils/engines';
 import ConfirmDialog from './shared/ConfirmDialog';
 import { useT } from '../i18n/context';
 import MarkdownMessage from './MarkdownMessage';
+import SessionProgress from './SessionProgress';
 
 /**
  * Transcript messages rendered at once. A long session is ~1,700 messages
@@ -250,8 +251,10 @@ export default function SessionDetailPanel({
         ref={scrollRef}
         className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden pt-3"
       >
+        <SessionProgress detail={detail} usage={usage} />
+
         {usage && (
-          <section>
+          <section data-testid="session-usage">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
               {t('sessionDetail.usage')}
             </p>
