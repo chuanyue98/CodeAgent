@@ -580,6 +580,7 @@ export const en = {
   'logs.title': 'Logs',
   'logs.live': 'Live',
   'logs.disconnected': 'Disconnected',
+  'logs.finished': 'Finished ({status})',
   'logs.autoScrollOn': 'Auto-scroll ON',
   'logs.autoScrollOff': 'Auto-scroll OFF',
   'logs.noFiles': 'No log files',

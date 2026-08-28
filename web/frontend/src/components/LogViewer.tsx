@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Terminal, AlertCircle, Wifi, WifiOff } from 'lucide-react';
+import { Terminal, AlertCircle, CheckCircle2, Wifi, WifiOff } from 'lucide-react';
 import { fetchLogFiles, fetchLogFile, useLogStream, type LogFile } from '../api/logs';
 import usePolling from '../hooks/usePolling';
 import { useT } from '../i18n/context';
@@ -21,7 +21,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
   const [filesError, setFilesError] = useState<string | null>(null);
   const [showAllLines, setShowAllLines] = useState(false);
 
-  const { lines: streamLines, error, connected } = useLogStream(selectedTaskId);
+  const { lines: streamLines, error, connected, finished } = useLogStream(selectedTaskId);
 
   const loadFiles = useCallback(async () => {
     try {
@@ -77,9 +77,25 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
           <Terminal className="w-4 h-4 text-slate-500" />
           <span className="text-sm font-semibold text-slate-700">{t('logs.title')}</span>
           {selectedTaskId && (
-            <span className={`flex items-center gap-1 text-xs ${connected ? 'text-green-600' : 'text-red-500'}`}>
-              {connected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {connected ? t('logs.live') : t('logs.disconnected')}
+            /* A run that ended closed the stream on purpose. Reporting that
+               as "disconnected" reads as a fault the viewer should retry. */
+            <span
+              className={`flex items-center gap-1 text-xs ${
+                finished ? 'text-slate-500' : connected ? 'text-green-600' : 'text-red-500'
+              }`}
+            >
+              {finished ? (
+                <CheckCircle2 className="w-3 h-3" />
+              ) : connected ? (
+                <Wifi className="w-3 h-3" />
+              ) : (
+                <WifiOff className="w-3 h-3" />
+              )}
+              {finished
+                ? t('logs.finished', { status: finished })
+                : connected
+                  ? t('logs.live')
+                  : t('logs.disconnected')}
             </span>
           )}
         </div>

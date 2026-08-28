@@ -565,6 +565,7 @@ export const zh: Record<TranslationKey, string> = {
   'logs.title': '日志',
   'logs.live': '实时',
   'logs.disconnected': '已断开',
+  'logs.finished': '已结束({status})',
   'logs.autoScrollOn': '自动滚动：开',
   'logs.autoScrollOff': '自动滚动：关',
   'logs.noFiles': '暂无日志文件',

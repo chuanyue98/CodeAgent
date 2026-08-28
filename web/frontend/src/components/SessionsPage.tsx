@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useIsMounted, useLatestRequest } from '../hooks/useAsyncGuards';
 import { useSearchParams } from 'react-router';
 import { ChevronRight, Clock, DollarSign, FileText, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { fetchSessionPage, type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
@@ -64,17 +65,11 @@ export default function SessionsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Guards setState calls in the async fetch below from firing after the
-  // component has unmounted (e.g. a fast page switch while the request is
-  // still in flight).
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    // 重挂时必须置回 true：StrictMode 的首次卸载已经把它设成 false。
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const isMounted = useIsMounted();
+  // Narrowing the query starts a new request while the old one is still out.
+  // Being mounted is not enough to accept a response: the wider result would
+  // land on top of the narrower one the user is now looking at.
+  const claimPage = useLatestRequest();
 
   // Project narrowing and text search both happen server-side, and the page
   // is cut after them: filtering a fixed window here instead would let a busy
@@ -84,24 +79,25 @@ export default function SessionsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
+    const isCurrent = claimPage();
     fetchSessionPage({
       limit: PAGE_SIZE,
       project: project || undefined,
       search: activeSearch || undefined,
     })
       .then(page => {
-        if (!mountedRef.current) return;
+        if (!isMounted() || !isCurrent()) return;
         setSessions(page.sessions);
         setNextCursor(page.nextCursor);
         setMatchCount(page.total);
         setLoading(false);
       })
       .catch(() => {
-        if (!mountedRef.current) return;
+        if (!isMounted() || !isCurrent()) return;
         setLoading(false);
         setError(t('sessions.loadFailed'));
       });
-  }, [project, activeSearch, ready, reloadNonce, t]);
+  }, [project, activeSearch, ready, reloadNonce, isMounted, claimPage, t]);
 
   const loadMore = useCallback(() => {
     if (!nextCursor || loadingMore) return;
@@ -113,18 +109,18 @@ export default function SessionsPage() {
       cursor: nextCursor,
     })
       .then(page => {
-        if (!mountedRef.current) return;
+        if (!isMounted()) return;
         setSessions(previous => [...previous, ...page.sessions]);
         setNextCursor(page.nextCursor);
         setMatchCount(page.total);
         setLoadingMore(false);
       })
       .catch(() => {
-        if (!mountedRef.current) return;
+        if (!isMounted()) return;
         setLoadingMore(false);
         setError(t('sessions.loadFailed'));
       });
-  }, [nextCursor, loadingMore, project, activeSearch, t]);
+  }, [nextCursor, loadingMore, project, activeSearch, isMounted, t]);
 
   const reload = useCallback(() => setReloadNonce(n => n + 1), []);
 

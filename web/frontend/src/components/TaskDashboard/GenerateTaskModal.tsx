@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useIsMounted } from '../../hooks/useAsyncGuards';
 import { Loader2, Sparkles, StopCircle, X } from 'lucide-react';
 import request from '../../utils/request';
 import Modal from '../shared/Modal';
@@ -27,15 +28,8 @@ export default function GenerateTaskModal({
 
   const nameValid = NAME_PATTERN.test(name);
 
-  const isMounted = useRef(true);
+  const isMounted = useIsMounted();
   const cancelled = useRef(false);
-  useEffect(() => {
-    // 重挂时必须置回 true：StrictMode 的首次卸载已经把它设成 false。
-    isMounted.current = true;
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
 
   const handleSubmit = async () => {
     if (!nameValid || !title.trim() || !description.trim()) return;
@@ -47,21 +41,21 @@ export default function GenerateTaskModal({
         method: 'POST',
         body: JSON.stringify({ engine, name, title, description }),
       });
-      if (!isMounted.current) return;
+      if (!isMounted()) return;
       setRunId(status.task_id);
 
       const poll = async () => {
         if (cancelled.current) return;
         try {
           const { status: runStatus } = await request<RunPollResponse>(`/api/tasks/runs/${status.task_id}`);
-          if (!isMounted.current || cancelled.current) return;
+          if (!isMounted() || cancelled.current) return;
 
           if (runStatus.status === 'running') {
             setTimeout(() => void poll(), GENERATE_POLL_MS);
             return;
           }
           const tasks = await request<Task[]>('/api/tasks').catch(() => []);
-          if (!isMounted.current || cancelled.current) return;
+          if (!isMounted() || cancelled.current) return;
 
           if (tasks.some(t => t.name === name)) {
             onCreated(name);
@@ -70,14 +64,14 @@ export default function GenerateTaskModal({
             setPhase('failed');
           }
         } catch (e) {
-          if (!isMounted.current || cancelled.current) return;
+          if (!isMounted() || cancelled.current) return;
           setError(e instanceof Error ? e.message : t('taskModal.generateFailed'));
           setPhase('failed');
         }
       };
       void poll();
     } catch (e) {
-      if (!isMounted.current) return;
+      if (!isMounted()) return;
       setError(e instanceof Error ? e.message : t('taskModal.generateFailed'));
       setPhase('failed');
     }
@@ -92,7 +86,7 @@ export default function GenerateTaskModal({
         console.error('Failed to stop generation run', e);
       }
     }
-    if (!isMounted.current) return;
+    if (!isMounted()) return;
     setError(null);
     setPhase('form');
   };
