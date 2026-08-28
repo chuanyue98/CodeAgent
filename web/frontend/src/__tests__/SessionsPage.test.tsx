@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import SessionsPage from '../components/SessionsPage';
@@ -285,5 +285,62 @@ describe('SessionsPage session identity', () => {
     fireEvent.click(checkboxes[0]);
 
     expect(await screen.findByText('1 selected')).toBeVisible();
+  });
+});
+
+describe('SessionsPage stale responses', () => {
+  test('a slow earlier search does not overwrite a later, narrower one', async () => {
+    // Both searches are in flight at once; the first one answers last. Without
+    // a latest-wins guard its wider result lands on top of the narrower one
+    // the user is actually looking at.
+    const pending: Array<(sessions: SessionUsage[]) => void> = [];
+
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/config')) return jsonResponse({});
+      if (url.includes('/api/projects')) return jsonResponse([]);
+      if (url.includes('/api/groups')) return jsonResponse({});
+      if (url.includes('/api/analytics/sessions')) {
+        return new Promise(resolve => {
+          pending.push(sessions =>
+            resolve({
+              ok: true,
+              status: 200,
+              text: async () => JSON.stringify({ sessions, nextCursor: null, total: sessions.length }),
+              json: async () => ({ sessions, nextCursor: null, total: sessions.length }),
+            } as Response),
+          );
+        });
+      }
+      return jsonResponse({});
+    });
+
+    renderSessionsPage();
+    // The list renders a skeleton until the first response lands, and the
+    // search box lives behind it.
+    await waitFor(() => expect(pending).toHaveLength(1));
+    pending[0]([session({ sessionId: 'seed' })]);
+    await screen.findByText('1 session');
+
+    // Two searches now go out back to back, both still in flight.
+    fireEvent.change(screen.getByPlaceholderText('Project or session...'), {
+      target: { value: 'a' },
+    });
+    await waitFor(() => expect(pending).toHaveLength(2), { timeout: 2000 });
+    fireEvent.change(screen.getByPlaceholderText('Project or session...'), {
+      target: { value: 'ab' },
+    });
+    await waitFor(() => expect(pending).toHaveLength(3), { timeout: 2000 });
+
+    // The narrower request answers first, then the wider one straggles in.
+    pending[2]([session({ sessionId: 'narrow' })]);
+    await screen.findByText('1 session');
+    pending[1]([session({ sessionId: 'wide-1' }), session({ sessionId: 'wide-2' })]);
+
+    // Let the straggler's handler run before asserting it changed nothing.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText('1 session')).toBeVisible();
   });
 });

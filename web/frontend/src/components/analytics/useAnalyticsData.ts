@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useIsMounted } from '../../hooks/useAsyncGuards';
 import { useT } from '../../i18n/context';
 import {
   type DailyUsage,
@@ -46,34 +47,24 @@ export default function useAnalyticsData(): AnalyticsData {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Guards setState calls in the async fetch below from firing after the
-  // component has unmounted (e.g. a fast page switch while the request is
-  // still in flight).
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    // 重挂时必须置回 true：StrictMode 的首次卸载已经把它设成 false。
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const isMounted = useIsMounted();
 
   const loadAll = useCallback(async () => {
     try {
       const [summary, eng, day, mon, sess, mods] = await Promise.all([
         fetchSummary(), fetchEngines(), fetchDaily(), fetchMonthly(), fetchSessions(500), fetchModels(),
       ]);
-      if (!mountedRef.current) return;
+      if (!isMounted()) return;
       setEngines(eng); setDaily(day); setMonthly(mon); setSessions(sess); setModelStats(mods);
       setTotalSessions(summary.session_count);
       setError(null);
     } catch (e) {
-      if (!mountedRef.current) return;
+      if (!isMounted()) return;
       setError(e instanceof Error ? e.message : t('analytics.loadFailed'));
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (isMounted()) setLoading(false);
     }
-  }, [t]);
+  }, [isMounted, t]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadAll(); }, [loadAll]);

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useIsMounted } from '../hooks/useAsyncGuards';
 import { Clock, Plus, Trash2, Play, PauseCircle, PlayCircle, Pencil, X, Search, Sparkles, CheckCircle2 } from 'lucide-react';
 import cronstrue from 'cronstrue';
 import { useProject } from '../context/ProjectContext';
@@ -70,17 +71,7 @@ export default function CronPage() {
   const [templateNotice, setTemplateNotice] = useState<string | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
 
-  // Guards setState calls in async fetches below from firing after the
-  // component has unmounted (e.g. a fast workspace/page switch while a
-  // request is still in flight).
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    // 重挂时必须置回 true：StrictMode 的首次卸载已经把它设成 false。
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const isMounted = useIsMounted();
 
   // Debounced live preview: translates the raw cron syntax into plain
   // English and the next few actual fire times, so the user isn't expected
@@ -101,16 +92,16 @@ export default function CronPage() {
         `/api/schedules/preview?cron_expr=${encodeURIComponent(trimmed)}`,
       )
         .then(result => {
-          if (!mountedRef.current) return;
+          if (!isMounted()) return;
           setCronPreview({ valid: result.valid, nextRuns: result.nextRuns });
         })
         .catch(() => {
-          if (!mountedRef.current) return;
+          if (!isMounted()) return;
           setCronPreview({ valid: false, nextRuns: [] });
         });
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [cronExpr]);
+  }, [cronExpr, isMounted]);
 
   const cronDescription = useMemo(() => {
     const trimmed = cronExpr.trim();
@@ -121,14 +112,14 @@ export default function CronPage() {
   const loadSchedules = useCallback(() => {
     fetchSchedules()
       .then(list => {
-        if (!mountedRef.current) return;
+        if (!isMounted()) return;
         setSchedules(list);
       })
       .catch(() => {
-        if (!mountedRef.current) return;
+        if (!isMounted()) return;
         setError(t('cron.loadSchedulesFailed'));
       });
-  }, [t]);
+  }, [isMounted, t]);
 
   const retrySchedules = useCallback(() => {
     setError(null);
@@ -137,33 +128,33 @@ export default function CronPage() {
 
   const loadTasks = useCallback(async (): Promise<Task[]> => {
     const list = await request<Task[]>('/api/tasks');
-    if (mountedRef.current) {
+    if (isMounted()) {
       setTasks(list);
       if (list.length > 0) setTaskName(prev => prev || list[0].name);
     }
     return list;
-  }, []);
+  }, [isMounted]);
 
   useEffect(() => {
     // loadTasks only touches state after its await, but the rule cannot see
     // past the call, so the same disable the other pages use applies here.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTasks().catch(() => {
-      if (!mountedRef.current) return;
+      if (!isMounted()) return;
       setError(t('cron.loadTasksFailed'));
     });
 
     request<Engine[]>('/api/engines')
       .then((list) => {
-        if (!mountedRef.current) return;
+        if (!isMounted()) return;
         setEngines(list);
         if (list.length > 0) setEngine(prev => prev || list[0].id);
       })
       .catch(() => {
-        if (!mountedRef.current) return;
+        if (!isMounted()) return;
         setError(t('cron.loadEnginesFailed'));
       });
-  }, [loadTasks, t]);
+  }, [isMounted, loadTasks, t]);
 
   usePolling(loadSchedules, POLL_INTERVAL_MS);
 
@@ -213,10 +204,10 @@ export default function CronPage() {
         else throw createError;
       }
     } catch (e) {
-      if (!mountedRef.current) return;
+      if (!isMounted()) return;
       setError(e instanceof Error ? e.message : t('template.createFailed'));
     } finally {
-      if (mountedRef.current) setTemplateBusyId(null);
+      if (isMounted()) setTemplateBusyId(null);
     }
   };
 

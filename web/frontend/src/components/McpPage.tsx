@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useIsMounted } from '../hooks/useAsyncGuards';
 import { Pencil, Plus, Search, Server, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { useProject } from '../context/ProjectContext';
@@ -69,17 +70,7 @@ export default function McpPage() {
 
   const [pendingRemoveServer, setPendingRemoveServer] = useState<string | null>(null);
 
-  // Guards setState calls in async fetches below from firing after the
-  // component has unmounted (e.g. a fast workspace/page switch while a
-  // request is still in flight).
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    // 重挂时必须置回 true：StrictMode 的首次卸载已经把它设成 false。
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const isMounted = useIsMounted();
 
   const groupProjects = useMemo(
     () => projects.filter(p => p.group === currentGroup),
@@ -99,15 +90,15 @@ export default function McpPage() {
   useEffect(() => {
     request<Engine[]>('/api/engines')
       .then((list) => {
-        if (!mountedRef.current) return;
+        if (!isMounted()) return;
         setEngines(list);
         if (list.length > 0) setSelectedEngine(prev => prev || list[0].id);
       })
       .catch(() => {
-        if (!mountedRef.current) return;
+        if (!isMounted()) return;
         setError(t('mcp.loadEnginesFailed'));
       });
-  }, [t]);
+  }, [isMounted, t]);
 
   useEffect(() => {
     if (projectPath || groupProjects.length === 0) return;
@@ -127,14 +118,14 @@ export default function McpPage() {
     }
     fetchMcpServers(selectedEngine, projectPath)
       .then(list => {
-        if (!mountedRef.current) return;
+        if (!isMounted()) return;
         setServers(list);
       })
       .catch(e => {
-        if (!mountedRef.current) return;
+        if (!isMounted()) return;
         setError(e instanceof Error ? e.message : t('mcp.loadServersFailed'));
       });
-  }, [selectedEngine, projectPath, t]);
+  }, [selectedEngine, projectPath, isMounted, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
