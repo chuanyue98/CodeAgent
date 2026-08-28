@@ -215,6 +215,7 @@ export function buildSeries(
   granularity: 'day' | 'month',
   monthly: MonthlyUsage[],
   rangeDaily: DailyUsage[],
+  days: number | null,
 ): TimeSeries {
   const rows = granularity === 'month'
     ? monthly.map(m => ({
@@ -234,10 +235,32 @@ export function buildSeries(
     cost[row.key][row.target] = Number(cost[row.key][row.target] ?? 0) + row.cost;
     tokens[row.key][row.target] = Number(tokens[row.key][row.target] ?? 0) + row.tokens;
   }
+  const engines = [...new Set(rows.map(r => r.target))];
+
+  // A day nobody worked has no row at all, and a day only one engine worked
+  // leaves the others undefined -- both of which recharts draws as a break in
+  // the line. "No work" and "no data" then look identical, and the gaps make
+  // the surrounding points read as one continuous run. Fill the calendar and
+  // every engine on it, so a quiet day is plotted as the zero it was.
+  if (granularity === 'day' && days !== null) {
+    for (const key of calendarKeys(days)) {
+      cost[key] ??= { _key: key };
+      tokens[key] ??= { _key: key };
+    }
+  }
+  for (const row of [...Object.values(cost), ...Object.values(tokens)]) {
+    for (const engine of engines) row[engine] ??= 0;
+  }
+
   const byKey = (a: ChartRow, b: ChartRow) => a._key.localeCompare(b._key);
   return {
     cost: Object.values(cost).sort(byKey),
     tokens: Object.values(tokens).sort(byKey),
-    engines: [...new Set(rows.map(r => r.target))],
+    engines,
   };
+}
+
+/** Every `YYYY-MM-DD` in the trailing `days`-day window, oldest first. */
+function calendarKeys(days: number): string[] {
+  return Array.from({ length: days }, (_, i) => localDayOffset(days - 1 - i));
 }

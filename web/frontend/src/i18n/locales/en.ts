@@ -494,6 +494,7 @@ export const en = {
   'home.headingAccent': 'work',
   'home.headingSuffix': ' you want to do.',
   'home.openTerminal': 'Open terminal',
+  'home.activityBars': 'Cost per day, last {days} days',
   'home.recentActivity': 'recent activity',
   'home.viewAll': 'View all',
   'home.noActivity': 'No activity yet — start a session to see it here.',
