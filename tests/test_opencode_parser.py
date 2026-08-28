@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from core.session_history.parse_cache import clear_parse_cache
+from core.session_history.parsers import opencode_parser
 from core.session_history.parsers.opencode_parser import (
     find_opencode_sessions,
     parse_opencode_session,
@@ -76,6 +78,13 @@ def db(tmp_path):
     con = _make_db(path)
     yield path, con
     con.close()
+
+
+@pytest.fixture(autouse=True)
+def _clean_parse_cache():
+    clear_parse_cache()
+    yield
+    clear_parse_cache()
 
 
 # ── the happy path ───────────────────────────────────────────────────────────
@@ -247,3 +256,47 @@ def test_find_without_a_database_returns_empty(monkeypatch):
     )
 
     assert find_opencode_sessions("E:/work/app") == []
+
+
+# ── the parse cache ──────────────────────────────────────────────────────────
+def test_an_unchanged_session_is_not_reparsed(db, monkeypatch):
+    path, con = db
+    _session(con, "ses_a", directory="E:/work/app")
+    _message(con, "m", "ses_a", role="user")
+    _part(con, "p", "m", "ses_a", data={"type": "text", "text": "x"})
+
+    monkeypatch.setattr(opencode_parser, "_find_opencode_db", lambda home=None: path)
+    parses = []
+    real_parse = opencode_parser.parse_opencode_session
+
+    def counting_parse(session_id, db_path, connection=None):
+        parses.append(session_id)
+        return real_parse(session_id, db_path, connection=connection)
+
+    monkeypatch.setattr(opencode_parser, "parse_opencode_session", counting_parse)
+
+    assert len(find_opencode_sessions("E:/work/app")) == 1
+    assert parses == ["ses_a"]
+    assert len(find_opencode_sessions("E:/work/app")) == 1
+    assert parses == ["ses_a"], "cache hit still re-parsed the session"
+
+
+def test_an_appended_part_is_picked_up_without_a_time_updated_bump(db, monkeypatch):
+    # OpenCode writes parts without always bumping session.time_updated, so
+    # keying the cache on that column alone would serve the first parse
+    # forever. _session never touches time_updated after the insert, which is
+    # exactly the case being pinned here.
+    path, con = db
+    _session(con, "ses_a", directory="E:/work/app")
+    _message(con, "m", "ses_a", role="user")
+    _part(con, "p1", "m", "ses_a", data={"type": "text", "text": "first"})
+
+    monkeypatch.setattr(opencode_parser, "_find_opencode_db", lambda home=None: path)
+
+    before = find_opencode_sessions("E:/work/app")
+    assert before[0].messages[0].content == "first"
+
+    _part(con, "p2", "m", "ses_a", data={"type": "text", "text": "second"})
+
+    after = find_opencode_sessions("E:/work/app")
+    assert "second" in after[0].messages[0].content

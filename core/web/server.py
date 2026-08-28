@@ -179,6 +179,34 @@ def initialize_default_groups() -> None:
         logger.exception("Failed to seed default groups from %s", CONFIG_PATH)
 
 
+async def _prewarm_session_history() -> None:
+    """Pays the first full history scan before anyone asks for it.
+
+    The sessions list joins analytics usage against the parsed engine history.
+    Both are memoized, but the first caller to touch them walks every engine's
+    history -- seconds on a machine with a real backlog. Doing it here makes
+    that caller startup rather than whoever opens the terminal or Activity
+    first.
+    """
+
+    def _scan() -> None:
+        from core.analytics.service import get_analytics_data
+        from core.session_history.session_finder import find_all_sessions
+
+        get_analytics_data()
+        find_all_sessions()
+
+    try:
+        await asyncio.to_thread(_scan)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        # A prewarm is an optimisation: the endpoints redo this work on demand
+        # and report their own failures, so a broken history must not keep the
+        # server from coming up.
+        logger.exception("Failed to prewarm session history")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize_default_groups()
@@ -226,12 +254,14 @@ async def lifespan(app: FastAPI):
     scheduler_task = asyncio.create_task(
         scheduler_tick_loop(schedule_service, _task_runner, get_tasks_root)
     )
+    prewarm_task = asyncio.create_task(_prewarm_session_history())
     yield
-    scheduler_task.cancel()
-    try:
-        await scheduler_task
-    except asyncio.CancelledError:
-        pass
+    for task in (scheduler_task, prewarm_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
     if agent_gateway is not None:
         await agent_gateway.stop()

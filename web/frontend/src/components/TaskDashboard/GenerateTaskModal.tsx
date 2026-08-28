@@ -30,6 +30,8 @@ export default function GenerateTaskModal({
   const isMounted = useRef(true);
   const cancelled = useRef(false);
   useEffect(() => {
+    // 重挂时必须置回 true：StrictMode 的首次卸载已经把它设成 false。
+    isMounted.current = true;
     return () => {
       isMounted.current = false;
     };
