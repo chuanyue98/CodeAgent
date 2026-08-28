@@ -537,6 +537,10 @@ export const en = {
   'sessionDetail.confirmDeleteDescription':
     'This permanently removes the underlying history file. This cannot be undone.',
   'sessionDetail.deleting': 'Deleting…',
+  'sessionProgress.title': 'Progress',
+  'sessionProgress.turns': '{count} turns',
+  'sessionProgress.files': '{count} files',
+  'sessionProgress.lastActions': 'Last actions',
 
   // ── System page ───────────────────────────────────────────────────────────
   'systemPage.loadFailed': 'Failed to load',

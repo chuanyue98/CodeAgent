@@ -523,6 +523,10 @@ export const zh: Record<TranslationKey, string> = {
   'sessionDetail.confirmDeleteTitle': '删除此会话？',
   'sessionDetail.confirmDeleteDescription': '这将永久删除底层的历史记录文件，且无法撤销。',
   'sessionDetail.deleting': '删除中…',
+  'sessionProgress.title': '进度',
+  'sessionProgress.turns': '{count} 轮',
+  'sessionProgress.files': '{count} 个文件',
+  'sessionProgress.lastActions': '最近动作',
 
   // ── System page ───────────────────────────────────────────────────────────
   'systemPage.loadFailed': '加载失败',
