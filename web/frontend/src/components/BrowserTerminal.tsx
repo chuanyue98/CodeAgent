@@ -84,6 +84,10 @@ export default function BrowserTerminal({
     setState('connecting');
     setMessage(null);
     let exitHandled = false;
+    // A socket this effect has torn down still fires `onclose` afterwards, and
+    // by then a later run owns the state -- its "connection closed" would sit
+    // over a terminal that is connected and typing fine.
+    let superseded = false;
     const socket = new WebSocket(ptyWebSocketUrl(engine, cwd, sessionId));
 
     const sendResize = () => {
@@ -93,11 +97,14 @@ export default function BrowserTerminal({
     };
 
     socket.onopen = () => {
+      if (superseded) return;
       setState('open');
+      setMessage(null);
       if (fitIfVisible()) sendResize();
       if (isVisible()) term.focus();
     };
     socket.onmessage = (event) => {
+      if (superseded) return;
       let payload: { type?: string; data?: string; code?: number };
       try {
         payload = JSON.parse(event.data);
@@ -114,11 +121,12 @@ export default function BrowserTerminal({
       }
     };
     socket.onerror = () => {
+      if (superseded) return;
       setState('error');
       setMessage(tRef.current('terminal.connectionError'));
     };
     socket.onclose = (event) => {
-      if (exitHandled) return;
+      if (superseded || exitHandled) return;
       setState('closed');
       setMessage(event.reason || tRef.current('terminal.connectionClosed'));
     };
@@ -144,6 +152,7 @@ export default function BrowserTerminal({
     resizeObserver.observe(container);
 
     return () => {
+      superseded = true;
       clearTimeout(resizeTimer);
       resizeObserver.disconnect();
       dataDisposable.dispose();

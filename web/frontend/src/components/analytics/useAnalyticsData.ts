@@ -51,6 +51,8 @@ export default function useAnalyticsData(): AnalyticsData {
   // still in flight).
   const mountedRef = useRef(true);
   useEffect(() => {
+    // 重挂时必须置回 true：StrictMode 的首次卸载已经把它设成 false。
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };

@@ -199,9 +199,8 @@ export const en = {
   'analytics.totalTokens': 'Total Tokens',
   'analytics.totalCost': 'Total Cost',
   'analytics.perSession': '~{cost} / session',
-  'analytics.cacheTokens': 'Cache Tokens',
-  'analytics.engineCountOne': '{count} engine',
-  'analytics.engineCount': '{count} engines',
+  'analytics.cacheCost': 'Cache Cost',
+  'analytics.cacheShare': '{pct}% cache · {io} I/O',
   'analytics.inputCost': 'Input Cost',
   'analytics.outputCost': 'Output Cost',
   'analytics.total': 'Total',
@@ -488,9 +487,12 @@ export const en = {
 
   // ── Home ──────────────────────────────────────────────────────────────────
   'home.eyebrow': 'CodeAgent Workspace',
-  'home.headingPrefix': 'Start with the',
+  // The three parts are concatenated around a styled <span>, so each language
+  // supplies its own spacing: English needs the surrounding blanks, Chinese
+  // must not have them.
+  'home.headingPrefix': 'Start with the ',
   'home.headingAccent': 'work',
-  'home.headingSuffix': 'you want to do.',
+  'home.headingSuffix': ' you want to do.',
   'home.openTerminal': 'Open terminal',
   'home.recentActivity': 'recent activity',
   'home.viewAll': 'View all',
