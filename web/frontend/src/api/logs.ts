@@ -26,6 +26,7 @@ export function useLogStream(taskId: string | null) {
   const [lines, setLines] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [finished, setFinished] = useState<string | null>(null);
 
   useEffect(() => {
     if (!taskId) return;
@@ -34,6 +35,7 @@ export function useLogStream(taskId: string | null) {
     setLines([]);
     setError(null);
     setConnected(false);
+    setFinished(null);
 
     // EventSource cannot set headers, so the token rides the query string.
     const url = withToken(`/api/logs/${encodeURIComponent(taskId)}/stream`);
@@ -44,6 +46,21 @@ export function useLogStream(taskId: string | null) {
       setConnected(false);
       setError('Connection lost. Retrying...');
     };
+
+    // The server ends the stream once the run stops. EventSource treats a
+    // closed connection as a dropped one and reconnects on its own, so the
+    // close has to be explicit here or a finished run reconnects forever
+    // behind a "Connection lost" banner.
+    eventSource.addEventListener('done', (event: MessageEvent) => {
+      try {
+        setFinished(JSON.parse(event.data).status ?? 'completed');
+      } catch {
+        setFinished('completed');
+      }
+      setConnected(false);
+      setError(null);
+      eventSource.close();
+    });
 
     eventSource.addEventListener('message', (event: MessageEvent) => {
       try {
@@ -71,5 +88,5 @@ export function useLogStream(taskId: string | null) {
     };
   }, [taskId]);
 
-  return { lines, error, connected };
+  return { lines, error, connected, finished };
 }

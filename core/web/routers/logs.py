@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from core.web.resource_paths import ROOT_DIR
+from core.web.routers.tasks import _runner  # 与 tasks.py 共用的单例
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
@@ -68,38 +69,77 @@ async def get_log_file(task_id: str):
     return {"task_id": task_id, "content": content}
 
 
+def _size_of(path: Path) -> int | None:
+    """Current size of *path*, or None once it can no longer be read."""
+    try:
+        return path.stat().st_size
+    except OSError:
+        return None
+
+
+def _read_from(path: Path, offset: int) -> str:
+    with open(path, encoding="utf-8") as fh:
+        fh.seek(offset)
+        return fh.read()
+
+
 @router.get("/{task_id}/stream")
 async def stream_log_file(task_id: str):
+    """Tails one run's log over SSE, ending with a ``done`` event when it stops.
+
+    Only new bytes are sent; the existing contents come from ``GET /{task_id}``,
+    which the viewer fetches alongside this.
+    """
     path = _resolve_log_path(task_id)
     if path is None:
         raise HTTPException(status_code=404, detail="Log file not found")
 
     async def event_generator():
-        last_size = 0
-        try:
-            last_size = path.stat().st_size
-        except OSError:
+        last_size = await asyncio.to_thread(_size_of, path)
+        if last_size is None:
             yield "data: {}\n\n"
             return
 
         while True:
-            try:
-                current_size = path.stat().st_size
-            except OSError:
+            # A finished run is read once more before the loop exits, so the
+            # last lines written between the previous poll and the exit are
+            # not lost to the race.
+            run = _runner.get_run(task_id)
+            finished_as = None if run is None or run.status == "running" else run.status
+
+            current_size = await asyncio.to_thread(_size_of, path)
+            if current_size is None:
                 yield 'data: {"error": "file removed"}\n\n'
-                break
+                return
 
             if current_size != last_size:
                 try:
-                    with open(path, encoding="utf-8") as fh:
-                        fh.seek(last_size)
-                        new_data = fh.read()
-                        if new_data:
-                            yield f"data: {json.dumps({'content': new_data, 'size': current_size})}\n\n"
-                except Exception:
+                    new_data = await asyncio.to_thread(_read_from, path, last_size)
+                except OSError:
                     yield 'data: {"error": "read failed"}\n\n'
-                    break
+                    return
+                if new_data:
+                    yield f"data: {json.dumps({'content': new_data, 'size': current_size})}\n\n"
                 last_size = current_size
+                continue
+
+            if finished_as is not None:
+                # One last read, taken after the run was seen to stop: a
+                # process can still be flushing when its status flips, and
+                # those bytes have no later poll to catch them.
+                final_size = await asyncio.to_thread(_size_of, path)
+                if final_size is not None and final_size != last_size:
+                    try:
+                        tail = await asyncio.to_thread(_read_from, path, last_size)
+                    except OSError:
+                        tail = ""
+                    if tail:
+                        yield f"data: {json.dumps({'content': tail, 'size': final_size})}\n\n"
+
+                # Without this the stream polls a completed run forever, and
+                # the viewer keeps claiming to be following a live log.
+                yield f"event: done\ndata: {json.dumps({'status': finished_as})}\n\n"
+                return
 
             await asyncio.sleep(0.3)
 
