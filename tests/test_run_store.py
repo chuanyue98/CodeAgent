@@ -5,7 +5,9 @@ from core.services.run_store import RunStore, TaskRunRecord
 
 @pytest.fixture
 def store(tmp_path):
-    return RunStore(tmp_path / "runs.db")
+    store = RunStore(tmp_path / "runs.db")
+    yield store
+    store.close()
 
 
 def test_init_db_creates_parent_dirs_and_table(tmp_path):
