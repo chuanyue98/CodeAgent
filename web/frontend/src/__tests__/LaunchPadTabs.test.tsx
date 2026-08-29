@@ -81,10 +81,12 @@ function renderLaunchPad(initialEntry = '/agent/terminal') {
 }
 
 async function openEngine(name: string) {
-  const cards = await screen.findAllByRole('button', { name: /open terminal/i });
-  const card = cards.find(button => button.closest('.glass-card')?.textContent?.includes(name));
-  if (!card) throw new Error(`No launch button for ${name}`);
-  fireEvent.click(card);
+  fireEvent.click(await launchCard(name));
+}
+
+/** Each engine card is itself the launch button. */
+function launchCard(name: string) {
+  return screen.findByRole('button', { name: new RegExp(`open terminal · ${name}`, 'i') });
 }
 
 describe('LaunchPad terminal tabs', () => {
@@ -142,12 +144,9 @@ describe('LaunchPad terminal tabs', () => {
     const field = await screen.findByLabelText(/workspace/i);
     fireEvent.change(field, { target: { value: '/somewhere/brand-new' } });
 
-    const launch = screen
-      .getAllByRole('button', { name: /open terminal/i })
-      .find(button => button.closest('.glass-card')?.textContent?.includes('Claude'));
-    expect(launch).toBeTruthy();
-    expect((launch as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(launch as HTMLButtonElement);
+    const launch = (await launchCard('Claude')) as HTMLButtonElement;
+    expect(launch.disabled).toBe(false);
+    fireEvent.click(launch);
 
     await screen.findByTestId('term-claude:new');
   });
