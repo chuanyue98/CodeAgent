@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { AlertTriangle, Plus, TerminalSquare, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Plus, Terminal, TerminalSquare, X } from 'lucide-react';
 import { fetchPtyStatus } from '../api/pty';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
@@ -16,17 +16,19 @@ interface Engine {
   /** Brand blurb that stays as-is (product names), or a key when it is prose. */
   description?: string;
   descriptionKey?: TranslationKey;
-  color: string;
+  /** Tints the engine's icon tile — the card itself stays neutral so five
+      cards read as one row of choices instead of five competing buttons. */
+  accent: string;
 }
 
 // Engine names and their vendor blurbs are brands, so they are not translated;
 // only OpenCode's descriptive line is prose, and it carries a key instead.
 const ENGINES: Engine[] = [
-  { id: 'claude',    name: 'Claude',    description: 'Anthropic · Claude Code CLI',      color: 'bg-orange-50 border-orange-200 text-orange-700' },
-  { id: 'opencode',  name: 'OpenCode',  descriptionKey: 'launch.opencodeDescription', color: 'bg-violet-50 border-violet-200 text-violet-700' },
-  { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',               color: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
-  { id: 'codebuddy', name: 'CodeBuddy', description: 'Tencent · CodeBuddy Code CLI',     color: 'bg-sky-50 border-sky-200 text-sky-700' },
-  { id: 'shell',     nameKey: 'launch.shellName', descriptionKey: 'launch.shellDescription', color: 'bg-slate-50 border-slate-200 text-slate-700' },
+  { id: 'claude',    name: 'Claude',    description: 'Anthropic · Claude Code CLI',      accent: 'bg-orange-100 text-orange-600' },
+  { id: 'opencode',  name: 'OpenCode',  descriptionKey: 'launch.opencodeDescription',    accent: 'bg-violet-100 text-violet-600' },
+  { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',               accent: 'bg-emerald-100 text-emerald-600' },
+  { id: 'codebuddy', name: 'CodeBuddy', description: 'Tencent · CodeBuddy Code CLI',     accent: 'bg-sky-100 text-sky-600' },
+  { id: 'shell',     nameKey: 'launch.shellName', descriptionKey: 'launch.shellDescription', accent: 'bg-slate-200 text-slate-600' },
 ];
 
 interface TerminalTab {
@@ -140,7 +142,7 @@ export default function LaunchPad() {
   };
 
   const launcher = (
-    <div className="space-y-6">
+    <div className="max-w-5xl space-y-6">
       <div className="space-y-2">
         <p className="text-sm text-slate-600">
           {t('launch.intro')}
@@ -165,7 +167,7 @@ export default function LaunchPad() {
           suggestions rather than the whole world. As a select this page was a
           dead end on a fresh install -- nothing registered meant no options,
           which meant every launch button stayed disabled. */}
-      <div className="max-w-xl space-y-1">
+      <div className="space-y-1">
         <label htmlFor="launchpad-project" className="text-xs font-medium text-slate-500">
           {t('filters.workspace')}
         </label>
@@ -187,31 +189,42 @@ export default function LaunchPad() {
         <p className="text-xs text-slate-500">{t('launch.workspaceHint')}</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {ENGINES.map((engine) => (
-          <div
-            key={engine.id}
-            className="glass-card p-6 flex items-center justify-between gap-4"
-          >
-            <div className="space-y-1">
-              <div className="font-semibold text-slate-800">{engine.nameKey ? t(engine.nameKey) : engine.name}</div>
-              <div className="text-xs text-slate-500">{engine.descriptionKey ? t(engine.descriptionKey) : engine.description}</div>
-            </div>
-
+      {/* The card is the button. A small button parked at the far edge of a
+          wide card left the label stranded from what it acts on, and it was
+          the one target that had to survive every column width. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+        {ENGINES.map((engine) => {
+          const name = engine.nameKey ? t(engine.nameKey) : engine.name;
+          const description = engine.descriptionKey
+            ? t(engine.descriptionKey)
+            : engine.description;
+          const blocked = !available || !workspaceInput.trim();
+          const Icon = engine.id === 'shell' ? Terminal : TerminalSquare;
+          return (
             <button
+              key={engine.id}
+              type="button"
               onClick={() => openTab(engine.id, workspaceInput.trim())}
-              disabled={!available || !workspaceInput.trim()}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all
-                ${!available || !workspaceInput.trim()
-                  ? 'opacity-50 cursor-not-allowed'
-                  : 'hover:scale-105 active:scale-95 cursor-pointer'}
-                ${engine.color}`}
+              disabled={blocked}
+              aria-label={`${t('launch.openTerminal')} · ${name}`}
+              title={`${t('launch.openTerminal')} · ${name}`}
+              className={`glass-card group flex h-full items-center gap-3 p-4 text-left transition-all ${
+                blocked
+                  ? 'cursor-not-allowed opacity-50'
+                  : 'cursor-pointer hover:-translate-y-0.5 hover:shadow-lg'
+              }`}
             >
-              <TerminalSquare size={15} />
-              {t('launch.openTerminal')}
+              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${engine.accent}`}>
+                <Icon size={17} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold text-slate-800">{name}</span>
+                <span className="line-clamp-2 block text-xs text-slate-500">{description}</span>
+              </span>
+              <ArrowRight className="h-4 w-4 shrink-0 text-slate-300 transition-colors group-hover:text-primary" />
             </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -230,10 +243,10 @@ export default function LaunchPad() {
           return (
             <div
               key={tab.id}
-              className={`group flex shrink-0 items-center gap-2 rounded-t-lg border-b-2 px-3 py-1.5 text-xs transition-colors ${
+              className={`group flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-colors ${
                 active
-                  ? 'border-primary bg-primary/5 font-semibold text-primary'
-                  : 'border-transparent text-slate-500 hover:bg-slate-50'
+                  ? 'bg-primary/10 font-semibold text-primary'
+                  : 'text-slate-500 hover:bg-slate-50'
               }`}
             >
               <button
@@ -255,7 +268,7 @@ export default function LaunchPad() {
                 onClick={() => closeTab(tab.id)}
                 aria-label={t('launch.closeTerminal')}
                 title={t('launch.closeTerminal')}
-                className="rounded p-0.5 text-slate-400 opacity-0 transition-opacity hover:bg-slate-200 hover:text-slate-700 focus:opacity-100 group-hover:opacity-100"
+                className="rounded p-0.5 text-slate-300 transition-colors hover:bg-slate-200 hover:text-slate-700"
               >
                 <X size={12} />
               </button>

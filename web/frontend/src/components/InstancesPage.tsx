@@ -41,11 +41,19 @@ const STATUS_DOT: Record<string, string> = {
   failed: 'bg-red-500',
 };
 
+const TWO_DAYS_IN_SECONDS = 48 * 3600;
+
+/** Uptime for something still running, age for something that is not. Past two
+ *  days the hours stop carrying meaning -- a chat from last month read as
+ *  "1081h 59min". */
 function elapsedLabel(startedAt: string): string {
   const seconds = Math.max(0, (Date.now() - new Date(startedAt).getTime()) / 1000);
   if (seconds < 60) return `${Math.floor(seconds)}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}min`;
-  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}min`;
+  if (seconds < TWO_DAYS_IN_SECONDS) {
+    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}min`;
+  }
+  return `${Math.floor(seconds / 86400)}d`;
 }
 
 function StatusDot({ status }: { status: string }) {
@@ -106,7 +114,9 @@ export default function InstancesPage() {
   }, [pendingStop, refresh]);
 
   return (
-    <div className="space-y-5">
+    // Capped: a full-width row put its title on the far left and its age on
+    // the far right, with a third of the screen of nothing in between.
+    <div className="max-w-5xl space-y-5">
       {/* ── 概览条 ── */}
       <div className="glass-card animate-fade-rise flex items-center gap-6 px-5 py-4">
         <div className="flex items-center gap-3">
@@ -115,7 +125,10 @@ export default function InstancesPage() {
           </span>
           <div>
             <p className="text-sm font-semibold text-slate-800">
-              {t('instances.summary', { count: liveCount })}
+              {t('instances.summary', {
+                live: String(liveCount),
+                total: String(instances.length),
+              })}
             </p>
             <p className="text-[11px] text-slate-400">{t('instances.intro')}</p>
           </div>
@@ -194,7 +207,10 @@ export default function InstancesPage() {
                   </div>
 
                   <div className="flex shrink-0 items-center gap-3">
-                    <span className="font-mono text-[11px] text-slate-400 tabular-nums">
+                    <span
+                      className="font-mono text-[11px] text-slate-400 tabular-nums"
+                      title={new Date(instance.started_at).toLocaleString()}
+                    >
                       {elapsedLabel(instance.started_at)}
                     </span>
                     {instance.stoppable && (

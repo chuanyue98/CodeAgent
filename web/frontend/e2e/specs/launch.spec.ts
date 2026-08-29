@@ -1,6 +1,12 @@
+import { type Locator } from '@playwright/test';
 import { test, expect, type Page } from '../lib/test-base';
 import { resetBackend } from '../lib/reset';
-import { waitForH2, cardByText } from '../lib/ui';
+import { waitForH2 } from '../lib/ui';
+
+/** Each engine card is itself the launch button. */
+function engineCard(page: Page, engine: string): Locator {
+  return page.getByRole('button', { name: `Open terminal · ${engine}` });
+}
 
 test.beforeEach(async ({ baseURL }) => {
   await resetBackend(baseURL!);
@@ -9,15 +15,14 @@ test.beforeEach(async ({ baseURL }) => {
 async function gotoLaunch(page: Page): Promise<void> {
   await page.goto('/launch');
   await waitForH2(page, 'Local Terminal');
-  await expect(cardByText(page, 'Claude')).toBeVisible();
+  await expect(engineCard(page, 'Claude')).toBeVisible();
   // Seeded by /api/__e2e_reset: one registered project pointing at $HOME.
   await expect(page.locator('#launchpad-project')).not.toHaveValue('');
 }
 
 test('opening an engine streams its output into an in-browser terminal', async ({ page }) => {
   await gotoLaunch(page);
-  const codexCard = cardByText(page, 'Codex');
-  await codexCard.getByRole('button', { name: 'Open terminal' }).click();
+  await engineCard(page, 'Codex').click();
 
   await expect(page.locator('.xterm')).toBeVisible();
   // The fake `codex` binary (web/frontend/e2e/fixtures/fake-engines) sleeps
@@ -34,12 +39,12 @@ test('opening an engine streams its output into an in-browser terminal', async (
 
 test('closing a terminal returns to the engine picker', async ({ page }) => {
   await gotoLaunch(page);
-  await cardByText(page, 'Claude').getByRole('button', { name: 'Open terminal' }).click();
+  await engineCard(page, 'Claude').click();
   await expect(page.locator('.xterm')).toBeVisible();
 
   await page.getByRole('button', { name: /Close terminal/i }).click();
-  await expect(cardByText(page, 'Claude')).toBeVisible();
-  await expect(cardByText(page, 'Codex')).toBeVisible();
+  await expect(engineCard(page, 'Claude')).toBeVisible();
+  await expect(engineCard(page, 'Codex')).toBeVisible();
 });
 
 test('unavailable browser terminal is explained and launch actions are disabled', async ({ page }) => {
@@ -54,5 +59,5 @@ test('unavailable browser terminal is explained and launch actions are disabled'
   await page.goto('/launch');
   await waitForH2(page, 'Local Terminal');
   await expect(page.getByText('Browser terminal unavailable')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Open terminal' }).first()).toBeDisabled();
+  await expect(engineCard(page, 'Claude')).toBeDisabled();
 });
