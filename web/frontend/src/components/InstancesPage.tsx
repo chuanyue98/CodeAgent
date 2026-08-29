@@ -114,7 +114,9 @@ export default function InstancesPage() {
   }, [pendingStop, refresh]);
 
   return (
-    <div className="space-y-5">
+    // Capped: a full-width row put its title on the far left and its age on
+    // the far right, with a third of the screen of nothing in between.
+    <div className="max-w-5xl space-y-5">
       {/* ── 概览条 ── */}
       <div className="glass-card animate-fade-rise flex items-center gap-6 px-5 py-4">
         <div className="flex items-center gap-3">

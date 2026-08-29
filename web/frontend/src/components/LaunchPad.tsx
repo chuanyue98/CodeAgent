@@ -243,10 +243,10 @@ export default function LaunchPad() {
           return (
             <div
               key={tab.id}
-              className={`group flex shrink-0 items-center gap-2 rounded-t-lg border-b-2 px-3 py-1.5 text-xs transition-colors ${
+              className={`group flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-colors ${
                 active
-                  ? 'border-primary bg-primary/5 font-semibold text-primary'
-                  : 'border-transparent text-slate-500 hover:bg-slate-50'
+                  ? 'bg-primary/10 font-semibold text-primary'
+                  : 'text-slate-500 hover:bg-slate-50'
               }`}
             >
               <button
@@ -268,7 +268,7 @@ export default function LaunchPad() {
                 onClick={() => closeTab(tab.id)}
                 aria-label={t('launch.closeTerminal')}
                 title={t('launch.closeTerminal')}
-                className="rounded p-0.5 text-slate-400 opacity-0 transition-opacity hover:bg-slate-200 hover:text-slate-700 focus:opacity-100 group-hover:opacity-100"
+                className="rounded p-0.5 text-slate-300 transition-colors hover:bg-slate-200 hover:text-slate-700"
               >
                 <X size={12} />
               </button>

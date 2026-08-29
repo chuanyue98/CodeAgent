@@ -577,6 +577,8 @@ export const en = {
   'terminal.sessionEnded': 'Session ended (exit code {code})',
   'terminal.connectionError': 'Terminal connection error',
   'terminal.connectionClosed': 'Connection closed',
+  'terminal.clear': 'Clear the terminal',
+  'terminal.copyAll': 'Copy everything on screen',
   'terminal.startNew': 'Start new',
   'terminal.startNewHint':
     'Starts a fresh terminal session. The previous one has ended — its scrollback is not restored.',

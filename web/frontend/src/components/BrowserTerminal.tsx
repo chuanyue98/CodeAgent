@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { RotateCw } from 'lucide-react';
+import { ClipboardCopy, Eraser, RotateCw } from 'lucide-react';
 import { ptyWebSocketUrl } from '../api/pty';
 import { useT } from '../i18n/context';
 
@@ -27,6 +27,7 @@ export default function BrowserTerminal({
 }: BrowserTerminalProps) {
   const t = useT();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const termRef = useRef<Terminal | null>(null);
   const [state, setState] = useState<ConnectionState>('connecting');
   const [message, setMessage] = useState<string | null>(null);
   // Bumping this tears the effect down and starts a fresh session. The PTY
@@ -65,6 +66,7 @@ export default function BrowserTerminal({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
+    termRef.current = term;
 
     /** True when the fit actually happened; a hidden tab measures 0x0. */
     const fitIfVisible = (): boolean => {
@@ -157,11 +159,29 @@ export default function BrowserTerminal({
       resizeObserver.disconnect();
       dataDisposable.dispose();
       socket.close();
+      termRef.current = null;
       term.dispose();
     };
   }, [engine, cwd, sessionId, attempt]);
 
   const canRestart = state === 'closed' || state === 'error';
+
+  const clear = useCallback(() => {
+    termRef.current?.clear();
+    termRef.current?.focus();
+  }, []);
+
+  const copyAll = useCallback(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.selectAll();
+    const text = term.getSelection();
+    term.clearSelection();
+    // Denied clipboard permission is the user's answer, not an error worth a
+    // banner over the terminal.
+    void navigator.clipboard?.writeText(text).catch(() => {});
+    term.focus();
+  }, []);
 
   return (
     <div className="flex h-full min-h-0 flex-col space-y-2">
@@ -187,6 +207,25 @@ export default function BrowserTerminal({
           )}
         </div>
       )}
+      <div className="flex shrink-0 items-center justify-end gap-1">
+        <button
+          onClick={clear}
+          aria-label={t('terminal.clear')}
+          title={t('terminal.clear')}
+          className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+        >
+          <Eraser className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={copyAll}
+          aria-label={t('terminal.copyAll')}
+          title={t('terminal.copyAll')}
+          className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+        >
+          <ClipboardCopy className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
       {/* Fills the page's remaining height instead of a fixed vh slice -- the
           FitAddon + ResizeObserver below re-fit whenever this box resizes. */}
       <div

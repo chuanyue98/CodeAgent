@@ -563,6 +563,8 @@ export const zh: Record<TranslationKey, string> = {
   'terminal.sessionEnded': '会话已结束（退出码 {code}）',
   'terminal.connectionError': '终端连接出错',
   'terminal.connectionClosed': '连接已断开',
+  'terminal.clear': '清屏',
+  'terminal.copyAll': '复制全部输出',
   'terminal.startNew': '开新会话',
   'terminal.startNewHint': '开启一个全新的终端会话。上一个已经结束，其回滚缓冲不会恢复。',
 
