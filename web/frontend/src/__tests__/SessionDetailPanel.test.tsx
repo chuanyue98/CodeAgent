@@ -90,12 +90,31 @@ describe('SessionDetailPanel transcript window', () => {
     expect(screen.queryByRole('button', { name: /Load earlier/ })).not.toBeInTheDocument();
   });
 
-  test('the jump controls are offered once there is a transcript', async () => {
+  test('the jump controls sit outside the transcript and follow the scroll position', async () => {
     mockTranscript(120);
     renderPanel();
+    await screen.findByText('message-119');
 
-    expect(await screen.findByRole('button', { name: 'Jump to the latest' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Jump to the start' })).toBeInTheDocument();
+    // jsdom has no layout, so stand in for a transcript taller than the panel.
+    const scroller = screen.getByTestId('session-scroll');
+    Object.defineProperty(scroller, 'scrollHeight', { value: 2000, configurable: true });
+    Object.defineProperty(scroller, 'clientHeight', { value: 400, configurable: true });
+    Object.defineProperty(scroller, 'scrollTop', { value: 1600, writable: true, configurable: true });
+
+    fireEvent.scroll(scroller);
+
+    // Parked at the newest message: only the way back up is worth offering,
+    // and it must not live inside the content that just scrolled away.
+    const toTop = await screen.findByRole('button', { name: 'Jump to the start' });
+    expect(scroller.contains(toTop)).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Jump to the latest' })).not.toBeInTheDocument();
+
+    scroller.scrollTop = 0;
+    fireEvent.scroll(scroller);
+
+    const toBottom = await screen.findByRole('button', { name: 'Jump to the latest' });
+    expect(scroller.contains(toBottom)).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Jump to the start' })).not.toBeInTheDocument();
   });
 });
 
