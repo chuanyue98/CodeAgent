@@ -87,8 +87,20 @@ ignore = [
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
 
+[tool.coverage.run]
+# Without an explicit source, `coverage` measures whatever gets imported --
+# which includes tests/ itself. Test files run top to bottom, so they score
+# near 100% and drag the total up: the suite reported 84% while the code it
+# exercises sat at 75%, and fail_under was gating on the wrong number.
+source = ["core", "engines", "ca_launcher.py"]
+
 [tool.coverage.report]
-fail_under = 78
+# Measured over shipped code only (see [tool.coverage.run] above). A ratchet
+# floor, not a target: raise it as coverage climbs. It sits a point under the
+# current ~75% because threaded code (the PTY reader, the scheduler loop) hits
+# a slightly different line set per run -- observed spread is 75.07-75.67, so
+# a floor at 75 would flake.
+fail_under = 74
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
