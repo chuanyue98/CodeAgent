@@ -145,7 +145,7 @@ export default function LaunchPad() {
         <p className="text-sm text-slate-600">
           {t('launch.intro')}
         </p>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-500">
           {t('launch.introDetail')}
         </p>
       </div>
@@ -184,7 +184,7 @@ export default function LaunchPad() {
             <option key={project.path} value={project.path} />
           ))}
         </datalist>
-        <p className="text-[11px] text-slate-400">{t('launch.workspaceHint')}</p>
+        <p className="text-xs text-slate-500">{t('launch.workspaceHint')}</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
