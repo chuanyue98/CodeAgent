@@ -39,7 +39,7 @@ export const en = {
   'tab.agent.terminal': 'Local Terminal',
   'tab.agent.instances': 'Instances',
   'instances.intro': 'Unified view of chat sessions, browser terminals, and background tasks. Auto-refreshes every 5 seconds.',
-  'instances.summary': '{count} instances running',
+  'instances.summary': '{live} running · {total} listed',
   'instances.empty': 'No running instances',
   'instances.emptyHint': 'Launch an engine in "Local Terminal" — running instances will appear here.',
   'instances.kind.chat': 'Chat',

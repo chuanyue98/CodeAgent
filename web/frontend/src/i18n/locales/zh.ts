@@ -35,7 +35,7 @@ export const zh: Record<TranslationKey, string> = {
   'tab.agent.terminal': '本地终端',
   'tab.agent.instances': '实例',
   'instances.intro': '聊天会话、浏览器终端与后台任务的统一视图，每 5 秒自动刷新',
-  'instances.summary': '{count} 个实例运行中',
+  'instances.summary': '{live} 个在跑 · 共 {total} 条',
   'instances.empty': '当前没有正在运行的实例',
   'instances.emptyHint': '在「本地终端」里启动一个引擎 —— 正在运行的实例会出现在这里。',
   'instances.kind.chat': '聊天',
