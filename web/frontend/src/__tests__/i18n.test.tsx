@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, test, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router';
-import LanguageSwitcher from '../components/LanguageSwitcher';
+import ConfigHub from '../components/ConfigHub';
 import { ProjectProvider } from '../context/ProjectContext';
 import { LanguageProvider } from '../i18n/LanguageProvider';
 import { useT } from '../i18n/context';
@@ -101,13 +101,15 @@ describe('LanguageProvider', () => {
   });
 });
 
-describe('LanguageSwitcher', () => {
+describe('the language setting', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();
   });
 
   test('switching repaints the UI and persists the choice to config.json', async () => {
+    // It lives on Settings > Workspace: `language` is a config.json field, and
+    // a one-time preference does not earn permanent space in the app header.
     const calls: Array<{ url: string; body: unknown }> = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input);
@@ -115,7 +117,7 @@ describe('LanguageSwitcher', () => {
         calls.push({ url, body: JSON.parse(String(init.body)) });
         return new Response(JSON.stringify({ status: 'success' }), { status: 200 });
       }
-      const empty = url.includes('/api/config') ? {} : [];
+      const empty = url.includes('/api/projects') ? [] : {};
       return new Response(JSON.stringify(empty), { status: 200 });
     });
 
@@ -123,23 +125,24 @@ describe('LanguageSwitcher', () => {
       <MemoryRouter>
         <ProjectProvider>
           <LanguageProvider initialLanguage="en">
-            <LanguageSwitcher />
+            <ConfigHub />
             <Label />
           </LanguageProvider>
         </ProjectProvider>
       </MemoryRouter>,
     );
 
+    await screen.findByRole('radio', { name: en['language.en'] });
     expect(screen.getByText(en['nav.home'])).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('language-switcher'));
-    fireEvent.click(screen.getByRole('option', { name: /中文/ }));
+    fireEvent.click(screen.getByRole('radio', { name: en['language.zh'] }));
 
     // Repaints immediately rather than waiting on the write to land.
     expect(screen.getByText(zh['nav.home'])).toBeInTheDocument();
 
     // The setting is shared with the CLI (core/i18n.py reads the same field),
-    // so it has to reach config.json, not just browser storage.
+    // so it has to reach config.json, not just browser storage. It is written
+    // straight away, unlike the rest of this page, which stages behind Save.
     await waitFor(() => {
       const write = calls.find(call => call.url.includes('/api/config'));
       expect(write?.body).toMatchObject({ language: 'zh' });

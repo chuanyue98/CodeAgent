@@ -22,14 +22,14 @@ export async function waitForPage(page: Page, label: string): Promise<void> {
   ).toBeVisible();
 }
 
-/** Opens the ProjectSwitcher dropdown (click toggle) and picks a group.
+/** Picks a resource group, which now lives inside the workspace menu — it is
+ *  a property of the workspace, and switching workspace moves it anyway.
  *  Drives every page whose data is re-scoped by `currentGroup`. */
 export async function switchGroup(page: Page, group: string): Promise<void> {
-  // Addressed by test id, not by aria-haspopup="listbox": the header now holds
-  // three listbox triggers (group, workspace, language) and matching on the
-  // role attribute picks up all of them.
-  await page.getByTestId('group-switcher').click();
-  await page.getByRole('option', { name: group, exact: true }).click();
+  const trigger = page.getByRole('button', { name: /current workspace/i });
+  await trigger.click();
+  await page.getByTestId('group-switcher').selectOption(group);
+  await trigger.click();
 }
 
 /** Types into the first search box on the page (galleries, sessions, audit).

@@ -25,7 +25,15 @@ interface Option {
  */
 export default function WorkspaceSwitcher() {
   const t = useT();
-  const { validProjects, customWorkspaces, selectedWorkspace, setSelectedWorkspace } = useProject();
+  const {
+    validProjects,
+    customWorkspaces,
+    selectedWorkspace,
+    setSelectedWorkspace,
+    availableGroups,
+    currentGroup,
+    setCurrentGroup,
+  } = useProject();
   const [open, setOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [draft, setDraft] = useState('');
@@ -130,7 +138,6 @@ export default function WorkspaceSwitcher() {
     pick(path);
   };
 
-  const current = options.find(option => option.path === selectedWorkspace);
   // A typed path that has not been recorded yet still names the selection —
   // falling back to "none selected" would claim the app is pointed nowhere.
   const currentLabel = selectedWorkspace
@@ -231,9 +238,36 @@ export default function WorkspaceSwitcher() {
             </div>
           </form>
 
-          <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-2 text-[11px] text-slate-500">
-            {t('workspaceSwitcher.groupNote', { group: current?.group ?? '—' })}{' '}
-            <Link to="/settings/workspace" className="text-primary hover:underline">{t('workspaceSwitcher.manage')}</Link>
+          {/* The resource group used to be its own header chip, equal in weight
+              to the workspace next to it. It is a property *of* the workspace —
+              setSelectedWorkspace already moves it — so it belongs inside this
+              menu, where the rule that ties them is visible. Changing it by
+              hand stays possible here and in the command palette. */}
+          <div className="space-y-1.5 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
+            <label
+              htmlFor="workspace-group"
+              className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400"
+            >
+              {t('groupSwitcher.heading')}
+            </label>
+            <select
+              id="workspace-group"
+              data-testid="group-switcher"
+              value={currentGroup}
+              onChange={event => setCurrentGroup(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Escape') setOpen(false);
+              }}
+              className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              {availableGroups.map(group => (
+                <option key={group} value={group}>{group}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate-500">
+              {t('workspaceSwitcher.groupNote')}{' '}
+              <Link to="/settings/workspace" className="text-primary hover:underline">{t('workspaceSwitcher.manage')}</Link>
+            </p>
           </div>
         </div>
       )}

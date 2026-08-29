@@ -251,6 +251,18 @@ describe('LaunchPad terminal tabs', () => {
     expect(await screen.findByLabelText(/show the session list/i)).toBeTruthy();
   });
 
+  test('the collapsed rail can still reach a session', async () => {
+    // Collapsing used to leave two icons and no trace of the list, which made
+    // the rail an edge you could aim at and nothing else.
+    renderLaunchPad();
+    await sidebarSession('修复登录');
+    fireEvent.click(screen.getByLabelText(/collapse the session list/i));
+
+    const rail = within(screen.getByRole('complementary'));
+    fireEvent.click(rail.getByLabelText('修复登录'));
+    await screen.findByTestId('term-opencode:ses_abc');
+  });
+
   test('resuming a session that already has a tab focuses it instead of forking a second PTY', async () => {
     renderLaunchPad();
     fireEvent.click(await sidebarSession('修复登录'));

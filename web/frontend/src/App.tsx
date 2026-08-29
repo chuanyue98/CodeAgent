@@ -2,12 +2,10 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router';
 import { Menu, X, AlertCircle } from 'lucide-react';
 import CommandPalette from './components/CommandPalette';
-import ProjectSwitcher from './components/ProjectSwitcher';
 import SectionLayout from './components/SectionLayout';
 import SystemPanel from './components/SystemPanel';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import ErrorBoundary from './components/shared/ErrorBoundary';
-import LanguageSwitcher from './components/LanguageSwitcher';
 import { useProject } from './context/ProjectContext';
 import { useT } from './i18n/context';
 import {
@@ -152,10 +150,8 @@ function App() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <CommandPalette />
-              <LanguageSwitcher />
               <SystemPanel />
               <WorkspaceSwitcher />
-              <ProjectSwitcher />
             </div>
           </header>
           {ctxError && (

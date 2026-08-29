@@ -6,10 +6,14 @@ test.beforeEach(async ({ baseURL }) => {
   await resetBackend(baseURL!);
 });
 
-/** Opens the header language menu and picks one of its two options. */
+/**
+ * Picks a language on Settings > Workspace, where the setting lives — it is a
+ * config.json field, and a one-time preference does not earn permanent space
+ * in the app header. Navigates there and leaves the browser on that page.
+ */
 async function chooseLanguage(page: import('@playwright/test').Page, name: string): Promise<void> {
-  await page.getByTestId('language-switcher').click();
-  await page.getByRole('option', { name }).click();
+  await page.goto('/settings/workspace');
+  await page.getByTestId('language-switcher').getByRole('radio', { name }).click();
 }
 
 test('the UI starts in the browser language when config expresses no preference', async ({ page }) => {
@@ -20,7 +24,7 @@ test('the UI starts in the browser language when config expresses no preference'
   await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toBeVisible();
 });
 
-test('switching language repaints the whole shell, not just the switcher', async ({ page }) => {
+test('switching language repaints the whole shell, not just the control', async ({ page }) => {
   await page.goto('/home');
   await waitForPage(page, 'Home');
 
@@ -28,7 +32,7 @@ test('switching language repaints the whole shell, not just the switcher', async
 
   // Heading, sidebar nav and section descriptions all come from the same
   // dictionary — if any of them were still hardcoded this fails.
-  await waitForPage(page, '首页');
+  await waitForPage(page, '工作区');
   const nav = page.getByRole('navigation', { name: '主导航' });
   await expect(nav.getByRole('link', { name: '自动化', exact: true })).toBeVisible();
   await expect(nav.getByRole('link', { name: '设置', exact: true })).toBeVisible();
@@ -38,7 +42,7 @@ test('the choice is written to config.json, so the CLI and a reload agree', asyn
   await page.goto('/home');
   await waitForPage(page, 'Home');
   await chooseLanguage(page, '中文');
-  await waitForPage(page, '首页');
+  await waitForPage(page, '工作区');
 
   // config.json is the shared setting core/i18n.py reads; browser storage
   // alone would leave the CLI in another language.
@@ -51,14 +55,14 @@ test('the choice is written to config.json, so the CLI and a reload agree', asyn
   }).toBe('zh');
 
   await page.reload();
-  await waitForPage(page, '首页');
+  await waitForPage(page, '工作区');
 });
 
 test('a language switch survives navigation across sections', async ({ page }) => {
   await page.goto('/home');
   await waitForPage(page, 'Home');
   await chooseLanguage(page, '中文');
-  await waitForPage(page, '首页');
+  await waitForPage(page, '工作区');
 
   await page.getByRole('navigation', { name: '主导航' })
     .getByRole('link', { name: '动态', exact: true })
@@ -66,8 +70,9 @@ test('a language switch survives navigation across sections', async ({ page }) =
   await waitForPage(page, '会话');
   await expect(page.getByRole('navigation', { name: '动态分区' })).toBeVisible();
 
-  // And back again, to prove the switch is not one-way.
+  // And back again, to prove the switch is not one-way. Picking a language
+  // lands you on Settings, so that is the section that has to have repainted.
   await chooseLanguage(page, 'English');
-  await waitForPage(page, 'Sessions');
-  await expect(page.getByRole('navigation', { name: 'Activity sections' })).toBeVisible();
+  await waitForPage(page, 'Workspace');
+  await expect(page.getByRole('navigation', { name: 'Settings sections' })).toBeVisible();
 });

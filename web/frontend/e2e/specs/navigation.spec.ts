@@ -6,12 +6,14 @@ test.beforeEach(async ({ baseURL }) => {
   await resetBackend(baseURL!);
 });
 
-test('ProjectSwitcher hover reveals the menu and changes the active group', async ({
-  page,
-}) => {
+test('the workspace menu changes the active resource group', async ({ page }) => {
+  // The group used to be its own header chip; it is a field inside the
+  // workspace menu now, since that is what decides it.
   await page.goto('/skills');
   await switchGroup(page, 'common');
-  await expect(page.locator('header button', { hasText: 'common' }).first()).toContainText('common');
+
+  await page.getByRole('button', { name: /current workspace/i }).click();
+  await expect(page.getByTestId('group-switcher')).toHaveValue('common');
 });
 
 test('sidebar nav links navigate and mark the active route', async ({ page }) => {

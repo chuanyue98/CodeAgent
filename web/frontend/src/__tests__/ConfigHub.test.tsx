@@ -2,13 +2,18 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import ConfigHub from '../components/ConfigHub';
 import { ProjectProvider } from '../context/ProjectContext';
+import { LanguageProvider } from '../i18n/LanguageProvider';
 import { expect, test, describe } from 'vitest';
 
+// The page owns the language setting now, and useLanguage — unlike useT —
+// has no provider-less fallback.
 function renderConfigHub() {
   return render(
     <MemoryRouter>
       <ProjectProvider>
-        <ConfigHub />
+        <LanguageProvider initialLanguage="en">
+          <ConfigHub />
+        </LanguageProvider>
       </ProjectProvider>
     </MemoryRouter>
   );

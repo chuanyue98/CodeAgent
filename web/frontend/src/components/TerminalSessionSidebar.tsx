@@ -4,10 +4,13 @@ import { fetchSessionPage, type SessionUsage } from '../api/analytics';
 import { relativeTime, workspaceLabel } from '../utils/workspaceFormat';
 import { useLanguageCode } from '../i18n/context';
 import { useT } from '../i18n/context';
+import { engineDot, findEngine } from './terminalEngines';
 
 const PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 250;
 const COLLAPSED_KEY = 'ca.terminalSidebar.collapsed';
+/** Dots the collapsed rail shows before it would just be a stripe. */
+const RAIL_SESSIONS = 12;
 
 function readCollapsed(): boolean {
   try {
@@ -24,6 +27,8 @@ interface TerminalSessionSidebarProps {
   currentWorkspace: string;
   /** Session currently shown in the active terminal tab, if any. */
   activeSessionId?: string;
+  /** The launcher is already on screen, so "new" has nowhere left to go. */
+  launcherActive: boolean;
   onOpenSession: (engine: string, cwd: string, sessionId: string) => void;
   onNewSession: () => void;
 }
@@ -53,6 +58,7 @@ interface WorkspaceGroup {
 export default function TerminalSessionSidebar({
   currentWorkspace,
   activeSessionId,
+  launcherActive,
   onOpenSession,
   onNewSession,
 }: TerminalSessionSidebarProps) {
@@ -162,6 +168,19 @@ export default function TerminalSessionSidebar({
     // A search is a request to see what matched, wherever it lives.
     Boolean(query) || (path === defaultOpen) !== toggled.has(path);
 
+  const engineName = (id: string) => {
+    const engine = findEngine(id);
+    if (!engine) return id;
+    return engine.nameKey ? t(engine.nameKey) : engine.name;
+  };
+
+  // "New" and the launcher are the same thing seen from two places; when the
+  // launcher is already what you are looking at, the button is a no-op and
+  // should read as the state you are in, the way the tab strip's + does.
+  const newButtonTone = launcherActive
+    ? 'bg-primary/10 text-primary'
+    : 'text-primary hover:bg-primary/10';
+
   const [collapsed, setCollapsed] = useState(readCollapsed);
 
   const toggleCollapsed = useCallback(() => {
@@ -180,7 +199,7 @@ export default function TerminalSessionSidebar({
   // beats a control that vanishes with the thing it reopens.
   if (collapsed) {
     return (
-      <aside className="glass-card flex w-11 shrink-0 flex-col items-center gap-1 self-start p-1.5">
+      <aside className="glass-card flex w-11 shrink-0 flex-col items-center gap-1 p-1.5">
         <button
           onClick={toggleCollapsed}
           aria-label={t('terminalSidebar.expand')}
@@ -193,10 +212,35 @@ export default function TerminalSessionSidebar({
           onClick={onNewSession}
           aria-label={t('terminalSidebar.new')}
           title={t('terminalSidebar.new')}
-          className="rounded-lg p-1.5 text-primary transition-colors hover:bg-primary/10"
+          className={`rounded-lg p-1.5 transition-colors ${newButtonTone}`}
         >
           <Plus size={15} />
         </button>
+        {/* Collapsing used to leave two icons and no trace of the sessions the
+            rail is a rail *for*. One dot per session in engine colour keeps it
+            aimable without reopening. */}
+        <ul className="custom-scrollbar mt-1 flex min-h-0 w-full flex-col items-center gap-0.5 overflow-y-auto border-t border-slate-100 pt-1">
+          {(sessions ?? []).slice(0, RAIL_SESSIONS).map(session => {
+            const active = session.sessionId === activeSessionId;
+            const label = session.title || t('terminalSidebar.untitled');
+            return (
+              <li key={`${session.target}:${session.sessionId}`}>
+                <button
+                  onClick={() =>
+                    onOpenSession(session.target, session.projectPath, session.sessionId)
+                  }
+                  aria-label={label}
+                  title={`${label} · ${engineName(session.target)}`}
+                  className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+                    active ? 'bg-primary/10' : 'hover:bg-slate-50'
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${engineDot(session.target)}`} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       </aside>
     );
   }
@@ -207,7 +251,7 @@ export default function TerminalSessionSidebar({
         <span className="flex-1 text-xs font-semibold text-slate-600">{t('terminalSidebar.title')}</span>
         <button
           onClick={onNewSession}
-          className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+          className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition-colors ${newButtonTone}`}
         >
           <Plus size={13} /> {t('terminalSidebar.new')}
         </button>
@@ -244,19 +288,31 @@ export default function TerminalSessionSidebar({
 
         {groups.map(group => {
           const open = isOpen(group.path);
+          const current = group.path === currentWorkspace;
           return (
             <div key={group.path}>
               <button
                 onClick={() => toggle(group.path)}
-                title={group.path}
-                className="flex w-full items-center gap-1 rounded-lg px-2 py-1 text-left text-[11px] font-semibold text-slate-500 hover:bg-slate-50"
+                title={current ? t('terminalSidebar.currentWorkspace', { path: group.path }) : group.path}
+                className={`flex w-full items-center gap-1 rounded-lg px-2 py-1 text-left text-[11px] font-semibold hover:bg-slate-50 ${
+                  // This group leads the list because it is the workspace the
+                  // launcher points at -- a rule the old all-grey headers gave
+                  // no sign of, so the order read as arbitrary.
+                  current ? 'text-primary' : 'text-slate-500'
+                }`}
               >
                 <ChevronRight
                   size={12}
                   className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`}
                 />
                 <span className="min-w-0 flex-1 truncate">{workspaceLabel(group.path)}</span>
-                <span className="shrink-0 text-slate-400">{group.sessions.length}</span>
+                {/* Closed, the row has to speak for what it hides; open, the
+                    sessions carry their own times. */}
+                <span className="shrink-0 font-normal text-slate-400">
+                  {open
+                    ? group.sessions.length
+                    : `${group.sessions.length} · ${relativeTime(group.sessions[0]?.lastActivity, language)}`}
+                </span>
               </button>
               {open && (
                 <ul>
@@ -276,9 +332,14 @@ export default function TerminalSessionSidebar({
                           <span className="block truncate text-xs text-slate-700">
                             {session.title || t('terminalSidebar.untitled')}
                           </span>
+                          {/* The engine used to be a grey monospace caps chip
+                              that outweighed the title next to it. A coloured
+                              dot names it just as well, in the same palette
+                              the launcher's cards use. */}
                           <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-slate-400">
-                            <span className="rounded bg-slate-100 px-1 font-mono uppercase">
-                              {session.target}
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${engineDot(session.target)}`} />
+                            <span className="shrink-0 font-medium text-slate-500">
+                              {engineName(session.target)}
                             </span>
                             <span className="truncate">{relativeTime(session.lastActivity, language)}</span>
                           </span>

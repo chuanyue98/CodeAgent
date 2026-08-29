@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Save, Loader2, Plus, Trash2, Folder, Layers, Globe, Zap, Check, X, AlertTriangle, CheckCircle2, ArrowRight, Eraser } from 'lucide-react';
+import { Save, Loader2, Plus, Trash2, Folder, Languages, Layers, Globe, Zap, Check, X, AlertTriangle, CheckCircle2, ArrowRight, Eraser } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useProject, type Config, type GroupDefinition, type Project } from '../context/ProjectContext';
-import { useT } from '../i18n/context';
+import { useLanguage, useT } from '../i18n/context';
+import { SUPPORTED_LANGUAGES, type Language } from '../i18n/language';
 import request from '../utils/request';
 import LoadingState from './shared/LoadingState';
 
@@ -24,16 +25,20 @@ const createEditableRowId = (kind: 'project' | 'proxy') => `${kind}-${nextEditab
 
 const deepClone = <T,>(value: T): T => structuredClone(value);
 
+const LANGUAGE_LABEL_KEYS = { en: 'language.en', zh: 'language.zh' } as const;
+
 const ConfigHub: React.FC = () => {
   const {
     config,
     projects,
     groups,
     refreshConfig,
+    updateConfig,
     availableGroups,
     setCurrentGroup
   } = useProject();
   const t = useT();
+  const { language, setLanguage } = useLanguage();
   const navigate = useNavigate();
 
   const [localConfig, setLocalConfig] = useState<Config | null>(null);
@@ -113,6 +118,22 @@ const ConfigHub: React.FC = () => {
       setLoading(false);
     }
   }, [config, projects, groups, isDirty]);
+
+  /**
+   * Persisted the moment it is picked, unlike the rest of this page.
+   *
+   * `language` is the same config.json field core/i18n.py reads, so it also
+   * decides what `ca` prints in the terminal; staging it behind Save would
+   * leave the UI repainted and the CLI not. The draft is patched in step so
+   * this page's own Save -- which posts the snapshot it loaded -- cannot
+   * quietly put the old language back.
+   */
+  const chooseLanguage = (next: Language) => {
+    if (next === language) return;
+    setLanguage(next);
+    setLocalConfig(previous => (previous ? { ...previous, language: next } : previous));
+    void updateConfig({ ...(config ?? {}), language: next });
+  };
 
   const handleSave = async () => {
     setSaved(false);
@@ -318,6 +339,40 @@ const ConfigHub: React.FC = () => {
         </div>
         <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 text-sm text-slate-600">
           {t('config.localOnlyNotice')}
+        </div>
+
+        {/* The language lived in the app header, permanently, next to four
+            controls of four different kinds. It is a one-time preference and
+            it is a config.json field, which makes this page — the config.json
+            editor — where it belongs. */}
+        <div className="space-y-2 pt-4">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+            <Languages size={12} className="text-primary" /> {t('language.label')}
+          </span>
+          <div
+            role="radiogroup"
+            data-testid="language-switcher"
+            aria-label={t('language.label')}
+            className="flex flex-wrap gap-2"
+          >
+            {SUPPORTED_LANGUAGES.map(code => (
+              <button
+                key={code}
+                type="button"
+                role="radio"
+                aria-checked={code === language}
+                onClick={() => chooseLanguage(code)}
+                className={`rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${
+                  code === language
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-slate-100 bg-slate-50/50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {t(LANGUAGE_LABEL_KEYS[code])}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-slate-500">{t('config.languageHint')}</p>
         </div>
 
         <div className="space-y-2 pt-4">

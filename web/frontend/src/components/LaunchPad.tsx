@@ -309,6 +309,7 @@ export default function LaunchPad() {
       <TerminalSessionSidebar
         currentWorkspace={effectiveProject}
         activeSessionId={activeTab?.sessionId}
+        launcherActive={activeTabId === null}
         onOpenSession={openTab}
         onNewSession={() => setActiveTabId(null)}
       />
