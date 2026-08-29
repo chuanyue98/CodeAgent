@@ -16,7 +16,27 @@ from core.services.runner_service import (
 from core.task_lib import get_tasks_dir
 
 
-def test_task_runner_passes_task_mode_group_and_tasks_root(tmp_path):
+@pytest.fixture
+def new_runner():
+    """Builds TaskRunners and closes the run DB each one opened.
+
+    Every TaskRunner opens a sqlite connection; without closing them the suite
+    fills with ResourceWarnings, and the retention tests -- which open a second
+    runner over the same directory to sweep it -- leak two apiece.
+    """
+    created: list[TaskRunner] = []
+
+    def make(root):
+        runner = TaskRunner(root)
+        created.append(runner)
+        return runner
+
+    yield make
+    for runner in created:
+        runner.close()
+
+
+def test_task_runner_passes_task_mode_group_and_tasks_root(tmp_path, new_runner):
     launcher = tmp_path / "ca_launcher.py"
     launcher.write_text(
         "import json, os, sys\n"
@@ -30,7 +50,7 @@ def test_task_runner_passes_task_mode_group_and_tasks_root(tmp_path):
     tasks_root = tmp_path / "resources" / "tasks"
     tasks_root.mkdir(parents=True)
 
-    runner = TaskRunner(tmp_path)
+    runner = new_runner(tmp_path)
     run = runner.run_task("review", "codex", "work", tasks_root=tasks_root)
 
     deadline = time.time() + 5
@@ -48,8 +68,8 @@ def test_task_runner_passes_task_mode_group_and_tasks_root(tmp_path):
     assert payload["tasks_root"] == str(tasks_root.resolve())
 
 
-def test_task_runner_rejects_unknown_engine(tmp_path):
-    runner = TaskRunner(tmp_path)
+def test_task_runner_rejects_unknown_engine(tmp_path, new_runner):
+    runner = new_runner(tmp_path)
     with pytest.raises(ValueError, match="Invalid engine"):
         runner.run_task("review", "shell", "common")
 
@@ -62,8 +82,8 @@ def test_task_library_uses_explicit_tasks_root(tmp_path, monkeypatch):
     assert get_tasks_dir() == tasks_root.resolve()
 
 
-def test_failed_task_start_is_still_queryable(tmp_path):
-    runner = TaskRunner(tmp_path)
+def test_failed_task_start_is_still_queryable(tmp_path, new_runner):
+    runner = new_runner(tmp_path)
     with patch(
         "core.services.runner_service.subprocess.Popen",
         side_effect=OSError("cannot start"),
@@ -74,14 +94,12 @@ def test_failed_task_start_is_still_queryable(tmp_path):
     assert runner.get_status(run.task_id) is run
 
 
-def test_task_runner_kill_all(tmp_path):
+def test_task_runner_kill_all(tmp_path, new_runner):
     import subprocess
     import sys
     import time
 
-    from core.services.runner_service import TaskRunner
-
-    runner = TaskRunner(tmp_path)
+    runner = new_runner(tmp_path)
     # Use a cross-platform sleep via Python instead of the POSIX-only `sleep` binary.
     dummy_proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(10)"])
     runner.active_runs["dummy"] = MagicMock(pid=dummy_proc.pid, status="running")
@@ -92,14 +110,12 @@ def test_task_runner_kill_all(tmp_path):
     assert dummy_proc.poll() is not None  # Process terminated
 
 
-def test_task_runner_kill_all_missing_from_active_runs(tmp_path):
+def test_task_runner_kill_all_missing_from_active_runs(tmp_path, new_runner):
     import subprocess
     import sys
     import time
 
-    from core.services.runner_service import TaskRunner
-
-    runner = TaskRunner(tmp_path)
+    runner = new_runner(tmp_path)
     dummy_proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(10)"])
     # Do NOT put it in active_runs
     runner._processes["dummy"] = dummy_proc
@@ -110,9 +126,9 @@ def test_task_runner_kill_all_missing_from_active_runs(tmp_path):
     assert dummy_proc.poll() is not None
 
 
-def test_overlap_guard_refreshes_completed_process_status(tmp_path):
+def test_overlap_guard_refreshes_completed_process_status(tmp_path, new_runner):
     (tmp_path / "ca_launcher.py").write_text("pass\n", encoding="utf-8")
-    runner = TaskRunner(tmp_path)
+    runner = new_runner(tmp_path)
     run = runner.run_task(
         "review",
         "codex",
@@ -126,9 +142,9 @@ def test_overlap_guard_refreshes_completed_process_status(tmp_path):
     assert runner.get_status(run.task_id).status == "completed"
 
 
-def test_get_status_records_end_time_and_exit_code_on_completion(tmp_path):
+def test_get_status_records_end_time_and_exit_code_on_completion(tmp_path, new_runner):
     (tmp_path / "ca_launcher.py").write_text("pass\n", encoding="utf-8")
-    runner = TaskRunner(tmp_path)
+    runner = new_runner(tmp_path)
     run = runner.run_task("review", "codex", "common")
 
     deadline = time.time() + 5
@@ -146,13 +162,13 @@ def test_get_status_records_end_time_and_exit_code_on_completion(tmp_path):
     assert status.end_time >= status.start_time
 
 
-def test_overlap_guard_is_atomic_and_scoped_to_workspace(tmp_path):
+def test_overlap_guard_is_atomic_and_scoped_to_workspace(tmp_path, new_runner):
     (tmp_path / "ca_launcher.py").write_text(
         "import time\ntime.sleep(10)\n", encoding="utf-8"
     )
     other_workspace = tmp_path / "other"
     other_workspace.mkdir()
-    runner = TaskRunner(tmp_path)
+    runner = new_runner(tmp_path)
     runner.run_task(
         "review",
         "codex",
@@ -196,8 +212,8 @@ def _assert_runner_lock_is_available_from_another_thread(runner):
     assert acquired == [True]
 
 
-def test_stop_task_waits_without_holding_runner_lock(tmp_path):
-    runner = TaskRunner(tmp_path)
+def test_stop_task_waits_without_holding_runner_lock(tmp_path, new_runner):
+    runner = new_runner(tmp_path)
     process = MagicMock()
     process.wait.side_effect = lambda timeout: (
         _assert_runner_lock_is_available_from_another_thread(runner)
@@ -233,8 +249,8 @@ def test_stop_task_waits_without_holding_runner_lock(tmp_path):
     assert run.task_id not in runner._processes
 
 
-def test_kill_all_waits_without_holding_runner_lock(tmp_path):
-    runner = TaskRunner(tmp_path)
+def test_kill_all_waits_without_holding_runner_lock(tmp_path, new_runner):
+    runner = new_runner(tmp_path)
     process = MagicMock()
     process.wait.side_effect = lambda timeout=0: (
         _assert_runner_lock_is_available_from_another_thread(runner)
@@ -280,26 +296,6 @@ def _seed_run(runner: TaskRunner, task_id: str, *, age_days: float, status="comp
 
 
 @pytest.fixture
-def new_runner():
-    """Builds TaskRunners and closes the run DB each one opened.
-
-    Retention runs in the constructor, so these tests open a runner twice
-    against the same directory; without this the sqlite connections pile up
-    and the suite fills with ResourceWarnings.
-    """
-    created: list[TaskRunner] = []
-
-    def make(root):
-        runner = TaskRunner(root)
-        created.append(runner)
-        return runner
-
-    yield make
-    for runner in created:
-        runner._run_store.close()
-
-
-@pytest.fixture
 def age_only(monkeypatch):
     """Drops the keep-the-newest-N floor so age alone decides what is pruned.
 
@@ -315,6 +311,7 @@ def test_startup_prunes_runs_past_the_retention_window(tmp_path, new_runner, age
     fresh_log = _seed_run(runner, "yesterday", age_days=1)
 
     reopened = new_runner(tmp_path)
+    reopened.prune_old_runs()
 
     assert reopened._run_store.get("ancient") is None
     assert reopened._run_store.get("yesterday") is not None
@@ -327,6 +324,7 @@ def test_startup_leaves_a_still_running_row_alone(tmp_path, new_runner, age_only
     log = _seed_run(runner, "ancient", age_days=90, status="running")
 
     reopened = new_runner(tmp_path)
+    reopened.prune_old_runs()
 
     assert reopened._run_store.get("ancient") is not None
     assert log.exists()
@@ -339,7 +337,7 @@ def test_startup_sweeps_log_files_no_row_points_at(tmp_path, new_runner, age_onl
     when = time.time() - 90 * 86400
     os.utime(orphan, (when, when))
 
-    new_runner(tmp_path)
+    new_runner(tmp_path).prune_old_runs()
 
     assert not orphan.exists()
 
@@ -349,7 +347,7 @@ def test_a_recent_orphan_log_is_left_in_place(tmp_path, new_runner, age_only):
     orphan = runner.log_dir / "orphan.jsonl"
     orphan.write_text("{}\n", encoding="utf-8")
 
-    new_runner(tmp_path)
+    new_runner(tmp_path).prune_old_runs()
 
     assert orphan.exists()
 
@@ -360,6 +358,7 @@ def test_retention_can_be_disabled_by_env(tmp_path, new_runner, monkeypatch, age
 
     monkeypatch.setenv("CA_RUN_RETENTION_DAYS", "0")
     reopened = new_runner(tmp_path)
+    reopened.prune_old_runs()
 
     assert reopened._run_store.get("ancient") is not None
     assert log.exists()
@@ -373,6 +372,7 @@ def test_retention_window_can_be_widened_by_env(
 
     monkeypatch.setenv("CA_RUN_RETENTION_DAYS", "365")
     reopened = new_runner(tmp_path)
+    reopened.prune_old_runs()
 
     assert reopened._run_store.get("seven-weeks-ago") is not None
 
@@ -385,6 +385,7 @@ def test_unparsable_retention_env_falls_back_to_the_default(
 
     monkeypatch.setenv("CA_RUN_RETENTION_DAYS", "soon")
     reopened = new_runner(tmp_path)
+    reopened.prune_old_runs()
 
     assert reopened._run_store.get("ancient") is None
 
@@ -396,6 +397,7 @@ def test_the_newest_runs_survive_the_window(tmp_path, new_runner, monkeypatch):
         _seed_run(runner, f"run-{index}", age_days=90 - index)
 
     reopened = new_runner(tmp_path)
+    reopened.prune_old_runs()
 
     surviving = {r.task_id for r in reopened._run_store.list_history()}
     assert surviving == {"run-2", "run-3"}

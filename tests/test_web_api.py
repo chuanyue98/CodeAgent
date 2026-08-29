@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from core.web import server
 from core.web.routers import tasks as tasks_router
 from core.web.server import app
+from tests._helpers import assert_camel
 
 
 @pytest.fixture
@@ -287,7 +288,7 @@ async def test_list_task_runs_route_queries_history_by_task_name(mock_env, monke
     assert data[0]["taskId"] == "review_1"
     assert data[0]["exitCode"] == 0
     assert data[0]["endTime"] == 200
-    assert not [key for key in data[0] if "_" in key]
+    assert_camel(data)
 
 
 @pytest.mark.asyncio

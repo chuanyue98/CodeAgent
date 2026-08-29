@@ -210,6 +210,10 @@ async def _prewarm_session_history() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize_default_groups()
+    # Retention sweep walks the log dir, so it belongs to server startup rather
+    # than to TaskRunner's constructor, which the CLI also builds for read-only
+    # commands. Off the event loop: it stats every log file in the directory.
+    await asyncio.to_thread(_task_runner.prune_old_runs)
     from core.services.agent_adapters.base import AgentAdapter
     from core.services.agent_adapters.claude import ClaudeAdapter
     from core.services.agent_adapters.codebuddy import CodeBuddyAdapter

@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import SessionProgress from '../components/SessionProgress';
 import type { SessionUsage } from '../api/analytics';
+import { session as baseSession } from './factories';
 import type { SessionMessage } from '../api/audit';
 
 function message(overrides: Partial<SessionMessage> = {}): SessionMessage {
@@ -15,21 +16,15 @@ function message(overrides: Partial<SessionMessage> = {}): SessionMessage {
   };
 }
 
+/** Token totals drive the progress arithmetic, so they are pinned here. */
 function usage(overrides: Partial<SessionUsage> = {}): SessionUsage {
-  return {
-    sessionId: 'session-a',
-    target: 'claude',
-    projectPath: '/workspace/project-a',
+  return baseSession({
     inputTokens: 1000,
     outputTokens: 500,
-    cacheCreationTokens: 0,
-    cacheReadTokens: 0,
     cost: 0.42,
     lastActivity: '2026-07-20T10:30:00Z',
-    modelsUsed: ['claude-opus'],
-    modelBreakdowns: [],
     ...overrides,
-  };
+  });
 }
 
 test('a session with nothing to report renders no strip at all', () => {

@@ -16,6 +16,10 @@ import request from '../utils/request';
 import { useSystemMetrics } from '../context/SystemMetricsContext';
 import { buildResumeLink } from '../utils/sessionLink';
 import { useT } from '../i18n/context';
+import type { RunStatus } from '../components/TaskDashboard/types';
+
+/** Home shows only enough of a run to identify it; the dashboard shows the rest. */
+type RunningTask = Pick<RunStatus, 'taskId' | 'engine' | 'status'>;
 
 //: Days of history in the hero's bar strip. Twelve fits the column at the
 //: bar width without the strip becoming a chart that needs axes.
@@ -90,12 +94,6 @@ function toneForEvent(event: AuditEvent): 'live' | 'ok' | 'idle' {
 /** Last path segment — the label form every other page uses for a workspace. */
 function workspaceLabel(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() || path;
-}
-
-interface RunStatus {
-  taskId: string;
-  engine: string;
-  status: string;
 }
 
 /**
@@ -426,12 +424,12 @@ function useRecentSessions(limit: number): SessionUsage[] | null {
 }
 
 /** Only the running rows matter on a dashboard — everything else is noise. */
-function useRunningTasks(): RunStatus[] | null {
-  const [runs, setRuns] = useState<RunStatus[] | null>(null);
+function useRunningTasks(): RunningTask[] | null {
+  const [runs, setRuns] = useState<RunningTask[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    request<RunStatus[]>('/api/tasks/runs')
+    request<RunningTask[]>('/api/tasks/runs')
       .then(list => { if (!cancelled) setRuns((list || []).filter(run => run.status === 'running')); })
       .catch(() => { if (!cancelled) setRuns([]); });
     return () => { cancelled = true; };

@@ -2,33 +2,20 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import TerminalSessionSidebar from '../components/TerminalSessionSidebar';
 import type { SessionUsage } from '../api/analytics';
+import { jsonResponse, session as baseSession } from './factories';
 
 const COLLAPSED_KEY = 'ca.terminalSidebar.collapsed';
 
+/** The sidebar lists sessions by title and recency; token totals never show. */
 function session(overrides: Partial<SessionUsage> = {}): SessionUsage {
-  return {
-    sessionId: 'session-a',
-    target: 'claude',
-    projectPath: '/workspace/project-a',
+  return baseSession({
     inputTokens: 0,
     outputTokens: 0,
-    cacheCreationTokens: 0,
-    cacheReadTokens: 0,
     cost: 0,
     lastActivity: new Date().toISOString(),
     modelsUsed: [],
-    modelBreakdowns: [],
     title: 'Session A',
     ...overrides,
-  };
-}
-
-function jsonResponse(data: unknown) {
-  return Promise.resolve({
-    ok: true,
-    status: 200,
-    text: async () => JSON.stringify(data),
-    json: async () => data,
   });
 }
 

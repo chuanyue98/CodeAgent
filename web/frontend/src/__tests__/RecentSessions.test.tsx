@@ -2,31 +2,15 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import RecentSessions from '../components/RecentSessions';
 import type { SessionUsage } from '../api/analytics';
+import { jsonResponse, session as baseSession } from './factories';
 
+/** Recent-session rows are shown by recency and title, so both are fixed here. */
 function session(overrides: Partial<SessionUsage> = {}): SessionUsage {
-  return {
-    sessionId: 'session-a',
-    target: 'claude',
-    projectPath: '/workspace/project-a',
-    inputTokens: 100,
-    outputTokens: 50,
-    cacheCreationTokens: 0,
-    cacheReadTokens: 0,
+  return baseSession({
     cost: 0.1,
     lastActivity: new Date().toISOString(),
-    modelsUsed: ['claude-opus'],
-    modelBreakdowns: [],
     title: 'Refactor the launcher',
     ...overrides,
-  };
-}
-
-function jsonResponse(data: unknown) {
-  return Promise.resolve({
-    ok: true,
-    status: 200,
-    text: async () => JSON.stringify(data),
-    json: async () => data,
   });
 }
 

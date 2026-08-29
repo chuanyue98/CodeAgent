@@ -17,7 +17,7 @@ from core.services.workspace_service import (
 from core.services.workspace_service import (
     resolve_registered_workspace as resolve_workspace,
 )
-from core.web.case_convert import ProtocolModel, wire
+from core.web.case_convert import camelize
 from core.web.resource_paths import ROOT_DIR, resolve_resource_path
 from core.web.routers.config import get_config_path
 
@@ -27,25 +27,9 @@ router = APIRouter(prefix="/api")
 _runner = TaskRunner(ROOT_DIR)
 
 
-class RunStatus(ProtocolModel):
-    """Wire shape of :class:`~core.services.runner_service.TaskRunStatus`."""
-
-    task_id: str
-    engine: str
-    pid: int | None
-    status: str
-    log_path: str
-    start_time: float
-    session_id: str | None = None
-    workspace: str | None = None
-    end_time: float | None = None
-    exit_code: int | None = None
-    task_name: str | None = None
-    schedule_id: str | None = None
-
-
 def _wire_run(status: TaskRunStatus) -> dict:
-    return wire(RunStatus(**vars(status)))
+    """Wire shape of :class:`~core.services.runner_service.TaskRunStatus`."""
+    return camelize(vars(status))
 
 
 def get_tasks_root():

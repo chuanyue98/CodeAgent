@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 
 from core.web.routers import system as system_router
 from core.web.server import app
+from tests._helpers import assert_camel
 
 
 @pytest.mark.asyncio
@@ -68,7 +69,7 @@ async def test_metrics_returns_system_stats():
         "logFileCount",
     ):
         assert key in body
-    assert not [key for key in body if "_" in key]
+    assert_camel(body)
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,8 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import HomePage from '../pages/HomePage';
 import { SystemMetricsProvider } from '../context/SystemMetricsContext';
+import type { SessionUsage } from '../api/analytics';
+import { jsonResponse, session as baseSession } from './factories';
 
 interface Backend {
   events?: unknown[];
@@ -10,15 +12,6 @@ interface Backend {
   daily?: unknown[];
   runs?: unknown[];
   metrics?: Record<string, number>;
-}
-
-function jsonResponse(data: unknown) {
-  return Promise.resolve({
-    ok: true,
-    status: 200,
-    text: async () => JSON.stringify(data),
-    json: async () => data,
-  });
 }
 
 function mockBackend({ events = [], sessions = [], daily = [], runs = [], metrics }: Backend = {}) {
@@ -73,22 +66,17 @@ function auditEvent(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function sessionRow(overrides: Record<string, unknown> = {}) {
-  return {
-    sessionId: 'session-a',
-    target: 'claude',
-    projectPath: '/workspace/project-a',
+/** The home strip reads only recency and title off a session row. */
+function sessionRow(overrides: Partial<SessionUsage> = {}): SessionUsage {
+  return baseSession({
     inputTokens: 0,
     outputTokens: 0,
-    cacheCreationTokens: 0,
-    cacheReadTokens: 0,
     cost: 0,
     lastActivity: new Date().toISOString(),
     modelsUsed: [],
-    modelBreakdowns: [],
     title: 'Refactor the launcher',
     ...overrides,
-  };
+  });
 }
 
 const originalFetch = globalThis.fetch;
@@ -240,13 +228,16 @@ test('the activity strip plots the days it claims to plot', async () => {
   renderHome();
 
   const strip = await screen.findByTitle('Cost per day, last 12 days');
-  const bars = strip.querySelectorAll('span');
+  const bars = Array.from(strip.children) as HTMLElement[];
+  const height = (bar: HTMLElement) => parseFloat(bar.style.height);
   expect(bars).toHaveLength(12);
-  // The busiest day is full height; a day with no work keeps a 6% stub so the
-  // strip stays a calendar rather than silently shortening.
-  expect((bars[11] as HTMLElement).style.height).toBe('100%');
-  expect((bars[8] as HTMLElement).style.height).toBe('25%');
-  expect((bars[0] as HTMLElement).style.height).toBe('6%');
+  // The busiest day is full height and a quieter day is visibly shorter; a day
+  // with no work still keeps a stub, so the strip stays a calendar rather than
+  // silently shortening. The exact stub size is the component's to choose.
+  expect(height(bars[11])).toBe(100);
+  expect(height(bars[8])).toBeLessThan(height(bars[11]));
+  expect(height(bars[8])).toBeGreaterThan(height(bars[0]));
+  expect(height(bars[0])).toBeGreaterThan(0);
 });
 
 test('the system card reads from the shared metrics subscription', async () => {

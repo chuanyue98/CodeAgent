@@ -34,11 +34,6 @@ class LogFile(ProtocolModel):
     modified: int
 
 
-class LogFileContent(ProtocolModel):
-    task_id: str
-    content: str
-
-
 def _list_log_files() -> list[dict]:
     files: list[dict] = []
     if not CA_TASK_LOGS_DIR.exists():
@@ -81,7 +76,7 @@ async def get_log_file(task_id: str):
     if path is None:
         raise HTTPException(status_code=404, detail="Log file not found")
     content = _read_log(path)
-    return wire(LogFileContent(task_id=task_id, content=content))
+    return {"taskId": task_id, "content": content}
 
 
 def _size_of(path: Path) -> int | None:

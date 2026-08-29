@@ -41,7 +41,7 @@ from core.session_history.session_finder import (
     find_all_sessions,
     find_session_by_id,
 )
-from core.web.case_convert import ProtocolModel, wire
+from core.web.case_convert import ProtocolModel, camelize, wire
 from core.web.routers.config import get_config_path
 
 router = APIRouter(prefix="/api")
@@ -144,38 +144,8 @@ class DeleteSessionResponse(ProtocolModel):
 
 
 # The domain's own to_summary_dict()/to_full_dict()/to_dict() stay snake_case:
-# they are Python-side serializations used by the CLI and tests. These models
-# are the wire shape, and the only place the two vocabularies meet.
-
-
-class ToolCall(ProtocolModel):
-    name: str
-    args_preview: str
-    result_preview: str
-
-
-class SessionMessage(ProtocolModel):
-    role: str
-    content: str
-    timestamp: str
-    model: str = ""
-    tool_calls: list[ToolCall] = []
-
-
-class SessionSummary(ProtocolModel):
-    session_id: str
-    engine: str
-    project_path: str
-    started_at: str
-    ended_at: str
-    message_count: int
-    title: str
-    model: str = ""
-    source_file: str = ""
-
-
-class SessionDetail(SessionSummary):
-    messages: list[SessionMessage] = []
+# they are Python-side serializations used by the CLI and tests. camelize() at
+# the route is where the two vocabularies meet.
 
 
 class ResumeTarget(ProtocolModel):
@@ -183,29 +153,6 @@ class ResumeTarget(ProtocolModel):
     engine: str
     session_id: str
     project: str
-
-
-class AuditEvent(ProtocolModel):
-    """One row of the flattened timeline.
-
-    Message and tool-call rows carry different halves of the optional fields;
-    they are sent with ``drop_none`` so neither variant ships the other's
-    nulls across a response that can hold thousands of rows.
-    """
-
-    event_id: str
-    event_type: str
-    engine: str
-    project_path: str
-    session_id: str
-    session_title: str
-    timestamp: str
-    role: str
-    model: str = ""
-    content_preview: str | None = None
-    tool_name: str | None = None
-    args_preview: str | None = None
-    result_preview: str | None = None
 
 
 @router.get("/history")
@@ -233,7 +180,7 @@ async def list_sessions(
         :limit
     ]
     return {
-        "sessions": [wire(SessionSummary(**s.to_summary_dict())) for s in sessions],
+        "sessions": [camelize(s.to_summary_dict()) for s in sessions],
         "count": len(sessions),
     }
 
@@ -281,7 +228,7 @@ async def get_audit_events(
     events = events[:limit]
 
     return {
-        "events": [wire(AuditEvent(**event), drop_none=True) for event in events],
+        "events": [camelize(event) for event in events],
         "count": len(events),
     }
 
@@ -312,7 +259,7 @@ async def get_session_detail(
                 "engine": engine,
             },
         )
-    return wire(SessionDetail(**session.to_full_dict()))
+    return camelize(session.to_full_dict())
 
 
 @router.post("/history/convert")

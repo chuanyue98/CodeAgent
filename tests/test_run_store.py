@@ -186,11 +186,13 @@ def test_delete_missing_task_id_is_a_no_op(store):
 # the UI as soon as the process that produced it went away.
 
 
-def _run(task_id, *, task_name=None, status="completed", start_time=1000.0, **kw):
+def _run(
+    task_id, *, task_name=None, status="completed", start_time=1000.0, pid=1, **kw
+):
     return TaskRunRecord(
         task_id=task_id,
         engine="claude",
-        pid=1,
+        pid=pid,
         status=status,
         log_path=f"/tmp/{task_id}.log",
         start_time=start_time,
@@ -292,17 +294,8 @@ def test_legacy_rows_get_a_task_name_on_migration(tmp_path):
 
 
 def _record(task_id: str, **overrides) -> TaskRunRecord:
-    fields = {
-        "task_id": task_id,
-        "engine": "claude",
-        "pid": None,
-        "status": "completed",
-        "log_path": f"/logs/{task_id}.log",
-        "start_time": 1000.0,
-        "end_time": 1100.0,
-    }
-    fields.update(overrides)
-    return TaskRunRecord(**fields)
+    """A run the retention tests can age: already finished, and never a live pid."""
+    return _run(task_id, pid=None, **{"end_time": 1100.0, **overrides})
 
 
 def test_prune_drops_rows_that_ended_before_the_cutoff(store):
@@ -311,7 +304,7 @@ def test_prune_drops_rows_that_ended_before_the_cutoff(store):
 
     removed = store.prune(older_than=100.0, keep_latest=0)
 
-    assert removed == ["/logs/old.log"]
+    assert removed == ["/tmp/old.log"]
     assert store.get("old") is None
     assert store.get("recent") is not None
 
@@ -337,7 +330,7 @@ def test_prune_judges_a_row_with_no_end_time_by_its_start(store):
         _record("never-finished", status="failed", start_time=10.0, end_time=None)
     )
 
-    assert store.prune(older_than=100.0, keep_latest=0) == ["/logs/never-finished.log"]
+    assert store.prune(older_than=100.0, keep_latest=0) == ["/tmp/never-finished.log"]
 
 
 def test_prune_reports_nothing_when_all_rows_are_recent(store):
@@ -350,4 +343,4 @@ def test_log_paths_lists_what_the_table_still_points_at(store):
     store.upsert(_record("one"))
     store.upsert(_record("two"))
 
-    assert sorted(store.log_paths()) == ["/logs/one.log", "/logs/two.log"]
+    assert sorted(store.log_paths()) == ["/tmp/one.log", "/tmp/two.log"]

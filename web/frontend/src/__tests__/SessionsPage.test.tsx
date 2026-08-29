@@ -4,37 +4,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import SessionsPage from '../components/SessionsPage';
 import { ProjectProvider } from '../context/ProjectContext';
 import type { SessionUsage } from '../api/analytics';
-
-function session(overrides: Partial<SessionUsage>): SessionUsage {
-  return {
-    sessionId: 'session-a',
-    target: 'claude',
-    projectPath: '/workspace/project-a',
-    inputTokens: 100,
-    outputTokens: 50,
-    cacheCreationTokens: 0,
-    cacheReadTokens: 0,
-    cost: 0.12,
-    lastActivity: '2026-07-20T10:00:00Z',
-    modelsUsed: ['claude-opus'],
-    modelBreakdowns: [],
-    ...overrides,
-  };
-}
+import { jsonResponse, session } from './factories';
 
 const SESSIONS: SessionUsage[] = [
   session({ sessionId: 'session-a', target: 'claude', projectPath: '/workspace/project-a' }),
   session({ sessionId: 'session-b', target: 'codebuddy', projectPath: '/workspace/project-b' }),
 ];
-
-function jsonResponse(data: unknown) {
-  return Promise.resolve({
-    ok: true,
-    status: 200,
-    text: async () => JSON.stringify(data),
-    json: async () => data,
-  });
-}
 
 let deleteCalls: string[];
 let historyLoads: string[];

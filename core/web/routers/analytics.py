@@ -11,7 +11,7 @@ from core.analytics.service import get_analytics_data, refresh_analytics_data
 from core.session_history.parse_cache import clear_parse_cache
 from core.session_history.paths import normalize_project_path
 from core.session_history.session_finder import find_all_sessions
-from core.web.case_convert import ProtocolModel, wire
+from core.web.case_convert import camelize
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -45,21 +45,10 @@ async def _session_title_map() -> dict[tuple[str, str], str]:
     return await asyncio.to_thread(_build)
 
 
-class AnalyticsSummary(ProtocolModel):
-    total_entries: int
-    total_input_tokens: int
-    total_output_tokens: int
-    total_cache_creation_tokens: int
-    total_cache_read_tokens: int
-    targets: list[str]
-    models: list[str]
-    session_count: int
-
-
 @router.get("/summary")
 async def get_summary():
     data = await _data()
-    return wire(AnalyticsSummary(**data["summary"]))
+    return camelize(data["summary"])
 
 
 @router.get("/daily")
@@ -292,5 +281,5 @@ async def refresh():
     data = await asyncio.to_thread(refresh_analytics_data)
     return {
         "status": "refreshed",
-        "summary": wire(AnalyticsSummary(**data["summary"])),
+        "summary": camelize(data["summary"]),
     }

@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,8 +42,19 @@ def _retention_days() -> int:
         return RUN_RETENTION_DAYS
 
 
+#: Every artifact kind the runner writes into ``log_dir``: ``run_task`` writes
+#: ``{task_id}.log``, ``run_chat_turn`` writes ``{turn_id}.jsonl``. Both
+#: sweepers glob this, so a new artifact kind is collected by adding it here.
+_LOG_PATTERNS = ("*.log", "*.jsonl")
+
+
 def _unlink_quietly(path: Path) -> None:
-    """Deletes *path*, tolerating a Windows handle still holding it open."""
+    """Deletes *path*, tolerating a handle still holding it open.
+
+    Windows 上「上一个用例启动的引擎进程还没退出」时，日志文件句柄仍被握着
+    （假引擎会 sleep 数秒），unlink 会抛 PermissionError；POSIX 允许删除打开
+    中的文件所以从不触发。删不掉就留着，下一轮清理会再遇到它。
+    """
     try:
         path.unlink(missing_ok=True)
     except OSError:
@@ -91,7 +103,6 @@ class TaskRunner:
         self.log_dir = self.root_dir / ".ca_task_logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self._run_store = RunStore(self.log_dir / "runs.db")
-        self._prune_old_runs()
         self._load_persisted_runs()
 
     def reset_for_e2e(self) -> None:
@@ -107,16 +118,8 @@ class TaskRunner:
             self._processes.clear()
             self._stopping_tasks.clear()
         self._run_store.clear()
-        for pattern in ("*.log", "*.jsonl"):
-            for f in self.log_dir.glob(pattern):
-                # Windows 上「上一个用例启动的引擎进程还没退出」时，日志文件
-                # 句柄仍被握着（假引擎会 sleep 数秒），unlink 会抛
-                # PermissionError；POSIX 允许删除打开中的文件所以从不触发。
-                # 删不掉就留着——scratch 环境随后会被整体丢弃。
-                try:
-                    f.unlink(missing_ok=True)
-                except PermissionError:
-                    pass
+        for f in self._log_files():
+            _unlink_quietly(f)
 
     def run_task(
         self,
@@ -326,12 +329,19 @@ class TaskRunner:
             schedule_id=record.schedule_id,
         )
 
-    def _prune_old_runs(self) -> None:
+    def close(self) -> None:
+        """Releases the run DB connection this runner opened."""
+        self._run_store.close()
+
+    def prune_old_runs(self) -> None:
         """Drops aged-out run rows and the log files nothing points at any more.
 
-        Runs at startup rather than on a timer: the set only grows when a run
-        finishes, and a process that never restarts is not the one with a disk
-        problem.
+        Called once from the web server's startup rather than from the
+        constructor or a timer: the set only grows when a run finishes, and a
+        process that never restarts is not the one with a disk problem.
+        Constructing a runner stays free of side effects -- the CLI builds one
+        for read-only commands like ``ca task ps``, which have no business
+        deleting anything.
         """
         days = _retention_days()
         if days <= 0:
@@ -346,16 +356,20 @@ class TaskRunner:
         # Logs whose row was deleted individually (see `delete`) leave no
         # trace in the table, so age is the only thing left to judge them by.
         still_referenced = {Path(p) for p in self._run_store.log_paths()}
-        for pattern in ("*.log", "*.jsonl"):
-            for stale in self.log_dir.glob(pattern):
-                if stale in still_referenced:
+        for stale in self._log_files():
+            if stale in still_referenced:
+                continue
+            try:
+                if stale.stat().st_mtime >= cutoff:
                     continue
-                try:
-                    if stale.stat().st_mtime >= cutoff:
-                        continue
-                except OSError:
-                    continue
-                _unlink_quietly(stale)
+            except OSError:
+                continue
+            _unlink_quietly(stale)
+
+    def _log_files(self) -> Iterator[Path]:
+        """Every artifact the runner has written into ``log_dir``."""
+        for pattern in _LOG_PATTERNS:
+            yield from self.log_dir.glob(pattern)
 
     def _load_persisted_runs(self):
         """Reload runs from the SQLite store so they survive restarts."""
