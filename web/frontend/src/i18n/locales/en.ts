@@ -569,6 +569,8 @@ export const en = {
   'terminalSidebar.empty': 'No sessions yet. Start one from the launcher.',
   'terminalSidebar.untitled': '(untitled)',
   'terminalSidebar.loadMore': 'Load more',
+  'terminalSidebar.collapse': 'Collapse the session list',
+  'terminalSidebar.expand': 'Show the session list',
   'launch.openTerminals': 'Open terminals',
   'launch.newTerminal': 'New terminal',
   'launch.resumed': 'Resumed',

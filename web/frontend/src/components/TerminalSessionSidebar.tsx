@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, Plus, Search } from 'lucide-react';
+import { ChevronRight, PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react';
 import { fetchSessionPage, type SessionUsage } from '../api/analytics';
 import { relativeTime, workspaceLabel } from '../utils/workspaceFormat';
 import { useLanguageCode } from '../i18n/context';
@@ -7,6 +7,17 @@ import { useT } from '../i18n/context';
 
 const PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 250;
+const COLLAPSED_KEY = 'ca.terminalSidebar.collapsed';
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === '1';
+  } catch {
+    // Private windows and blocked site data throw on access; an unreadable
+    // preference just means the sidebar opens.
+    return false;
+  }
+}
 
 interface TerminalSessionSidebarProps {
   /** Workspace to expand by default -- the one the launcher is pointed at. */
@@ -151,15 +162,62 @@ export default function TerminalSessionSidebar({
     // A search is a request to see what matched, wherever it lives.
     Boolean(query) || (path === defaultOpen) !== toggled.has(path);
 
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed(previous => {
+      const next = !previous;
+      try {
+        localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0');
+      } catch {
+        // Non-fatal: the sidebar just opens again next visit.
+      }
+      return next;
+    });
+  }, []);
+
+  // Collapsed keeps the rail rather than removing it: an edge you can aim at
+  // beats a control that vanishes with the thing it reopens.
+  if (collapsed) {
+    return (
+      <aside className="glass-card flex w-11 shrink-0 flex-col items-center gap-1 self-start p-1.5">
+        <button
+          onClick={toggleCollapsed}
+          aria-label={t('terminalSidebar.expand')}
+          title={t('terminalSidebar.expand')}
+          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600"
+        >
+          <PanelLeftOpen size={15} />
+        </button>
+        <button
+          onClick={onNewSession}
+          aria-label={t('terminalSidebar.new')}
+          title={t('terminalSidebar.new')}
+          className="rounded-lg p-1.5 text-primary transition-colors hover:bg-primary/10"
+        >
+          <Plus size={15} />
+        </button>
+      </aside>
+    );
+  }
+
   return (
-    <aside className="flex w-64 shrink-0 flex-col gap-2 overflow-hidden">
-      <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-semibold text-slate-600">{t('terminalSidebar.title')}</span>
+    <aside className="glass-card flex w-64 shrink-0 flex-col gap-2 overflow-hidden p-2">
+      <div className="flex items-center gap-1 px-1">
+        <span className="flex-1 text-xs font-semibold text-slate-600">{t('terminalSidebar.title')}</span>
         <button
           onClick={onNewSession}
           className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
         >
           <Plus size={13} /> {t('terminalSidebar.new')}
+        </button>
+        <button
+          onClick={toggleCollapsed}
+          aria-label={t('terminalSidebar.collapse')}
+          title={t('terminalSidebar.collapse')}
+          className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600"
+        >
+          <PanelLeftClose size={14} />
         </button>
       </div>
 

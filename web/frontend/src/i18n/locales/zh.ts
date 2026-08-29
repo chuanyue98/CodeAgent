@@ -555,6 +555,8 @@ export const zh: Record<TranslationKey, string> = {
   'terminalSidebar.empty': '还没有会话。从右侧启动一个。',
   'terminalSidebar.untitled': '(无标题)',
   'terminalSidebar.loadMore': '加载更多',
+  'terminalSidebar.collapse': '收起会话列表',
+  'terminalSidebar.expand': '展开会话列表',
   'launch.openTerminals': '已打开的终端',
   'launch.newTerminal': '新终端',
   'launch.resumed': '已续接',

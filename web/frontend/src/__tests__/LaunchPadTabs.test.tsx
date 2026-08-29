@@ -56,6 +56,9 @@ function jsonResponse(data: unknown) {
 beforeEach(() => {
   mounted.length = 0;
   unmounted.length = 0;
+  // The sidebar remembers being collapsed, so one test could otherwise hide
+  // the session list from every test after it.
+  localStorage.clear();
   globalThis.fetch = vi.fn().mockImplementation((url: string) => {
     if (url.includes('/api/pty/status')) return jsonResponse({ available: true, reason: null });
     if (url.includes('/api/projects')) {
@@ -169,6 +172,20 @@ describe('LaunchPad terminal tabs', () => {
     // which is why there was no way to reach a session from here.
     expect(await screen.findByTitle('修复登录')).toBeTruthy();
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
+  });
+
+  test('the session list collapses to a rail, and stays collapsed next time', async () => {
+    const first = renderLaunchPad();
+    await screen.findByTitle('修复登录');
+
+    fireEvent.click(screen.getByLabelText(/collapse the session list/i));
+    expect(screen.queryByTitle('修复登录')).toBeNull();
+    // The rail keeps the way back: collapsing must not hide its own control.
+    expect(screen.getByLabelText(/show the session list/i)).toBeTruthy();
+
+    first.unmount();
+    renderLaunchPad();
+    expect(await screen.findByLabelText(/show the session list/i)).toBeTruthy();
   });
 
   test('resuming a session that already has a tab focuses it instead of forking a second PTY', async () => {
