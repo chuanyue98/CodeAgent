@@ -66,6 +66,14 @@ function App() {
   const t = useT();
   const pageLabelKey = PAGE_LABEL_KEYS[pathname];
   const pageLabel = pageLabelKey ? t(pageLabelKey) : 'CodeAgent';
+  // The heading names the section, not the leaf: the leaf is already the
+  // selected chip in the tab row directly below it, and printing the same
+  // word twice, one above the other, spent the page's most prominent line on
+  // nothing. The document title keeps the leaf -- a browser tab has no tab
+  // row to read it off.
+  const section = primaryNav.find(
+    item => pathname === item.matchPrefix || pathname.startsWith(`${item.matchPrefix}/`),
+  );
 
   useEffect(() => {
     document.title = pageLabel === 'CodeAgent' ? pageLabel : `${pageLabel} - CodeAgent`;
@@ -129,7 +137,19 @@ function App() {
 
         <main className="relative flex min-w-0 flex-1 flex-col gap-3 overflow-hidden md:gap-4">
           <header className="animate-fade-in stagger-2 relative z-50 flex min-w-0 items-center justify-between gap-3">
-            <h1 className="min-w-0 truncate text-lg font-bold text-slate-800 md:text-xl">{pageLabel}</h1>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold text-slate-800 md:text-xl">
+                {section ? t(section.labelKey) : pageLabel}
+              </h1>
+              {section && (
+                <p
+                  title={t(section.descriptionKey)}
+                  className="hidden truncate text-xs text-slate-400 sm:block"
+                >
+                  {t(section.descriptionKey)}
+                </p>
+              )}
+            </div>
             <div className="flex shrink-0 items-center gap-2">
               <CommandPalette />
               <LanguageSwitcher />
@@ -151,7 +171,7 @@ function App() {
 
               <Route
                 path="/agent"
-                element={<SectionLayout labelKey="nav.agent" descriptionKey="section.agent.description" tabs={AGENT_TABS} />}
+                element={<SectionLayout labelKey="nav.agent" tabs={AGENT_TABS} />}
               >
                 <Route index element={<Navigate to="terminal" replace />} />
                 <Route path="terminal" element={page(<LaunchPad />)} />
@@ -160,7 +180,7 @@ function App() {
 
               <Route
                 path="/automations"
-                element={<SectionLayout labelKey="nav.automations" descriptionKey="section.automations.description" tabs={AUTOMATION_TABS} />}
+                element={<SectionLayout labelKey="nav.automations" tabs={AUTOMATION_TABS} />}
               >
                 <Route index element={<Navigate to="tasks" replace />} />
                 <Route path="tasks" element={page(<TaskDashboard />)} />
@@ -170,7 +190,7 @@ function App() {
 
               <Route
                 path="/activity"
-                element={<SectionLayout labelKey="nav.activity" descriptionKey="section.activity.description" tabs={ACTIVITY_TABS} preserveParams={ACTIVITY_FILTER_PARAMS} />}
+                element={<SectionLayout labelKey="nav.activity" tabs={ACTIVITY_TABS} preserveParams={ACTIVITY_FILTER_PARAMS} />}
               >
                 <Route index element={<Navigate to="sessions" replace />} />
                 <Route path="sessions" element={page(<SessionsPage />)} />
@@ -179,7 +199,7 @@ function App() {
 
               <Route
                 path="/settings"
-                element={<SectionLayout labelKey="nav.settings" descriptionKey="section.settings.description" tabs={SETTINGS_TABS} />}
+                element={<SectionLayout labelKey="nav.settings" tabs={SETTINGS_TABS} />}
               >
                 <Route index element={<Navigate to="workspace" replace />} />
                 <Route path="workspace" element={page(<ConfigHub />)} />

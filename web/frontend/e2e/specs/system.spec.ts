@@ -1,6 +1,6 @@
 import { test, expect } from '../lib/test-base';
 import { resetBackend } from '../lib/reset';
-import { waitForH2 } from '../lib/ui';
+import { waitForPage } from '../lib/ui';
 
 test.beforeEach(async ({ baseURL }) => {
   await resetBackend(baseURL!);
@@ -26,7 +26,7 @@ test('SystemPanel opens from the header status button and expands/collapses its 
 
 test('/system page renders metrics and Refresh reloads', async ({ page }) => {
   await page.goto('/system');
-  await waitForH2(page, 'System');
+  await waitForPage(page, 'System');
   await expect(page.getByText('Metrics')).toBeVisible();
   await page.getByRole('button', { name: 'Refresh' }).click();
   await expect(page.getByText('Metrics')).toBeVisible();

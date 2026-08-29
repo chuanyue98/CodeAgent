@@ -1,35 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { AlertTriangle, ArrowRight, Plus, Terminal, TerminalSquare, X } from 'lucide-react';
+import { AlertTriangle, Plus, Terminal, TerminalSquare, X } from 'lucide-react';
 import { fetchPtyStatus } from '../api/pty';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
-import type { TranslationKey } from '../i18n/locales/en';
 import BrowserTerminal from './BrowserTerminal';
+import RecentSessions from './RecentSessions';
 import TerminalSessionSidebar from './TerminalSessionSidebar';
-
-interface Engine {
-  id: string;
-  name?: string;
-  /** 非品牌名称（如纯终端）走 i18n。 */
-  nameKey?: TranslationKey;
-  /** Brand blurb that stays as-is (product names), or a key when it is prose. */
-  description?: string;
-  descriptionKey?: TranslationKey;
-  /** Tints the engine's icon tile — the card itself stays neutral so five
-      cards read as one row of choices instead of five competing buttons. */
-  accent: string;
-}
-
-// Engine names and their vendor blurbs are brands, so they are not translated;
-// only OpenCode's descriptive line is prose, and it carries a key instead.
-const ENGINES: Engine[] = [
-  { id: 'claude',    name: 'Claude',    description: 'Anthropic · Claude Code CLI',      accent: 'bg-orange-100 text-orange-600' },
-  { id: 'opencode',  name: 'OpenCode',  descriptionKey: 'launch.opencodeDescription',    accent: 'bg-violet-100 text-violet-600' },
-  { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',               accent: 'bg-emerald-100 text-emerald-600' },
-  { id: 'codebuddy', name: 'CodeBuddy', description: 'Tencent · CodeBuddy Code CLI',     accent: 'bg-sky-100 text-sky-600' },
-  { id: 'shell',     nameKey: 'launch.shellName', descriptionKey: 'launch.shellDescription', accent: 'bg-slate-200 text-slate-600' },
-];
+import {
+  AGENT_ENGINES,
+  findEngine,
+  SHELL_ENGINE,
+  SHELL_ENGINE_ID,
+  type Engine,
+} from './terminalEngines';
 
 interface TerminalTab {
   /** Stable across re-renders so React keeps the same xterm instance mounted. */
@@ -43,11 +27,7 @@ let nextTabId = 0;
 
 export default function LaunchPad() {
   const t = useT();
-  const {
-    validProjects,
-    selectedWorkspace,
-    setSelectedWorkspace,
-  } = useProject();
+  const { validProjects, selectedWorkspace } = useProject();
 
   const [available, setAvailable] = useState<boolean | null>(null);
   const [reason, setReason] = useState<string | null>(null);
@@ -125,31 +105,79 @@ export default function LaunchPad() {
       });
   }, [t]);
 
-  const effectiveProject = validProjects.some(project => project.path === selectedWorkspace)
+  // The header's workspace switcher is the only place the selection is made,
+  // including for a directory that is not in the registry. This page used to
+  // carry a second field for that, so one screen had two controls writing one
+  // value and no way to tell which one was authoritative.
+  const effectiveProject = (validProjects.some(project => project.path === selectedWorkspace)
     ? selectedWorkspace
-    : (selectedWorkspace.trim() || validProjects[0]?.path || '');
+    : (selectedWorkspace.trim() || validProjects[0]?.path || '')).trim();
 
-  // An override rather than a mirror: until something is typed the field just
-  // shows the shared selection, so there is no state to keep in sync (and no
-  // effect writing state during render, which cascades).
-  const [typedWorkspace, setTypedWorkspace] = useState<string | null>(null);
-  const workspaceInput = typedWorkspace ?? effectiveProject;
+  const activeTab = tabs.find(tab => tab.id === activeTabId);
+
+  const engineCard = (engine: Engine) => {
+    const name = engine.nameKey ? t(engine.nameKey) : engine.name;
+    const description = engine.descriptionKey
+      ? t(engine.descriptionKey)
+      : engine.description;
+    const blocked = !available || !effectiveProject;
+    const Icon = engine.id === SHELL_ENGINE_ID ? Terminal : TerminalSquare;
+    return (
+      <button
+        key={engine.id}
+        type="button"
+        onClick={() => openTab(engine.id, effectiveProject)}
+        disabled={blocked}
+        aria-label={`${t('launch.openTerminal')} · ${name}`}
+        title={`${t('launch.openTerminal')} · ${name}`}
+        className={`glass-card flex h-full w-full items-center gap-3 p-4 text-left transition-all ${
+          blocked
+            ? 'cursor-not-allowed opacity-50'
+            : 'cursor-pointer hover:-translate-y-0.5 hover:shadow-lg'
+        }`}
+      >
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${engine.accent}`}>
+          <Icon size={17} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold text-slate-800">{name}</span>
+          <span className="line-clamp-2 block text-xs text-slate-500">{description}</span>
+        </span>
+      </button>
+    );
+  };
 
   const engineLabel = (id: string) => {
-    const engine = ENGINES.find(item => item.id === id);
+    const engine = findEngine(id);
     if (!engine) return id;
     return engine.nameKey ? t(engine.nameKey) : engine.name;
   };
 
   const launcher = (
-    <div className="max-w-5xl space-y-6">
-      <div className="space-y-2">
-        <p className="text-sm text-slate-600">
-          {t('launch.intro')}
-        </p>
-        <p className="text-xs text-slate-500">
-          {t('launch.introDetail')}
-        </p>
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <p className="text-sm text-slate-600">{t('launch.intro')}</p>
+        {/* The long explanation is first-run material: it stops once a
+            terminal has been opened, rather than sitting above the only
+            control on the page forever. */}
+        {tabs.length === 0 && (
+          <p className="text-xs text-slate-500">{t('launch.introDetail')}</p>
+        )}
+        {/* The header switcher shows only the trailing directory name, and
+            which directory a terminal opens in is the one thing you must be
+            able to check before launching one. */}
+        {effectiveProject && (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-xs text-slate-500">
+            <span>{t('launch.workspaceLabel')}</span>
+            <code
+              data-testid="launch-workspace"
+              className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700"
+            >
+              {effectiveProject}
+            </code>
+            <span className="text-slate-400">{t('launch.workspaceChange')}</span>
+          </p>
+        )}
       </div>
 
       {available === false && (
@@ -162,74 +190,39 @@ export default function LaunchPad() {
         </div>
       )}
 
-      {/* A combobox, not a select: any existing directory works now (see
-          core.services.workspace_service), so the registered ones are
-          suggestions rather than the whole world. As a select this page was a
-          dead end on a fresh install -- nothing registered meant no options,
-          which meant every launch button stayed disabled. */}
-      <div className="space-y-1">
-        <label htmlFor="launchpad-project" className="text-xs font-medium text-slate-500">
-          {t('filters.workspace')}
-        </label>
-        <input
-          id="launchpad-project"
-          list="launchpad-known-workspaces"
-          value={workspaceInput}
-          onChange={event => setTypedWorkspace(event.target.value)}
-          onBlur={() => setSelectedWorkspace(workspaceInput.trim())}
-          placeholder={t('launch.workspacePlaceholder')}
-          spellCheck={false}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm"
-        />
-        <datalist id="launchpad-known-workspaces">
-          {validProjects.map(project => (
-            <option key={project.path} value={project.path} />
-          ))}
-        </datalist>
-        <p className="text-xs text-slate-500">{t('launch.workspaceHint')}</p>
-      </div>
+      {/* Disabled cards used to be the whole message: five tiles at half
+          opacity and nothing saying which of the two reasons applied. */}
+      {available !== false && !effectiveProject && (
+        <p role="status" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          {t('launch.pickWorkspace')}
+        </p>
+      )}
 
       {/* The card is the button. A small button parked at the far edge of a
           wide card left the label stranded from what it acts on, and it was
           the one target that had to survive every column width. */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-        {ENGINES.map((engine) => {
-          const name = engine.nameKey ? t(engine.nameKey) : engine.name;
-          const description = engine.descriptionKey
-            ? t(engine.descriptionKey)
-            : engine.description;
-          const blocked = !available || !workspaceInput.trim();
-          const Icon = engine.id === 'shell' ? Terminal : TerminalSquare;
-          return (
-            <button
-              key={engine.id}
-              type="button"
-              onClick={() => openTab(engine.id, workspaceInput.trim())}
-              disabled={blocked}
-              aria-label={`${t('launch.openTerminal')} · ${name}`}
-              title={`${t('launch.openTerminal')} · ${name}`}
-              className={`glass-card group flex h-full items-center gap-3 p-4 text-left transition-all ${
-                blocked
-                  ? 'cursor-not-allowed opacity-50'
-                  : 'cursor-pointer hover:-translate-y-0.5 hover:shadow-lg'
-              }`}
-            >
-              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${engine.accent}`}>
-                <Icon size={17} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold text-slate-800">{name}</span>
-                <span className="line-clamp-2 block text-xs text-slate-500">{description}</span>
-              </span>
-              <ArrowRight className="h-4 w-4 shrink-0 text-slate-300 transition-colors group-hover:text-primary" />
-            </button>
-          );
-        })}
-      </div>
+      <section className="space-y-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          {t('launch.engines')}
+        </h2>
+        {/* Four agents, so every column count divides the row evenly. The
+            fifth card used to sit in this grid and wrap 3 + 2, leaving a
+            card-shaped hole at the width the page is usually read at. */}
+        <div className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+          {AGENT_ENGINES.map(engineCard)}
+        </div>
+        {/* And, separately, no agent at all. */}
+        <div className="pt-1">{engineCard(SHELL_ENGINE)}</div>
+      </section>
+
+      <RecentSessions
+        workspace={effectiveProject}
+        activeSessionId={activeTab?.sessionId}
+        onOpen={openTab}
+      />
     </div>
   );
 
-  const activeTab = tabs.find(tab => tab.id === activeTabId);
 
   const workspace = (
     <div className="flex min-w-0 flex-1 flex-col gap-2">

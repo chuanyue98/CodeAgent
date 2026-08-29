@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '../lib/test-base';
 import { resetBackend } from '../lib/reset';
-import { waitForH2 } from '../lib/ui';
+import { waitForPage } from '../lib/ui';
 
 test.beforeEach(async ({ baseURL }) => {
   await resetBackend(baseURL!);
@@ -8,7 +8,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoConfig(page: Page): Promise<void> {
   await page.goto('/config');
-  await waitForH2(page, 'Workspace');
+  await waitForPage(page, 'Workspace');
   await expect(page.getByRole('button', { name: 'Save All Changes' })).toBeVisible();
 }
 
@@ -27,7 +27,7 @@ test('adding a project then saving persists the row', async ({ page }) => {
   await registry.locator('input[placeholder="/absolute/path/to/your/project"]').last().fill('/tmp/e2e-project');
   await save(page);
   await page.reload();
-  await waitForH2(page, 'Workspace');
+  await waitForPage(page, 'Workspace');
   // The project path lives in an <input> value (not text content), so assert
   // the persisted value rather than visible text.
   await expect(

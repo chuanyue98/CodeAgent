@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '../lib/test-base';
 import { resetBackend } from '../lib/reset';
-import { waitForH2 } from '../lib/ui';
+import { waitForPage } from '../lib/ui';
 
 test.beforeEach(async ({ baseURL }) => {
   await resetBackend(baseURL!);
@@ -8,7 +8,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoCron(page: Page): Promise<void> {
   await page.goto('/cron');
-  await waitForH2(page, 'Schedules');
+  await waitForPage(page, 'Schedules');
   await expect(page.getByLabel('Workspace', { exact: true })).not.toHaveValue('');
   await expect(page.getByText('No schedules yet.')).toBeVisible();
 }

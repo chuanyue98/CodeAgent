@@ -10,7 +10,6 @@ export interface SectionTab {
 
 interface SectionLayoutProps {
   labelKey: TranslationKey;
-  descriptionKey: TranslationKey;
   tabs: SectionTab[];
   /**
    * Query params to carry from the current URL onto each tab link, so state
@@ -22,13 +21,11 @@ interface SectionLayoutProps {
 
 export default function SectionLayout({
   labelKey,
-  descriptionKey,
   tabs,
   preserveParams,
 }: SectionLayoutProps) {
   const { pathname, search } = useLocation();
   const t = useT();
-  const description = t(descriptionKey);
 
   const carried = (() => {
     if (!preserveParams?.length) return '';
@@ -44,11 +41,10 @@ export default function SectionLayout({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      {/* The description used to be sr-only, so the one line explaining what
-          a section is for was readable by screen readers and nobody else.
-          Shown from lg up, where there is room beside the tabs. */}
-      <div className="animate-fade-rise stagger-1 flex flex-wrap items-center justify-between gap-x-4 border-b border-slate-200 px-1 pb-2">
-        <span className="sr-only">{description}</span>
+      {/* The section's one-line description lives in the app header, under the
+          title. Parked out here at the far right of a wide row it sat a screen
+          away from the words it explained, in the lightest grey on the page. */}
+      <div className="animate-fade-rise stagger-1 border-b border-slate-200 px-1 pb-2">
         <nav aria-label={t('section.nav', { label: t(labelKey) })} className="custom-scrollbar flex max-w-full gap-1 overflow-x-auto">
           {tabs.map((tab, i) => {
             const active = tab.matchPrefix
@@ -72,7 +68,6 @@ export default function SectionLayout({
             );
           })}
         </nav>
-        <p aria-hidden className="hidden truncate text-xs text-slate-400 lg:block">{description}</p>
       </div>
 
       {/* key on pathname so each route transition re-triggers the entrance

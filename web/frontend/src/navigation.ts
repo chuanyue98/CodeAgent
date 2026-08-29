@@ -6,6 +6,9 @@ export interface PrimaryNavItem {
   to: string;
   matchPrefix: string;
   labelKey: TranslationKey;
+  /** One line on what the section is for; the app header shows it under the
+      title, where it sits next to the thing it describes. */
+  descriptionKey: TranslationKey;
   icon: LucideIcon;
 }
 
@@ -14,11 +17,11 @@ export interface PrimaryNavItem {
 // where there is no hook to call, and a label baked in here would freeze the
 // nav in whichever language happened to be active at import time.
 export const primaryNav: PrimaryNavItem[] = [
-  { to: '/home', matchPrefix: '/home', labelKey: 'nav.home', icon: Home },
-  { to: '/agent/terminal', matchPrefix: '/agent', labelKey: 'nav.agent', icon: Bot },
-  { to: '/automations/tasks', matchPrefix: '/automations', labelKey: 'nav.automations', icon: Clock3 },
-  { to: '/activity/sessions', matchPrefix: '/activity', labelKey: 'nav.activity', icon: History },
-  { to: '/settings/workspace', matchPrefix: '/settings', labelKey: 'nav.settings', icon: Settings },
+  { to: '/home', matchPrefix: '/home', labelKey: 'nav.home', descriptionKey: 'section.home.description', icon: Home },
+  { to: '/agent/terminal', matchPrefix: '/agent', labelKey: 'nav.agent', descriptionKey: 'section.agent.description', icon: Bot },
+  { to: '/automations/tasks', matchPrefix: '/automations', labelKey: 'nav.automations', descriptionKey: 'section.automations.description', icon: Clock3 },
+  { to: '/activity/sessions', matchPrefix: '/activity', labelKey: 'nav.activity', descriptionKey: 'section.activity.description', icon: History },
+  { to: '/settings/workspace', matchPrefix: '/settings', labelKey: 'nav.settings', descriptionKey: 'section.settings.description', icon: Settings },
 ];
 
 // The terminal streams the engine's own TUI, so it has every feature the vendor

@@ -1,7 +1,7 @@
 import { type Locator } from '@playwright/test';
 import { test, expect, type Page } from '../lib/test-base';
 import { resetBackend } from '../lib/reset';
-import { waitForH2 } from '../lib/ui';
+import { waitForPage } from '../lib/ui';
 
 /** Each engine card is itself the launch button. */
 function engineCard(page: Page, engine: string): Locator {
@@ -14,10 +14,12 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoLaunch(page: Page): Promise<void> {
   await page.goto('/launch');
-  await waitForH2(page, 'Local Terminal');
+  await waitForPage(page, 'Local Terminal');
   await expect(engineCard(page, 'Claude')).toBeVisible();
   // Seeded by /api/__e2e_reset: one registered project pointing at $HOME.
-  await expect(page.locator('#launchpad-project')).not.toHaveValue('');
+  // The page has no workspace field of its own any more — the header switcher
+  // owns the selection, and the launcher reports the directory it resolved to.
+  await expect(page.getByTestId('launch-workspace')).not.toBeEmpty();
 }
 
 test('opening an engine streams its output into an in-browser terminal', async ({ page }) => {
@@ -57,7 +59,7 @@ test('unavailable browser terminal is explained and launch actions are disabled'
   }));
 
   await page.goto('/launch');
-  await waitForH2(page, 'Local Terminal');
+  await waitForPage(page, 'Local Terminal');
   await expect(page.getByText('Browser terminal unavailable')).toBeVisible();
   await expect(engineCard(page, 'Claude')).toBeDisabled();
 });

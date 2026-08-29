@@ -6,6 +6,15 @@ import { SystemMetricsProvider } from '../context/SystemMetricsContext';
 import { LanguageProvider } from '../i18n/LanguageProvider';
 import { expect, test, describe } from 'vitest';
 
+/**
+ * The tab carrying aria-current is what identifies the leaf route. The page
+ * heading names the *section* (Agent, Activity, Settings), so it can no
+ * longer stand in for "did this URL resolve to the right page".
+ */
+function activeTab(name: string | RegExp) {
+  return screen.findByRole('link', { name, current: 'page' });
+}
+
 function renderWithRouter(initialPath = '/skills') {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
@@ -23,7 +32,7 @@ function renderWithRouter(initialPath = '/skills') {
 describe('App Layout and Navigation', () => {
   test('renders the five workflow navigation links', async () => {
     renderWithRouter();
-    await screen.findByRole('heading', { name: /Resources/i });
+    await activeTab(/Resources/i);
     expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Agent' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Automations' })).toBeInTheDocument();
@@ -31,14 +40,21 @@ describe('App Layout and Navigation', () => {
     expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
   });
 
+  test('the heading names the section, not the tab below it', async () => {
+    // Both used to read "Sessions", one directly above the other.
+    renderWithRouter('/activity/sessions');
+    expect(await activeTab('Sessions')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Activity');
+  });
+
   test('shows correct page heading for /config route', async () => {
     renderWithRouter('/config');
-    expect(await screen.findByRole('heading', { name: /Workspace/i })).toBeInTheDocument();
+    expect(await activeTab(/Workspace/i)).toBeInTheDocument();
   });
 
   test('shows correct page heading for /dashboard route', async () => {
     renderWithRouter('/dashboard');
-    expect(await screen.findByRole('heading', { name: /Tasks/i })).toBeInTheDocument();
+    expect(await activeTab(/Tasks/i)).toBeInTheDocument();
   });
 });
 
@@ -48,7 +64,7 @@ describe('Activity tabs are Sessions / Usage', () => {
     ['/activity/usage', 'Usage'],
   ])('%s renders as %s', async (path, label) => {
     renderWithRouter(path);
-    expect(await screen.findByRole('heading', { name: label })).toBeInTheDocument();
+    expect(await activeTab(label)).toBeInTheDocument();
   });
 
   // Timeline is gone; every URL that used to point at it now lands on
@@ -63,7 +79,7 @@ describe('Activity tabs are Sessions / Usage', () => {
     ['/analytics', 'Usage'],
   ])('the old %s location redirects to %s', async (path, label) => {
     renderWithRouter(path);
-    expect(await screen.findByRole('heading', { name: label })).toBeInTheDocument();
+    expect(await activeTab(label)).toBeInTheDocument();
   });
 
   // Skills/Prompts/Hooks/Plugins are one page now, so every address that
@@ -82,7 +98,7 @@ describe('Activity tabs are Sessions / Usage', () => {
   ])('the old %s location still resolves to Resources', async path => {
     renderWithRouter(path);
 
-    await screen.findByRole('heading', { name: /Resources/i });
+    await activeTab(/Resources/i);
     const tabs = screen.getByRole('navigation', { name: 'Settings sections' });
     expect(within(tabs).getByRole('link', { name: 'Resources' })).toBeInTheDocument();
   });
@@ -91,7 +107,7 @@ describe('Activity tabs are Sessions / Usage', () => {
     // Dropping the query here would silently discard a saved filtered view,
     // or the params that open one session's detail.
     renderWithRouter('/activity/history?q=deploy&project=%2Fwork%2Fapp');
-    await screen.findByRole('heading', { name: 'Sessions' });
+    await activeTab('Sessions');
 
     const tabs = screen.getByRole('navigation', { name: 'Activity sections' });
     const target = new URL(
@@ -106,12 +122,12 @@ describe('Activity tabs are Sessions / Usage', () => {
 describe('Logs lives under Automations', () => {
   test('renders at /automations/logs', async () => {
     renderWithRouter('/automations/logs');
-    expect(await screen.findByRole('heading', { name: /^Logs$/ })).toBeInTheDocument();
+    expect(await activeTab(/^Logs$/)).toBeInTheDocument();
   });
 
   test('appears as an Automations tab, not an Activity one', async () => {
     renderWithRouter('/automations/logs');
-    await screen.findByRole('heading', { name: /^Logs$/ });
+    await activeTab(/^Logs$/);
 
     const tabs = screen.getByRole('navigation', { name: 'Automations sections' });
     expect(within(tabs).getByRole('link', { name: 'Logs' })).toBeInTheDocument();
@@ -119,7 +135,7 @@ describe('Logs lives under Automations', () => {
 
   test('the old /activity/logs location redirects instead of 404ing', async () => {
     renderWithRouter('/activity/logs');
-    expect(await screen.findByRole('heading', { name: /^Logs$/ })).toBeInTheDocument();
+    expect(await activeTab(/^Logs$/)).toBeInTheDocument();
     expect(
       screen.getByRole('navigation', { name: 'Automations sections' }),
     ).toBeInTheDocument();
@@ -127,6 +143,6 @@ describe('Logs lives under Automations', () => {
 
   test('the legacy /logs shortcut still lands on the viewer', async () => {
     renderWithRouter('/logs');
-    expect(await screen.findByRole('heading', { name: /^Logs$/ })).toBeInTheDocument();
+    expect(await activeTab(/^Logs$/)).toBeInTheDocument();
   });
 });

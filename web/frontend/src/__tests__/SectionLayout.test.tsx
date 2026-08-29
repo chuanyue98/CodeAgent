@@ -14,7 +14,6 @@ function renderActivityTabs(initialPath: string) {
           element={
             <SectionLayout
               labelKey="nav.activity"
-              descriptionKey="section.activity.description"
               tabs={ACTIVITY_TABS}
               preserveParams={ACTIVITY_FILTER_PARAMS}
             />

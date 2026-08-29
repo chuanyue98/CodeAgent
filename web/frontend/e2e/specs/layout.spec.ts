@@ -1,6 +1,6 @@
 import { expect, test } from '../lib/test-base';
 import { resetBackend } from '../lib/reset';
-import { waitForH2 } from '../lib/ui';
+import { waitForPage } from '../lib/ui';
 
 test.beforeEach(async ({ baseURL }) => {
   await resetBackend(baseURL!);
@@ -9,7 +9,7 @@ test.beforeEach(async ({ baseURL }) => {
 test('laptop layout keeps session controls inside their panels and metrics out of the content', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto('/sessions');
-  await waitForH2(page, 'Sessions');
+  await waitForPage(page, 'Sessions');
 
   const filters = page.getByTestId('activity-filters');
   const list = page.getByTestId('session-list');
@@ -32,7 +32,7 @@ test('laptop layout keeps session controls inside their panels and metrics out o
 test('compact layout stacks session filters above results', async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 768 });
   await page.goto('/sessions');
-  await waitForH2(page, 'Sessions');
+  await waitForPage(page, 'Sessions');
 
   const navBox = await page.locator('aside').first().boundingBox();
   const filtersBox = await page.getByTestId('activity-filters').boundingBox();
@@ -57,7 +57,7 @@ test('nested workspace routes avoid page-level overflow at supported widths', as
     await page.setViewportSize({ width, height: 768 });
     for (const route of routes) {
       await page.goto(route.path);
-      await waitForH2(page, route.label);
+      await waitForPage(page, route.label);
       const hasPageOverflow = await page.evaluate(
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
       );

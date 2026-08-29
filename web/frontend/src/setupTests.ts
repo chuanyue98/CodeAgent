@@ -105,3 +105,10 @@ if (typeof globalThis.localStorage === 'undefined' || globalThis.localStorage ==
     writable: true,
   });
 }
+
+// Not implemented by the DOM environment used here, and every listbox that
+// keeps its focused option in view calls it during a passive effect — where a
+// throw is not caught by anything and fails the render outright.
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}

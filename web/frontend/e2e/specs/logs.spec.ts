@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '../lib/test-base';
 import { resetBackend } from '../lib/reset';
-import { waitForH2 } from '../lib/ui';
+import { waitForPage } from '../lib/ui';
 
 test.beforeEach(async ({ baseURL }) => {
   await resetBackend(baseURL!);
@@ -8,7 +8,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoLogs(page: Page): Promise<void> {
   await page.goto('/logs');
-  await waitForH2(page, 'Logs');
+  await waitForPage(page, 'Logs');
 }
 
 const autoScrollBtn = (page: Page) =>

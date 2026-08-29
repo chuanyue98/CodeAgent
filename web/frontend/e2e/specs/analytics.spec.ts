@@ -1,6 +1,6 @@
 import { test, expect } from '../lib/test-base';
 import { resetBackend } from '../lib/reset';
-import { waitForH2 } from '../lib/ui';
+import { waitForPage } from '../lib/ui';
 
 /**
  * 用量页的全部展示与统计逻辑（时间范围、模型明细展开、工具排行、空态）
@@ -14,7 +14,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 test('every section renders on one page instead of behind sub-tabs', async ({ page }) => {
   await page.goto('/analytics');
-  await waitForH2(page, 'Usage');
+  await waitForPage(page, 'Usage');
   const main = page.locator('main');
   await expect(main).toContainText('Total Cost');
   await expect(main).toContainText('Cost by engine');

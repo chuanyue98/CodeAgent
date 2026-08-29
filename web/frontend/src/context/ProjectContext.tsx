@@ -33,6 +33,32 @@ function writeStoredWorkspace(path: string): void {
   }
 }
 
+// Directories the user typed in rather than picked from the registry. They are
+// kept because an unregistered path is still a deliberate choice: without this
+// list the heal-the-selection effect below would read it as "no longer
+// resolves" and bounce the user back to the first registered project.
+const CUSTOM_WORKSPACES_KEY = 'codeagent.customWorkspaces';
+const CUSTOM_WORKSPACE_LIMIT = 5;
+
+function readStoredCustomWorkspaces(): string[] {
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_WORKSPACES_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === 'string' && item.trim() !== '');
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredCustomWorkspaces(paths: string[]): void {
+  try {
+    window.localStorage.setItem(CUSTOM_WORKSPACES_KEY, JSON.stringify(paths));
+  } catch {
+    // Same as above: the list is a convenience, not state anything depends on.
+  }
+}
+
 interface ProxyConfig {
   host: string;
   port: number;
@@ -72,6 +98,8 @@ interface ProjectContextType {
   selectedWorkspace: string;
   /** Selects the workspace and follows it with the project's resource group. */
   setSelectedWorkspace: (path: string) => void;
+  /** Recently used directories that are not in the registry, most recent first. */
+  customWorkspaces: string[];
   groups: Record<string, GroupDefinition>;
   refreshConfig: () => Promise<void>;
   updateConfig: (newConfig: Config) => Promise<void>;
@@ -92,6 +120,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [availableGroups, setAvailableGroups] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedWorkspace, setSelectedWorkspaceState] = useState<string>(readStoredWorkspace);
+  const [customWorkspaces, setCustomWorkspaces] = useState<string[]>(readStoredCustomWorkspaces);
   const currentGroupRef = useRef(currentGroup);
   useEffect(() => {
     currentGroupRef.current = currentGroup;
@@ -220,18 +249,30 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     // Group chip in the header never disagrees with the open project).
     const project = projectsRef.current.find(item => item.path === path);
     if (project?.group) selectGroup(project.group);
+    else if (path.trim()) {
+      setCustomWorkspaces(previous => {
+        const next = [path, ...previous.filter(item => item !== path)]
+          .slice(0, CUSTOM_WORKSPACE_LIMIT);
+        writeStoredCustomWorkspaces(next);
+        return next;
+      });
+    }
     // selectGroup is stable (useCallback with no deps), so this keeps the
     // stable identity the mount-only effects below rely on.
   }, [selectGroup]);
 
   // Heal a selection that no longer resolves (project removed, path gone
   // missing, or nothing chosen yet) by falling back to the first usable one.
+  // A directory the user typed in resolves too -- it is not in the registry by
+  // design, and bouncing off it would make the header's custom-path field
+  // impossible to use.
   useEffect(() => {
     if (validProjects.length === 0) return;
     if (validProjects.some(project => project.path === selectedWorkspace)) return;
+    if (customWorkspaces.includes(selectedWorkspace)) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedWorkspace(validProjects[0].path);
-  }, [selectedWorkspace, setSelectedWorkspace, validProjects]);
+  }, [customWorkspaces, selectedWorkspace, setSelectedWorkspace, validProjects]);
 
   const value = useMemo<ProjectContextType>(() => ({
     currentGroup,
@@ -241,6 +282,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     validProjects,
     selectedWorkspace,
     setSelectedWorkspace,
+    customWorkspaces,
     groups,
     refreshConfig,
     updateConfig,
@@ -254,6 +296,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     validProjects,
     selectedWorkspace,
     setSelectedWorkspace,
+    customWorkspaces,
     groups,
     refreshConfig,
     updateConfig,

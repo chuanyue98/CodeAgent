@@ -1,10 +1,11 @@
 import { test, expect } from './lib/test-base';
 import AxeBuilder from '@axe-core/playwright';
+import { waitForPage } from './lib/ui';
 
-// One entry per route registered in src/App.tsx's `navItems`/`PAGE_LABELS`.
-// `label` is the exact text App.tsx renders in the page header (`<h2>`),
-// which doubles as the universal "did this page mount" signal for every
-// route — no need for page-specific selectors here.
+// One entry per leaf route in src/navigation.ts's PAGE_LABEL_KEYS. `label` is
+// the exact text that route's tab renders, which doubles as the universal
+// "did this page mount" signal for every route (see waitForPage) — no need
+// for page-specific selectors here.
 //
 // `emptyStateHint` is set for pages whose backing data is guaranteed empty
 // against the E2E fixtures (see start-server.sh) — asserting the hint text
@@ -43,7 +44,7 @@ for (const { path, label, screenshotSlug, emptyStateHint } of PAGES) {
     });
 
     await page.goto(path);
-    await expect(page.getByRole('heading', { level: 1, name: label, exact: true })).toBeVisible();
+    await waitForPage(page, label);
     // Let the page's mount-time fetches resolve. Not networkidle: LogViewer
     // may open a long-lived SSE stream that never goes idle.
     await page.waitForTimeout(800);

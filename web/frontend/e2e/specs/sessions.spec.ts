@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '../lib/test-base';
 import { resetBackend } from '../lib/reset';
-import { waitForH2 } from '../lib/ui';
+import { waitForPage } from '../lib/ui';
 
 test.beforeEach(async ({ baseURL }) => {
   await resetBackend(baseURL!);
@@ -12,7 +12,7 @@ async function gotoSessions(page: Page): Promise<void> {
   // default, which would exact-match the seeded /tmp/e2e-* sessions out of
   // the list (0 sessions) instead of showing them.
   await page.goto('/sessions?project=all');
-  await waitForH2(page, 'Sessions');
+  await waitForPage(page, 'Sessions');
   await expect(page.getByText(/sessions?$/)).toBeVisible();
 }
 
@@ -46,7 +46,7 @@ test('an old Timeline link still opens the session it pointed at', async ({ page
   await page.goto(
     '/activity/timeline?session=claude-session-1&sessionEngine=claude&sessionProject=%2Ftmp%2Fe2e-claude-project',
   );
-  await waitForH2(page, 'Sessions');
+  await waitForPage(page, 'Sessions');
   await expect(page).toHaveURL(/\/activity\/sessions\?/);
   await expect(page).toHaveURL(/session=claude-session-1/);
 });

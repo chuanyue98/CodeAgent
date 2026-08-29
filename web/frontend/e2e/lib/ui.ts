@@ -7,10 +7,19 @@ import { type Page, type Locator, expect } from '@playwright/test';
  * layout change touches one place, not fifteen specs.
  */
 
-/** Waits for a page to have mounted — every route renders its label as the
- *  primary heading in App.tsx's header, so this is the universal render signal. */
-export async function waitForH2(page: Page, label: string): Promise<void> {
-  await expect(page.getByRole('heading', { level: 1, name: label, exact: true })).toBeVisible();
+/**
+ * Waits for a page to have mounted.
+ *
+ * A leaf route is named by whichever link carries aria-current: the section's
+ * tab in SectionLayout, or — for a section with no tabs, like Home — its entry
+ * in the primary nav. The h1 above the tab row names the *section*, so it no
+ * longer identifies which page rendered.
+ */
+export async function waitForPage(page: Page, label: string): Promise<void> {
+  const exact = new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+  await expect(
+    page.locator('a[aria-current="page"]').filter({ hasText: exact }).first(),
+  ).toBeVisible();
 }
 
 /** Opens the ProjectSwitcher dropdown (click toggle) and picks a group.
@@ -78,7 +87,7 @@ export async function gotoResource(
   category: string,
 ): Promise<void> {
   await page.goto('/settings/resources');
-  await waitForH2(page, 'Resources');
+  await waitForPage(page, 'Resources');
   // Kind groups start expanded, so the category rows are already visible;
   // clicking the kind header would collapse the group instead.
   await resourceCategory(page, kind, category).click();
