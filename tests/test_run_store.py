@@ -287,3 +287,65 @@ def test_legacy_rows_get_a_task_name_on_migration(tmp_path):
     # being guessed at as a task called "chat_claude".
     chat = store.get("chat_claude_1700000000456")
     assert chat is not None and chat.task_name is None
+
+
+def _record(task_id: str, **overrides) -> TaskRunRecord:
+    fields = {
+        "task_id": task_id,
+        "engine": "claude",
+        "pid": None,
+        "status": "completed",
+        "log_path": f"/logs/{task_id}.log",
+        "start_time": 1000.0,
+        "end_time": 1100.0,
+    }
+    fields.update(overrides)
+    return TaskRunRecord(**fields)
+
+
+def test_prune_drops_rows_that_ended_before_the_cutoff(store):
+    store.upsert(_record("old", start_time=10.0, end_time=20.0))
+    store.upsert(_record("recent", start_time=900.0, end_time=950.0))
+
+    removed = store.prune(older_than=100.0, keep_latest=0)
+
+    assert removed == ["/logs/old.log"]
+    assert store.get("old") is None
+    assert store.get("recent") is not None
+
+
+def test_prune_never_touches_a_running_row(store):
+    store.upsert(_record("alive", status="running", start_time=10.0, end_time=None))
+
+    assert store.prune(older_than=100.0, keep_latest=0) == []
+    assert store.get("alive") is not None
+
+
+def test_prune_keeps_the_newest_runs_whatever_their_age(store):
+    for index in range(5):
+        store.upsert(_record(f"run-{index}", start_time=float(index), end_time=1.0))
+
+    store.prune(older_than=1_000.0, keep_latest=2)
+
+    assert [r.task_id for r in store.list_history()] == ["run-4", "run-3"]
+
+
+def test_prune_judges_a_row_with_no_end_time_by_its_start(store):
+    store.upsert(
+        _record("never-finished", status="failed", start_time=10.0, end_time=None)
+    )
+
+    assert store.prune(older_than=100.0, keep_latest=0) == ["/logs/never-finished.log"]
+
+
+def test_prune_reports_nothing_when_all_rows_are_recent(store):
+    store.upsert(_record("recent", start_time=900.0, end_time=950.0))
+
+    assert store.prune(older_than=100.0, keep_latest=0) == []
+
+
+def test_log_paths_lists_what_the_table_still_points_at(store):
+    store.upsert(_record("one"))
+    store.upsert(_record("two"))
+
+    assert sorted(store.log_paths()) == ["/logs/one.log", "/logs/two.log"]

@@ -255,3 +255,125 @@ def test_kill_all_waits_without_holding_runner_lock(tmp_path):
 
     assert run.status == "stopped"
     assert runner._processes == {}
+
+
+def _seed_run(runner: TaskRunner, task_id: str, *, age_days: float, status="completed"):
+    """Writes a finished run plus its log file, both aged *age_days* into the past."""
+    from core.services.run_store import TaskRunRecord
+
+    when = time.time() - age_days * 86400
+    log_file = runner.log_dir / f"{task_id}.log"
+    log_file.write_text("output\n", encoding="utf-8")
+    os.utime(log_file, (when, when))
+    runner._run_store.upsert(
+        TaskRunRecord(
+            task_id=task_id,
+            engine="claude",
+            pid=None,
+            status=status,
+            log_path=str(log_file),
+            start_time=when,
+            end_time=when,
+        )
+    )
+    return log_file
+
+
+@pytest.fixture
+def age_only(monkeypatch):
+    """Drops the keep-the-newest-N floor so age alone decides what is pruned.
+
+    The real floor (RUN_RETENTION_KEEP) would protect every row in a test that
+    seeds a handful, which would let these pass without exercising the cutoff.
+    """
+    monkeypatch.setattr("core.services.runner_service.RUN_RETENTION_KEEP", 0)
+
+
+def test_startup_prunes_runs_past_the_retention_window(tmp_path, age_only):
+    runner = TaskRunner(tmp_path)
+    old_log = _seed_run(runner, "ancient", age_days=90)
+    fresh_log = _seed_run(runner, "yesterday", age_days=1)
+
+    reopened = TaskRunner(tmp_path)
+
+    assert reopened._run_store.get("ancient") is None
+    assert reopened._run_store.get("yesterday") is not None
+    assert not old_log.exists()
+    assert fresh_log.exists()
+
+
+def test_startup_leaves_a_still_running_row_alone(tmp_path, age_only):
+    runner = TaskRunner(tmp_path)
+    log = _seed_run(runner, "ancient", age_days=90, status="running")
+
+    reopened = TaskRunner(tmp_path)
+
+    assert reopened._run_store.get("ancient") is not None
+    assert log.exists()
+
+
+def test_startup_sweeps_log_files_no_row_points_at(tmp_path, age_only):
+    runner = TaskRunner(tmp_path)
+    orphan = runner.log_dir / "orphan.jsonl"
+    orphan.write_text("{}\n", encoding="utf-8")
+    when = time.time() - 90 * 86400
+    os.utime(orphan, (when, when))
+
+    TaskRunner(tmp_path)
+
+    assert not orphan.exists()
+
+
+def test_a_recent_orphan_log_is_left_in_place(tmp_path, age_only):
+    runner = TaskRunner(tmp_path)
+    orphan = runner.log_dir / "orphan.jsonl"
+    orphan.write_text("{}\n", encoding="utf-8")
+
+    TaskRunner(tmp_path)
+
+    assert orphan.exists()
+
+
+def test_retention_can_be_disabled_by_env(tmp_path, monkeypatch, age_only):
+    runner = TaskRunner(tmp_path)
+    log = _seed_run(runner, "ancient", age_days=90)
+
+    monkeypatch.setenv("CA_RUN_RETENTION_DAYS", "0")
+    reopened = TaskRunner(tmp_path)
+
+    assert reopened._run_store.get("ancient") is not None
+    assert log.exists()
+
+
+def test_retention_window_can_be_widened_by_env(tmp_path, monkeypatch, age_only):
+    runner = TaskRunner(tmp_path)
+    _seed_run(runner, "seven-weeks-ago", age_days=49)
+
+    monkeypatch.setenv("CA_RUN_RETENTION_DAYS", "365")
+    reopened = TaskRunner(tmp_path)
+
+    assert reopened._run_store.get("seven-weeks-ago") is not None
+
+
+def test_unparsable_retention_env_falls_back_to_the_default(
+    tmp_path, monkeypatch, age_only
+):
+    runner = TaskRunner(tmp_path)
+    _seed_run(runner, "ancient", age_days=90)
+
+    monkeypatch.setenv("CA_RUN_RETENTION_DAYS", "soon")
+    reopened = TaskRunner(tmp_path)
+
+    assert reopened._run_store.get("ancient") is None
+
+
+def test_the_newest_runs_survive_the_window(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.services.runner_service.RUN_RETENTION_KEEP", 2)
+    runner = TaskRunner(tmp_path)
+    for index in range(4):
+        _seed_run(runner, f"run-{index}", age_days=90 - index)
+
+    reopened = TaskRunner(tmp_path)
+
+    surviving = {r.task_id for r in reopened._run_store.list_history()}
+    assert surviving == {"run-2", "run-3"}

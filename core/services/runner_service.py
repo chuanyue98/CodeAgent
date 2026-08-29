@@ -8,6 +8,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +17,37 @@ from core.host_env import child_environ
 from core.services.run_store import RunStore, TaskRunRecord
 
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
+
+#: Finished runs that ended more than this many days ago are dropped from the
+#: run DB and their log files deleted, once, at startup. Log files are the part
+#: that actually grows -- a single run's log is unbounded in size, and nothing
+#: removed them before, so a long-lived install accumulated every log it ever
+#: wrote. ``CA_RUN_RETENTION_DAYS=0`` turns pruning off entirely.
+RUN_RETENTION_DAYS = 30
+#: ...but never prune below this many most-recent runs, whatever their age, so
+#: an install that sat idle past the cutoff still opens with its history.
+RUN_RETENTION_KEEP = 200
+RUN_RETENTION_ENV = "CA_RUN_RETENTION_DAYS"
+
+
+def _retention_days() -> int:
+    """Reads the retention window, falling back to the default when unusable."""
+    raw = os.environ.get(RUN_RETENTION_ENV, "").strip()
+    if not raw:
+        return RUN_RETENTION_DAYS
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return RUN_RETENTION_DAYS
+
+
+def _unlink_quietly(path: Path) -> None:
+    """Deletes *path*, tolerating a Windows handle still holding it open."""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
 
 # Field name each engine's JSON(L) output uses for its session identifier.
 # codex calls it "thread_id"; the others call it "session_id"/"sessionID".
@@ -59,6 +91,7 @@ class TaskRunner:
         self.log_dir = self.root_dir / ".ca_task_logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self._run_store = RunStore(self.log_dir / "runs.db")
+        self._prune_old_runs()
         self._load_persisted_runs()
 
     def reset_for_e2e(self) -> None:
@@ -100,8 +133,6 @@ class TaskRunner:
         ``schedule_id`` is recorded on the run when a schedule fired it, so the
         schedule can later report what the run actually did.
         """
-        import time
-
         if not _SAFE_NAME_RE.match(task_name):
             raise ValueError(f"Invalid task name: {task_name!r}")
         if not _SAFE_NAME_RE.match(group):
@@ -208,7 +239,6 @@ class TaskRunner:
         for v1) and writes structured JSON(L) output to a distinct
         ``.jsonl`` log so ``logs.py``'s ``*.log`` glob doesn't pick it up.
         """
-        import time
 
         if engine not in ENGINES:
             raise ValueError(f"Invalid engine: {engine!r}")
@@ -295,6 +325,37 @@ class TaskRunner:
             task_name=record.task_name,
             schedule_id=record.schedule_id,
         )
+
+    def _prune_old_runs(self) -> None:
+        """Drops aged-out run rows and the log files nothing points at any more.
+
+        Runs at startup rather than on a timer: the set only grows when a run
+        finishes, and a process that never restarts is not the one with a disk
+        problem.
+        """
+        days = _retention_days()
+        if days <= 0:
+            return
+        cutoff = time.time() - days * 86400
+
+        for log_path in self._run_store.prune(
+            older_than=cutoff, keep_latest=RUN_RETENTION_KEEP
+        ):
+            _unlink_quietly(Path(log_path))
+
+        # Logs whose row was deleted individually (see `delete`) leave no
+        # trace in the table, so age is the only thing left to judge them by.
+        still_referenced = {Path(p) for p in self._run_store.log_paths()}
+        for pattern in ("*.log", "*.jsonl"):
+            for stale in self.log_dir.glob(pattern):
+                if stale in still_referenced:
+                    continue
+                try:
+                    if stale.stat().st_mtime >= cutoff:
+                        continue
+                except OSError:
+                    continue
+                _unlink_quietly(stale)
 
     def _load_persisted_runs(self):
         """Reload runs from the SQLite store so they survive restarts."""
@@ -453,8 +514,6 @@ class TaskRunner:
             proc = self._processes.get(task_id)
             rc = proc.poll() if proc is not None else None
             if rc is not None:
-                import time
-
                 run.status = "completed" if rc == 0 else "failed"
                 run.end_time = time.time()
                 run.exit_code = rc
@@ -465,8 +524,6 @@ class TaskRunner:
                     )
                 self._persist(run)
             elif proc is None and not self._is_process_running(run.pid):
-                import time
-
                 run.status = "failed"
                 run.end_time = time.time()
                 self._persist(run)
@@ -510,7 +567,6 @@ class TaskRunner:
             try:
                 if self._processes.get(task_id) is proc:
                     self._processes.pop(task_id, None)
-                import time
 
                 run.status = "stopped"
                 run.end_time = time.time()

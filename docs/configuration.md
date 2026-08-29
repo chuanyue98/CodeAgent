@@ -275,5 +275,6 @@ a JSON body shaped like:
 | `CA_SKIP_AUTO_REGISTER` | No | Suppresses the "run `ca project add`" hint when launching from an unregistered directory |
 | `CA_DEBUG` | No | Set to `1` for verbose skill/hook/plugin/prompt scanner debug output |
 | `CA_TASKS_ROOT` | No | Overrides the task-template directory (default: `tasks/` under the resolved resource root) |
+| `CA_RUN_RETENTION_DAYS` | No | How long finished task runs and their log files are kept. Default `30`; `0` keeps everything. The 200 most recent runs survive regardless of age |
 
 A handful of others (`CA_E2E`, `CA_AGENT_GATEWAY_FAKE`, `CA_ROOT_DIR`, `CA_AGENT_LEGACY_FALLBACK`, `CA_PROJECT_GROUP`, `CODEAGENT_RESOURCE_ROOT`) exist mainly for internal tooling and tests — see `.env.example` for the full list with descriptions.
