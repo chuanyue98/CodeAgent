@@ -90,12 +90,31 @@ describe('SessionDetailPanel transcript window', () => {
     expect(screen.queryByRole('button', { name: /Load earlier/ })).not.toBeInTheDocument();
   });
 
-  test('the jump controls are offered once there is a transcript', async () => {
+  test('the jump controls sit outside the transcript and follow the scroll position', async () => {
     mockTranscript(120);
     renderPanel();
+    await screen.findByText('message-119');
 
-    expect(await screen.findByRole('button', { name: 'Jump to the latest' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Jump to the start' })).toBeInTheDocument();
+    // jsdom has no layout, so stand in for a transcript taller than the panel.
+    const scroller = screen.getByTestId('session-scroll');
+    Object.defineProperty(scroller, 'scrollHeight', { value: 2000, configurable: true });
+    Object.defineProperty(scroller, 'clientHeight', { value: 400, configurable: true });
+    Object.defineProperty(scroller, 'scrollTop', { value: 1600, writable: true, configurable: true });
+
+    fireEvent.scroll(scroller);
+
+    // Parked at the newest message: only the way back up is worth offering,
+    // and it must not live inside the content that just scrolled away.
+    const toTop = await screen.findByRole('button', { name: 'Jump to the start' });
+    expect(scroller.contains(toTop)).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Jump to the latest' })).not.toBeInTheDocument();
+
+    scroller.scrollTop = 0;
+    fireEvent.scroll(scroller);
+
+    const toBottom = await screen.findByRole('button', { name: 'Jump to the latest' });
+    expect(scroller.contains(toBottom)).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Jump to the start' })).not.toBeInTheDocument();
   });
 });
 
@@ -168,5 +187,67 @@ describe('SessionDetailPanel resume', () => {
     expect(location).toContain('engine=claude');
     expect(location).toContain('session=session-a');
     expect(location).toContain(encodeURIComponent('/workspace/project-a'));
+  });
+});
+
+describe('SessionDetailPanel progress', () => {
+  test('summarizes turns, duration and the last actions above the transcript', async () => {
+    const detail = {
+      session_id: 'session-a',
+      engine: 'claude',
+      project_path: '/workspace/project-a',
+      title: 'A session',
+      messages: [
+        { ...message(0), timestamp: '2026-07-20T10:00:00Z' },
+        {
+          ...message(1),
+          timestamp: '2026-07-20T11:23:00Z',
+          tool_calls: [
+            { name: 'Edit', args_preview: '{"file_path": "core/web/routers/history.py"}', result_preview: '' },
+            { name: 'Bash', args_preview: '{"command": "pytest -q"}', result_preview: '' },
+          ],
+        },
+      ],
+    };
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/history/')) {
+        const text = JSON.stringify(detail);
+        return Promise.resolve({ ok: true, status: 200, text: async () => text, json: async () => detail });
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    }) as typeof fetch;
+
+    renderPanel();
+
+    const strip = await screen.findByTestId('session-progress');
+    expect(strip).toHaveTextContent('1 turns');
+    expect(strip).toHaveTextContent('1h23m');
+    expect(strip).toHaveTextContent('1 files');
+    // Newest action first, and a file operand is shown as the path rather
+    // than the raw argument JSON.
+    expect(strip).toHaveTextContent('Bash');
+    expect(strip).toHaveTextContent('core/web/routers/history.py');
+  });
+
+  test('renders nothing when there is no transcript to summarize', async () => {
+    const detail = {
+      session_id: 'session-a',
+      engine: 'claude',
+      project_path: '/workspace/project-a',
+      title: 'A session',
+      messages: [],
+    };
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/history/')) {
+        const text = JSON.stringify(detail);
+        return Promise.resolve({ ok: true, status: 200, text: async () => text, json: async () => detail });
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    }) as typeof fetch;
+
+    renderPanel();
+
+    await screen.findByText('This session has no messages.');
+    expect(screen.queryByTestId('session-progress')).not.toBeInTheDocument();
   });
 });

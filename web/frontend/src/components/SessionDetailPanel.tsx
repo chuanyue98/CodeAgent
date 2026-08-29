@@ -25,6 +25,7 @@ import { ALL_ENGINES, READ_ONLY_ENGINES, engineLabel } from '../utils/engines';
 import ConfirmDialog from './shared/ConfirmDialog';
 import { useT } from '../i18n/context';
 import MarkdownMessage from './MarkdownMessage';
+import SessionProgress from './SessionProgress';
 
 /**
  * Transcript messages rendered at once. A long session is ~1,700 messages
@@ -94,6 +95,21 @@ export default function SessionDetailPanel({
     });
   }, []);
 
+  // Which jump buttons are worth showing: the one pointing at the edge you
+  // are already sitting on is noise.
+  const [scrollEdges, setScrollEdges] = useState({ atTop: true, atBottom: true });
+
+  const syncScrollEdges = useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const slack = 24;
+    setScrollEdges({
+      atTop: element.scrollTop <= slack,
+      atBottom:
+        element.scrollHeight - element.scrollTop - element.clientHeight <= slack,
+    });
+  }, []);
+
   // A transcript is read from the end: the last thing the engine said is why
   // you opened it. Jump there once the messages land, without animating
   // through everything above.
@@ -101,7 +117,8 @@ export default function SessionDetailPanel({
     if (!detail) return;
     const element = scrollRef.current;
     if (element) element.scrollTop = element.scrollHeight;
-  }, [detail]);
+    syncScrollEdges();
+  }, [detail, syncScrollEdges]);
 
   // Prepending older messages moves everything down by their height. Restore
   // the distance from the bottom so the row you were reading stays put.
@@ -111,7 +128,8 @@ export default function SessionDetailPanel({
     anchorFromBottomRef.current = null;
     const element = scrollRef.current;
     if (element) element.scrollTop = element.scrollHeight - anchor;
-  }, [visibleCount]);
+    syncScrollEdges();
+  }, [visibleCount, syncScrollEdges]);
 
   const loadEarlier = useCallback(() => {
     const element = scrollRef.current;
@@ -246,128 +264,138 @@ export default function SessionDetailPanel({
           other axis compute to `auto`, so the whole panel picked up a
           horizontal scrollbar whenever one line of a transcript was long.
           Code blocks keep their own — wrapping code would mangle it. */}
-      <div
-        ref={scrollRef}
-        className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden pt-3"
-      >
-        {usage && (
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={scrollRef}
+          data-testid="session-scroll"
+          onScroll={syncScrollEdges}
+          className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden pt-3"
+        >
+          <SessionProgress detail={detail} usage={usage} />
+
+          {usage && (
+            <section data-testid="session-usage">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+                {t('sessionDetail.usage')}
+              </p>
+              <div className="mb-2 grid grid-cols-2 gap-2">
+                <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-2 text-center">
+                  <p className="text-sm font-bold text-slate-800">{fmtTokens(totalTokens)}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">Token</p>
+                </div>
+                <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-2 text-center">
+                  <p className="text-sm font-bold text-slate-800">{fmtCost(usage.cost)}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">{t('sessionDetail.estCost')}</p>
+                </div>
+              </div>
+              {usage.modelBreakdowns?.length > 0 && (
+                <div className="space-y-1">
+                  {usage.modelBreakdowns.map((mb, i) => (
+                    <div key={`${mb.modelName}-${i}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="min-w-0 break-all font-mono text-slate-600">{mb.modelName}</span>
+                      <div className="flex flex-wrap gap-3 text-slate-500">
+                        <span>{t('sessionDetail.in', { tokens: fmtTokens(mb.inputTokens) })}</span>
+                        <span>{t('sessionDetail.out', { tokens: fmtTokens(mb.outputTokens) })}</span>
+                        <span className="font-semibold text-slate-700">{fmtCost(mb.cost)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="mt-2 flex flex-wrap gap-4 border-t border-slate-50 pt-2 text-xs text-slate-500">
+                <span>{t('sessionDetail.cacheWrite', { tokens: fmtTokens(usage.cacheCreationTokens) })}</span>
+                <span>{t('sessionDetail.cacheRead', { tokens: fmtTokens(usage.cacheReadTokens) })}</span>
+              </div>
+            </section>
+          )}
+
           <section>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
-              {t('sessionDetail.usage')}
+              {t('sessionDetail.conversation')}
             </p>
-            <div className="mb-2 grid grid-cols-2 gap-2">
-              <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-2 text-center">
-                <p className="text-sm font-bold text-slate-800">{fmtTokens(totalTokens)}</p>
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Token</p>
-              </div>
-              <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-2 text-center">
-                <p className="text-sm font-bold text-slate-800">{fmtCost(usage.cost)}</p>
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">{t('sessionDetail.estCost')}</p>
-              </div>
-            </div>
-            {usage.modelBreakdowns?.length > 0 && (
-              <div className="space-y-1">
-                {usage.modelBreakdowns.map((mb, i) => (
-                  <div key={`${mb.modelName}-${i}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <span className="min-w-0 break-all font-mono text-slate-600">{mb.modelName}</span>
-                    <div className="flex flex-wrap gap-3 text-slate-500">
-                      <span>{t('sessionDetail.in', { tokens: fmtTokens(mb.inputTokens) })}</span>
-                      <span>{t('sessionDetail.out', { tokens: fmtTokens(mb.outputTokens) })}</span>
-                      <span className="font-semibold text-slate-700">{fmtCost(mb.cost)}</span>
+            {loading && (
+              <p className="flex items-center gap-2 text-xs text-slate-400">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t('sessionDetail.loadingConversation')}
+              </p>
+            )}
+            {!loading && loadError && <p className="text-xs text-slate-400">{loadError}</p>}
+            {!loading && !loadError && detail && messages.length === 0 && (
+              <p className="text-xs text-slate-400">{t('sessionDetail.noMessages')}</p>
+            )}
+            {!loading && !loadError && detail && messages.length > 0 && (
+              <div className="space-y-3">
+                {hiddenCount > 0 && (
+                  <button
+                    onClick={loadEarlier}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-200 py-2 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                  >
+                    <ChevronUp className="h-3.5 w-3.5" />
+                    {t('sessionDetail.loadEarlier', {
+                      shown: String(visibleMessages.length),
+                      total: String(messages.length),
+                    })}
+                  </button>
+                )}
+                {visibleMessages.map((msg, i) => (
+                  <div
+                    key={`${msg.timestamp}-${msg.role}-${hiddenCount + i}`}
+                    className="rounded-lg border border-slate-100 p-3"
+                  >
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-xs font-semibold uppercase text-slate-600">{msg.role}</span>
+                      <span className="text-[10px] text-slate-400">
+                        {msg.timestamp ? new Date(msg.timestamp).toLocaleString() : ''}
+                      </span>
                     </div>
+                    {/* Same rendering the Agent page gives these messages: they
+                        are the transcript of a session an engine wrote in
+                        markdown, so showing them raw meant a wall of ** and
+                        backticks in the one place you go to read them back. */}
+                    <div className="prose prose-sm prose-slate max-w-none break-words">
+                      <MarkdownMessage text={msg.content} />
+                    </div>
+                    {msg.tool_calls?.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {msg.tool_calls.map((tc, j) => (
+                          <div key={`${tc.name}-${j}`} className="rounded bg-slate-50 p-1.5 text-[11px]">
+                            <span className="font-mono font-semibold">{tc.name}</span>
+                            {tc.args_preview && <span className="text-slate-500"> — {tc.args_preview}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
-            <div className="mt-2 flex flex-wrap gap-4 border-t border-slate-50 pt-2 text-xs text-slate-500">
-              <span>{t('sessionDetail.cacheWrite', { tokens: fmtTokens(usage.cacheCreationTokens) })}</span>
-              <span>{t('sessionDetail.cacheRead', { tokens: fmtTokens(usage.cacheReadTokens) })}</span>
-            </div>
           </section>
-        )}
+        </div>
 
-        <section>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
-              {t('sessionDetail.conversation')}
-            </p>
-            {messages.length > 0 && (
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  aria-label={t('sessionDetail.toTop')}
-                  title={t('sessionDetail.toTop')}
-                  onClick={() => scrollTo('top')}
-                  className="rounded-md border border-slate-200 p-1 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600"
-                >
-                  <ArrowUpToLine className="h-3 w-3" />
-                </button>
-                <button
-                  aria-label={t('sessionDetail.toBottom')}
-                  title={t('sessionDetail.toBottom')}
-                  onClick={() => scrollTo('bottom')}
-                  className="rounded-md border border-slate-200 p-1 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600"
-                >
-                  <ArrowDownToLine className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-          </div>
-          {loading && (
-            <p className="flex items-center gap-2 text-xs text-slate-400">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t('sessionDetail.loadingConversation')}
-            </p>
+        {/* Pinned to the viewport, not to the transcript header: the panel
+            opens at the newest message, so a control that scrolls away with
+            the content is unreachable exactly when it is wanted. */}
+        <div className="pointer-events-none absolute bottom-3 right-3 flex flex-col gap-1">
+          {!scrollEdges.atTop && (
+            <button
+              aria-label={t('sessionDetail.toTop')}
+              title={t('sessionDetail.toTop')}
+              onClick={() => scrollTo('top')}
+              className="pointer-events-auto rounded-full border border-slate-200 bg-white/90 p-1.5 text-slate-500 shadow-sm backdrop-blur transition-colors hover:bg-slate-50 hover:text-slate-700"
+            >
+              <ArrowUpToLine className="h-3.5 w-3.5" />
+            </button>
           )}
-          {!loading && loadError && <p className="text-xs text-slate-400">{loadError}</p>}
-          {!loading && !loadError && detail && messages.length === 0 && (
-            <p className="text-xs text-slate-400">{t('sessionDetail.noMessages')}</p>
+          {!scrollEdges.atBottom && (
+            <button
+              aria-label={t('sessionDetail.toBottom')}
+              title={t('sessionDetail.toBottom')}
+              onClick={() => scrollTo('bottom')}
+              className="pointer-events-auto rounded-full border border-slate-200 bg-white/90 p-1.5 text-slate-500 shadow-sm backdrop-blur transition-colors hover:bg-slate-50 hover:text-slate-700"
+            >
+              <ArrowDownToLine className="h-3.5 w-3.5" />
+            </button>
           )}
-          {!loading && !loadError && detail && messages.length > 0 && (
-            <div className="space-y-3">
-              {hiddenCount > 0 && (
-                <button
-                  onClick={loadEarlier}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-200 py-2 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
-                >
-                  <ChevronUp className="h-3.5 w-3.5" />
-                  {t('sessionDetail.loadEarlier', {
-                    shown: String(visibleMessages.length),
-                    total: String(messages.length),
-                  })}
-                </button>
-              )}
-              {visibleMessages.map((msg, i) => (
-                <div
-                  key={`${msg.timestamp}-${msg.role}-${hiddenCount + i}`}
-                  className="rounded-lg border border-slate-100 p-3"
-                >
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase text-slate-600">{msg.role}</span>
-                    <span className="text-[10px] text-slate-400">
-                      {msg.timestamp ? new Date(msg.timestamp).toLocaleString() : ''}
-                    </span>
-                  </div>
-                  {/* Same rendering the Agent page gives these messages: they
-                      are the transcript of a session an engine wrote in
-                      markdown, so showing them raw meant a wall of ** and
-                      backticks in the one place you go to read them back. */}
-                  <div className="prose prose-sm prose-slate max-w-none break-words">
-                    <MarkdownMessage text={msg.content} />
-                  </div>
-                  {msg.tool_calls?.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {msg.tool_calls.map((tc, j) => (
-                        <div key={`${tc.name}-${j}`} className="rounded bg-slate-50 p-1.5 text-[11px]">
-                          <span className="font-mono font-semibold">{tc.name}</span>
-                          {tc.args_preview && <span className="text-slate-500"> — {tc.args_preview}</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+        </div>
       </div>
 
       <div className="space-y-2 border-t border-slate-100 pt-3">
