@@ -11,7 +11,7 @@ function instance(overrides: Record<string, unknown> = {}) {
     title: 'A chat',
     status: 'disconnected',
     pid: null,
-    started_at: new Date(Date.now() - 45 * 24 * 3600 * 1000).toISOString(),
+    startedAt: new Date(Date.now() - 45 * 24 * 3600 * 1000).toISOString(),
     stoppable: false,
     ...overrides,
   };

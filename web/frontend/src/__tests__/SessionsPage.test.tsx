@@ -71,9 +71,9 @@ beforeEach(() => {
     if (url.startsWith('/api/history/') && init?.method !== 'DELETE') {
       historyLoads.push(url);
       return jsonResponse({
-        session_id: 'session-a',
+        sessionId: 'session-a',
         engine: 'claude',
-        project_path: '/workspace/project-a',
+        projectPath: '/workspace/project-a',
         title: 'Session A',
         messages: [
           {
@@ -81,14 +81,14 @@ beforeEach(() => {
             content: 'how do I ship this',
             timestamp: '2026-07-20T10:00:00Z',
             model: 'claude-opus',
-            tool_calls: [],
+            toolCalls: [],
           },
         ],
       });
     }
     if (url.startsWith('/api/history/') && init?.method === 'DELETE') {
       deleteCalls.push(url);
-      const body = { status: 'deleted', session_id: 'deleted' };
+      const body = { status: 'deleted', sessionId: 'deleted' };
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -242,7 +242,7 @@ describe('SessionsPage session detail', () => {
 });
 
 describe('SessionsPage session identity', () => {
-  // The backend aggregates usage on (session_id, engine), so the same id can
+  // The backend aggregates usage on (sessionId, engine), so the same id can
   // appear under two engines. Keying rows or expansion state on the bare id
   // collided: React saw duplicate keys and expanding one row expanded both.
   const SHARED_ID = 'shared-session';

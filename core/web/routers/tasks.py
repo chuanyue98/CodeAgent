@@ -2,7 +2,11 @@ from fastapi import APIRouter, Body, HTTPException, Query
 
 from core.constants import ENGINES
 from core.services.config_service import ConfigService
-from core.services.runner_service import TaskAlreadyRunningError, TaskRunner
+from core.services.runner_service import (
+    TaskAlreadyRunningError,
+    TaskRunner,
+    TaskRunStatus,
+)
 from core.services.skill_service import SkillService
 from core.services.task_service import TaskService, is_valid_task_name
 from core.services.workspace_service import (
@@ -13,6 +17,7 @@ from core.services.workspace_service import (
 from core.services.workspace_service import (
     resolve_registered_workspace as resolve_workspace,
 )
+from core.web.case_convert import ProtocolModel, wire
 from core.web.resource_paths import ROOT_DIR, resolve_resource_path
 from core.web.routers.config import get_config_path
 
@@ -20,6 +25,27 @@ router = APIRouter(prefix="/api")
 
 # Singleton runner for the session
 _runner = TaskRunner(ROOT_DIR)
+
+
+class RunStatus(ProtocolModel):
+    """Wire shape of :class:`~core.services.runner_service.TaskRunStatus`."""
+
+    task_id: str
+    engine: str
+    pid: int | None
+    status: str
+    log_path: str
+    start_time: float
+    session_id: str | None = None
+    workspace: str | None = None
+    end_time: float | None = None
+    exit_code: int | None = None
+    task_name: str | None = None
+    schedule_id: str | None = None
+
+
+def _wire_run(status: TaskRunStatus) -> dict:
+    return wire(RunStatus(**vars(status)))
 
 
 def get_tasks_root():
@@ -129,13 +155,13 @@ async def generate_task(
         # dangling empty placeholder that would 409 all future retries.
         path.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return status.__dict__
+    return _wire_run(status)
 
 
 @router.get("/tasks/runs")
 async def list_runs():
     """Lists all background task runs."""
-    return _runner.list_runs()
+    return [_wire_run(run) for run in _runner.list_runs()]
 
 
 @router.get("/tasks/runs/{task_id}")
@@ -150,7 +176,7 @@ async def get_run_status(task_id: str):
     task_service = TaskService(get_tasks_root())
     task_data = task_service.get_task(task_name, log_path=status.log_path)
 
-    return {"status": status, "progress": task_data}
+    return {"status": _wire_run(status), "progress": task_data}
 
 
 @router.post("/tasks/runs/{task_id}/stop")
@@ -183,8 +209,8 @@ async def get_task(name: str, group: str = Query(None)):
                 if skill["id"] in group_skills_set:
                     task_skills.append(skill)
 
-        task["resolved_skills"] = task_skills
-        task["resolved_prompts"] = group_def.get("prompts", [])
+        task["resolvedSkills"] = task_skills
+        task["resolvedPrompts"] = group_def.get("prompts", [])
 
     return task
 
@@ -227,7 +253,7 @@ async def list_task_runs(name: str, limit: int = Query(50, ge=1, le=500)):
     """
     if not is_valid_task_name(name):
         raise HTTPException(status_code=400, detail="Task name must match [\\w.-]+")
-    return _runner.list_history(task_name=name, limit=limit)
+    return [_wire_run(run) for run in _runner.list_history(task_name=name, limit=limit)]
 
 
 @router.post("/tasks/{name}/run")
@@ -243,13 +269,15 @@ async def run_task(
         raise HTTPException(status_code=404, detail="Task not found")
     resolved_workspace = resolve_registered_workspace(workspace)
     try:
-        return _runner.run_task(
-            name,
-            engine,
-            resolved_workspace.group,
-            tasks_root=get_tasks_root(),
-            workspace=resolved_workspace.path,
-            prevent_overlap=True,
+        return _wire_run(
+            _runner.run_task(
+                name,
+                engine,
+                resolved_workspace.group,
+                tasks_root=get_tasks_root(),
+                workspace=resolved_workspace.path,
+                prevent_overlap=True,
+            )
         )
     except TaskAlreadyRunningError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

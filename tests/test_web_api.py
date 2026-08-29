@@ -284,9 +284,10 @@ async def test_list_task_runs_route_queries_history_by_task_name(mock_env, monke
     assert calls == {"task_name": "review", "limit": 50}
     data = resp.json()
     assert len(data) == 1
-    assert data[0]["task_id"] == "review_1"
-    assert data[0]["exit_code"] == 0
-    assert data[0]["end_time"] == 200
+    assert data[0]["taskId"] == "review_1"
+    assert data[0]["exitCode"] == 0
+    assert data[0]["endTime"] == 200
+    assert not [key for key in data[0] if "_" in key]
 
 
 @pytest.mark.asyncio

@@ -9,15 +9,15 @@ function message(index: number) {
     content: `message-${index}`,
     timestamp: `2026-07-20T10:${String(index % 60).padStart(2, '0')}:00Z`,
     model: 'claude-opus',
-    tool_calls: [],
+    toolCalls: [],
   };
 }
 
 function mockTranscript(count: number) {
   const detail = {
-    session_id: 'session-a',
+    sessionId: 'session-a',
     engine: 'claude',
-    project_path: '/workspace/project-a',
+    projectPath: '/workspace/project-a',
     title: 'Long session',
     messages: Array.from({ length: count }, (_, i) => message(i)),
   };
@@ -122,9 +122,9 @@ describe('SessionDetailPanel transcript window', () => {
 describe('SessionDetailPanel resume', () => {
   test('Continue asks the server, then opens the browser terminal', async () => {
     const detail = {
-      session_id: 'session-a',
+      sessionId: 'session-a',
       engine: 'claude',
-      project_path: '/workspace/project-a',
+      projectPath: '/workspace/project-a',
       title: 'A session',
       messages: [message(0)],
     };
@@ -193,18 +193,18 @@ describe('SessionDetailPanel resume', () => {
 describe('SessionDetailPanel progress', () => {
   test('summarizes turns, duration and the last actions above the transcript', async () => {
     const detail = {
-      session_id: 'session-a',
+      sessionId: 'session-a',
       engine: 'claude',
-      project_path: '/workspace/project-a',
+      projectPath: '/workspace/project-a',
       title: 'A session',
       messages: [
         { ...message(0), timestamp: '2026-07-20T10:00:00Z' },
         {
           ...message(1),
           timestamp: '2026-07-20T11:23:00Z',
-          tool_calls: [
-            { name: 'Edit', args_preview: '{"file_path": "core/web/routers/history.py"}', result_preview: '' },
-            { name: 'Bash', args_preview: '{"command": "pytest -q"}', result_preview: '' },
+          toolCalls: [
+            { name: 'Edit', argsPreview: '{"file_path": "core/web/routers/history.py"}', resultPreview: '' },
+            { name: 'Bash', argsPreview: '{"command": "pytest -q"}', resultPreview: '' },
           ],
         },
       ],
@@ -231,9 +231,9 @@ describe('SessionDetailPanel progress', () => {
 
   test('renders nothing when there is no transcript to summarize', async () => {
     const detail = {
-      session_id: 'session-a',
+      sessionId: 'session-a',
       engine: 'claude',
-      project_path: '/workspace/project-a',
+      projectPath: '/workspace/project-a',
       title: 'A session',
       messages: [],
     };

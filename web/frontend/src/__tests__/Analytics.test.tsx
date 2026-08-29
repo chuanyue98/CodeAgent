@@ -80,7 +80,7 @@ const TOOL_USAGE = {
 beforeEach(() => {
   toolRequests = [];
   globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-    if (url.includes('/api/analytics/summary')) return jsonResponse({ session_count: 2 });
+    if (url.includes('/api/analytics/summary')) return jsonResponse({ sessionCount: 2 });
     if (url.includes('/api/analytics/engines')) {
       return jsonResponse([
         {
@@ -207,7 +207,7 @@ describe('Analytics time range scoping', () => {
 describe('Analytics empty range', () => {
   test('distinguishes an empty range from no usage at all', async () => {
     globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('/api/analytics/summary')) return jsonResponse({ session_count: 1 });
+      if (url.includes('/api/analytics/summary')) return jsonResponse({ sessionCount: 1 });
       if (url.includes('/api/analytics/engines')) return jsonResponse([]);
       if (url.includes('/api/analytics/daily')) return jsonResponse([daily(dayAgo(120), 'claude', 5)]);
       if (url.includes('/api/analytics/monthly')) return jsonResponse([]);

@@ -66,7 +66,7 @@ export default function SystemPage() {
     return <div className="p-8 text-red-600 text-sm">{error}</div>;
   }
 
-  const uptimeHours = metrics ? Math.floor(metrics.uptime_seconds / 3600) : 0;
+  const uptimeHours = metrics ? Math.floor(metrics.uptimeSeconds / 3600) : 0;
 
   return (
     <div className="flex flex-col gap-5">
@@ -87,9 +87,9 @@ export default function SystemPage() {
         <div className="glass-card p-5 space-y-4">
           <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">{t('systemPage.metrics')}</p>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricBar label="CPU" value={metrics.cpu_percent} max={100} unit="%" color={metrics.cpu_percent > 80 ? '#ef4444' : '#3b82f6'} />
-            <MetricBar label={t('system.memory')} value={metrics.memory_percent} max={100} unit="%" color={metrics.memory_percent > 80 ? '#ef4444' : '#10b981'} />
-            <MetricBar label={t('system.disk')} value={metrics.disk_percent} max={100} unit="%" color={metrics.disk_percent > 90 ? '#ef4444' : '#f59e0b'} />
+            <MetricBar label="CPU" value={metrics.cpuPercent} max={100} unit="%" color={metrics.cpuPercent > 80 ? '#ef4444' : '#3b82f6'} />
+            <MetricBar label={t('system.memory')} value={metrics.memoryPercent} max={100} unit="%" color={metrics.memoryPercent > 80 ? '#ef4444' : '#10b981'} />
+            <MetricBar label={t('system.disk')} value={metrics.diskPercent} max={100} unit="%" color={metrics.diskPercent > 90 ? '#ef4444' : '#f59e0b'} />
             <div className="space-y-1">
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500">{t('system.uptime')}</span>
@@ -97,11 +97,11 @@ export default function SystemPage() {
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500">{t('systemPage.historyFile')}</span>
-                <span className="text-slate-700">{metrics.history_file_size_mb} MB</span>
+                <span className="text-slate-700">{metrics.historyFileSizeMb} MB</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500">{t('systemPage.logFiles')}</span>
-                <span className="text-slate-700">{metrics.log_file_count}</span>
+                <span className="text-slate-700">{metrics.logFileCount}</span>
               </div>
             </div>
           </div>
@@ -119,8 +119,8 @@ export default function SystemPage() {
                 <div className="flex-1 min-w-0">
                   <span className="text-slate-700">{check.label}</span>
                   {check.detail && <span className="text-slate-400 ml-1">— {check.detail}</span>}
-                  {check.fix_hint && check.status !== '[OK]' && (
-                    <p className="text-slate-400 mt-0.5 ml-6">↳ {check.fix_hint}</p>
+                  {check.fixHint && check.status !== '[OK]' && (
+                    <p className="text-slate-400 mt-0.5 ml-6">↳ {check.fixHint}</p>
                   )}
                 </div>
               </div>

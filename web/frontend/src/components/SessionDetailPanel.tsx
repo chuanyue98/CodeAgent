@@ -354,12 +354,12 @@ export default function SessionDetailPanel({
                     <div className="prose prose-sm prose-slate max-w-none break-words">
                       <MarkdownMessage text={msg.content} />
                     </div>
-                    {msg.tool_calls?.length > 0 && (
+                    {msg.toolCalls?.length > 0 && (
                       <div className="mt-2 space-y-1">
-                        {msg.tool_calls.map((tc, j) => (
+                        {msg.toolCalls.map((tc, j) => (
                           <div key={`${tc.name}-${j}`} className="rounded bg-slate-50 p-1.5 text-[11px]">
                             <span className="font-mono font-semibold">{tc.name}</span>
-                            {tc.args_preview && <span className="text-slate-500"> — {tc.args_preview}</span>}
+                            {tc.argsPreview && <span className="text-slate-500"> — {tc.argsPreview}</span>}
                           </div>
                         ))}
                       </div>

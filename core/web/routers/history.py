@@ -44,15 +44,6 @@ from core.session_history.session_finder import (
 from core.web.case_convert import ProtocolModel, wire
 from core.web.routers.config import get_config_path
 
-# NOTE: list_sessions/get_audit_events/get_session_detail below intentionally
-# still return raw snake_case dicts. Their shapes (SessionSummary,
-# AuditEvent, and to_full_dict()'s nested `messages`) are consumed by
-# NativeAgentSession (types/agent.ts), ChatPage.tsx, and AuditTrail.tsx --
-# converting them requires coordinated frontend updates across those
-# call sites and is deferred to a dedicated follow-up rather than folded
-# into this pass. convert/convert-and-launch/delete below ARE migrated
-# since their responses are small and self-contained.
-
 router = APIRouter(prefix="/api")
 
 
@@ -152,6 +143,71 @@ class DeleteSessionResponse(ProtocolModel):
     session_id: str
 
 
+# The domain's own to_summary_dict()/to_full_dict()/to_dict() stay snake_case:
+# they are Python-side serializations used by the CLI and tests. These models
+# are the wire shape, and the only place the two vocabularies meet.
+
+
+class ToolCall(ProtocolModel):
+    name: str
+    args_preview: str
+    result_preview: str
+
+
+class SessionMessage(ProtocolModel):
+    role: str
+    content: str
+    timestamp: str
+    model: str = ""
+    tool_calls: list[ToolCall] = []
+
+
+class SessionSummary(ProtocolModel):
+    session_id: str
+    engine: str
+    project_path: str
+    started_at: str
+    ended_at: str
+    message_count: int
+    title: str
+    model: str = ""
+    source_file: str = ""
+
+
+class SessionDetail(SessionSummary):
+    messages: list[SessionMessage] = []
+
+
+class ResumeTarget(ProtocolModel):
+    status: str
+    engine: str
+    session_id: str
+    project: str
+
+
+class AuditEvent(ProtocolModel):
+    """One row of the flattened timeline.
+
+    Message and tool-call rows carry different halves of the optional fields;
+    they are sent with ``drop_none`` so neither variant ships the other's
+    nulls across a response that can hold thousands of rows.
+    """
+
+    event_id: str
+    event_type: str
+    engine: str
+    project_path: str
+    session_id: str
+    session_title: str
+    timestamp: str
+    role: str
+    model: str = ""
+    content_preview: str | None = None
+    tool_name: str | None = None
+    args_preview: str | None = None
+    result_preview: str | None = None
+
+
 @router.get("/history")
 async def list_sessions(
     project: str | None = Query(
@@ -177,7 +233,7 @@ async def list_sessions(
         :limit
     ]
     return {
-        "sessions": [s.to_summary_dict() for s in sessions],
+        "sessions": [wire(SessionSummary(**s.to_summary_dict())) for s in sessions],
         "count": len(sessions),
     }
 
@@ -224,7 +280,10 @@ async def get_audit_events(
 
     events = events[:limit]
 
-    return {"events": events, "count": len(events)}
+    return {
+        "events": [wire(AuditEvent(**event), drop_none=True) for event in events],
+        "count": len(events),
+    }
 
 
 @router.get("/history/{engine}/{session_id}")
@@ -249,11 +308,11 @@ async def get_session_detail(
             status_code=404,
             detail={
                 "error": "Session not found",
-                "session_id": session_id,
+                "sessionId": session_id,
                 "engine": engine,
             },
         )
-    return session.to_full_dict()
+    return wire(SessionDetail(**session.to_full_dict()))
 
 
 @router.post("/history/convert")
@@ -267,7 +326,7 @@ async def convert_session(req: ConvertRequest) -> dict:
         req: The conversion request.
 
     Returns:
-        dict: {"status": "ok", "new_session_id": "...", "target_engine": "..."}
+        dict: {"status": "ok", "newSessionId": "...", "targetEngine": "..."}
     """
     validated_project = _resolve_history_workspace(req.project_path)
     # Import here to avoid circular dependencies and only load when needed
@@ -281,7 +340,7 @@ async def convert_session(req: ConvertRequest) -> dict:
             status_code=404,
             detail={
                 "error": "Source session not found",
-                "session_id": req.session_id,
+                "sessionId": req.session_id,
             },
         )
 
@@ -399,7 +458,7 @@ async def continue_session(
             status_code=404,
             detail={
                 "error": "Session not found",
-                "session_id": session_id,
+                "sessionId": session_id,
                 "engine": engine,
             },
         )
@@ -409,12 +468,14 @@ async def continue_session(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return {
-        "status": "ready",
-        "engine": engine,
-        "session_id": session_id,
-        "project": validated_project,
-    }
+    return wire(
+        ResumeTarget(
+            status="ready",
+            engine=engine,
+            session_id=session_id,
+            project=validated_project,
+        )
+    )
 
 
 @router.delete("/history/{engine}/{session_id}")
@@ -432,7 +493,7 @@ async def delete_session(
             status_code=404,
             detail={
                 "error": "Session not found",
-                "session_id": session_id,
+                "sessionId": session_id,
                 "engine": engine,
             },
         )

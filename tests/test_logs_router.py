@@ -46,7 +46,7 @@ async def test_list_log_files_reports_existing_logs(logs_dir):
     assert response.status_code == 200
     body = response.json()
     assert len(body) == 1
-    assert body[0]["task_id"] == "task-1"
+    assert body[0]["taskId"] == "task-1"
     assert body[0]["name"] == "task-1.log"
     assert body[0]["size"] == len("hello\n")
 
@@ -62,7 +62,7 @@ async def test_get_log_file_returns_content(logs_dir):
 
     assert response.status_code == 200
     assert response.json() == {
-        "task_id": "task-1",
+        "taskId": "task-1",
         "content": "line one\nline two\n",
     }
 

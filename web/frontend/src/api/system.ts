@@ -6,22 +6,22 @@ export interface SystemHealth {
       status: string;
       label: string;
       detail: string;
-      fix_hint: string;
+      fixHint: string;
     }>;
   }>;
 }
 
 export interface SystemMetrics {
-  cpu_percent: number;
-  memory_percent: number;
-  memory_used_gb: number;
-  memory_total_gb: number;
-  disk_percent: number;
-  disk_used_gb: number;
-  disk_total_gb: number;
-  uptime_seconds: number;
-  history_file_size_mb: number;
-  log_file_count: number;
+  cpuPercent: number;
+  memoryPercent: number;
+  memoryUsedGb: number;
+  memoryTotalGb: number;
+  diskPercent: number;
+  diskUsedGb: number;
+  diskTotalGb: number;
+  uptimeSeconds: number;
+  historyFileSizeMb: number;
+  logFileCount: number;
 }
 
 import request from '../utils/request';

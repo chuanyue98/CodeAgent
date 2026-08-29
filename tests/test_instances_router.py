@@ -88,6 +88,9 @@ def test_list_instances_aggregates_all_kinds(monkeypatch):
     assert by_kind["terminal"]["pid"] == 42
     assert by_kind["terminal"]["stoppable"] is True
     assert by_kind["task"]["id"] == "t1"
+    # 内部 PTY 注册表用 snake_case，跨线的实例对象一律 camelCase。
+    assert "startedAt" in by_kind["terminal"]
+    assert not [key for item in instances for key in item if "_" in key]
 
 
 def test_stop_terminal_instance(monkeypatch):

@@ -172,7 +172,7 @@ export default memo(function TaskList({
 
       <div className="grid gap-4">
         {filteredTasks.map(task => {
-          const activeRun = runs.find(r => r.task_id.startsWith(task.name) && r.status === 'running');
+          const activeRun = runs.find(r => r.taskId.startsWith(task.name) && r.status === 'running');
           return (
             <TaskCard
               key={task.name}

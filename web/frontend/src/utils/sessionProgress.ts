@@ -56,7 +56,7 @@ function unescapeJsonString(raw: string): string {
 /**
  * Pulls the file path out of a tool call's argument preview.
  *
- * Parsers truncate ``args_preview`` at 200 characters, so a call with a long
+ * Parsers truncate ``argsPreview`` at 200 characters, so a call with a long
  * argument list arrives as invalid JSON. The regex fallback exists for that
  * case: the key is usually well inside the first 200 characters even when the
  * closing brace is not.
@@ -127,9 +127,9 @@ export function summarizeSession(
       if (lastTime === null || time > lastTime) lastTime = time;
     }
 
-    for (const call of message.tool_calls ?? []) {
+    for (const call of message.toolCalls ?? []) {
       toolCalls += 1;
-      const path = extractFilePath(call.args_preview);
+      const path = extractFilePath(call.argsPreview);
       if (path) {
         // Re-inserting would keep the original position, so drop first.
         files.delete(path);
@@ -137,7 +137,7 @@ export function summarizeSession(
       }
       recent.push({
         name: call.name || '—',
-        detail: path ?? shortArgs(call.args_preview ?? ''),
+        detail: path ?? shortArgs(call.argsPreview ?? ''),
       });
     }
   }

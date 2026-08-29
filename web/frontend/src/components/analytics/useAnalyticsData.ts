@@ -56,7 +56,7 @@ export default function useAnalyticsData(): AnalyticsData {
       ]);
       if (!isMounted()) return;
       setEngines(eng); setDaily(day); setMonthly(mon); setSessions(sess); setModelStats(mods);
-      setTotalSessions(summary.session_count);
+      setTotalSessions(summary.sessionCount);
       setError(null);
     } catch (e) {
       if (!isMounted()) return;

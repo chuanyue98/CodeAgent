@@ -11,7 +11,7 @@ from core.web.server import app
 
 @pytest.mark.asyncio
 async def test_health_returns_ok_with_doctor_sections(monkeypatch):
-    fake_check = MagicMock(status="OK", label="Python", detail="3.13", fix_hint=None)
+    fake_check = MagicMock(status="OK", label="Python", detail="3.13", fix_hint="")
     fake_section = MagicMock(title="Runtime", checks=[fake_check])
     monkeypatch.setattr(
         system_router, "get_doctor_sections", lambda fix: [fake_section]
@@ -27,6 +27,7 @@ async def test_health_returns_ok_with_doctor_sections(monkeypatch):
     assert body["status"] == "ok"
     assert body["sections"][0]["title"] == "Runtime"
     assert body["sections"][0]["checks"][0]["label"] == "Python"
+    assert "fixHint" in body["sections"][0]["checks"][0]
 
 
 @pytest.mark.asyncio
@@ -55,18 +56,19 @@ async def test_metrics_returns_system_stats():
     assert response.status_code == 200
     body = response.json()
     for key in (
-        "cpu_percent",
-        "memory_percent",
-        "memory_used_gb",
-        "memory_total_gb",
-        "disk_percent",
-        "disk_used_gb",
-        "disk_total_gb",
-        "uptime_seconds",
-        "history_file_size_mb",
-        "log_file_count",
+        "cpuPercent",
+        "memoryPercent",
+        "memoryUsedGb",
+        "memoryTotalGb",
+        "diskPercent",
+        "diskUsedGb",
+        "diskTotalGb",
+        "uptimeSeconds",
+        "historyFileSizeMb",
+        "logFileCount",
     ):
         assert key in body
+    assert not [key for key in body if "_" in key]
 
 
 @pytest.mark.asyncio

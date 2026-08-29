@@ -79,13 +79,13 @@ async def test_audit_events_across_all_projects(two_project_history):
 
     assert response.status_code == 200
     data = response.json()
-    session_ids = {e["session_id"] for e in data["events"]}
+    session_ids = {e["sessionId"] for e in data["events"]}
     assert session_ids == {"sess-a", "sess-b"}
     # message + tool_call events for each session's assistant turn, plus user turn
-    event_types = {e["event_type"] for e in data["events"]}
+    event_types = {e["eventType"] for e in data["events"]}
     assert event_types == {"message", "tool_call"}
     # Most recent session's events should sort first
-    assert data["events"][0]["session_id"] == "sess-b"
+    assert data["events"][0]["sessionId"] == "sess-b"
 
 
 @pytest.mark.asyncio
@@ -99,7 +99,7 @@ async def test_audit_events_filtered_by_project(two_project_history):
 
     assert response.status_code == 200
     data = response.json()
-    assert {e["session_id"] for e in data["events"]} == {"sess-a"}
+    assert {e["sessionId"] for e in data["events"]} == {"sess-a"}
 
 
 @pytest.mark.asyncio
@@ -126,7 +126,7 @@ async def test_audit_events_since_filter(two_project_history):
 
     assert response.status_code == 200
     data = response.json()
-    assert all(e["session_id"] == "sess-b" for e in data["events"])
+    assert all(e["sessionId"] == "sess-b" for e in data["events"])
     assert len(data["events"]) > 0
 
 
@@ -152,7 +152,7 @@ async def test_list_sessions_without_project_searches_all_projects(two_project_h
 
     assert response.status_code == 200
     data = response.json()
-    session_ids = {s["session_id"] for s in data["sessions"]}
+    session_ids = {s["sessionId"] for s in data["sessions"]}
     assert session_ids == {"sess-a", "sess-b"}
 
 
@@ -182,7 +182,7 @@ async def test_continue_session_answers_with_a_browser_terminal_target(
     assert response.json() == {
         "status": "ready",
         "engine": "claude",
-        "session_id": "sess-a",
+        "sessionId": "sess-a",
         "project": "E:/demo/project-a",
     }
 
@@ -250,7 +250,7 @@ async def test_list_sessions_still_scopes_to_project_when_given(two_project_hist
 
     assert response.status_code == 200
     data = response.json()
-    assert {s["session_id"] for s in data["sessions"]} == {"sess-a"}
+    assert {s["sessionId"] for s in data["sessions"]} == {"sess-a"}
 
 
 @pytest.mark.asyncio
@@ -363,7 +363,7 @@ async def test_delete_opencode_session(tmp_path, monkeypatch):
         )
         assert list_res.status_code == 200
         assert len(list_res.json()["sessions"]) == 1
-        assert list_res.json()["sessions"][0]["session_id"] == "sess-opencode"
+        assert list_res.json()["sessions"][0]["sessionId"] == "sess-opencode"
 
         # Call delete
         del_res = await ac.delete(

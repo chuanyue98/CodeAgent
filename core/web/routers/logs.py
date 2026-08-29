@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
+from core.web.case_convert import ProtocolModel, wire
 from core.web.resource_paths import ROOT_DIR
 from core.web.routers.tasks import _runner  # 与 tasks.py 共用的单例
 
@@ -26,6 +27,18 @@ def _resolve_log_path(task_id: str) -> Path | None:
     return path
 
 
+class LogFile(ProtocolModel):
+    task_id: str
+    name: str
+    size: int
+    modified: int
+
+
+class LogFileContent(ProtocolModel):
+    task_id: str
+    content: str
+
+
 def _list_log_files() -> list[dict]:
     files: list[dict] = []
     if not CA_TASK_LOGS_DIR.exists():
@@ -34,12 +47,14 @@ def _list_log_files() -> list[dict]:
         try:
             stat = f.stat()
             files.append(
-                {
-                    "task_id": f.stem,
-                    "name": f.name,
-                    "size": stat.st_size,
-                    "modified": int(stat.st_mtime),
-                }
+                wire(
+                    LogFile(
+                        task_id=f.stem,
+                        name=f.name,
+                        size=stat.st_size,
+                        modified=int(stat.st_mtime),
+                    )
+                )
             )
         except OSError:
             pass
@@ -66,7 +81,7 @@ async def get_log_file(task_id: str):
     if path is None:
         raise HTTPException(status_code=404, detail="Log file not found")
     content = _read_log(path)
-    return {"task_id": task_id, "content": content}
+    return wire(LogFileContent(task_id=task_id, content=content))
 
 
 def _size_of(path: Path) -> int | None:

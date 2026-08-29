@@ -18,14 +18,14 @@ export interface Engine {
 }
 
 export interface RunStatus {
-  task_id: string;
+  taskId: string;
   engine: string;
   status: 'running' | 'completed' | 'failed' | 'stopped';
-  log_path: string;
-  start_time: number;
+  logPath: string;
+  startTime: number;
   workspace?: string;
-  end_time?: number;
-  exit_code?: number;
+  endTime?: number;
+  exitCode?: number;
 }
 
 export interface Task {
@@ -35,8 +35,8 @@ export interface Task {
   hasStages: boolean;
   stages: Stage[];
   content?: string;
-  resolved_skills?: Skill[];
-  resolved_prompts?: string[];
+  resolvedSkills?: Skill[];
+  resolvedPrompts?: string[];
   logs?: string;
 }
 

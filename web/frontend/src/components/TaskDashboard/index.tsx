@@ -97,8 +97,8 @@ const TaskDashboard: React.FC = () => {
       void fetchRunHistory(name);
 
       // Check if this task is already running
-      const active = runs.find(r => r.task_id.startsWith(name) && r.status === 'running');
-      if (active) setActiveRunId(active.task_id);
+      const active = runs.find(r => r.taskId.startsWith(name) && r.status === 'running');
+      if (active) setActiveRunId(active.taskId);
       else setActiveRunId(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('tasks.error'));
@@ -134,7 +134,7 @@ const TaskDashboard: React.FC = () => {
         method: 'POST',
         body: JSON.stringify({ engine, group: project?.group || 'common', workspace }),
       });
-      setActiveRunId(status.task_id);
+      setActiveRunId(status.taskId);
       void fetchRuns();
     } catch (e) {
       setError(e instanceof Error ? e.message : t('tasks.runFailed'));
@@ -221,7 +221,7 @@ const TaskDashboard: React.FC = () => {
       </div>
     );
 
-  const activeRun = activeRunId ? runs.find(r => r.task_id === activeRunId) : undefined;
+  const activeRun = activeRunId ? runs.find(r => r.taskId === activeRunId) : undefined;
 
   if (selected)
     return (
