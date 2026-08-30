@@ -72,6 +72,48 @@ export async function stopRun(taskId: string): Promise<void> {
   await request(`/api/tasks/runs/${taskId}/stop`, { method: 'POST' });
 }
 
+export interface RunCommit {
+  sha: string;
+  message: string;
+  author: string;
+  committedAt: string;
+}
+
+export interface RunFileChange {
+  path: string;
+  additions: number | null;
+  deletions: number | null;
+}
+
+export interface RunChangeEntry {
+  status: string;
+  path: string;
+}
+
+/**
+ * Git changes attributed to one run. `available` is false (with a snake_case
+ * `reason`) when the workspace cannot be inspected; otherwise `mode` is
+ * "commits" (windowed commits + diff) or "uncommitted" (no commits landed in
+ * the window, so the worktree state is shown instead).
+ */
+export interface RunChanges {
+  available: boolean;
+  reason?: string;
+  workspace?: string | null;
+  mode?: 'commits' | 'uncommitted';
+  window?: { since: string; until: string };
+  commits?: RunCommit[];
+  files?: RunFileChange[];
+  entries?: RunChangeEntry[];
+  diff?: string;
+  diffTruncated?: boolean;
+  note?: string;
+}
+
+export async function getRunChanges(taskId: string): Promise<RunChanges> {
+  return request(`/api/tasks/runs/${taskId}/changes`);
+}
+
 export async function listEngines(): Promise<Engine[]> {
   return request('/api/engines');
 }

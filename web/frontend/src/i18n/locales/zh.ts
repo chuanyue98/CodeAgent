@@ -657,6 +657,18 @@ export const zh: Record<TranslationKey, string> = {
   'taskDetail.confirmDeleteDescription': '"{name}" 将被永久删除，此操作不可撤销。',
   'taskDetail.deleteFailed': '删除任务失败',
   'taskDetail.deleteBlocked': '请先停止该任务正在运行的实例，再执行删除。',
+  'taskDetail.tabLogs': '日志',
+  'taskDetail.tabChanges': '变更',
+  'taskDetail.changes': '运行变更',
+  'taskDetail.changesUnavailable.no_workspace': '该运行没有可检查的工作区。',
+  'taskDetail.changesUnavailable.git_missing': '服务器上没有安装 git。',
+  'taskDetail.changesUnavailable.not_git_repo': '该运行的工作区不是 git 仓库。',
+  'taskDetail.changesUnavailable.git_error': '读取工作区的 git 变更失败。',
+  'taskDetail.changesUncommittedNote': '运行时间窗内没有产生提交，这里展示工作区当前的未提交变更，归因仅供参考。',
+  'taskDetail.changesCommits': '提交',
+  'taskDetail.changesFiles': '变更文件',
+  'taskDetail.changesCleanTree': '工作区是干净的。',
+  'taskDetail.changesDiffTruncated': 'diff 过大，已截断展示。',
 
   // ── Language ──────────────────────────────────────────────────────────────
   'language.label': '语言',

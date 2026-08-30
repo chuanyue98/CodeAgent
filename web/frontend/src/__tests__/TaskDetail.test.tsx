@@ -1,7 +1,9 @@
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import TaskDetail from '../components/TaskDashboard/TaskDetail';
 import type { Engine, RunStatus, Task } from '../components/TaskDashboard/types';
+import { createQueryClient } from '../utils/queryClient';
 
 const engines: Engine[] = [
   { id: 'claude', name: 'Claude Code', description: '' },
@@ -197,5 +199,82 @@ describe('TaskDetail actions', () => {
     renderDetail({ task: makeTask({ content: '# blueprint' }) });
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     expect(screen.getByLabelText('Task content (Markdown)')).toHaveValue('# blueprint');
+  });
+});
+
+describe('TaskDetail changes tab', () => {
+  function renderWithChanges(response: unknown) {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(response),
+      json: async () => response,
+    }) as Response);
+    return render(
+      <QueryClientProvider client={createQueryClient()}>
+        <TaskDetail
+          task={makeTask()}
+          engines={engines}
+          activeRun={makeRun({ status: 'running', endTime: undefined })}
+          runHistory={[]}
+          onBack={vi.fn()}
+          onRun={vi.fn()}
+          onStop={vi.fn()}
+          onDeleted={vi.fn()}
+          onTaskUpdated={vi.fn()}
+          workspace="/work/demo"
+          projects={projects}
+          onWorkspaceChange={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+  }
+
+  test('shows the run\'s commits, file stats and diff', async () => {
+    renderWithChanges({
+      available: true,
+      mode: 'commits',
+      workspace: '/work/demo',
+      window: { since: '2026-08-30T09:00:00+08:00', until: '2026-08-30T10:00:00+08:00' },
+      commits: [
+        {
+          sha: 'abcdef1234567890abcdef1234567890abcdef12',
+          message: 'feat: wire the changes tab',
+          author: 'tester',
+          committedAt: '2026-08-30T09:30:00+08:00',
+        },
+      ],
+      files: [{ path: 'core/app.py', additions: 3, deletions: 1 }],
+      diff: '+wired\n-unwired',
+      diffTruncated: false,
+    });
+
+    // The logs view is the default; the changes query only fires on the tab.
+    fireEvent.click(screen.getByRole('button', { name: 'Changes' }));
+    await waitFor(() =>
+      expect(screen.getByText('feat: wire the changes tab')).toBeVisible(),
+    );
+    expect(screen.getByText('abcdef1')).toBeVisible();
+    expect(screen.getByText('core/app.py')).toBeVisible();
+    expect(screen.getByText('+3')).toBeVisible();
+    // The diff sits in a <pre> with real newlines; getByText compares the
+    // matcher against normalized (whitespace-collapsed) text, so query the
+    // collapsed form.
+    expect(screen.getByText('+wired -unwired')).toBeVisible();
+
+    // Switching back hides the changes content.
+    fireEvent.click(screen.getByRole('button', { name: 'Logs' }));
+    expect(screen.queryByText('feat: wire the changes tab')).not.toBeInTheDocument();
+  });
+
+  test('degrades to a reason message when the workspace cannot be inspected', async () => {
+    renderWithChanges({ available: false, reason: 'not_git_repo', workspace: '/work/demo' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Changes' }));
+    await waitFor(() =>
+      expect(
+        screen.getByText('The run workspace is not a git repository.'),
+      ).toBeVisible(),
+    );
   });
 });

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, Code, History, Pencil, Play, StopCircle, Terminal, Trash2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, Code, GitBranch, History, Pencil, Play, StopCircle, Terminal, Trash2 } from 'lucide-react';
 import LogViewer from '../LogViewer';
 import ConfirmDialog from '../shared/ConfirmDialog';
 import EditTaskModal from './EditTaskModal';
+import RunChanges from './RunChanges';
 import { classifyStageStatus, type Engine, type RunStatus, type Task } from './types';
 import { useT } from '../../i18n/context';
 import request from '../../utils/request';
@@ -88,6 +89,7 @@ export default function TaskDetail({
   // Which run's log to display in the LogViewer. Defaults to the active run;
   // clicking a history entry swaps it to inspect that run's log.
   const [viewedLogId, setViewedLogId] = useState<string | null>(null);
+  const [logTab, setLogTab] = useState<'logs' | 'changes'>('logs');
 
   // Reset the viewed log whenever the selected task changes so a stale id
   // from a previous task doesn't leak into the LogViewer. Adjusting state
@@ -97,6 +99,7 @@ export default function TaskDetail({
   if (task.name !== trackedName) {
     setTrackedName(task.name);
     setViewedLogId(null);
+    setLogTab('logs');
   }
 
   // While a run is active, always show its live log regardless of what the
@@ -282,12 +285,36 @@ export default function TaskDetail({
 
           {logTaskId && (
             <section className="space-y-3">
-              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                <Terminal className="w-4 h-4" />
-                {t('taskDetail.logs')}
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                  {logTab === 'logs' ? <Terminal className="w-4 h-4" /> : <GitBranch className="w-4 h-4" />}
+                  {logTab === 'logs' ? t('taskDetail.logs') : t('taskDetail.changes')}
+                </h2>
+                <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
+                  <button
+                    onClick={() => setLogTab('logs')}
+                    className={`px-3 py-1.5 transition-colors ${
+                      logTab === 'logs' ? 'bg-primary/10 text-primary' : 'bg-white text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    {t('taskDetail.tabLogs')}
+                  </button>
+                  <button
+                    onClick={() => setLogTab('changes')}
+                    className={`px-3 py-1.5 transition-colors ${
+                      logTab === 'changes' ? 'bg-primary/10 text-primary' : 'bg-white text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    {t('taskDetail.tabChanges')}
+                  </button>
+                </div>
+              </div>
               <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 400 }}>
-                <LogViewer taskId={logTaskId} />
+                {logTab === 'logs' ? (
+                  <LogViewer taskId={logTaskId} />
+                ) : (
+                  <RunChanges taskId={logTaskId} />
+                )}
               </div>
             </section>
           )}

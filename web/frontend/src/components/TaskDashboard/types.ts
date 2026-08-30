@@ -26,6 +26,8 @@ export interface RunStatus {
   workspace?: string;
   endTime?: number;
   exitCode?: number;
+  /** Sent by the runner; null on legacy rows persisted before it existed. */
+  taskName?: string | null;
 }
 
 export interface Task {
