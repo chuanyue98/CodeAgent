@@ -82,9 +82,7 @@ async def try_start_adapter(adapter: AgentAdapter) -> bool:
         await adapter.start()
         return True
     except Exception as exc:
-        logger.info(
-            "Provider %s is not available yet: %s", adapter.provider_id, exc
-        )
+        logger.info("Provider %s is not available yet: %s", adapter.provider_id, exc)
         return False
 
 

@@ -53,9 +53,7 @@ async def execute_command(gateway: AgentGateway, command: AgentCommand) -> Agent
 async def run_command(gateway: AgentGateway, command: AgentCommand) -> AgentAck:
     result: dict = {}
     if command.type == "session.resume":
-        result = {
-            "session": wire(await gateway.resume_session(command.session_id))
-        }
+        result = {"session": wire(await gateway.resume_session(command.session_id))}
     elif command.type == "turn.start":
         if not command.input:
             raise AgentGatewayError("invalid_command", "turn.start requires input")
@@ -74,9 +72,7 @@ async def run_command(gateway: AgentGateway, command: AgentCommand) -> AgentAck:
         )
     elif command.type == "turn.cancel":
         if not command.turn_id:
-            raise AgentGatewayError(
-                "invalid_command", "turn.cancel requires turnId"
-            )
+            raise AgentGatewayError("invalid_command", "turn.cancel requires turnId")
         await gateway.cancel_turn(command.session_id, command.turn_id)
     elif command.type == "approval.respond":
         if not command.approval_id or command.decision is None:
@@ -87,9 +83,7 @@ async def run_command(gateway: AgentGateway, command: AgentCommand) -> AgentAck:
         await gateway.respond_to_approval(
             command.session_id, command.approval_id, command.decision
         )
-    ack = AgentAck(
-        request_id=command.request_id, command=command.type, result=result
-    )
+    ack = AgentAck(request_id=command.request_id, command=command.type, result=result)
     cache = gateway._acks[command.session_id]
     cache[command.request_id] = ack
     cache.move_to_end(command.request_id)

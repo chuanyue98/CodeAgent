@@ -69,7 +69,7 @@ def describe_run_changes(
         return _unavailable("not_git_repo", workspace)
 
     since = start - _WINDOW_SLACK_SECONDS
-    until = (end if end is not None else datetime.now(UTC).timestamp())
+    until = end if end is not None else datetime.now(UTC).timestamp()
     until += _WINDOW_SLACK_SECONDS
 
     try:
@@ -116,11 +116,14 @@ def _collect(ws: Path, workspace: str, since: float, until: float) -> dict:
     base_range = f"{oldest}^"
     # rev-parse --verify -q 对不存在的引用返回非零：这是检测根提交
     # （没有父提交）的方式，此时改为对空树做 diff
-    if subprocess.run(
-        ["git", "-C", str(ws), "rev-parse", "--verify", "-q", base_range],
-        capture_output=True,
-        timeout=_GIT_TIMEOUT_SECONDS,
-    ).returncode != 0:
+    if (
+        subprocess.run(
+            ["git", "-C", str(ws), "rev-parse", "--verify", "-q", base_range],
+            capture_output=True,
+            timeout=_GIT_TIMEOUT_SECONDS,
+        ).returncode
+        != 0
+    ):
         base_range = _git(ws, "mktree", stdin="").strip()
 
     base["mode"] = "commits"

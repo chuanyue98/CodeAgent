@@ -44,13 +44,20 @@ def config_service():
 # ── ca project add ───────────────────────────────────────────────────────────
 
 
-def test_add_registers_a_directory_into_a_group(monkeypatch, capsys, tmp_path, config_service):
+def test_add_registers_a_directory_into_a_group(
+    monkeypatch, capsys, tmp_path, config_service
+):
     project_dir = tmp_path / "proj"
     project_dir.mkdir()
     config_service.registry = [{"path": "/existing", "group": "common"}]
 
     _run(
-        monkeypatch, "project", "add", str(project_dir), "--group", "work",
+        monkeypatch,
+        "project",
+        "add",
+        str(project_dir),
+        "--group",
+        "work",
         config={"groups": {"work": {}}},
     )
 
@@ -60,9 +67,16 @@ def test_add_registers_a_directory_into_a_group(monkeypatch, capsys, tmp_path, c
     assert "project_registry now has 2 entries." in out
 
 
-def test_add_warns_when_the_group_does_not_exist(monkeypatch, capsys, tmp_path, config_service):
+def test_add_warns_when_the_group_does_not_exist(
+    monkeypatch, capsys, tmp_path, config_service
+):
     _run(
-        monkeypatch, "project", "add", str(tmp_path), "--group", "ghost",
+        monkeypatch,
+        "project",
+        "add",
+        str(tmp_path),
+        "--group",
+        "ghost",
         config={"groups": {}},
     )
     assert "Group 'ghost' doesn't exist" in capsys.readouterr().out
@@ -70,7 +84,9 @@ def test_add_warns_when_the_group_does_not_exist(monkeypatch, capsys, tmp_path, 
     assert config_service.added == [(str(tmp_path), "ghost")]
 
 
-def test_add_rejects_a_path_that_is_not_a_directory(monkeypatch, capsys, tmp_path, config_service):
+def test_add_rejects_a_path_that_is_not_a_directory(
+    monkeypatch, capsys, tmp_path, config_service
+):
     missing = tmp_path / "nope"
     with pytest.raises(SystemExit) as excinfo:
         _run(monkeypatch, "project", "add", str(missing), config={"groups": {}})
@@ -82,7 +98,9 @@ def test_add_rejects_a_path_that_is_not_a_directory(monkeypatch, capsys, tmp_pat
 # ── ca project remove ────────────────────────────────────────────────────────
 
 
-def test_remove_deletes_a_registered_project(monkeypatch, capsys, tmp_path, config_service):
+def test_remove_deletes_a_registered_project(
+    monkeypatch, capsys, tmp_path, config_service
+):
     config_service.registry = [{"path": str(tmp_path), "group": "work"}]
     _run(monkeypatch, "project", "remove", str(tmp_path), config={})
     assert "[OK] Removed" in capsys.readouterr().out

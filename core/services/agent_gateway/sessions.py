@@ -83,9 +83,7 @@ async def create_session(
     resource_snapshot = gateway._resource_snapshot(cwd, config)
     injection: tuple[str, list[dict]] | None = None
     if capabilities.supports_resource_injection and resource_snapshot.prompts:
-        injection = resources.assemble_system_prompt(
-            resource_snapshot.prompts, config
-        )
+        injection = resources.assemble_system_prompt(resource_snapshot.prompts, config)
         if injection is None:
             logger.warning(
                 "Prompt groups %s could not be resolved for %s; "
@@ -252,9 +250,7 @@ def delete_session(gateway: AgentGateway, session_id: str) -> bool:
     return gateway.store.delete_session(session_id)
 
 
-async def start_turn(
-    gateway: AgentGateway, session_id: str, turn: TurnInput
-) -> str:
+async def start_turn(gateway: AgentGateway, session_id: str, turn: TurnInput) -> str:
     session = gateway.get_session(session_id)
     adapter = gateway._adapter_for(session)
     await assert_resources_applied(gateway, session)
