@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from core.services.agent_protocol import SessionStatus
 from core.web.routers import instances as instances_router
 from core.web.routers import pty as pty_router
+from tests._helpers import assert_camel
 
 
 def _app() -> FastAPI:
@@ -88,6 +89,9 @@ def test_list_instances_aggregates_all_kinds(monkeypatch):
     assert by_kind["terminal"]["pid"] == 42
     assert by_kind["terminal"]["stoppable"] is True
     assert by_kind["task"]["id"] == "t1"
+    # 内部 PTY 注册表用 snake_case，跨线的实例对象一律 camelCase。
+    assert "startedAt" in by_kind["terminal"]
+    assert_camel(instances)
 
 
 def test_stop_terminal_instance(monkeypatch):

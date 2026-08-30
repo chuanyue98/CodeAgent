@@ -673,6 +673,18 @@ export const en = {
   'taskDetail.confirmDeleteDescription': '"{name}" will be permanently removed. This cannot be undone.',
   'taskDetail.deleteFailed': 'Failed to delete task',
   'taskDetail.deleteBlocked': 'Stop the active run before deleting this task.',
+  'taskDetail.tabLogs': 'Logs',
+  'taskDetail.tabChanges': 'Changes',
+  'taskDetail.changes': 'Run Changes',
+  'taskDetail.changesUnavailable.no_workspace': 'This run has no workspace to inspect.',
+  'taskDetail.changesUnavailable.git_missing': 'git is not installed on the server.',
+  'taskDetail.changesUnavailable.not_git_repo': 'The run workspace is not a git repository.',
+  'taskDetail.changesUnavailable.git_error': 'Failed to read git changes from the workspace.',
+  'taskDetail.changesUncommittedNote': 'No commits landed during the run window, so the workspace\'s current uncommitted changes are shown instead. Attribution is approximate.',
+  'taskDetail.changesCommits': 'Commits',
+  'taskDetail.changesFiles': 'Changed files',
+  'taskDetail.changesCleanTree': 'The workspace is clean.',
+  'taskDetail.changesDiffTruncated': 'The diff is very large and has been truncated.',
 
   // ── Language ──────────────────────────────────────────────────────────────
   'language.label': 'Language',

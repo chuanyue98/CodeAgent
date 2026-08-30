@@ -63,7 +63,7 @@ const Analytics: React.FC = () => {
     [sessions, rangeDays],
   );
 
-  // `summary.session_count` is authoritative but all-time only; a narrowed
+  // `summary.sessionCount` is authoritative but all-time only; a narrowed
   // range has to count the fetched window instead.
   const sessionCount = rangeDays === null ? totalSessions : rangeSessions.length;
   const avgCostPerSession = sessionCount > 0 ? totals.cost / sessionCount : 0;

@@ -1,21 +1,21 @@
 export type AuditEventType = 'message' | 'tool_call';
 
 export interface AuditEvent {
-  event_id: string;
-  event_type: AuditEventType;
+  eventId: string;
+  eventType: AuditEventType;
   engine: string;
-  project_path: string;
-  session_id: string;
-  session_title: string;
+  projectPath: string;
+  sessionId: string;
+  sessionTitle: string;
   timestamp: string;
   role: string;
   model: string;
   // message events only
-  content_preview?: string;
+  contentPreview?: string;
   // tool_call events only
-  tool_name?: string;
-  args_preview?: string;
-  result_preview?: string;
+  toolName?: string;
+  argsPreview?: string;
+  resultPreview?: string;
 }
 
 export interface AuditEventsResponse {
@@ -36,13 +36,13 @@ export interface SessionMessage {
   content: string;
   timestamp: string;
   model: string;
-  tool_calls: { name: string; args_preview: string; result_preview: string }[];
+  toolCalls: { name: string; argsPreview: string; resultPreview: string }[];
 }
 
 export interface SessionDetail {
-  session_id: string;
+  sessionId: string;
   engine: string;
-  project_path: string;
+  projectPath: string;
   title: string;
   messages: SessionMessage[];
 }

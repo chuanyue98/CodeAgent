@@ -4,37 +4,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import SessionsPage from '../components/SessionsPage';
 import { ProjectProvider } from '../context/ProjectContext';
 import type { SessionUsage } from '../api/analytics';
-
-function session(overrides: Partial<SessionUsage>): SessionUsage {
-  return {
-    sessionId: 'session-a',
-    target: 'claude',
-    projectPath: '/workspace/project-a',
-    inputTokens: 100,
-    outputTokens: 50,
-    cacheCreationTokens: 0,
-    cacheReadTokens: 0,
-    cost: 0.12,
-    lastActivity: '2026-07-20T10:00:00Z',
-    modelsUsed: ['claude-opus'],
-    modelBreakdowns: [],
-    ...overrides,
-  };
-}
+import { jsonResponse, session } from './factories';
 
 const SESSIONS: SessionUsage[] = [
   session({ sessionId: 'session-a', target: 'claude', projectPath: '/workspace/project-a' }),
   session({ sessionId: 'session-b', target: 'codebuddy', projectPath: '/workspace/project-b' }),
 ];
-
-function jsonResponse(data: unknown) {
-  return Promise.resolve({
-    ok: true,
-    status: 200,
-    text: async () => JSON.stringify(data),
-    json: async () => data,
-  });
-}
 
 let deleteCalls: string[];
 let historyLoads: string[];
@@ -71,9 +46,9 @@ beforeEach(() => {
     if (url.startsWith('/api/history/') && init?.method !== 'DELETE') {
       historyLoads.push(url);
       return jsonResponse({
-        session_id: 'session-a',
+        sessionId: 'session-a',
         engine: 'claude',
-        project_path: '/workspace/project-a',
+        projectPath: '/workspace/project-a',
         title: 'Session A',
         messages: [
           {
@@ -81,14 +56,14 @@ beforeEach(() => {
             content: 'how do I ship this',
             timestamp: '2026-07-20T10:00:00Z',
             model: 'claude-opus',
-            tool_calls: [],
+            toolCalls: [],
           },
         ],
       });
     }
     if (url.startsWith('/api/history/') && init?.method === 'DELETE') {
       deleteCalls.push(url);
-      const body = { status: 'deleted', session_id: 'deleted' };
+      const body = { status: 'deleted', sessionId: 'deleted' };
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -242,7 +217,7 @@ describe('SessionsPage session detail', () => {
 });
 
 describe('SessionsPage session identity', () => {
-  // The backend aggregates usage on (session_id, engine), so the same id can
+  // The backend aggregates usage on (sessionId, engine), so the same id can
   // appear under two engines. Keying rows or expansion state on the bare id
   // collided: React saw duplicate keys and expanding one row expanded both.
   const SHARED_ID = 'shared-session';

@@ -114,10 +114,10 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
           )}
           {files?.map(f => (
             <button
-              key={f.task_id}
-              onClick={() => setSelectedTaskId(f.task_id)}
+              key={f.taskId}
+              onClick={() => setSelectedTaskId(f.taskId)}
               className={`w-full text-left px-2 py-1.5 rounded-md text-xs truncate transition-colors ${
-                selectedTaskId === f.task_id
+                selectedTaskId === f.taskId
                   ? 'bg-slate-100 text-slate-800 font-medium'
                   : 'text-slate-500 hover:bg-slate-50'
               }`}

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, Code, History, Pencil, Play, StopCircle, Terminal, Trash2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, Code, GitBranch, History, Pencil, Play, StopCircle, Terminal, Trash2 } from 'lucide-react';
 import LogViewer from '../LogViewer';
 import ConfirmDialog from '../shared/ConfirmDialog';
 import EditTaskModal from './EditTaskModal';
+import RunChanges from './RunChanges';
 import { classifyStageStatus, type Engine, type RunStatus, type Task } from './types';
 import { useT } from '../../i18n/context';
 import request from '../../utils/request';
@@ -34,8 +35,8 @@ function formatDuration(seconds: number): string {
 }
 
 function runDuration(run: RunStatus): number {
-  const end = run.end_time ?? (run.status === 'running' ? Date.now() / 1000 : 0);
-  return end ? end - run.start_time : 0;
+  const end = run.endTime ?? (run.status === 'running' ? Date.now() / 1000 : 0);
+  return end ? end - run.startTime : 0;
 }
 
 function runBadgeClass(status: RunStatus['status']): string {
@@ -88,6 +89,7 @@ export default function TaskDetail({
   // Which run's log to display in the LogViewer. Defaults to the active run;
   // clicking a history entry swaps it to inspect that run's log.
   const [viewedLogId, setViewedLogId] = useState<string | null>(null);
+  const [logTab, setLogTab] = useState<'logs' | 'changes'>('logs');
 
   // Reset the viewed log whenever the selected task changes so a stale id
   // from a previous task doesn't leak into the LogViewer. Adjusting state
@@ -97,11 +99,12 @@ export default function TaskDetail({
   if (task.name !== trackedName) {
     setTrackedName(task.name);
     setViewedLogId(null);
+    setLogTab('logs');
   }
 
   // While a run is active, always show its live log regardless of what the
   // user previously selected from history.
-  const logTaskId = activeRun ? activeRun.task_id : viewedLogId;
+  const logTaskId = activeRun ? activeRun.taskId : viewedLogId;
 
   const done = task.stages.filter(s => classifyStageStatus(s.status) === 'done').length;
   const pct = task.stages.length > 0 ? Math.round((done / task.stages.length) * 100) : 0;
@@ -153,7 +156,7 @@ export default function TaskDetail({
 
           {activeRun ? (
             <button
-              onClick={() => onStop(activeRun.task_id)}
+              onClick={() => onStop(activeRun.taskId)}
               className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-sm font-bold border border-red-100 hover:bg-red-100 transition-colors"
             >
               <StopCircle className="w-4 h-4" />
@@ -224,10 +227,10 @@ export default function TaskDetail({
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('taskDetail.duration')}</span>
             <span className="font-medium text-slate-700">{formatDuration(runDuration(metaRun))}</span>
           </span>
-          {metaRun.exit_code !== undefined && metaRun.exit_code !== null && (
+          {metaRun.exitCode !== undefined && metaRun.exitCode !== null && (
             <span className="flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('taskDetail.exitCode')}</span>
-              <span className="font-mono font-medium text-slate-700">{metaRun.exit_code}</span>
+              <span className="font-mono font-medium text-slate-700">{metaRun.exitCode}</span>
             </span>
           )}
           <span className={`text-[10px] px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider border ${runBadgeClass(metaRun.status)}`}>
@@ -282,12 +285,36 @@ export default function TaskDetail({
 
           {logTaskId && (
             <section className="space-y-3">
-              <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                <Terminal className="w-4 h-4" />
-                {t('taskDetail.logs')}
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                  {logTab === 'logs' ? <Terminal className="w-4 h-4" /> : <GitBranch className="w-4 h-4" />}
+                  {logTab === 'logs' ? t('taskDetail.logs') : t('taskDetail.changes')}
+                </h2>
+                <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
+                  <button
+                    onClick={() => setLogTab('logs')}
+                    className={`px-3 py-1.5 transition-colors ${
+                      logTab === 'logs' ? 'bg-primary/10 text-primary' : 'bg-white text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    {t('taskDetail.tabLogs')}
+                  </button>
+                  <button
+                    onClick={() => setLogTab('changes')}
+                    className={`px-3 py-1.5 transition-colors ${
+                      logTab === 'changes' ? 'bg-primary/10 text-primary' : 'bg-white text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    {t('taskDetail.tabChanges')}
+                  </button>
+                </div>
+              </div>
               <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 400 }}>
-                <LogViewer taskId={logTaskId} />
+                {logTab === 'logs' ? (
+                  <LogViewer taskId={logTaskId} />
+                ) : (
+                  <RunChanges taskId={logTaskId} />
+                )}
               </div>
             </section>
           )}
@@ -306,8 +333,8 @@ export default function TaskDetail({
               {t('taskDetail.mountedSkills')}
             </h2>
             <div className="space-y-2">
-              {task.resolved_skills && task.resolved_skills.length > 0 ? (
-                task.resolved_skills.map(skill => (
+              {task.resolvedSkills && task.resolvedSkills.length > 0 ? (
+                task.resolvedSkills.map(skill => (
                   <div key={skill.id} className="glass-card p-4 border-slate-100 space-y-2">
                     <div className="flex items-center gap-2">
                       <Code className="w-4 h-4 text-primary" />
@@ -339,8 +366,8 @@ export default function TaskDetail({
               {t('taskDetail.injectedPrompts')}
             </h2>
             <div className="flex flex-wrap gap-2">
-              {task.resolved_prompts && task.resolved_prompts.length > 0 ? (
-                task.resolved_prompts.map(prompt => (
+              {task.resolvedPrompts && task.resolvedPrompts.length > 0 ? (
+                task.resolvedPrompts.map(prompt => (
                   <span key={prompt} className="px-2 py-1 bg-primary/5 text-primary border border-primary/10 rounded-lg text-xs font-medium">
                     {prompt}
                   </span>
@@ -362,12 +389,12 @@ export default function TaskDetail({
             {runHistory.length > 0 ? (
               <div className="space-y-2">
                 {runHistory.map(run => {
-                  const isActive = activeRun?.task_id === run.task_id;
-                  const isViewed = viewedLogId === run.task_id;
+                  const isActive = activeRun?.taskId === run.taskId;
+                  const isViewed = viewedLogId === run.taskId;
                   return (
                     <button
-                      key={run.task_id}
-                      onClick={() => setViewedLogId(run.task_id)}
+                      key={run.taskId}
+                      onClick={() => setViewedLogId(run.taskId)}
                       className={`w-full text-left glass-card p-3 border transition-all flex items-center justify-between gap-3 ${
                         isActive || isViewed ? 'border-primary/30 bg-primary/5' : 'border-slate-100 hover:bg-slate-50/50'
                       }`}
@@ -380,8 +407,8 @@ export default function TaskDetail({
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-400 mt-0.5">
-                          {new Date(run.start_time * 1000).toLocaleString()} · {formatDuration(runDuration(run))}
-                          {run.exit_code !== undefined && run.exit_code !== null && ` · ${t('taskDetail.exitCode')} ${run.exit_code}`}
+                          {new Date(run.startTime * 1000).toLocaleString()} · {formatDuration(runDuration(run))}
+                          {run.exitCode !== undefined && run.exitCode !== null && ` · ${t('taskDetail.exitCode')} ${run.exitCode}`}
                         </p>
                       </div>
                       {(isActive || isViewed) && <Terminal className="w-3.5 h-3.5 text-primary shrink-0" />}

@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, type ReactNode } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchSystemMetrics, type SystemMetrics } from '../api/system';
-import usePolling from '../hooks/usePolling';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -21,28 +21,25 @@ const SystemMetricsContext = createContext<SystemMetricsContextValue | null>(nul
  * read from this one poller instead.
  */
 export function SystemMetricsProvider({ children }: { children: ReactNode }) {
-  const [metrics, setMetrics] = useState<SystemMetrics>();
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const { data, error } = useQuery({
+    queryKey: ['system', 'metrics'],
+    queryFn: fetchSystemMetrics,
+    refetchInterval: POLL_INTERVAL_MS,
+  });
 
   const refresh = useCallback(async () => {
-    try {
-      const next = await fetchSystemMetrics();
-      setMetrics(next);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load metrics');
-    }
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refresh();
-  }, [refresh]);
-
-  usePolling(refresh, POLL_INTERVAL_MS, true, { immediate: false });
+    await queryClient.invalidateQueries({ queryKey: ['system', 'metrics'] });
+  }, [queryClient]);
 
   return (
-    <SystemMetricsContext.Provider value={{ metrics, error, refresh }}>
+    <SystemMetricsContext.Provider
+      value={{
+        metrics: data,
+        error: error ? (error instanceof Error ? error.message : 'Failed to load metrics') : null,
+        refresh,
+      }}
+    >
       {children}
     </SystemMetricsContext.Provider>
   );

@@ -41,17 +41,8 @@ from core.session_history.session_finder import (
     find_all_sessions,
     find_session_by_id,
 )
-from core.web.case_convert import ProtocolModel, wire
+from core.web.case_convert import ProtocolModel, camelize, wire
 from core.web.routers.config import get_config_path
-
-# NOTE: list_sessions/get_audit_events/get_session_detail below intentionally
-# still return raw snake_case dicts. Their shapes (SessionSummary,
-# AuditEvent, and to_full_dict()'s nested `messages`) are consumed by
-# NativeAgentSession (types/agent.ts), ChatPage.tsx, and AuditTrail.tsx --
-# converting them requires coordinated frontend updates across those
-# call sites and is deferred to a dedicated follow-up rather than folded
-# into this pass. convert/convert-and-launch/delete below ARE migrated
-# since their responses are small and self-contained.
 
 router = APIRouter(prefix="/api")
 
@@ -152,6 +143,18 @@ class DeleteSessionResponse(ProtocolModel):
     session_id: str
 
 
+# The domain's own to_summary_dict()/to_full_dict()/to_dict() stay snake_case:
+# they are Python-side serializations used by the CLI and tests. camelize() at
+# the route is where the two vocabularies meet.
+
+
+class ResumeTarget(ProtocolModel):
+    status: str
+    engine: str
+    session_id: str
+    project: str
+
+
 @router.get("/history")
 async def list_sessions(
     project: str | None = Query(
@@ -177,7 +180,7 @@ async def list_sessions(
         :limit
     ]
     return {
-        "sessions": [s.to_summary_dict() for s in sessions],
+        "sessions": [camelize(s.to_summary_dict()) for s in sessions],
         "count": len(sessions),
     }
 
@@ -224,7 +227,10 @@ async def get_audit_events(
 
     events = events[:limit]
 
-    return {"events": events, "count": len(events)}
+    return {
+        "events": [camelize(event) for event in events],
+        "count": len(events),
+    }
 
 
 @router.get("/history/{engine}/{session_id}")
@@ -249,11 +255,11 @@ async def get_session_detail(
             status_code=404,
             detail={
                 "error": "Session not found",
-                "session_id": session_id,
+                "sessionId": session_id,
                 "engine": engine,
             },
         )
-    return session.to_full_dict()
+    return camelize(session.to_full_dict())
 
 
 @router.post("/history/convert")
@@ -267,7 +273,7 @@ async def convert_session(req: ConvertRequest) -> dict:
         req: The conversion request.
 
     Returns:
-        dict: {"status": "ok", "new_session_id": "...", "target_engine": "..."}
+        dict: {"status": "ok", "newSessionId": "...", "targetEngine": "..."}
     """
     validated_project = _resolve_history_workspace(req.project_path)
     # Import here to avoid circular dependencies and only load when needed
@@ -281,7 +287,7 @@ async def convert_session(req: ConvertRequest) -> dict:
             status_code=404,
             detail={
                 "error": "Source session not found",
-                "session_id": req.session_id,
+                "sessionId": req.session_id,
             },
         )
 
@@ -399,7 +405,7 @@ async def continue_session(
             status_code=404,
             detail={
                 "error": "Session not found",
-                "session_id": session_id,
+                "sessionId": session_id,
                 "engine": engine,
             },
         )
@@ -409,12 +415,14 @@ async def continue_session(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return {
-        "status": "ready",
-        "engine": engine,
-        "session_id": session_id,
-        "project": validated_project,
-    }
+    return wire(
+        ResumeTarget(
+            status="ready",
+            engine=engine,
+            session_id=session_id,
+            project=validated_project,
+        )
+    )
 
 
 @router.delete("/history/{engine}/{session_id}")
@@ -432,7 +440,7 @@ async def delete_session(
             status_code=404,
             detail={
                 "error": "Session not found",
-                "session_id": session_id,
+                "sessionId": session_id,
                 "engine": engine,
             },
         )

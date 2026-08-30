@@ -74,3 +74,21 @@ def write_fake_chat_cli(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return script
+
+
+def assert_camel(payload) -> None:
+    """Assert every JSON key in *payload* is camelCase, recursively.
+
+    The wire contract from ``core/web/case_convert.py``: routers may return
+    snake_case only for the exemptions that module's docstring enumerates
+    (``/api/config``, ``/api/groups``, engine-native payloads). Anywhere else
+    an underscore in a key means a shape escaped the conversion boundary.
+    """
+    if isinstance(payload, dict):
+        offenders = sorted(key for key in payload if "_" in key)
+        assert not offenders, f"snake_case keys on the wire: {offenders}"
+        for value in payload.values():
+            assert_camel(value)
+    elif isinstance(payload, list):
+        for item in payload:
+            assert_camel(item)

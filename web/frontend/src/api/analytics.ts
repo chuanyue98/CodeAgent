@@ -59,14 +59,14 @@ export interface EngineSummary {
 }
 
 export interface AnalyticsSummary {
-  total_entries: number;
-  total_input_tokens: number;
-  total_output_tokens: number;
-  total_cache_creation_tokens: number;
-  total_cache_read_tokens: number;
+  totalEntries: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheCreationTokens: number;
+  totalCacheReadTokens: number;
   targets: string[];
   models: string[];
-  session_count: number;
+  sessionCount: number;
 }
 
 import request from '../utils/request';

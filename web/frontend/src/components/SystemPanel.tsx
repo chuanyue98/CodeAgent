@@ -13,7 +13,7 @@ function colorFor(value: number, thresholds: [number, number]): string {
 function statusDotFor(metrics: SystemMetrics | undefined, error: string | null): string {
   if (error) return 'bg-red-500';
   if (!metrics) return 'bg-slate-300';
-  const worst = Math.max(metrics.cpu_percent, metrics.memory_percent, metrics.disk_percent);
+  const worst = Math.max(metrics.cpuPercent, metrics.memoryPercent, metrics.diskPercent);
   if (worst > 90) return 'bg-red-500';
   if (worst > 70) return 'bg-yellow-500';
   return 'bg-emerald-500';
@@ -77,17 +77,17 @@ export default function SystemPanel() {
             <>
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
-                  <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${colorFor(metrics.cpu_percent, [70, 90])}`}>
-                    <Cpu className="h-3 w-3" />{metrics.cpu_percent.toFixed(0)}%
+                  <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${colorFor(metrics.cpuPercent, [70, 90])}`}>
+                    <Cpu className="h-3 w-3" />{metrics.cpuPercent.toFixed(0)}%
                   </span>
-                  <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${colorFor(metrics.memory_percent, [70, 90])}`}>
-                    <Clock className="h-3 w-3" />{metrics.memory_percent.toFixed(0)}%
+                  <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${colorFor(metrics.memoryPercent, [70, 90])}`}>
+                    <Clock className="h-3 w-3" />{metrics.memoryPercent.toFixed(0)}%
                   </span>
-                  <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${colorFor(metrics.disk_percent, [70, 90])}`}>
-                    <HardDrive className="h-3 w-3" />{metrics.disk_percent.toFixed(0)}%
+                  <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 ${colorFor(metrics.diskPercent, [70, 90])}`}>
+                    <HardDrive className="h-3 w-3" />{metrics.diskPercent.toFixed(0)}%
                   </span>
                   <span className="flex items-center gap-1 text-slate-400">
-                    <FileText className="h-3 w-3" />{t('system.logCount', { count: metrics.log_file_count })}
+                    <FileText className="h-3 w-3" />{t('system.logCount', { count: metrics.logFileCount })}
                   </span>
                 </div>
                 <button
@@ -103,19 +103,19 @@ export default function SystemPanel() {
                 <div className="mt-2 grid grid-cols-2 gap-3 border-t border-slate-100 pt-2 text-xs">
                   <div>
                     <span className="text-slate-400">{t('system.memory')}</span>
-                    <p className="font-medium text-slate-700">{metrics.memory_used_gb} / {metrics.memory_total_gb} GB</p>
+                    <p className="font-medium text-slate-700">{metrics.memoryUsedGb} / {metrics.memoryTotalGb} GB</p>
                   </div>
                   <div>
                     <span className="text-slate-400">{t('system.disk')}</span>
-                    <p className="font-medium text-slate-700">{metrics.disk_used_gb} / {metrics.disk_total_gb} GB</p>
+                    <p className="font-medium text-slate-700">{metrics.diskUsedGb} / {metrics.diskTotalGb} GB</p>
                   </div>
                   <div>
                     <span className="text-slate-400">{t('system.uptime')}</span>
-                    <p className="font-medium text-slate-700">{t('system.uptimeHours', { hours: Math.floor(metrics.uptime_seconds / 3600) })}</p>
+                    <p className="font-medium text-slate-700">{t('system.uptimeHours', { hours: Math.floor(metrics.uptimeSeconds / 3600) })}</p>
                   </div>
                   <div>
                     <span className="text-slate-400">{t('system.historyDb')}</span>
-                    <p className="font-medium text-slate-700">{metrics.history_file_size_mb} MB</p>
+                    <p className="font-medium text-slate-700">{metrics.historyFileSizeMb} MB</p>
                   </div>
                 </div>
               )}

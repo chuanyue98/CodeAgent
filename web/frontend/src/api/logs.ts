@@ -3,14 +3,14 @@ import request from '../utils/request';
 import { withToken } from '../utils/token';
 
 export interface LogFile {
-  task_id: string;
+  taskId: string;
   name: string;
   size: number;
   modified: number;
 }
 
 export interface LogFileContent {
-  task_id: string;
+  taskId: string;
   content: string;
 }
 

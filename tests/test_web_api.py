@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from core.web import server
 from core.web.routers import tasks as tasks_router
 from core.web.server import app
+from tests._helpers import assert_camel
 
 
 @pytest.fixture
@@ -284,9 +285,71 @@ async def test_list_task_runs_route_queries_history_by_task_name(mock_env, monke
     assert calls == {"task_name": "review", "limit": 50}
     data = resp.json()
     assert len(data) == 1
-    assert data[0]["task_id"] == "review_1"
-    assert data[0]["exit_code"] == 0
-    assert data[0]["end_time"] == 200
+    assert data[0]["taskId"] == "review_1"
+    assert data[0]["exitCode"] == 0
+    assert data[0]["endTime"] == 200
+    assert_camel(data)
+
+
+@pytest.mark.asyncio
+async def test_run_changes_route_404_for_unknown_run(mock_env, monkeypatch):
+    class FakeRunner:
+        def get_run(self, task_id):
+            return None
+
+    monkeypatch.setattr(tasks_router, "_runner", FakeRunner())
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.get("/api/tasks/runs/nope_1/changes")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_run_changes_route_passes_run_window_and_camelizes(
+    mock_env, monkeypatch
+):
+    from core.services.runner_service import TaskRunStatus
+
+    class FakeRunner:
+        def get_run(self, task_id):
+            assert task_id == "review_1"
+            return TaskRunStatus(
+                task_id="review_1",
+                engine="codex",
+                pid=1,
+                status="completed",
+                log_path="/tmp/a.log",
+                start_time=100,
+                end_time=200,
+                workspace="/tmp/ws",
+            )
+
+    captured = {}
+
+    def fake_describe(workspace, start, end):
+        captured.update(workspace=workspace, start=start, end=end)
+        return {
+            "available": False,
+            "reason": "not_git_repo",
+            "workspace": workspace,
+        }
+
+    monkeypatch.setattr(tasks_router, "_runner", FakeRunner())
+    monkeypatch.setattr(tasks_router, "describe_run_changes", fake_describe)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.get("/api/tasks/runs/review_1/changes")
+
+    assert resp.status_code == 200
+    assert captured == {"workspace": "/tmp/ws", "start": 100, "end": 200}
+    assert resp.json() == {
+        "available": False,
+        "reason": "not_git_repo",
+        "workspace": "/tmp/ws",
+    }
+    assert_camel(resp.json())
 
 
 @pytest.mark.asyncio

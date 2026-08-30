@@ -209,9 +209,9 @@ export default function InstancesPage() {
                   <div className="flex shrink-0 items-center gap-3">
                     <span
                       className="font-mono text-[11px] text-slate-400 tabular-nums"
-                      title={new Date(instance.started_at).toLocaleString()}
+                      title={new Date(instance.startedAt).toLocaleString()}
                     >
-                      {elapsedLabel(instance.started_at)}
+                      {elapsedLabel(instance.startedAt)}
                     </span>
                     {instance.stoppable && (
                       <button

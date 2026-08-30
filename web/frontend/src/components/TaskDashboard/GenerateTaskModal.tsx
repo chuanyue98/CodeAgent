@@ -37,17 +37,17 @@ export default function GenerateTaskModal({
     cancelled.current = false;
     setPhase('generating');
     try {
-      const status = await request<{ task_id: string }>('/api/tasks/generate', {
+      const status = await request<{ taskId: string }>('/api/tasks/generate', {
         method: 'POST',
         body: JSON.stringify({ engine, name, title, description }),
       });
       if (!isMounted()) return;
-      setRunId(status.task_id);
+      setRunId(status.taskId);
 
       const poll = async () => {
         if (cancelled.current) return;
         try {
-          const { status: runStatus } = await request<RunPollResponse>(`/api/tasks/runs/${status.task_id}`);
+          const { status: runStatus } = await request<RunPollResponse>(`/api/tasks/runs/${status.taskId}`);
           if (!isMounted() || cancelled.current) return;
 
           if (runStatus.status === 'running') {

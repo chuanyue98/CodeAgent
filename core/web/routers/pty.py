@@ -57,6 +57,7 @@ from core.services.workspace_service import (
     WorkspaceResolutionError,
     resolve_registered_workspace,
 )
+from core.web.case_convert import camelize
 from core.web.routers.config import get_config_path
 from core.web.security import verify_websocket
 
@@ -151,7 +152,9 @@ async def get_pty_status() -> dict:
 @router.get("/sessions")
 async def list_pty_sessions() -> dict:
     """活跃 PTY 会话列表，供实例管理页使用。"""
-    return {"sessions": list_active_sessions()}
+    # 内部注册表 _ACTIVE_SESSIONS 仍是 snake_case，因为 instances.py 也按
+    # Python 的读法取它的字段；camelize 只作用在出网这一层。
+    return {"sessions": [camelize(entry) for entry in list_active_sessions()]}
 
 
 @router.post("/sessions/{session_id}/stop")

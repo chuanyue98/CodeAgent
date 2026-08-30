@@ -1,7 +1,9 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import SystemPanel from '../components/SystemPanel';
 import { SystemMetricsProvider } from '../context/SystemMetricsContext';
+import { createQueryClient } from '../utils/queryClient';
 import { fetchSystemMetrics, type SystemMetrics } from '../api/system';
 
 vi.mock('../api/system', () => ({
@@ -10,23 +12,25 @@ vi.mock('../api/system', () => ({
 
 function renderPanel() {
   return render(
-    <SystemMetricsProvider>
-      <SystemPanel />
-    </SystemMetricsProvider>,
+    <QueryClientProvider client={createQueryClient()}>
+      <SystemMetricsProvider>
+        <SystemPanel />
+      </SystemMetricsProvider>
+    </QueryClientProvider>,
   );
 }
 
 const metrics: SystemMetrics = {
-  cpu_percent: 12,
-  memory_percent: 34,
-  memory_used_gb: 5,
-  memory_total_gb: 16,
-  disk_percent: 56,
-  disk_used_gb: 50,
-  disk_total_gb: 100,
-  uptime_seconds: 7200,
-  history_file_size_mb: 1.5,
-  log_file_count: 3,
+  cpuPercent: 12,
+  memoryPercent: 34,
+  memoryUsedGb: 5,
+  memoryTotalGb: 16,
+  diskPercent: 56,
+  diskUsedGb: 50,
+  diskTotalGb: 100,
+  uptimeSeconds: 7200,
+  historyFileSizeMb: 1.5,
+  logFileCount: 3,
 };
 
 describe('SystemPanel', () => {

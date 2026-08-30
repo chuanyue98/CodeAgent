@@ -9,13 +9,13 @@ import type { SessionMessage } from '../api/audit';
 function msg(
   role: string,
   timestamp: string,
-  tool_calls: SessionMessage['tool_calls'] = [],
+  toolCalls: SessionMessage['toolCalls'] = [],
 ): SessionMessage {
-  return { role, content: '', timestamp, model: '', tool_calls };
+  return { role, content: '', timestamp, model: '', toolCalls };
 }
 
-function call(name: string, args_preview: string) {
-  return { name, args_preview, result_preview: '' };
+function call(name: string, argsPreview: string) {
+  return { name, argsPreview, resultPreview: '' };
 }
 
 describe('extractFilePath', () => {
@@ -26,7 +26,7 @@ describe('extractFilePath', () => {
   });
 
   test('recovers the path from a preview truncated mid-JSON', () => {
-    // The parsers cut args_preview at 200 characters, so the closing brace is
+    // The parsers cut argsPreview at 200 characters, so the closing brace is
     // routinely missing on a call with a long argument list.
     const truncated = `{"file_path": "core/services/agent_gateway.py", "old_string": "${'x'.repeat(160)}`;
     expect(extractFilePath(truncated)).toBe('core/services/agent_gateway.py');

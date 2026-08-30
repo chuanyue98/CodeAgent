@@ -16,6 +16,10 @@ import request from '../utils/request';
 import { useSystemMetrics } from '../context/SystemMetricsContext';
 import { buildResumeLink } from '../utils/sessionLink';
 import { useT } from '../i18n/context';
+import type { RunStatus } from '../components/TaskDashboard/types';
+
+/** Home shows only enough of a run to identify it; the dashboard shows the rest. */
+type RunningTask = Pick<RunStatus, 'taskId' | 'engine' | 'status'>;
 
 //: Days of history in the hero's bar strip. Twelve fits the column at the
 //: bar width without the strip becoming a chart that needs axes.
@@ -72,30 +76,24 @@ function toolCallSubject(argsPreview: string | undefined): string {
  * what each call actually did.
  */
 function describeAuditEvent(event: AuditEvent): string {
-  if (event.event_type === 'tool_call') {
-    const name = event.tool_name || 'tool';
-    const subject = toolCallSubject(event.args_preview).replace(/\s+/g, ' ').trim();
+  if (event.eventType === 'tool_call') {
+    const name = event.toolName || 'tool';
+    const subject = toolCallSubject(event.argsPreview).replace(/\s+/g, ' ').trim();
     return subject ? `${name} · ${subject}` : name;
   }
-  const preview = event.content_preview?.trim();
+  const preview = event.contentPreview?.trim();
   if (preview) return preview;
-  return event.session_title?.trim() || event.engine;
+  return event.sessionTitle?.trim() || event.engine;
 }
 
 function toneForEvent(event: AuditEvent): 'live' | 'ok' | 'idle' {
-  if (event.event_type === 'tool_call') return 'ok';
+  if (event.eventType === 'tool_call') return 'ok';
   return event.role === 'user' ? 'live' : 'idle';
 }
 
 /** Last path segment — the label form every other page uses for a workspace. */
 function workspaceLabel(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() || path;
-}
-
-interface RunStatus {
-  task_id: string;
-  engine: string;
-  status: string;
 }
 
 /**
@@ -188,7 +186,7 @@ export default function HomePage() {
                   recentEvents.map(event => {
                     const tone = toneForEvent(event);
                     return (
-                      <li key={event.event_id} className="flex items-center justify-between gap-2 font-mono text-xs">
+                      <li key={event.eventId} className="flex items-center justify-between gap-2 font-mono text-xs">
                         <span className="flex min-w-0 items-center gap-2 text-slate-600">
                           <span
                             className={`h-1.5 w-1.5 shrink-0 rounded-full ${
@@ -225,9 +223,9 @@ export default function HomePage() {
           <div className="mt-4 flex-1 space-y-3">
             {metrics ? (
               <>
-                <MetricRow icon={<Cpu className="h-3.5 w-3.5" />} label="CPU" value={metrics.cpu_percent} />
-                <MetricRow icon={<MemoryStick className="h-3.5 w-3.5" />} label={t('system.memory')} value={metrics.memory_percent} extra={`${metrics.memory_used_gb.toFixed(1)} / ${metrics.memory_total_gb.toFixed(1)} GB`} />
-                <MetricRow icon={<HardDrive className="h-3.5 w-3.5" />} label={t('system.disk')} value={metrics.disk_percent} extra={`${metrics.disk_used_gb.toFixed(0)} / ${metrics.disk_total_gb.toFixed(0)} GB`} />
+                <MetricRow icon={<Cpu className="h-3.5 w-3.5" />} label="CPU" value={metrics.cpuPercent} />
+                <MetricRow icon={<MemoryStick className="h-3.5 w-3.5" />} label={t('system.memory')} value={metrics.memoryPercent} extra={`${metrics.memoryUsedGb.toFixed(1)} / ${metrics.memoryTotalGb.toFixed(1)} GB`} />
+                <MetricRow icon={<HardDrive className="h-3.5 w-3.5" />} label={t('system.disk')} value={metrics.diskPercent} extra={`${metrics.diskUsedGb.toFixed(0)} / ${metrics.diskTotalGb.toFixed(0)} GB`} />
               </>
             ) : (
               <p className="text-xs text-slate-400">{t('system.loadingMetrics')}</p>
@@ -310,7 +308,7 @@ export default function HomePage() {
               <ul className="space-y-2">
                 {runs.map(run => (
                   <li
-                    key={run.task_id}
+                    key={run.taskId}
                     className="flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs"
                   >
                     <span className="relative flex h-2 w-2">
@@ -318,7 +316,7 @@ export default function HomePage() {
                       <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
                     </span>
                     <span className="min-w-0 flex-1 truncate font-mono font-semibold text-emerald-800">
-                      {run.task_id}
+                      {run.taskId}
                     </span>
                     <span className="shrink-0 text-[10px] font-semibold uppercase text-emerald-600">
                       {run.engine}
@@ -426,12 +424,12 @@ function useRecentSessions(limit: number): SessionUsage[] | null {
 }
 
 /** Only the running rows matter on a dashboard — everything else is noise. */
-function useRunningTasks(): RunStatus[] | null {
-  const [runs, setRuns] = useState<RunStatus[] | null>(null);
+function useRunningTasks(): RunningTask[] | null {
+  const [runs, setRuns] = useState<RunningTask[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    request<RunStatus[]>('/api/tasks/runs')
+    request<RunningTask[]>('/api/tasks/runs')
       .then(list => { if (!cancelled) setRuns((list || []).filter(run => run.status === 'running')); })
       .catch(() => { if (!cancelled) setRuns([]); });
     return () => { cancelled = true; };

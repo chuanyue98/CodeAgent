@@ -226,6 +226,46 @@ class RunStore:
                     (status, session_id, task_id),
                 )
 
+    def log_paths(self) -> list[str]:
+        """Every log file the table still points at, for orphan sweeping."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT log_path FROM runs WHERE log_path IS NOT NULL"
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def prune(self, *, older_than: float, keep_latest: int) -> list[str]:
+        """Drops finished runs that ended before *older_than*, newest-first safe.
+
+        The *keep_latest* most recent runs are never pruned regardless of age,
+        so an install that sat idle for a year still opens with its history
+        intact. Running rows are never touched -- a run older than the cutoff
+        that is somehow still alive is a supervision problem, not garbage.
+
+        Returns the log paths of the deleted rows so the caller can unlink
+        the files; this store owns rows, not the filesystem.
+        """
+        with self._lock:
+            with self._conn:
+                rows = self._conn.execute(
+                    """
+                    SELECT task_id, log_path FROM runs
+                    WHERE status != 'running'
+                      AND COALESCE(end_time, start_time) < ?
+                      AND task_id NOT IN (
+                          SELECT task_id FROM runs
+                          ORDER BY start_time DESC LIMIT ?
+                      )
+                    """,
+                    (older_than, max(0, keep_latest)),
+                ).fetchall()
+                if rows:
+                    self._conn.executemany(
+                        "DELETE FROM runs WHERE task_id = ?",
+                        [(task_id,) for task_id, _ in rows],
+                    )
+        return [log_path for _, log_path in rows if log_path]
+
     def delete(self, task_id: str):
         with self._lock:
             with self._conn:

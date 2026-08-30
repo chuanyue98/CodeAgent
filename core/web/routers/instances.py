@@ -9,11 +9,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
 from core.services.agent_protocol import SessionStatus
+from core.web.case_convert import ProtocolModel, wire
 from core.web.routers import pty as pty_router
 from core.web.routers.chat import _runner as chat_runner
 from core.web.routers.tasks import _runner as tasks_runner
@@ -21,11 +21,23 @@ from core.web.routers.tasks import _runner as tasks_runner
 router = APIRouter(prefix="/api/instances", tags=["instances"])
 
 
+class Instance(ProtocolModel):
+    kind: str
+    id: str
+    engine: str
+    cwd: str
+    title: str | None
+    status: str
+    pid: int | None
+    started_at: str
+    stoppable: bool
+
+
 def _iso(ts: float) -> str:
     return datetime.fromtimestamp(ts, tz=UTC).isoformat()
 
 
-def _chat_instances(request: Request) -> list[dict[str, Any]]:
+def _chat_instances(request: Request) -> list[Instance]:
     gateway = getattr(request.app.state, "agent_gateway", None)
     if gateway is None:
         return []
@@ -34,42 +46,42 @@ def _chat_instances(request: Request) -> list[dict[str, Any]]:
         if session.status == SessionStatus.CLOSED:
             continue
         instances.append(
-            {
-                "kind": "chat",
-                "id": session.id,
-                "engine": session.provider,
-                "cwd": session.cwd,
-                "title": session.title,
+            Instance(
+                kind="chat",
+                id=session.id,
+                engine=session.provider,
+                cwd=session.cwd,
+                title=session.title,
                 # 部分路径下 status 已被序列化成 str，两种形态都兼容。
-                "status": getattr(session.status, "value", session.status),
-                "pid": None,
-                "started_at": session.created_at.isoformat(),
+                status=getattr(session.status, "value", session.status),
+                pid=None,
+                started_at=session.created_at.isoformat(),
                 # 聊天会话的进程由 provider 适配器共享持有，没有可单独
                 # 停止的实体；要终止只能删会话，那属于破坏性操作，不做。
-                "stoppable": False,
-            }
+                stoppable=False,
+            )
         )
     return instances
 
 
-def _terminal_instances() -> list[dict[str, Any]]:
+def _terminal_instances() -> list[Instance]:
     return [
-        {
-            "kind": "terminal",
-            "id": entry["id"],
-            "engine": entry["engine"],
-            "cwd": entry["cwd"],
-            "title": None,
-            "status": "running",
-            "pid": entry["pid"],
-            "started_at": entry["started_at"],
-            "stoppable": True,
-        }
+        Instance(
+            kind="terminal",
+            id=entry["id"],
+            engine=entry["engine"],
+            cwd=entry["cwd"],
+            title=None,
+            status="running",
+            pid=entry["pid"],
+            started_at=entry["started_at"],
+            stoppable=True,
+        )
         for entry in pty_router.list_active_sessions()
     ]
 
 
-def _task_instances() -> list[dict[str, Any]]:
+def _task_instances() -> list[Instance]:
     instances = []
     # chat._runner 就是 tasks._runner 的共享单例（chat.py 里明示的
     # re-export），按对象去重避免每个任务出现两行。
@@ -77,17 +89,17 @@ def _task_instances() -> list[dict[str, Any]]:
     for runner in runners.values():
         for run in runner.list_runs():
             instances.append(
-                {
-                    "kind": "task",
-                    "id": run.task_id,
-                    "engine": run.engine,
-                    "cwd": run.workspace or "",
-                    "title": None,
-                    "status": run.status,
-                    "pid": run.pid,
-                    "started_at": _iso(run.start_time),
-                    "stoppable": run.status == "running",
-                }
+                Instance(
+                    kind="task",
+                    id=run.task_id,
+                    engine=run.engine,
+                    cwd=run.workspace or "",
+                    title=None,
+                    status=run.status,
+                    pid=run.pid,
+                    started_at=_iso(run.start_time),
+                    stoppable=run.status == "running",
+                )
             )
     return instances
 
@@ -95,8 +107,8 @@ def _task_instances() -> list[dict[str, Any]]:
 @router.get("")
 async def list_instances(request: Request) -> dict:
     instances = _chat_instances(request) + _terminal_instances() + _task_instances()
-    instances.sort(key=lambda item: item["started_at"], reverse=True)
-    return {"instances": instances}
+    instances.sort(key=lambda item: item.started_at, reverse=True)
+    return {"instances": [wire(instance) for instance in instances]}
 
 
 @router.post("/{kind}/{instance_id}/stop")

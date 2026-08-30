@@ -1,5 +1,12 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
+import { notifyManager } from '@tanstack/react-query';
+
+// TanStack Query batches observer notifications through setTimeout(0), which
+// never fires under vi.useFakeTimers -- leaving queries stuck in "pending"
+// no matter how many microtasks act() flushes. Routing them through
+// microtasks restores that flushing without touching real-time tests.
+notifyManager.setScheduler(callback => queueMicrotask(callback));
 
 // Helper to create a mock Response with both text() and json()
 function mockResponse(data: unknown) {
@@ -55,16 +62,16 @@ globalThis.fetch = vi.fn().mockImplementation((url: string) => {
   }
   if (url.includes('/api/system/metrics')) {
     return Promise.resolve(mockResponse({
-      cpu_percent: 10,
-      memory_percent: 20,
-      memory_used_gb: 2,
-      memory_total_gb: 16,
-      disk_percent: 30,
-      disk_used_gb: 10,
-      disk_total_gb: 100,
-      uptime_seconds: 3600,
-      history_file_size_mb: 0,
-      log_file_count: 0,
+      cpuPercent: 10,
+      memoryPercent: 20,
+      memoryUsedGb: 2,
+      memoryTotalGb: 16,
+      diskPercent: 30,
+      diskUsedGb: 10,
+      diskTotalGb: 100,
+      uptimeSeconds: 3600,
+      historyFileSizeMb: 0,
+      logFileCount: 0,
     }));
   }
   if (url.includes('/api/engines')) {
@@ -101,6 +108,29 @@ if (typeof globalThis.localStorage === 'undefined' || globalThis.localStorage ==
   };
   Object.defineProperty(globalThis, 'localStorage', {
     value: storage,
+    configurable: true,
+    writable: true,
+  });
+}
+
+// jsdom does not implement EventSource. Log streaming components only need
+// construction, addEventListener and close() to not throw — no real events.
+if (typeof globalThis.EventSource === 'undefined') {
+  class MockEventSource {
+    url: string;
+    readyState = 0;
+    onopen: ((event: Event) => void) | null = null;
+    onerror: ((event: Event) => void) | null = null;
+    onmessage: ((event: MessageEvent) => void) | null = null;
+    constructor(url: string) {
+      this.url = url;
+    }
+    addEventListener(): void {}
+    removeEventListener(): void {}
+    close(): void {}
+  }
+  Object.defineProperty(globalThis, 'EventSource', {
+    value: MockEventSource as unknown as typeof EventSource,
     configurable: true,
     writable: true,
   });

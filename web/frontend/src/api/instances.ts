@@ -10,7 +10,7 @@ export interface AgentInstance {
   title: string | null;
   status: string;
   pid: number | null;
-  started_at: string;
+  startedAt: string;
   stoppable: boolean;
 }
 

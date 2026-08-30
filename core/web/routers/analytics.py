@@ -11,6 +11,7 @@ from core.analytics.service import get_analytics_data, refresh_analytics_data
 from core.session_history.parse_cache import clear_parse_cache
 from core.session_history.paths import normalize_project_path
 from core.session_history.session_finder import find_all_sessions
+from core.web.case_convert import camelize
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -47,7 +48,7 @@ async def _session_title_map() -> dict[tuple[str, str], str]:
 @router.get("/summary")
 async def get_summary():
     data = await _data()
-    return data["summary"]
+    return camelize(data["summary"])
 
 
 @router.get("/daily")
@@ -278,4 +279,7 @@ async def refresh():
     # it rather than explain why it was not dropped.
     clear_parse_cache()
     data = await asyncio.to_thread(refresh_analytics_data)
-    return {"status": "refreshed", "summary": data["summary"]}
+    return {
+        "status": "refreshed",
+        "summary": camelize(data["summary"]),
+    }

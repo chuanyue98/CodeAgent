@@ -211,9 +211,10 @@ async def start_chat_turn(req: StartChatTurnRequest) -> dict:
     Returns:
         dict: The initial TaskRunStatus (running, with the log path to poll/stream).
     """
-    project_path, group = _registered_project(req.project_path)
+    project_path, group = await asyncio.to_thread(_registered_project, req.project_path)
     try:
-        status = _runner.run_chat_turn(
+        status = await asyncio.to_thread(
+            _runner.run_chat_turn,
             req.engine,
             req.message,
             session_id=req.session_id,
@@ -235,7 +236,7 @@ async def get_chat_turn(turn_id: str) -> dict:
     Returns:
         dict: The current TaskRunStatus, including ``session_id`` once known.
     """
-    status = _runner.get_status(turn_id)
+    status = await asyncio.to_thread(_runner.get_status, turn_id)
     if not status:
         raise HTTPException(status_code=404, detail="Turn not found")
     return wire(ChatTurnStatusResponse(**status.__dict__))
@@ -244,14 +245,14 @@ async def get_chat_turn(turn_id: str) -> dict:
 @router.post("/turns/{turn_id}/cancel")
 async def cancel_chat_turn(turn_id: str) -> dict:
     """Stops a running legacy Chat turn."""
-    status = _runner.get_status(turn_id)
+    status = await asyncio.to_thread(_runner.get_status, turn_id)
     if not status:
         raise HTTPException(status_code=404, detail="Turn not found")
     if status.status != "running":
         raise HTTPException(status_code=409, detail="Turn is no longer running")
-    if not _runner.stop_task(turn_id):
+    if not await asyncio.to_thread(_runner.stop_task, turn_id):
         raise HTTPException(status_code=500, detail="Failed to stop turn")
-    stopped = _runner.get_status(turn_id) or status
+    stopped = await asyncio.to_thread(_runner.get_status, turn_id) or status
     return wire(ChatTurnStatusResponse(**stopped.__dict__))
 
 
@@ -266,21 +267,26 @@ async def stream_chat_turn(turn_id: str):
         StreamingResponse: text/event-stream of engine JSON events, ending
         with a ``done`` event once the process has exited.
     """
-    status = _runner.get_status(turn_id)
+    status = await asyncio.to_thread(_runner.get_status, turn_id)
     if not status:
         raise HTTPException(status_code=404, detail="Turn not found")
 
     path = Path(status.log_path)
+
+    def _size_of(p: Path = path) -> int | None:
+        try:
+            return p.stat().st_size
+        except OSError:
+            return None
 
     async def event_generator():
         last_size = 0
         buffer = ""
 
         while True:
-            current_status = _runner.get_status(turn_id)
-            try:
-                current_size = path.stat().st_size
-            except OSError:
+            current_status = await asyncio.to_thread(_runner.get_status, turn_id)
+            current_size = await asyncio.to_thread(_size_of)
+            if current_size is None:
                 yield 'data: {"error": "log file removed"}\n\n'
                 return
 
