@@ -16,6 +16,7 @@ import {
 import type { TooltipPayloadEntry } from 'recharts';
 import { fmtCost, fmtTokens } from '../../api/analytics';
 import { useT } from '../../i18n/context';
+import SectionLabel from '../shared/SectionLabel';
 import { ec, formatDate, formatMonth } from './present';
 import type { TimeSeries } from './rangeStats';
 
@@ -32,10 +33,10 @@ export function StatCard({
   stagger?: string;
 }) {
   return (
-    <div className={`animate-fade-rise ${stagger} glass-card group p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_24px_36px_-16px_rgba(15,23,42,0.12)]`}>
+    <div className={`animate-fade-rise ${stagger} glass-card group p-4`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
-          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest truncate">{label}</p>
+          <SectionLabel className="truncate">{label}</SectionLabel>
           <p className="text-xl font-bold text-slate-800 truncate">{value}</p>
           {sub && <p className="text-[10px] text-slate-500 truncate">{sub}</p>}
         </div>
@@ -79,7 +80,7 @@ export function ChartTooltip({ active, payload, label, isCost }: {
 export function SectionTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-2">
-      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">{children}</p>
+      <SectionLabel>{children}</SectionLabel>
       {action}
     </div>
   );

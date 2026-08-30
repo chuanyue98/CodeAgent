@@ -1,11 +1,12 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router';
-import { Menu, X, AlertCircle } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import CommandPalette from './components/CommandPalette';
 import SectionLayout from './components/SectionLayout';
 import SystemPanel from './components/SystemPanel';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
 import ErrorBoundary from './components/shared/ErrorBoundary';
+import ErrorBar from './components/shared/ErrorBar';
 import { useProject } from './context/ProjectContext';
 import { useT } from './i18n/context';
 import {
@@ -155,10 +156,7 @@ function App() {
             </div>
           </header>
           {ctxError && (
-            <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600" role="alert">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{t('app.configError', { message: ctxError })}</span>
-            </div>
+            <ErrorBar message={t('app.configError', { message: ctxError })} />
           )}
           <div className="animate-fade-in stagger-3 custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1 md:pr-2">
             <Routes>

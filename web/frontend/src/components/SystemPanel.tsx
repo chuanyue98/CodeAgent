@@ -3,6 +3,7 @@ import { Activity, Cpu, HardDrive, Clock, FileText } from 'lucide-react';
 import type { SystemMetrics } from '../api/system';
 import { useSystemMetrics } from '../context/SystemMetricsContext';
 import { useT } from '../i18n/context';
+import ErrorBar from './shared/ErrorBar';
 
 function colorFor(value: number, thresholds: [number, number]): string {
   if (value > thresholds[1]) return 'text-red-600 bg-red-50';
@@ -67,10 +68,7 @@ export default function SystemPanel() {
           className="glass-card absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] overflow-hidden p-3"
         >
           {error ? (
-            <div role="alert" className="flex items-center justify-between gap-2 text-xs text-red-600">
-              <span>{error}</span>
-              <button onClick={handleRetry} className="shrink-0 hover:underline">{t('common.retry')}</button>
-            </div>
+            <ErrorBar message={error} onRetry={handleRetry} />
           ) : !metrics ? (
             <p className="text-xs text-slate-400">{t('system.loadingMetrics')}</p>
           ) : (

@@ -38,7 +38,7 @@ export default function Modal({
 }: ModalProps) {
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 ${overlayClassName}`}
+      className={`fixed inset-0 z-50 flex items-start justify-center bg-foreground/40 ${overlayClassName}`}
       role="presentation"
       onClick={onClose}
       onKeyDown={event => {

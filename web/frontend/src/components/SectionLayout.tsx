@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { useT } from '../i18n/context';
 import type { TranslationKey } from '../i18n/locales/en';
+import { ACTIVE_CHIP } from './shared/activeChip';
 
 export interface SectionTab {
   to: string;
@@ -46,20 +47,18 @@ export default function SectionLayout({
           away from the words it explained, in the lightest grey on the page. */}
       <div className="animate-fade-rise stagger-1 border-b border-slate-200 px-1 pb-2">
         <nav aria-label={t('section.nav', { label: t(labelKey) })} className="custom-scrollbar flex max-w-full gap-1 overflow-x-auto">
-          {tabs.map((tab, i) => {
+          {tabs.map(tab => {
             const active = tab.matchPrefix
               ? pathname === tab.matchPrefix || pathname.startsWith(`${tab.matchPrefix}/`)
               : pathname === tab.to;
-            // Stagger the tab chips so they cascade in alongside the bar.
-            const stagger = `stagger-${Math.min(i + 2, 7)}`;
             return (
               <NavLink
                 key={tab.to}
                 to={`${tab.to}${carried}`}
                 aria-current={active ? 'page' : undefined}
-                className={`animate-fade-rise ${stagger} shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`animate-fade-rise shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                   active
-                    ? 'bg-primary/10 text-primary'
+                    ? ACTIVE_CHIP
                     : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
                 }`}
               >

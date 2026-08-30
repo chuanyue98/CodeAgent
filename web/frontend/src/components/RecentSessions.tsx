@@ -3,6 +3,7 @@ import { fetchSessionPage, type SessionUsage } from '../api/analytics';
 import { useLanguageCode, useT } from '../i18n/context';
 import { relativeTime, workspaceLabel } from '../utils/workspaceFormat';
 import { engineAccent, findEngine } from './terminalEngines';
+import SectionLabel from './shared/SectionLabel';
 
 const LIMIT = 8;
 
@@ -82,9 +83,9 @@ export default function RecentSessions({
 
   return (
     <section className="space-y-2">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+      <SectionLabel as="h2">
         {t(fresh && !fresh.scoped ? 'launch.recentElsewhere' : 'launch.recent')}
-      </h2>
+      </SectionLabel>
 
       {fresh === null && <p className="text-xs text-slate-400">{t('common.loading')}</p>}
       {fresh?.error && <p className="text-xs text-red-600">{fresh.error}</p>}

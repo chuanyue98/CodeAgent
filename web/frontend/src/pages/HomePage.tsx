@@ -15,6 +15,7 @@ import { fetchDaily, fetchSessions, type SessionUsage } from '../api/analytics';
 import request from '../utils/request';
 import { useSystemMetrics } from '../context/SystemMetricsContext';
 import { buildResumeLink } from '../utils/sessionLink';
+import { buttonClass } from '../components/shared/buttonClass';
 import { useT } from '../i18n/context';
 import type { RunStatus } from '../components/TaskDashboard/types';
 
@@ -143,7 +144,7 @@ export default function HomePage() {
             <div className="mt-4 flex flex-wrap gap-2">
               <Link
                 to="/agent/terminal"
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-all hover:opacity-90"
+                className={buttonClass('primary', 'md')}
               >
                 <Terminal className="h-3.5 w-3.5" /> {t('home.openTerminal')}
               </Link>

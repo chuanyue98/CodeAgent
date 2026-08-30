@@ -11,6 +11,8 @@ import { engineLabel } from '../utils/engines';
 import { eb } from './analytics/present';
 import usePolling from '../hooks/usePolling';
 import ConfirmDialog from './shared/ConfirmDialog';
+import EmptyState from './shared/EmptyState';
+import SharedStatusDot from './shared/StatusDot';
 import { useT } from '../i18n/context';
 import type { TranslationKey } from '../i18n/locales/en';
 
@@ -31,15 +33,16 @@ const KIND_LABEL_KEYS: Record<InstanceKind, TranslationKey> = {
 /** 活着的状态：就绪/忙碌/运行中/启动中，状态点带脉冲光环。 */
 const LIVE_STATUSES = new Set(['ready', 'busy', 'running', 'starting']);
 
-const STATUS_DOT: Record<string, string> = {
-  ready: 'bg-emerald-500',
-  running: 'bg-emerald-500',
-  busy: 'bg-blue-500',
-  starting: 'bg-amber-500',
-  disconnected: 'bg-slate-300',
-  error: 'bg-red-500',
-  failed: 'bg-red-500',
-};
+/** Instance statuses → shared StatusDot tones. */
+const STATUS_TONE = {
+  ready: 'success',
+  running: 'running',
+  busy: 'busy',
+  starting: 'pending',
+  disconnected: 'neutral',
+  error: 'failed',
+  failed: 'failed',
+} as const;
 
 const TWO_DAYS_IN_SECONDS = 48 * 3600;
 
@@ -57,16 +60,8 @@ function elapsedLabel(startedAt: string): string {
 }
 
 function StatusDot({ status }: { status: string }) {
-  const color = STATUS_DOT[status] ?? 'bg-slate-300';
-  if (!LIVE_STATUSES.has(status)) {
-    return <span className={`h-2 w-2 rounded-full ${color}`} />;
-  }
-  return (
-    <span className="relative flex h-2 w-2">
-      <span className={`absolute inline-flex h-full w-full rounded-full ${color} opacity-60 animate-ping`} />
-      <span className={`relative inline-flex h-2 w-2 rounded-full ${color}`} />
-    </span>
-  );
+  const tone = STATUS_TONE[status as keyof typeof STATUS_TONE] ?? 'neutral';
+  return <SharedStatusDot tone={tone} pulse={LIVE_STATUSES.has(status)} />;
 }
 
 /**
@@ -159,20 +154,21 @@ export default function InstancesPage() {
 
       {/* ── 空态 ── */}
       {instances.length === 0 && (
-        <div className="glass-card animate-fade-rise stagger-2 flex flex-col items-center gap-2 p-12 text-center">
-          <Radar className="h-8 w-8 text-slate-200" />
-          <p className="text-sm font-medium text-slate-500">{t('instances.empty')}</p>
-          <p className="max-w-sm text-xs text-slate-400">{t('instances.emptyHint')}</p>
-        </div>
+        <EmptyState
+          icon={Radar}
+          title={t('instances.empty')}
+          body={t('instances.emptyHint')}
+          className="animate-fade-rise stagger-2"
+        />
       )}
 
       {/* ── 分组列表 ── */}
-      {groups.map((group, groupIndex) => {
+      {groups.map(group => {
         const KindIcon = KIND_ICONS[group.kind];
         return (
           <section
             key={group.kind}
-            className={`animate-fade-rise stagger-${Math.min(groupIndex + 2, 7)} space-y-2`}
+            className="animate-fade-rise space-y-2"
           >
             <header className="flex items-center gap-2 px-1">
               <KindIcon className="h-3.5 w-3.5 text-slate-400" />

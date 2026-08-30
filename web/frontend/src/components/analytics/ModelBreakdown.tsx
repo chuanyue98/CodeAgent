@@ -3,6 +3,7 @@ import { fmtCost, fmtTokens } from '../../api/analytics';
 import { useT } from '../../i18n/context';
 import { eb, ec } from './present';
 import { SectionTitle } from './ChartCards';
+import SectionLabel from '../shared/SectionLabel';
 import type { RangeModelStat } from './rangeStats';
 import ShowMoreToggle from './ShowMoreToggle';
 
@@ -121,9 +122,7 @@ export default function ModelBreakdown({
               </div>
 
               <div>
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
-                  {t('model.tokenBreakdown')}
-                </p>
+                <SectionLabel className="mb-1.5">{t('model.tokenBreakdown')}</SectionLabel>
                 <div className="space-y-1">
                   {rows.map(({ label, cost, tokens }) => (
                     <div key={label} className="flex items-center justify-between text-xs">
@@ -136,9 +135,7 @@ export default function ModelBreakdown({
               </div>
 
               <div className="rounded-lg bg-white border border-slate-200 p-2.5">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">
-                  {t('model.ioRatio')}
-                </p>
+                <SectionLabel className="mb-1">{t('model.ioRatio')}</SectionLabel>
                 <p className="text-xs text-slate-600">{ioText}</p>
               </div>
             </div>

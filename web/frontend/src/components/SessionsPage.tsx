@@ -11,6 +11,7 @@ import ActivityFilterPanel from './ActivityFilterPanel';
 import { eb } from './analytics/present';
 import SessionDetailPanel from './SessionDetailPanel';
 import ConfirmDialog from './shared/ConfirmDialog';
+import EmptyState from './shared/EmptyState';
 import ErrorState from './shared/ErrorState';
 import FilterListSkeleton from './shared/FilterListSkeleton';
 
@@ -362,17 +363,14 @@ export default function SessionsPage() {
             overflow is visible and paint outside its background. Timeline and
             Schedules already do it this way. */}
         <div className="space-y-2 flex-1 min-h-0 overflow-y-auto">
-          {filtered.map((session, i) => {
+          {filtered.map(session => {
             const key = sessionKey(session);
             const isSelected = selectedKey === key;
             const totalTokens = session.inputTokens + session.outputTokens;
-            // Cap stagger at 6 so long lists don't cascade forever — items
-            // past the sixth just fade in without a delay.
-            const stagger = i < 6 ? `animate-fade-rise stagger-${i + 3}` : 'animate-fade-in';
             return (
               <div
                 key={key}
-                className={`${stagger} rounded-xl border p-4 transition-colors ${
+                className={`animate-fade-rise rounded-xl border p-4 transition-colors ${
                   isSelected
                     ? 'border-primary/40 bg-primary/[0.04]'
                     : 'border-slate-100 hover:bg-slate-50/60'
@@ -446,7 +444,7 @@ export default function SessionsPage() {
             );
           })}
           {filtered.length === 0 && (
-            <p className="text-sm text-slate-400 text-center py-8">{t('sessions.empty')}</p>
+            <EmptyState compact title={t('sessions.empty')} />
           )}
 
           {nextCursor && (

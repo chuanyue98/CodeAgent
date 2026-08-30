@@ -41,7 +41,10 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 192 81% 37%;
 
-    --radius: 1.25rem; /* rounded-3xl */
+    /* Corner scale: controls rounded-md/lg, interactive blocks rounded-xl,
+       glass cards rounded-2xl, hero cards rounded-3xl. Tailwind's 2xl/3xl
+       read this variable (see tailwind.config.js). */
+    --radius: 1.25rem;
 
     /* Atmospheric tokens */
     --grid-line: rgba(15, 23, 42, 0.028);
@@ -49,6 +52,21 @@
     --mesh-1: rgba(8, 145, 178, 0.11);
     --mesh-2: rgba(14, 116, 144, 0.07);
     --mesh-3: rgba(99, 102, 241, 0.05);
+
+    /* Glass surface tokens. The .glass-card* classes consume only these, so
+       a future dark theme is one override block away (redefine these plus
+       the HSL group and atmospheric tokens above; no component edits). */
+    --glass-bg: rgba(255, 255, 255, 0.86);
+    --glass-bg-flat: #ffffff;
+    --glass-bg-feature: rgba(255, 255, 255, 0.92);
+    --glass-border: #e2e8f0;
+    --glass-border-feature: rgba(226, 232, 240, 0.9);
+    --glass-highlight: rgba(255, 255, 255, 0.6);
+    --glass-highlight-feature: rgba(255, 255, 255, 0.7);
+    --glass-shadow-1: 0 20px 30px -12px rgba(15, 23, 42, 0.08);
+    --glass-shadow-2: 0 6px 12px -6px rgba(15, 23, 42, 0.05);
+    --glass-shadow-feature-1: 0 32px 48px -16px rgba(15, 23, 42, 0.12);
+    --glass-shadow-feature-2: 0 10px 20px -8px rgba(15, 23, 42, 0.06);
   }
 }
 
@@ -139,27 +157,27 @@
 
 @layer utilities {
   .glass-card {
-    background: rgba(255, 255, 255, 0.86);
+    background: var(--glass-bg);
     backdrop-filter: blur(18px) saturate(140%);
     -webkit-backdrop-filter: blur(18px) saturate(140%);
-    border: 1px solid #E2E8F0;
+    border: 1px solid var(--glass-border);
     box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.6) inset,
-      0 20px 30px -12px rgba(15, 23, 42, 0.08),
-      0 6px 12px -6px rgba(15, 23, 42, 0.05);
-    @apply rounded-[1.25rem];
+      0 1px 0 var(--glass-highlight) inset,
+      var(--glass-shadow-1),
+      var(--glass-shadow-2);
+    border-radius: var(--radius);
   }
   /* Stronger elevation for hero/feature tiles. */
   .glass-card-feature {
-    background: rgba(255, 255, 255, 0.92);
+    background: var(--glass-bg-feature);
     backdrop-filter: blur(22px) saturate(150%);
     -webkit-backdrop-filter: blur(22px) saturate(150%);
-    border: 1px solid rgba(226, 232, 240, 0.9);
+    border: 1px solid var(--glass-border-feature);
     box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.7) inset,
-      0 32px 48px -16px rgba(15, 23, 42, 0.12),
-      0 10px 20px -8px rgba(15, 23, 42, 0.06);
-    @apply rounded-[1.5rem];
+      0 1px 0 var(--glass-highlight-feature) inset,
+      var(--glass-shadow-feature-1),
+      var(--glass-shadow-feature-2);
+    border-radius: calc(var(--radius) + 0.25rem);
   }
   /* The same surface as .glass-card, minus the backdrop blur.
      backdrop-filter re-computes the blurred backdrop on every frame that
@@ -168,13 +186,23 @@
      the blur was buying close to nothing — the border, shadow and radius are
      what actually read as a card. */
   .glass-card-flat {
-    background: #FFFFFF;
-    border: 1px solid #E2E8F0;
+    background: var(--glass-bg-flat);
+    border: 1px solid var(--glass-border);
     box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.6) inset,
-      0 20px 30px -12px rgba(15, 23, 42, 0.08),
-      0 6px 12px -6px rgba(15, 23, 42, 0.05);
-    @apply rounded-[1.25rem];
+      0 1px 0 var(--glass-highlight) inset,
+      var(--glass-shadow-1),
+      var(--glass-shadow-2);
+    border-radius: var(--radius);
+  }
+  /* One hover idiom for every clickable card: the border warms toward the
+     primary hue, no lift, no shadow growth. Declared here rather than as a
+     hover:border-* utility because the utility would lose to the `border`
+     shorthand in the card classes above (same layer, later in the sheet). */
+  .glass-card-interactive {
+    transition: border-color 150ms ease;
+  }
+  .glass-card-interactive:hover {
+    border-color: hsl(var(--ring) / 0.35);
   }
 }
 
@@ -228,9 +256,8 @@
 /* Staggered entrance — pair with .animate-fade-rise etc.
    The delays are now zero. `both` fill mode holds an element at opacity 0 for
    the whole delay, so a stagger is time the content is on screen but not
-   visible. The classes stay (some are built as `stagger-${n}` template
-   strings) so call sites need no edit, and a future cascade has a place to
-   live. */
+   visible. A few static `.stagger-N` classes remain on long-lived layout
+   elements; they are dormant hooks where a future cascade can live. */
 .stagger-1,
 .stagger-2,
 .stagger-3,
@@ -242,6 +269,14 @@
 .animate-pulse-soft { animation: pulse-soft 2.4s ease-in-out infinite; }
 .animate-pulse-ring { animation: pulse-ring 2.4s ease-out infinite; }
 .animate-orbit      { animation: orbit-drift 24s linear infinite; }
+
+/* Slow spinner for long-running inline indicators. Tailwind's own `animate-spin`
+   covers the fast default; this is the deliberate unhurried variant used where
+   a task is known to take a while (task refresh icons). */
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow { animation: spin-slow 1.5s linear infinite; }
 
 /* Equalizer bars for the hero "live activity" decoration. */
 .eq-bar {

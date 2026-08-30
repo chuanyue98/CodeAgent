@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { BookOpen, ChevronDown, ChevronRight, Cpu, Globe, Layers, Search, Terminal } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronRight, Cpu, Globe, Layers, Terminal } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
@@ -10,9 +10,11 @@ import type { ResourceKindConfig, ResourceKindId } from './resources/resourceKin
 import type { ResourceItem } from './resources/types';
 import BatchActionBar from './shared/BatchActionBar';
 import ErrorState from './shared/ErrorState';
+import SectionLabel from './shared/SectionLabel';
 import LoadingState from './shared/LoadingState';
 import Toast from './shared/Toast';
 import Toggle from './shared/Toggle';
+import { SearchInput } from './shared/Field';
 
 interface Selection {
   kindId: ResourceKindId;
@@ -193,7 +195,7 @@ export default function ResourceHub() {
   return (
     <div className="flex h-full gap-6 overflow-hidden p-6">
       {/* ── Sidebar: kind > category ─────────────────────────────────────── */}
-      <div className="animate-slide-left stagger-1 glass-card flex w-64 shrink-0 flex-col overflow-hidden">
+      <div className="animate-slide-left stagger-1 glass-card flex w-full xl:w-56 shrink-0 flex-col overflow-hidden">
         <div className="border-b border-slate-100 p-6">
           <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-slate-400">
             <BookOpen className="h-4 w-4 text-primary" />
@@ -296,18 +298,16 @@ export default function ResourceHub() {
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-4">
             <div className="animate-fade-rise stagger-2 flex flex-wrap items-center justify-between gap-3">
-              <div className="relative w-full max-w-md">
+              <div className="w-full max-w-md">
                 <label htmlFor="resource-search" className="sr-only">
                   {t('resources.searchLabel')}
                 </label>
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
+                <SearchInput
                   id="resource-search"
                   type="text"
                   placeholder={t('resources.searchPlaceholder')}
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm transition-all placeholder:text-slate-400 focus:border-primary/30 focus:outline-none focus:ring-1 focus:ring-primary/20"
                 />
               </div>
               <p className="text-xs text-slate-400">
@@ -348,7 +348,7 @@ export default function ResourceHub() {
 
             <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-2">
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {shown.map((hit, i) => {
+                {shown.map(hit => {
                   const active = isActive(hit.kind.id, hit.item.id);
                   const ItemIcon = hit.kind.itemIcon;
                   return (
@@ -363,7 +363,7 @@ export default function ResourceHub() {
                           setOpenItem(hit);
                         }
                       }}
-                      className={`animate-fade-rise stagger-${Math.min(i + 3, 7)} group glass-card-flat relative cursor-pointer overflow-hidden p-6 transition-all hover:border-primary/20 hover:bg-slate-50/50 ${
+                      className={`animate-fade-rise group glass-card-flat relative cursor-pointer overflow-hidden p-6 transition-colors hover:border-primary/30 hover:bg-slate-50/50 ${
                         !active ? 'border-slate-200 bg-slate-50/60' : ''
                       }`}
                     >
@@ -462,9 +462,7 @@ function DetailView({ hit, active, currentGroup, onBack, onToggle }: DetailViewP
           <ChevronRight className="h-5 w-5 rotate-180" />
         </button>
         <div className="flex-1">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-primary">
-            {t(kind.detailHeadingKey)}
-          </span>
+          <SectionLabel className="text-primary">{t(kind.detailHeadingKey)}</SectionLabel>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{item.name}</h1>
         </div>
         <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2">

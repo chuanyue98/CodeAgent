@@ -45,7 +45,7 @@ const Toggle: React.FC<ToggleProps> = ({ checked, onChange, 'aria-label': ariaLa
       onClick={onChange}
       onKeyDown={handleKeyDown}
       className={`relative inline-flex items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 ${cls.button} ${
-        checked ? 'bg-primary' : 'bg-slate-200'
+        checked ? 'bg-primary' : 'bg-muted'
       }`}
     >
       <span

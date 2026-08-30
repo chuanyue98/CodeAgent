@@ -28,10 +28,10 @@ export default function EnginePanel({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {rangeEngines.map((eng, i) => (
+        {rangeEngines.map(eng => (
           <div
             key={eng.target}
-            className={`animate-fade-rise stagger-${Math.min(i + 2, 7)} glass-card group p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_24px_36px_-16px_rgba(15,23,42,0.12)]`}
+            className="animate-fade-rise glass-card glass-card-interactive group p-4"
           >
             <div className="flex items-center justify-between mb-3">
               <span className={`text-[11px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${eb(eng.target)}`}>

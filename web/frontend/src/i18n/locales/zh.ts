@@ -463,6 +463,13 @@ export const zh: Record<TranslationKey, string> = {
   'tasks.describeIt': '描述需求，让 AI 来写',
   'tasks.writeItMyself': '我自己写',
   'tasks.noSearchMatch': '没有匹配的任务。',
+  'tasks.activityTitle': '运行动态',
+  'tasks.statRunning': '运行中',
+  'tasks.statCompleted': '已完成',
+  'tasks.statFailed': '失败',
+  'tasks.lastRun': '上次运行 {time}',
+  'tasks.neverRun': '尚未运行',
+  'tasks.runFeedEmpty': '运行任务后会在这里显示记录。',
 
   // ── Agent workspace ───────────────────────────────────────────────────────
 

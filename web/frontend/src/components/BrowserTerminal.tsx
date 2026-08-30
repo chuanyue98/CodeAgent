@@ -190,7 +190,7 @@ export default function BrowserTerminal({
           role="status"
           className={`flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs ${
             state === 'error'
-              ? 'border border-red-200 bg-red-50 text-red-700'
+              ? 'border border-destructive/30 bg-destructive/10 text-destructive'
               : 'border border-slate-200 bg-slate-50 text-slate-600'
           }`}
         >

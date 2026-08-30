@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, Code, GitBranch, History, Pencil, Play, StopCircle, Terminal, Trash2 } from 'lucide-react';
 import LogViewer from '../LogViewer';
 import ConfirmDialog from '../shared/ConfirmDialog';
+import StatusDot from '../shared/StatusDot';
 import EditTaskModal from './EditTaskModal';
 import RunChanges from './RunChanges';
 import { classifyStageStatus, type Engine, type RunStatus, type Task } from './types';
@@ -22,7 +23,7 @@ function stageBadge(status: string) {
   if (state === 'done')
     return 'border-primary/20 text-primary bg-primary/10';
   if (state === 'wip')
-    return 'border-amber-200 text-amber-600 bg-amber-50 animate-pulse';
+    return 'border-amber-200 text-amber-600 bg-amber-50';
   return 'border-slate-100 text-slate-400 bg-slate-50';
 }
 
@@ -42,7 +43,7 @@ function runDuration(run: RunStatus): number {
 function runBadgeClass(status: RunStatus['status']): string {
   switch (status) {
     case 'running':
-      return 'border-emerald-200 text-emerald-600 bg-emerald-50 animate-pulse';
+      return 'border-emerald-200 text-emerald-600 bg-emerald-50';
     case 'completed':
       return 'border-primary/20 text-primary bg-primary/10';
     case 'failed':
@@ -207,7 +208,8 @@ export default function TaskDetail({
           <h2 className="text-2xl font-semibold tracking-tight text-slate-900 flex items-center gap-3">
             {task.title}
             {activeRun && (
-              <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-bold uppercase tracking-wider border border-emerald-100 animate-pulse">
+              <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-bold uppercase tracking-wider border border-emerald-100">
+                <StatusDot tone="running" pulse />
                 {t('taskDetail.running')}
               </span>
             )}
@@ -233,7 +235,8 @@ export default function TaskDetail({
               <span className="font-mono font-medium text-slate-700">{metaRun.exitCode}</span>
             </span>
           )}
-          <span className={`text-[10px] px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider border ${runBadgeClass(metaRun.status)}`}>
+          <span className={`inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider border ${runBadgeClass(metaRun.status)}`}>
+            {metaRun.status === 'running' && <StatusDot tone="running" pulse />}
             {metaRun.status}
           </span>
         </div>
@@ -402,7 +405,8 @@ export default function TaskDetail({
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-slate-800 truncate">{run.engine}</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-lg font-bold uppercase tracking-wider border ${runBadgeClass(run.status)}`}>
+                          <span className={`inline-flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-lg font-bold uppercase tracking-wider border ${runBadgeClass(run.status)}`}>
+                            {run.status === 'running' && <StatusDot tone="running" pulse />}
                             {run.status}
                           </span>
                         </div>

@@ -473,6 +473,13 @@ export const en = {
   'tasks.describeIt': 'Describe it, let AI write it',
   'tasks.writeItMyself': 'Write it myself',
   'tasks.noSearchMatch': 'No tasks match your search.',
+  'tasks.activityTitle': 'Run activity',
+  'tasks.statRunning': 'Running',
+  'tasks.statCompleted': 'Completed',
+  'tasks.statFailed': 'Failed',
+  'tasks.lastRun': 'Last run {time}',
+  'tasks.neverRun': 'Never run',
+  'tasks.runFeedEmpty': 'Run a task and it will show up here.',
 
   // ── Agent workspace ───────────────────────────────────────────────────────
 
