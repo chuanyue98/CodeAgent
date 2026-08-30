@@ -22,6 +22,10 @@ from core.session_history.models import (
     UnifiedSession,
 )
 from core.session_history.parse_cache import cached_file_parser
+from core.session_history.parsers._subagents import (
+    subagent_files,
+    title_subagent_runs,
+)
 from core.session_history.parsers._synthetic import is_synthetic_user_content
 from core.session_history.paths import strip_extended_length_prefix
 from core.utils.long_paths import exists as path_exists
@@ -117,6 +121,8 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
     ended_at = ""
     model = ""
     cwd = ""
+    agent = ""
+    subagent_titles: dict[str, str] = {}
 
     try:
         # long_path, not a bare open: these files live under a directory named
@@ -137,6 +143,19 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
                 # Capture cwd from any row that has it
                 if not cwd:
                     cwd = row.get("cwd", "")
+
+                # In a subagent transcript every row is attributed to the
+                # agent that produced it ("general-purpose", "Explore", ...).
+                if not agent:
+                    agent = row.get("attributionAgent") or ""
+
+                # A launcher records each subagent it starts, structured:
+                # {"agentId": ..., "description": ..., "resolvedModel": ...}.
+                launch = row.get("toolUseResult")
+                if isinstance(launch, dict) and launch.get("agentId"):
+                    description = str(launch.get("description") or "").strip()
+                    if description:
+                        subagent_titles[str(launch["agentId"])] = description
 
                 # Extract session title
                 if row_type == "ai-title":
@@ -210,6 +229,8 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
         title=title,
         model=model,
         source_file=str(file_path),
+        agent=agent,
+        subagent_titles=subagent_titles,
     )
 
 
@@ -318,17 +339,29 @@ def find_claude_sessions(
         ):
             continue
 
-        for jsonl_file in list_files(project_dir, ".jsonl"):
-            session = parse_claude_session(jsonl_file)
-            if session:
-                # Use the actual project path from the first message's cwd if available
-                if normalized_target is not None and (
-                    not session.project_path
-                    or session.project_path
-                    == _decode_claude_project_path(project_dir.name)
-                ):
-                    session.project_path = normalized_target
-                sessions.append(session)
+        candidates: list[tuple[Path, str]] = [
+            (jsonl_file, "") for jsonl_file in list_files(project_dir, ".jsonl")
+        ]
+        # Subagent transcripts sit in ``<session_id>/subagents/``. Every row in
+        # them repeats the *parent's* sessionId, so the owning session comes
+        # from the directory and the child's own id from the file stem (which
+        # is what ``parse_claude_session`` uses).
+        for session_dir in list_dirs(project_dir):
+            candidates.extend(subagent_files(session_dir))
 
+        for jsonl_file, parent_session_id in candidates:
+            session = parse_claude_session(jsonl_file)
+            if not session:
+                continue
+            # Use the actual project path from the first message's cwd if available
+            if normalized_target is not None and (
+                not session.project_path
+                or session.project_path == _decode_claude_project_path(project_dir.name)
+            ):
+                session.project_path = normalized_target
+            session.parent_session_id = parent_session_id
+            sessions.append(session)
+
+    title_subagent_runs(sessions)
     sessions.sort(key=lambda s: s.started_at, reverse=True)
     return sessions

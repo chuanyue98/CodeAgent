@@ -4,6 +4,8 @@ import { Link } from 'react-router';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
 import { workspaceLabel } from '../utils/workspaceFormat';
+import SectionLabel from './shared/SectionLabel';
+import { ACTIVE_CHIP } from './shared/activeChip';
 
 interface Option {
   path: string;
@@ -167,16 +169,16 @@ export default function WorkspaceSwitcher() {
         <div className="absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-slate-100 bg-white shadow-xl">
           <div role="listbox" ref={listboxRef} className="max-h-64 overflow-y-auto p-2" onKeyDown={handleKeyDown}>
             {validProjects.length > 0 && (
-              <div className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              <SectionLabel className="px-2 pb-1 pt-1">
                 {t('workspaceSwitcher.registered')}
-              </div>
+              </SectionLabel>
             )}
             {options.map((option, index) => (
               <div key={option.path}>
                 {option.custom && index === customOffset && (
-                  <div className="mt-1 border-t border-slate-100 px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  <SectionLabel className="mt-1 border-t border-slate-100 px-2 pb-1 pt-2">
                     {t('workspaceSwitcher.recent')}
-                  </div>
+                  </SectionLabel>
                 )}
                 <button
                   role="option"
@@ -186,7 +188,7 @@ export default function WorkspaceSwitcher() {
                   title={option.path}
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                     option.path === selectedWorkspace
-                      ? 'bg-primary/10 text-primary font-bold'
+                      ? `${ACTIVE_CHIP} font-bold`
                       : focusedIndex === index
                       ? 'bg-slate-100 text-slate-900'
                       : 'hover:bg-slate-50 text-slate-600'

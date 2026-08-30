@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { Save, X } from 'lucide-react';
 import request from '../../utils/request';
 import Modal from '../shared/Modal';
+import Button from '../shared/Button';
+import ErrorBar from '../shared/ErrorBar';
+import { Field, Textarea } from '../shared/Field';
 import type { Task } from './types';
 import { useT } from '../../i18n/context';
 
@@ -50,39 +53,23 @@ export default function EditTaskModal({
         </button>
       </div>
 
-      {error && (
-        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl text-sm">
-          {error}
-        </div>
-      )}
+      {error && <ErrorBar message={error} />}
 
-      <div>
-        <label htmlFor="edit-task-content" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-          {t('taskModal.contentLabel')}
-        </label>
-        <textarea
+      <Field label={t('taskModal.contentLabel')} htmlFor="edit-task-content">
+        <Textarea
           id="edit-task-content"
           value={content}
           onChange={e => setContent(e.target.value)}
           rows={20}
-          className="mt-1 w-full p-3 border border-slate-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
+          className="p-3 font-mono resize-y"
         />
-      </div>
+      </Field>
 
       <div className="flex justify-end gap-3 pt-2">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors"
-        >
-          {t('common.cancel')}
-        </button>
-        <button
-          onClick={() => void handleSubmit()}
-          disabled={submitting || !content.trim()}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold disabled:opacity-50 hover:opacity-90 transition-all"
-        >
-          <Save className="w-4 h-4" /> {t('common.save')}
-        </button>
+        <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button icon={Save} loading={submitting} disabled={!content.trim()} onClick={() => void handleSubmit()}>
+          {t('common.save')}
+        </Button>
       </div>
     </Modal>
   );

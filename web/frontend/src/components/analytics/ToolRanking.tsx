@@ -4,6 +4,7 @@ import { useT } from '../../i18n/context';
 import { engineLabel } from '../../utils/engines';
 import request from '../../utils/request';
 import LoadingState from '../shared/LoadingState';
+import EmptyState from '../shared/EmptyState';
 import ShowMoreToggle from './ShowMoreToggle';
 
 interface ToolUsage {
@@ -123,7 +124,7 @@ export default function ToolRanking({ rangeDays, rangeLabel }: ToolRankingProps)
       {inView && loading && <LoadingState message={t('tools.loading')} />}
       {inView && !loading && error && <p className="text-xs text-slate-400">{error}</p>}
       {inView && !loading && !error && tools.length === 0 && (
-        <p className="py-6 text-center text-sm text-slate-400">{t('tools.empty')}</p>
+        <EmptyState compact title={t('tools.empty')} />
       )}
 
       {inView && !loading && !error && tools.length > 0 && (

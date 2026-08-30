@@ -300,3 +300,89 @@ def test_an_appended_part_is_picked_up_without_a_time_updated_bump(db, monkeypat
 
     after = find_opencode_sessions("E:/work/app")
     assert "second" in after[0].messages[0].content
+
+
+def _make_db_with_subagent_columns(path: Path) -> sqlite3.Connection:
+    """A database from a build that knows about subagents."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(str(path))
+    with con:
+        con.execute(
+            """CREATE TABLE session (
+                id TEXT PRIMARY KEY, project_id TEXT, directory TEXT, title TEXT,
+                model TEXT, time_created INTEGER, time_updated INTEGER,
+                parent_id TEXT, agent TEXT
+            )"""
+        )
+        con.execute(
+            """CREATE TABLE message (
+                id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, data TEXT
+            )"""
+        )
+        con.execute(
+            """CREATE TABLE part (
+                id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT,
+                time_created INTEGER, data TEXT
+            )"""
+        )
+    return con
+
+
+def test_a_subagent_session_carries_its_parent_and_agent(tmp_path):
+    path = tmp_path / "opencode.db"
+    con = _make_db_with_subagent_columns(path)
+    try:
+        with con:
+            con.execute(
+                "INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    "ses_child",
+                    "prj",
+                    "E:/x",
+                    "前端代码质量检查 (@explore subagent)",
+                    '{"id":"m1"}',
+                    1_700_000_000_000,
+                    1_700_000_060_000,
+                    "ses_parent",
+                    "explore",
+                ),
+            )
+            con.execute(
+                "INSERT INTO message VALUES (?,?,?,?)",
+                ("m1", "ses_child", 1_700_000_000_000, json.dumps({"role": "user"})),
+            )
+            con.execute(
+                "INSERT INTO part VALUES (?,?,?,?,?)",
+                (
+                    "p1",
+                    "m1",
+                    "ses_child",
+                    1_700_000_000_000,
+                    json.dumps({"type": "text", "text": "查一下前端"}),
+                ),
+            )
+        clear_parse_cache()
+
+        session = parse_opencode_session("ses_child", path)
+
+        assert session is not None
+        assert session.parent_session_id == "ses_parent"
+        assert session.agent == "explore"
+    finally:
+        con.close()
+
+
+def test_a_database_without_the_subagent_columns_still_parses(db):
+    """OpenCode grew parent_id/agent late; naming them on an older database
+    would fail the whole query rather than one field."""
+    path, con = db
+    _session(con, "ses_1")
+    _message(con, "m1")
+    _part(con, "p1", "m1", data={"type": "text", "text": "hello"})
+    clear_parse_cache()
+
+    session = parse_opencode_session("ses_1", path)
+
+    assert session is not None
+    assert session.parent_session_id == ""
+    assert session.agent == ""

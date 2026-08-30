@@ -1,7 +1,8 @@
-import { Filter, FolderGit2, Search, X } from 'lucide-react';
+import { Filter, FolderGit2, X } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
 import { ALL_PROJECTS, type ActivityFilters } from '../hooks/useActivityFilters';
+import { Input, SearchInput } from './shared/Field';
 
 /** Last path segment, for a label that fits the 14rem sidebar. */
 function projectLabel(path: string): string {
@@ -65,17 +66,13 @@ export default function ActivityFilterPanel({
         <label className="text-xs text-slate-400 font-medium block mb-1" htmlFor="activity-search">
           {t('filters.searchLabel')}
         </label>
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
-          <input
-            id="activity-search"
-            type="text"
-            value={filters.search}
-            onChange={e => filters.setSearch(e.target.value)}
-            placeholder={searchPlaceholder}
-            className="w-full pl-7 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
-          />
-        </div>
+        <SearchInput
+          id="activity-search"
+          type="text"
+          value={filters.search}
+          onChange={e => filters.setSearch(e.target.value)}
+          placeholder={searchPlaceholder}
+        />
       </div>
 
       <div>
@@ -108,19 +105,17 @@ export default function ActivityFilterPanel({
       <div>
         <span className="text-xs text-slate-400 font-medium block mb-1">{t('filters.dateRange')}</span>
         <div className="grid grid-cols-1 gap-2">
-          <input
+          <Input
             type="date"
             aria-label={t('filters.dateStart')}
             value={filters.dateStart}
             onChange={e => filters.setDateStart(e.target.value)}
-            className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
           />
-          <input
+          <Input
             type="date"
             aria-label={t('filters.dateEnd')}
             value={filters.dateEnd}
             onChange={e => filters.setDateEnd(e.target.value)}
-            className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
           />
         </div>
       </div>

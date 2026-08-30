@@ -6,6 +6,7 @@ import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
 import BrowserTerminal from './BrowserTerminal';
 import RecentSessions from './RecentSessions';
+import SectionLabel from './shared/SectionLabel';
 import TerminalSessionSidebar from './TerminalSessionSidebar';
 import {
   AGENT_ENGINES,
@@ -202,9 +203,7 @@ export default function LaunchPad() {
           wide card left the label stranded from what it acts on, and it was
           the one target that had to survive every column width. */}
       <section className="space-y-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          {t('launch.engines')}
-        </h2>
+        <SectionLabel as="h2">{t('launch.engines')}</SectionLabel>
         {/* Four agents, so every column count divides the row evenly. The
             fifth card used to sit in this grid and wrap 3 + 2, leaving a
             card-shaped hole at the width the page is usually read at. */}

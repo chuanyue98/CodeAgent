@@ -11,6 +11,7 @@ import ActivityFilterPanel from './ActivityFilterPanel';
 import { eb } from './analytics/present';
 import SessionDetailPanel from './SessionDetailPanel';
 import ConfirmDialog from './shared/ConfirmDialog';
+import EmptyState from './shared/EmptyState';
 import ErrorState from './shared/ErrorState';
 import FilterListSkeleton from './shared/FilterListSkeleton';
 
@@ -362,17 +363,15 @@ export default function SessionsPage() {
             overflow is visible and paint outside its background. Timeline and
             Schedules already do it this way. */}
         <div className="space-y-2 flex-1 min-h-0 overflow-y-auto">
-          {filtered.map((session, i) => {
+          {filtered.map(session => {
             const key = sessionKey(session);
             const isSelected = selectedKey === key;
             const totalTokens = session.inputTokens + session.outputTokens;
-            // Cap stagger at 6 so long lists don't cascade forever — items
-            // past the sixth just fade in without a delay.
-            const stagger = i < 6 ? `animate-fade-rise stagger-${i + 3}` : 'animate-fade-in';
+            const subtaskCount = session.subtasks?.length ?? 0;
             return (
               <div
                 key={key}
-                className={`${stagger} rounded-xl border p-4 transition-colors ${
+                className={`animate-fade-rise rounded-xl border p-4 transition-colors ${
                   isSelected
                     ? 'border-primary/40 bg-primary/[0.04]'
                     : 'border-slate-100 hover:bg-slate-50/60'
@@ -421,6 +420,22 @@ export default function SessionsPage() {
                     <span className={`shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${eb(session.target)}`}>
                       {session.target}
                     </span>
+                    {/* Subagent runs are folded into the session that spawned
+                        them; the count is what tells you the row's tokens and
+                        cost cover more than one transcript. */}
+                    {subtaskCount > 0 && (
+                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                        {t('sessions.subtaskCount', { count: subtaskCount })}
+                      </span>
+                    )}
+                    {/* A subagent run only reaches top level when its parent is
+                        gone -- say the engine pruned that transcript. Marked
+                        rather than hidden, so its cost stays visible. */}
+                    {session.parentSessionId && (
+                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                        {t('sessions.orphanSubtask')}
+                      </span>
+                    )}
                   </div>
                   {/* Allowed to shrink: it already wraps its chips, but
                       `shrink-0` kept them on one line and gave the whole row a
@@ -446,7 +461,7 @@ export default function SessionsPage() {
             );
           })}
           {filtered.length === 0 && (
-            <p className="text-sm text-slate-400 text-center py-8">{t('sessions.empty')}</p>
+            <EmptyState compact title={t('sessions.empty')} />
           )}
 
           {nextCursor && (

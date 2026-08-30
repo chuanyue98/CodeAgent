@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useIsMounted } from '../hooks/useAsyncGuards';
-import { Pencil, Plus, Search, Server, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Server, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
 import request from '../utils/request';
 import ConfirmDialog from './shared/ConfirmDialog';
+import Button from './shared/Button';
+import EmptyState from './shared/EmptyState';
 import ErrorState from './shared/ErrorState';
 import Modal from './shared/Modal';
+import { Field, Input, Textarea, Select, SearchInput } from './shared/Field';
+import { ACTIVE_CHIP } from './shared/activeChip';
 import { fetchMcpServers, addMcpServer, removeMcpServer, type McpServer } from '../api/mcp';
 
 interface Engine {
@@ -234,7 +238,7 @@ export default function McpPage() {
   return (
     <div className="flex h-full overflow-hidden p-6 gap-6">
       {/* Engine sidebar — mirrors the galleries' category sidebar. */}
-      <div className="animate-slide-left stagger-1 w-64 shrink-0 glass-card flex flex-col overflow-hidden">
+      <div className="animate-slide-left stagger-1 w-full xl:w-56 shrink-0 glass-card flex flex-col overflow-hidden">
         <div className="p-6 border-b border-slate-100">
           <h2 className="text-sm font-semibold flex items-center gap-2 uppercase tracking-widest text-slate-400">
             <Server className="w-4 h-4 text-primary" />
@@ -242,19 +246,19 @@ export default function McpPage() {
           </h2>
         </div>
         <div className="custom-scrollbar flex-1 overflow-y-auto p-4 space-y-1">
-          {engines.map((engine, i) => (
+          {engines.map(engine => (
             <button
               key={engine.id}
               onClick={() => setSelectedEngine(engine.id)}
-              className={`animate-fade-rise stagger-${Math.min(i + 2, 7)} w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+              className={`animate-fade-rise w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 selectedEngine === engine.id
-                  ? 'bg-primary/10 text-primary'
+                  ? ACTIVE_CHIP
                   : 'hover:bg-slate-50 text-slate-500 hover:text-slate-900'
               }`}
             >
               <span className="min-w-0 flex-1 truncate text-left">{engine.name}</span>
               {selectedEngine === engine.id && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full border border-primary/20 bg-primary/10 text-cyan-800">
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
                   {servers.length}
                 </span>
               )}
@@ -266,43 +270,40 @@ export default function McpPage() {
       {/* Server cards */}
       <div className="flex-1 flex flex-col min-w-0 gap-4">
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-xs text-slate-400 font-medium shrink-0">
-            {t('filters.workspace')}
-            <select
+          <span className="text-xs text-slate-400 font-medium shrink-0">{t('filters.workspace')}</span>
+          <div className="w-52 shrink-0">
+            <Select
               aria-label={t('filters.workspace')}
               value={projectPath}
               onChange={e => setProjectPath(e.target.value)}
               disabled={groupProjects.length === 0}
-              className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
             >
               {groupProjects.map(p => (
                 <option key={p.path} value={p.path}>
                   {p.path}
                 </option>
               ))}
-            </select>
-          </label>
-          <div className="relative min-w-0 flex-1 max-w-72">
+            </Select>
+          </div>
+          <div className="min-w-0 flex-1 max-w-72">
             <label htmlFor="mcp-server-search" className="sr-only">{t('mcp.searchLabel')}</label>
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-            <input
+            <SearchInput
               id="mcp-server-search"
               type="text"
               value={serverSearch}
               onChange={e => setServerSearch(e.target.value)}
               placeholder={t('mcp.searchPlaceholder')}
               disabled={servers.length === 0}
-              className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary disabled:opacity-50"
             />
           </div>
-          <button
+          <Button
             onClick={openAdd}
             disabled={groupProjects.length === 0}
             title={groupProjects.length === 0 ? t('mcp.registerWorkspaceFirst') : t('mcp.addServerTitle')}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:opacity-90 transition-all font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            icon={Plus}
           >
-            <Plus className="w-4 h-4" /> {t('mcp.addServer')}
-          </button>
+            {t('mcp.addServer')}
+          </Button>
         </div>
 
         {groupProjects.length === 0 && (
@@ -324,19 +325,15 @@ export default function McpPage() {
 
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
           {servers.length === 0 ? (
-            <div className="glass-card p-10 text-center">
-              <p className="text-sm text-slate-400">{t('mcp.noServers')}</p>
-            </div>
+            <EmptyState icon={Server} title={t('mcp.noServers')} />
           ) : filteredServers.length === 0 ? (
-            <div className="glass-card p-10 text-center text-sm text-slate-400">
-              {t('mcp.noSearchMatch')}
-            </div>
+            <EmptyState compact title={t('mcp.noSearchMatch')} />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 pb-2">
-              {filteredServers.map((server, i) => (
+              {filteredServers.map(server => (
                 <div
                   key={server.name}
-                  className={`animate-fade-rise stagger-${Math.min(i + 3, 7)} glass-card p-4 flex flex-col gap-2 group`}
+                  className="animate-fade-rise glass-card p-4 flex flex-col gap-2 group"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
@@ -395,22 +392,20 @@ export default function McpPage() {
             {editName ? t('mcp.editTitle', { name: editName }) : t('mcp.addTitle')}
           </h3>
           <div className="space-y-3">
-            <div>
-              <label htmlFor="mcp-name" className="text-xs text-slate-400 font-medium block mb-1">{t('mcp.name')}</label>
-              <input
+            <Field label={t('mcp.name')} htmlFor="mcp-name">
+              <Input
                 id="mcp-name"
                 type="text"
                 value={draft.name}
                 onChange={e => setDraft({ ...draft, name: e.target.value })}
                 placeholder="my-server"
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
               />
-            </div>
+            </Field>
             <div className="flex gap-2 text-xs">
               <button
                 onClick={() => setDraft({ ...draft, kind: 'local' })}
                 className={`flex-1 px-2 py-1.5 rounded-md font-medium transition-colors ${
-                  draft.kind === 'local' ? 'bg-primary/10 text-primary' : 'text-slate-500 hover:bg-slate-50'
+                  draft.kind === 'local' ? ACTIVE_CHIP : 'text-slate-500 hover:bg-slate-50'
                 }`}
               >
                 {t('mcp.localStdio')}
@@ -418,72 +413,64 @@ export default function McpPage() {
               <button
                 onClick={() => setDraft({ ...draft, kind: 'remote' })}
                 className={`flex-1 px-2 py-1.5 rounded-md font-medium transition-colors ${
-                  draft.kind === 'remote' ? 'bg-primary/10 text-primary' : 'text-slate-500 hover:bg-slate-50'
+                  draft.kind === 'remote' ? ACTIVE_CHIP : 'text-slate-500 hover:bg-slate-50'
                 }`}
               >
                 {t('mcp.remoteUrl')}
               </button>
             </div>
             {draft.kind === 'local' ? (
-              <div>
-                <label htmlFor="mcp-command" className="text-xs text-slate-400 font-medium block mb-1">{t('mcp.command')}</label>
-                <input
+              <Field label={t('mcp.command')} htmlFor="mcp-command">
+                <Input
                   id="mcp-command"
                   type="text"
                   value={draft.command}
                   onChange={e => setDraft({ ...draft, command: e.target.value })}
                   placeholder="npx my-mcp-server --flag"
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white font-mono focus:outline-none focus:border-primary"
+                  className="font-mono"
                 />
-              </div>
+              </Field>
             ) : (
-              <div>
-                <label htmlFor="mcp-url" className="text-xs text-slate-400 font-medium block mb-1">URL</label>
-                <input
+              <Field label="URL" htmlFor="mcp-url">
+                <Input
                   id="mcp-url"
                   type="text"
                   value={draft.url}
                   onChange={e => setDraft({ ...draft, url: e.target.value })}
                   placeholder="https://mcp.example.com/mcp"
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white font-mono focus:outline-none focus:border-primary"
+                  className="font-mono"
                 />
-              </div>
+              </Field>
             )}
-            <div>
-              <label htmlFor="mcp-env" className="text-xs text-slate-400 font-medium block mb-1">
-                {t('mcp.environment')}
-              </label>
-              <textarea
+            <Field label={t('mcp.environment')} htmlFor="mcp-env">
+              <Textarea
                 id="mcp-env"
                 value={draft.envText}
                 onChange={e => setDraft({ ...draft, envText: e.target.value })}
                 rows={3}
                 placeholder="API_KEY=xxx"
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white font-mono focus:outline-none focus:border-primary resize-none"
+                className="font-mono resize-none"
               />
-            </div>
+            </Field>
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <button
-              onClick={closeModal}
-              className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors font-medium text-sm"
-            >
+            <Button variant="outline" onClick={closeModal}>
               {t('common.cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => void handleSubmit()}
+              loading={submitting}
               disabled={
-                submitting ||
                 !projectPath ||
                 !draft.name.trim() ||
                 (draft.kind === 'local' ? !draft.command.trim() : !draft.url.trim())
               }
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-all"
+              icon={editName ? undefined : Plus}
             >
               {editName
                 ? (submitting ? t('mcp.saving') : t('mcp.saveChanges'))
-                : <><Plus className="w-4 h-4" /> {submitting ? t('mcp.adding') : t('mcp.addServer')}</>}
-            </button>
+                : (submitting ? t('mcp.adding') : t('mcp.addServer'))}
+            </Button>
           </div>
         </Modal>
       )}

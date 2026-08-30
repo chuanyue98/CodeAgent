@@ -1,12 +1,26 @@
+import json
+import sqlite3
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from core.analytics.aggregator import aggregate
 from core.analytics.collectors.claude_collector import scan_claude_usage
-from core.analytics.history import append_history, get_last_timestamps, load_history
+from core.analytics.collectors.codebuddy_collector import scan_codebuddy_usage
+from core.analytics.collectors.codex_collector import scan_codex_usage
+from core.analytics.history import (
+    append_history,
+    get_last_timestamps,
+    load_history,
+    mark_backfill_done,
+)
 from core.analytics.models import RawUsageEntry
-from core.analytics.service import _collect_all, get_analytics_data
+from core.analytics.service import (
+    BACKFILL_VERSION,
+    _collect_all,
+    get_analytics_data,
+)
 
 
 @pytest.fixture
@@ -20,6 +34,9 @@ def mock_history_file(tmp_path):
         patch("core.analytics.history._history_path", return_value=history_file),
         patch("core.analytics.disk_cache._default_cache_path", return_value=cache_file),
     ):
+        # Most tests assert the steady-state incremental path; the one-off
+        # rescan after an upgrade has its own test and opts back in.
+        mark_backfill_done(BACKFILL_VERSION)
         yield history_file
 
 
@@ -376,3 +393,275 @@ def test_collect_all_purges_removed_targets(
 
     assert {e.target for e in entries} == {"claude"}
     assert {e.target for e in load_history()} == {"claude"}
+
+
+def test_subagent_runs_roll_up_into_the_session_that_spawned_them():
+    entries = [
+        RawUsageEntry(
+            timestamp="2026-08-01T10:00:00Z",
+            session_id="parent",
+            model="claude-test",
+            input_tokens=100,
+            output_tokens=10,
+            target="claude",
+        ),
+        RawUsageEntry(
+            timestamp="2026-08-01T11:00:00Z",
+            session_id="child",
+            model="claude-test",
+            input_tokens=40,
+            output_tokens=4,
+            target="claude",
+            parent_session_id="parent",
+            agent="explore",
+        ),
+    ]
+
+    result = aggregate(entries)
+
+    assert result["summary"]["session_count"] == 1
+    (session,) = result["sessions"]
+    assert session["sessionId"] == "parent"
+    # Rolled totals answer "what did this piece of work cost"...
+    assert session["inputTokens"] == 140
+    # ...while `own` keeps the main thread's share addressable.
+    assert session["own"]["inputTokens"] == 100
+    assert [s["sessionId"] for s in session["subtasks"]] == ["child"]
+    assert session["subtasks"][0]["agent"] == "explore"
+    # The parent's last message predates its subagent's; sorting on the
+    # parent's own timestamp would file the session before work it contains.
+    assert session["lastActivity"] == "2026-08-01T11:00:00Z"
+
+
+def test_a_subagent_whose_parent_is_gone_stays_at_top_level():
+    """The engine prunes transcripts; the archive keeps the usage rows.
+
+    Filing such a row under a parent that no longer exists would drop it out
+    of the list -- and its cost out of every per-session figure with it.
+    """
+    entries = [
+        RawUsageEntry(
+            timestamp="2026-08-01T10:00:00Z",
+            session_id="orphan",
+            model="claude-test",
+            input_tokens=7,
+            output_tokens=1,
+            target="claude",
+            parent_session_id="pruned",
+            agent="explore",
+        ),
+    ]
+
+    result = aggregate(entries)
+
+    (session,) = result["sessions"]
+    assert session["sessionId"] == "orphan"
+    assert session["parentSessionId"] == "pruned"
+
+
+def test_a_parent_cycle_does_not_swallow_the_sessions():
+    entries = [
+        RawUsageEntry(
+            timestamp="2026-08-01T10:00:00Z",
+            session_id="a",
+            model="claude-test",
+            input_tokens=1,
+            output_tokens=1,
+            target="claude",
+            parent_session_id="b",
+        ),
+        RawUsageEntry(
+            timestamp="2026-08-01T10:00:01Z",
+            session_id="b",
+            model="claude-test",
+            input_tokens=1,
+            output_tokens=1,
+            target="claude",
+            parent_session_id="a",
+        ),
+    ]
+
+    result = aggregate(entries)
+
+    assert {s["sessionId"] for s in result["sessions"]} == {"a", "b"}
+
+
+def test_claude_collector_reads_subagent_transcripts(tmp_path):
+    project_dir = tmp_path / ".claude" / "projects" / "-home-user-app"
+    subagents = project_dir / "parent-session" / "subagents"
+    subagents.mkdir(parents=True)
+    (project_dir / "parent-session.jsonl").write_text(
+        '{"timestamp":"2026-08-01T10:00:00Z","cwd":"/home/user/app",'
+        '"message":{"model":"claude-test","usage":{"input_tokens":10,'
+        '"output_tokens":5}}}\n',
+        encoding="utf-8",
+    )
+    # Subagent rows repeat the parent's sessionId, so only the file stem tells
+    # two subagents of one session apart.
+    (subagents / "agent-abc123.jsonl").write_text(
+        '{"timestamp":"2026-08-01T10:05:00Z","cwd":"/home/user/app",'
+        '"sessionId":"parent-session","isSidechain":true,'
+        '"attributionAgent":"general-purpose",'
+        '"message":{"model":"claude-test","usage":{"input_tokens":40,'
+        '"output_tokens":2}}}\n',
+        encoding="utf-8",
+    )
+
+    entries = scan_claude_usage(home=tmp_path)
+
+    by_session = {e.session_id: e for e in entries}
+    assert set(by_session) == {"parent-session", "agent-abc123"}
+    assert by_session["agent-abc123"].parent_session_id == "parent-session"
+    assert by_session["agent-abc123"].agent == "general-purpose"
+    assert by_session["parent-session"].parent_session_id == ""
+
+
+@patch("core.analytics.service.scan_claude_usage")
+@patch("core.analytics.service.scan_codex_usage", return_value=[])
+@patch("core.analytics.service.scan_opencode_usage", return_value=[])
+@patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
+def test_the_first_collection_after_an_upgrade_rescans_in_full(
+    _mock_codebuddy, _mock_opencode, _mock_codex, mock_claude, mock_history_file
+):
+    """Subagent transcripts were invisible to every earlier scan, so the
+    records that first become readable are older than the watermark. Without a
+    full pass they would never be collected at all."""
+    Path(mock_history_file).parent.joinpath(".ca_analytics_state.json").unlink(
+        missing_ok=True
+    )
+    append_history(
+        [
+            RawUsageEntry(
+                timestamp="2026-05-02T10:00:00Z",
+                session_id="parent",
+                model="claude-test",
+                input_tokens=100,
+                output_tokens=50,
+                target="claude",
+            )
+        ]
+    )
+    # Older than the watermark above, and only now readable.
+    mock_claude.return_value = [
+        RawUsageEntry(
+            timestamp="2026-05-01T10:00:00Z",
+            session_id="agent-abc123",
+            model="claude-test",
+            input_tokens=10,
+            output_tokens=5,
+            target="claude",
+            parent_session_id="parent",
+        )
+    ]
+
+    entries = _collect_all()
+
+    assert mock_claude.call_args[1]["since_timestamp"] == ""
+    assert {e.session_id for e in entries} == {"parent", "agent-abc123"}
+    # The pre-existing row survives -- its transcript may be long gone.
+    assert len(load_history()) == 2
+
+    # And the rebuild happens once: the next collection is incremental again.
+    mock_claude.return_value = []
+    _collect_all()
+    assert mock_claude.call_args[1]["since_timestamp"] == "2026-05-02T10:00:00Z"
+
+
+def test_codebuddy_collector_reads_subagent_transcripts(tmp_path):
+    """The same flat glob that hid Claude's subagent runs hid CodeBuddy's."""
+    project_dir = tmp_path / ".codebuddy" / "projects" / "home-user-app"
+    subagents = project_dir / "parent-session" / "subagents"
+    subagents.mkdir(parents=True)
+
+    def _assistant_row(tokens: int) -> str:
+        return json.dumps(
+            {
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "timestamp": 1787585232197,
+                "cwd": "/home/user/app",
+                "content": [{"type": "output_text", "text": "done"}],
+                "providerData": {
+                    "model": "kimi-k3-1",
+                    "usage": {"inputTokens": tokens, "outputTokens": 10},
+                },
+            }
+        )
+
+    (project_dir / "parent-session.jsonl").write_text(
+        _assistant_row(100) + "\n", encoding="utf-8"
+    )
+    (subagents / "agent-abc123.jsonl").write_text(
+        _assistant_row(40) + "\n", encoding="utf-8"
+    )
+
+    entries = scan_codebuddy_usage(home=tmp_path)
+
+    by_session = {e.session_id: e for e in entries}
+    assert set(by_session) == {"parent-session", "agent-abc123"}
+    assert by_session["agent-abc123"].parent_session_id == "parent-session"
+    assert by_session["parent-session"].parent_session_id == ""
+
+
+def test_codex_collector_reads_the_spawn_edge(tmp_path):
+    """Codex runs a subagent as a thread of its own; only the edge it records
+    tells that thread apart from a session someone started."""
+    codex = tmp_path / ".codex"
+    codex.mkdir(parents=True)
+    con = sqlite3.connect(codex / "state_5.sqlite")
+    with con:
+        con.execute(
+            """CREATE TABLE threads (
+                id TEXT PRIMARY KEY, rollout_path TEXT, created_at_ms INTEGER,
+                model TEXT, model_provider TEXT, cwd TEXT, tokens_used INTEGER,
+                agent_role TEXT, agent_nickname TEXT
+            )"""
+        )
+        con.execute(
+            """CREATE TABLE thread_spawn_edges (
+                parent_thread_id TEXT, child_thread_id TEXT, status TEXT
+            )"""
+        )
+        con.execute(
+            "INSERT INTO threads VALUES (?,?,?,?,?,?,?,?,?)",
+            ("t-parent", "", 1, "gpt-5", "openai", "/work", 1000, None, None),
+        )
+        con.execute(
+            "INSERT INTO threads VALUES (?,?,?,?,?,?,?,?,?)",
+            ("t-child", "", 2, "gpt-5", "openai", "/work", 500, "explorer", "Curie"),
+        )
+        con.execute(
+            "INSERT INTO thread_spawn_edges VALUES (?,?,?)",
+            ("t-parent", "t-child", "closed"),
+        )
+    con.close()
+
+    entries = {e.session_id: e for e in scan_codex_usage(home=tmp_path)}
+
+    assert entries["t-child"].parent_session_id == "t-parent"
+    assert entries["t-child"].agent == "explorer"
+    assert entries["t-parent"].parent_session_id == ""
+
+
+def test_codex_collector_survives_a_database_without_spawn_edges(tmp_path):
+    codex = tmp_path / ".codex"
+    codex.mkdir(parents=True)
+    con = sqlite3.connect(codex / "state_5.sqlite")
+    with con:
+        con.execute(
+            """CREATE TABLE threads (
+                id TEXT PRIMARY KEY, rollout_path TEXT, created_at_ms INTEGER,
+                model TEXT, model_provider TEXT, cwd TEXT, tokens_used INTEGER
+            )"""
+        )
+        con.execute(
+            "INSERT INTO threads VALUES (?,?,?,?,?,?,?)",
+            ("t-solo", "", 1, "gpt-5", "openai", "/work", 1000),
+        )
+    con.close()
+
+    (entry,) = scan_codex_usage(home=tmp_path)
+
+    assert entry.parent_session_id == ""
+    assert entry.agent == ""

@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertCircle } from 'lucide-react';
 import { useT } from '../../i18n/context';
+import Button from './Button';
 
 interface ErrorStateProps {
   message: string;
@@ -19,14 +20,7 @@ const ErrorState: React.FC<ErrorStateProps> = ({ message, onRetry }) => {
       <AlertCircle className="w-6 h-6" />
       <span className="text-sm font-medium">{message}</span>
     </div>
-    {onRetry && (
-      <button
-        onClick={onRetry}
-        className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_20px_-8px_hsl(192_82%_31%/0.4)] text-sm font-medium"
-      >
-        {t('common.retry')}
-      </button>
-    )}
+    {onRetry && <Button onClick={onRetry}>{t('common.retry')}</Button>}
   </div>
   );
 };

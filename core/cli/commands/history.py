@@ -13,16 +13,23 @@ from core.i18n import t
 from .. import helpers as _helpers
 
 
-def _history_list(ctx, engine):  # type: ignore[no-untyped-def]
+def _history_list(ctx, engine, include_subagents=False):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.session_history.session_finder import find_all_sessions
 
     project_path = str(Path.cwd())
     sessions = find_all_sessions(project_path, engine=engine)
+    hidden = 0
+    if not include_subagents:
+        kept = [s for s in sessions if not s.parent_session_id]
+        hidden = len(sessions) - len(kept)
+        sessions = kept
     if not sessions:
         print(t("history.none"))
         return
     print(t("history.found", count=len(sessions), path=project_path))
+    if hidden:
+        print(t("history.subagents_hidden", count=hidden))
     for i, s in enumerate(sessions):
         title = s.title or s.first_user_message[:60] or t("history.no_title")
         print(
@@ -42,10 +49,15 @@ def history(ctx):  # type: ignore[no-untyped-def]
 
 @history.command(name="list")
 @click.option("--engine", default=None, help="Filter by engine")
+@click.option(
+    "--include-subagents",
+    is_flag=True,
+    help="Also list subagent runs, which belong to the session that spawned them",
+)
 @click.pass_context
-def history_list(ctx, engine):  # type: ignore[no-untyped-def]
+def history_list(ctx, engine, include_subagents):  # type: ignore[no-untyped-def]
     """List all sessions for this project."""
-    _history_list(ctx, engine=engine)
+    _history_list(ctx, engine=engine, include_subagents=include_subagents)
 
 
 @history.command()

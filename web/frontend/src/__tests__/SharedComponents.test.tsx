@@ -14,7 +14,7 @@ describe('Badge', () => {
   test('neutral is the default look', () => {
     render(<Badge>claude</Badge>);
     const badge = screen.getByText('claude');
-    expect(badge.className).toContain('bg-slate-100');
+    expect(badge.className).toContain('bg-muted');
     expect(badge.className).toContain('uppercase');
   });
 
@@ -55,7 +55,7 @@ describe('Button', () => {
   test('destructive variant applies its own classes', () => {
     render(<Button variant="destructive">Remove</Button>);
     expect(screen.getByRole('button', { name: 'Remove' }).className).toContain(
-      'text-red-600',
+      'text-destructive',
     );
   });
 });

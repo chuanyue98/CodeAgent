@@ -9,7 +9,7 @@ from core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-CACHE_SCHEMA_VERSION = 3
+CACHE_SCHEMA_VERSION = 4
 CACHE_TTL_SECONDS = 300  # 5 minutes
 
 

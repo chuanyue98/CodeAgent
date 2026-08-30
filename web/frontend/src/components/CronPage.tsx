@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useIsMounted } from '../hooks/useAsyncGuards';
-import { Clock, Plus, Trash2, Play, PauseCircle, PlayCircle, Pencil, X, Search, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Clock, Plus, Trash2, Play, PauseCircle, PlayCircle, Pencil, X, Sparkles, CheckCircle2 } from 'lucide-react';
 import cronstrue from 'cronstrue';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
 import usePolling from '../hooks/usePolling';
 import request from '../utils/request';
+import Button from './shared/Button';
 import ConfirmDialog from './shared/ConfirmDialog';
+import EmptyState from './shared/EmptyState';
 import ErrorState from './shared/ErrorState';
+import { Field, Input, Select, SearchInput } from './shared/Field';
 import TaskTemplateGallery from './cron/TaskTemplateGallery';
 import type { TaskTemplate } from '../data/taskTemplates';
 import {
@@ -310,67 +313,55 @@ export default function CronPage() {
           <Clock className="w-4 h-4" /> {editingScheduleId ? t('cron.editTitle') : t('cron.newTitle')}
         </div>
 
-        <div>
-          <label className="text-xs text-slate-400 font-medium block mb-1">{t('filters.workspace')}</label>
-          <select
+        <Field label={t('filters.workspace')}>
+          <Select
             aria-label={t('filters.workspace')}
             value={workspace}
             onChange={e => setWorkspace(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
           >
             <option value="" disabled>{t('cron.selectWorkspace')}</option>
             {projects.filter(project => project.available !== false).map(project => (
               <option key={project.path} value={project.path}>{project.path}</option>
             ))}
-          </select>
-        </div>
+          </Select>
+        </Field>
 
-        <div>
-          <label className="text-xs text-slate-400 font-medium block mb-1">{t('cron.task')}</label>
-          <select
+        <Field label={t('cron.task')}>
+          <Select
             aria-label={t('cron.task')}
             value={taskName}
             onChange={e => setTaskName(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
           >
             {tasks.map(t => (
               <option key={t.name} value={t.name}>
                 {t.title || t.name}
               </option>
             ))}
-          </select>
-        </div>
+          </Select>
+        </Field>
 
-        <div>
-          <label className="text-xs text-slate-400 font-medium block mb-1">{t('filters.engine')}</label>
-          <select
+        <Field label={t('filters.engine')}>
+          <Select
             aria-label={t('filters.engine')}
             value={engine}
             onChange={e => setEngine(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
           >
             {engines.map(e => (
               <option key={e.id} value={e.id}>
                 {e.name}
               </option>
             ))}
-          </select>
-        </div>
+          </Select>
+        </Field>
 
-        <div>
-          <label className="text-xs text-slate-400 font-medium block mb-1">
-            {t('cron.expression')}
-          </label>
-          <input
+        <Field label={t('cron.expression')} hint={t('cron.syntaxHint')}>
+          <Input
             type="text"
             value={cronExpr}
             onChange={e => setCronExpr(e.target.value)}
             placeholder="0 9 * * *"
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white font-mono focus:outline-none focus:border-primary"
+            className="font-mono"
           />
-          <p className="text-[10px] text-slate-400 mt-1">
-            {t('cron.syntaxHint')}
-          </p>
           {cronExpr.trim() && (
             <div className="mt-1.5 rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2 text-xs">
               {cronPreview.valid ? (
@@ -383,27 +374,25 @@ export default function CronPage() {
                   )}
                 </>
               ) : (
-                <p className="text-red-500">{t('cron.invalid')}</p>
+                <p className="text-destructive">{t('cron.invalid')}</p>
               )}
             </div>
           )}
-        </div>
+        </Field>
 
-        <button
+        <Button
+          className="w-full"
+          icon={editingScheduleId ? Pencil : Plus}
+          loading={submitting}
+          disabled={!taskName || !engine || !workspace || !cronExpr.trim()}
           onClick={() => void handleSave()}
-          disabled={submitting || !taskName || !engine || !workspace || !cronExpr.trim()}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-95 transition-all"
         >
-          {editingScheduleId ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           {editingScheduleId ? t('cron.save') : t('cron.create')}
-        </button>
+        </Button>
         {editingScheduleId && (
-          <button
-            onClick={() => setEditingScheduleId(null)}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50"
-          >
-            <X className="w-4 h-4" /> {t('cron.cancelEditing')}
-          </button>
+          <Button variant="outline" className="w-full" icon={X} onClick={() => setEditingScheduleId(null)}>
+            {t('cron.cancelEditing')}
+          </Button>
         )}
       </section>
 
@@ -427,16 +416,14 @@ export default function CronPage() {
             </button>
           )}
           {schedules.length > 0 && (
-            <div className="relative w-full max-w-56">
+            <div className="w-full max-w-56">
               <label htmlFor="schedule-search" className="sr-only">{t('cron.searchLabel')}</label>
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-              <input
+              <SearchInput
                 id="schedule-search"
                 type="text"
                 value={scheduleSearch}
                 onChange={e => setScheduleSearch(e.target.value)}
                 placeholder={t('cron.searchPlaceholder')}
-                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary"
               />
             </div>
           )}
@@ -466,7 +453,7 @@ export default function CronPage() {
         <div className="flex-1 overflow-y-auto space-y-2">
           {schedules.length === 0 && (
             <div className="space-y-5 py-2">
-              <p className="text-sm text-slate-500">{t('cron.empty')}</p>
+              <EmptyState title={t('cron.empty')} />
               <TaskTemplateGallery busyId={templateBusyId} onUse={handleUseTemplate} />
             </div>
           )}
@@ -476,7 +463,7 @@ export default function CronPage() {
             </div>
           )}
           {schedules.length > 0 && filteredSchedules.length === 0 && (
-            <p className="text-sm text-slate-400 text-center py-8">{t('cron.noSearchMatch')}</p>
+            <EmptyState compact title={t('cron.noSearchMatch')} />
           )}
           {filteredSchedules.map(schedule => (
             <div

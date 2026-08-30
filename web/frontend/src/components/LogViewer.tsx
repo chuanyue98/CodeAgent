@@ -3,6 +3,7 @@ import { Terminal, AlertCircle, CheckCircle2, Wifi, WifiOff } from 'lucide-react
 import { fetchLogFiles, fetchLogFile, useLogStream, type LogFile } from '../api/logs';
 import usePolling from '../hooks/usePolling';
 import { useT } from '../i18n/context';
+import EmptyState from './shared/EmptyState';
 
 // Rendering every line of a long-running task's log as its own DOM node gets
 // sluggish well before the 10,000-line cap in api/logs.ts is reached. Only
@@ -126,7 +127,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
             </button>
           ))}
           {files?.length === 0 && (
-            <p className="text-xs text-slate-400 px-2">{t('logs.noFiles')}</p>
+            <EmptyState compact title={t('logs.noFiles')} />
           )}
         </div>
 

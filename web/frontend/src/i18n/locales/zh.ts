@@ -165,6 +165,8 @@ export const zh: Record<TranslationKey, string> = {
   'sessions.selectAllFiltered': '选择当前筛选条件下的全部会话',
   'sessions.countOne': '{count} 个会话',
   'sessions.count': '{count} 个会话',
+  'sessions.subtaskCount': '{count} 个子任务',
+  'sessions.orphanSubtask': '子任务 · 父会话已清理',
   'sessions.selected': '已选择 {count} 个',
   'sessions.deleteSelected': '删除所选',
   'sessions.sortDate': '日期',
@@ -463,6 +465,13 @@ export const zh: Record<TranslationKey, string> = {
   'tasks.describeIt': '描述需求，让 AI 来写',
   'tasks.writeItMyself': '我自己写',
   'tasks.noSearchMatch': '没有匹配的任务。',
+  'tasks.activityTitle': '运行动态',
+  'tasks.statRunning': '运行中',
+  'tasks.statCompleted': '已完成',
+  'tasks.statFailed': '失败',
+  'tasks.lastRun': '上次运行 {time}',
+  'tasks.neverRun': '尚未运行',
+  'tasks.runFeedEmpty': '运行任务后会在这里显示记录。',
 
   // ── Agent workspace ───────────────────────────────────────────────────────
 
@@ -515,6 +524,10 @@ export const zh: Record<TranslationKey, string> = {
   'sessionDetail.loadEarlier': '加载更早 —— 当前显示最近 {shown} / 共 {total} 条',
   'sessionDetail.toTop': '跳到开头',
   'sessionDetail.toBottom': '跳到最新',
+  'sessionDetail.subtasks': '子任务（{count}）',
+  'sessionDetail.ownShare': '主线 {tokens} · {cost}',
+  'sessionDetail.subtaskShare': '子任务 {tokens} · {cost}',
+  'sessionDetail.subtaskOfParent': '子任务属于派出它的会话，没有可单独恢复的上下文。',
   'sessionDetail.conversation': '对话记录',
   'sessionDetail.loadingConversation': '正在加载对话记录…',
   'sessionDetail.noMessages': '此会话没有消息。',

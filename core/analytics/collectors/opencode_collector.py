@@ -56,6 +56,23 @@ def _iso_to_ms(iso: str) -> int:
         return 0
 
 
+def _subagent_columns(con: sqlite3.Connection) -> tuple[str, str]:
+    """SELECT expressions for the parent/agent columns, or empty stand-ins.
+
+    OpenCode grew ``session.parent_id`` and ``session.agent`` with subagents;
+    a database written by an older build has neither, and naming a missing
+    column costs the whole scan.
+    """
+    try:
+        present = {row[1] for row in con.execute("PRAGMA table_info(session)")}
+    except sqlite3.Error:
+        present = set()
+    return (
+        "s.parent_id" if "parent_id" in present else "'' AS parent_id",
+        "s.agent" if "agent" in present else "'' AS agent",
+    )
+
+
 def scan_opencode_usage(
     home: Path | None = None, since_timestamp: str = ""
 ) -> list[RawUsageEntry]:
@@ -81,17 +98,22 @@ def scan_opencode_usage(
         con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         con.row_factory = sqlite3.Row
 
-        # Join part → message (for model) → session (for directory)
+        # Join part → message (for model) → session (for directory, and for
+        # the parent_id/agent that mark a subagent run as belonging to the
+        # session that spawned it rather than standing on its own)
         # part.data contains tokens + cost for type="step-finish"
+        parent_col, agent_col = _subagent_columns(con)
         rows = con.execute(
-            """
+            f"""
             SELECT
                 p.session_id,
                 p.message_id,
                 p.time_created,
                 p.data AS part_data,
                 m.data AS msg_data,
-                s.directory
+                s.directory,
+                {parent_col},
+                {agent_col}
             FROM part p
             JOIN message m ON m.id = p.message_id
             JOIN session s ON s.id = p.session_id
@@ -142,6 +164,8 @@ def scan_opencode_usage(
                 cost=cost,
                 project_path=row["directory"] or "",
                 target="opencode",
+                parent_session_id=row["parent_id"] or "",
+                agent=row["agent"] or "",
             )
         )
 

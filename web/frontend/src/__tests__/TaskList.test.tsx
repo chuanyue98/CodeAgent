@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
 import TaskList from '../components/TaskDashboard/TaskList';
+import type { RunStatus } from '../components/TaskDashboard/types';
 import type { Task } from '../components/TaskDashboard/types';
 
 function makeTask(name: string, title: string, description = ''): Task {
@@ -65,5 +66,36 @@ describe('TaskList search', () => {
     fireEvent.change(screen.getByLabelText('Search tasks'), { target: { value: 'nonexistent' } });
 
     expect(screen.getByText('No tasks match your search.')).toBeVisible();
+  });
+});
+
+describe('TaskList run activity feed', () => {
+  test('shows recent runs and opens the task on click', () => {
+    const onSelect = vi.fn();
+    const run: RunStatus = {
+      taskId: 'code_review-1725000000',
+      engine: 'claude',
+      status: 'completed',
+      logPath: '/tmp/run.log',
+      startTime: Date.now() / 1000 - 3600,
+      endTime: Date.now() / 1000 - 3500,
+      taskName: 'code_review',
+    };
+    render(
+      <TaskList
+        tasks={MANY_TASKS}
+        runs={[run]}
+        onSelect={onSelect}
+        onGenerateClick={vi.fn()}
+        onManualCreateClick={vi.fn()}
+      />,
+    );
+
+    const feed = screen.getByRole('complementary', { name: 'Run activity' });
+    expect(within(feed).getByText('Code Review')).toBeVisible();
+    expect(screen.getByText('Completed')).toBeVisible();
+
+    fireEvent.click(within(feed).getAllByRole('button')[0]);
+    expect(onSelect).toHaveBeenCalledWith('code_review');
   });
 });

@@ -4,6 +4,7 @@ import { type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
 import type { SessionDetail } from '../api/audit';
 import { formatDuration, summarizeSession } from '../utils/sessionProgress';
 import { useT } from '../i18n/context';
+import SectionLabel from './shared/SectionLabel';
 
 export interface SessionProgressProps {
   detail: Pick<SessionDetail, 'messages'> | null;
@@ -41,9 +42,7 @@ export default function SessionProgress({ detail, usage }: SessionProgressProps)
 
   return (
     <section data-testid="session-progress">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
-        {t('sessionProgress.title')}
-      </p>
+      <SectionLabel className="mb-2">{t('sessionProgress.title')}</SectionLabel>
       <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-2.5">
         {metrics.length > 0 && (
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-slate-700">
@@ -58,9 +57,7 @@ export default function SessionProgress({ detail, usage }: SessionProgressProps)
 
         {progress.recent.length > 0 && (
           <div className="mt-2 space-y-1 border-t border-slate-200/70 pt-2">
-            <p className="text-[10px] uppercase tracking-wide text-slate-400">
-              {t('sessionProgress.lastActions')}
-            </p>
+            <SectionLabel>{t('sessionProgress.lastActions')}</SectionLabel>
             {progress.recent.map((action, i) => (
               <div
                 key={`${action.name}-${i}`}

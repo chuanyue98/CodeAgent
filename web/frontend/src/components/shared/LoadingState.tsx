@@ -10,7 +10,7 @@ const LoadingState: React.FC<{ height?: string; message?: string }> = ({
 }) => (
   <div className={`animate-fade-in flex flex-col items-center justify-center gap-2 ${height}`}>
     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-    {message && <p className="text-xs text-slate-400">{message}</p>}
+    {message && <p className="text-xs text-muted-foreground">{message}</p>}
   </div>
 );
 

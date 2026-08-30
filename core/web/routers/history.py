@@ -164,21 +164,32 @@ async def list_sessions(
     limit: int = Query(
         500, ge=1, le=5000, description="Maximum number of sessions to return"
     ),
+    include_subagents: bool = Query(
+        False,
+        description="Include subagent runs, which belong to the session that "
+        "spawned them",
+    ),
 ) -> dict:
     """Lists session summaries across all engines for a project.
+
+    Subagent runs are left out unless asked for: they are part of a session
+    someone started, not sessions of their own.
 
     Args:
         project: Optional project directory path filter. Omit to search
             across every project the user has session history for.
         engine: Optional engine filter ("claude", "codex", "opencode", "codebuddy").
         limit: Maximum number of sessions to return.
+        include_subagents: Whether subagent runs are listed alongside the
+            sessions that spawned them.
 
     Returns:
         dict: {"sessions": [...], "count": N}
     """
-    sessions = (await asyncio.to_thread(find_all_sessions, project, engine=engine))[
-        :limit
-    ]
+    found = await asyncio.to_thread(find_all_sessions, project, engine=engine)
+    if not include_subagents:
+        found = [s for s in found if not s.parent_session_id]
+    sessions = found[:limit]
     return {
         "sessions": [camelize(s.to_summary_dict()) for s in sessions],
         "count": len(sessions),

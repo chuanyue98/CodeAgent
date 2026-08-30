@@ -66,6 +66,11 @@ The orchestration hub containing:
 - Tracks usage across all engine drivers
 - Estimates USD costs based on model-specific pricing
 - Aggregates data for the web dashboard
+- Subagent runs are collected as sessions of their own and then rolled up
+  under the session that spawned them, so a list row reads as one piece of
+  work while its cost stays complete. Each engine records the link its own
+  way: Claude and CodeBuddy write the run to `<session>/subagents/*.jsonl`,
+  OpenCode sets `session.parent_id`, Codex keeps a `thread_spawn_edges` row
 
 **Session History (`core/session_history/`)**
 - Stores and retrieves session data

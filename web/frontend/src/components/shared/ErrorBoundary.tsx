@@ -1,5 +1,6 @@
 import React, { Component, type ReactNode } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import Button from './Button';
 import { LanguageContext, translateDefault, type LanguageContextValue } from '../../i18n/context';
 
 interface Props {
@@ -64,26 +65,19 @@ class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen gap-6 p-8">
           <div className="flex flex-col items-center gap-3 text-center">
-            <AlertCircle className="w-12 h-12 text-red-400" />
-            <h2 className="text-xl font-semibold text-slate-900">{t('error.title')}</h2>
-            <p className="text-sm text-slate-500 max-w-md">
+            <AlertCircle className="w-12 h-12 text-destructive/70" />
+            <h2 className="text-xl font-semibold text-foreground">{t('error.title')}</h2>
+            <p className="text-sm text-muted-foreground max-w-md">
               {this.state.error?.message || t('error.unexpected')}
             </p>
           </div>
           <div className="flex gap-3">
-            <button
-              onClick={this.handleReload}
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors text-sm font-medium"
-            >
-              <RefreshCw className="w-4 h-4" />
+            <Button size="lg" icon={RefreshCw} onClick={this.handleReload}>
               {t('error.tryAgain')}
-            </button>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-colors text-sm font-medium"
-            >
+            </Button>
+            <Button size="lg" variant="outline" onClick={() => window.location.reload()}>
               {t('error.reloadPage')}
-            </button>
+            </Button>
           </div>
         </div>
       );

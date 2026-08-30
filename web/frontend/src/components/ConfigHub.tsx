@@ -1,11 +1,16 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Save, Loader2, Plus, Trash2, Folder, Languages, Layers, Globe, Zap, Check, X, AlertTriangle, CheckCircle2, ArrowRight, Eraser } from 'lucide-react';
+import { Save, Plus, Trash2, Folder, Languages, Layers, Globe, Zap, Check, X, AlertTriangle, CheckCircle2, ArrowRight, Eraser } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useProject, type Config, type GroupDefinition, type Project } from '../context/ProjectContext';
 import { useLanguage, useT } from '../i18n/context';
 import { SUPPORTED_LANGUAGES, type Language } from '../i18n/language';
 import request from '../utils/request';
 import LoadingState from './shared/LoadingState';
+import ErrorBar from './shared/ErrorBar';
+import Button from './shared/Button';
+import SectionLabel from './shared/SectionLabel';
+import { Input, Select } from './shared/Field';
+import { ACTIVE_CHIP } from './shared/activeChip';
 
 interface ProxyConfig {
   host: string;
@@ -321,9 +326,7 @@ const ConfigHub: React.FC = () => {
       </div>
 
       {error && (
-        <div role="alert" className="p-4 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl text-sm font-medium">
-          {t('config.error', { message: error })}
-        </div>
+        <ErrorBar message={t('config.error', { message: error })} />
       )}
 
       {/* General Settings */}
@@ -346,9 +349,9 @@ const ConfigHub: React.FC = () => {
             it is a config.json field, which makes this page — the config.json
             editor — where it belongs. */}
         <div className="space-y-2 pt-4">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+          <SectionLabel className="flex items-center gap-2">
             <Languages size={12} className="text-primary" /> {t('language.label')}
-          </span>
+          </SectionLabel>
           <div
             role="radiogroup"
             data-testid="language-switcher"
@@ -364,7 +367,7 @@ const ConfigHub: React.FC = () => {
                 onClick={() => chooseLanguage(code)}
                 className={`rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${
                   code === language
-                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    ? `border-primary/40 ${ACTIVE_CHIP}`
                     : 'border-slate-100 bg-slate-50/50 text-slate-600 hover:bg-slate-100'
                 }`}
               >
@@ -380,7 +383,7 @@ const ConfigHub: React.FC = () => {
             <Folder size={12} className="text-primary" /> {t('config.privateRoot')}
           </label>
           <div className="flex gap-3">
-            <input
+            <Input
               id="config-resource-root"
               type="text"
               value={localConfig.paths?.resource_root || ''}
@@ -390,7 +393,7 @@ const ConfigHub: React.FC = () => {
                 setLocalConfig({ ...localConfig, paths: newPaths });
               }}
               placeholder={t('config.privateRootPlaceholder')}
-              className="flex-1 p-3 border border-slate-100 rounded-xl bg-slate-50/50 text-sm font-mono focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+              className="flex-1 font-mono"
             />
           </div>
           <p className="text-[10px] text-slate-500">
@@ -427,9 +430,9 @@ const ConfigHub: React.FC = () => {
                   : t('config.removeMissing', { count: missingRowCount })}
               </button>
             )}
-            <button onClick={addProject} className="text-xs flex items-center gap-2 font-semibold text-primary bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-all">
-              <Plus className="w-4 h-4" /> {t('config.addWorkspace')}
-            </button>
+            <Button variant="soft" icon={Plus} onClick={addProject}>
+              {t('config.addWorkspace')}
+            </Button>
           </div>
         </div>
 
@@ -461,15 +464,15 @@ const ConfigHub: React.FC = () => {
                   </p>
                 )}
               </div>
-              <select
+              <Select
                 id={`project-group-${p.uiId}`}
                 aria-label={t('config.groupForWorkspace', { index: i + 1 })}
                 value={p.group}
                 onChange={(e) => updateProject(p.uiId, 'group', e.target.value)}
-                className="w-full sm:w-40 p-2 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/20"
+                className="sm:w-40"
               >
                 {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
+              </Select>
               <button aria-label={t('config.removeWorkspace', { name: p.path || i + 1 })} title={t('config.unregisterWorkspace')} onClick={() => removeProject(p.uiId)} className="self-end sm:self-auto p-2 text-slate-500 hover:text-red-500 transition-colors">
                 <Trash2 size={18} />
               </button>
@@ -484,9 +487,9 @@ const ConfigHub: React.FC = () => {
                 {' '}<code className="bg-slate-100 px-1 rounded text-slate-600 font-mono">/home/you/code/my-app</code>
                 {' '}{t('config.noWorkspacesHint2')}
               </p>
-              <button onClick={addProject} className="mt-1 inline-flex items-center gap-2 text-xs font-semibold text-primary bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-all">
-                <Plus className="w-4 h-4" /> {t('config.addFirstWorkspace')}
-              </button>
+              <Button variant="soft" className="mt-1" icon={Plus} onClick={addProject}>
+                {t('config.addFirstWorkspace')}
+              </Button>
             </div>
           )}
         </div>
@@ -528,9 +531,9 @@ const ConfigHub: React.FC = () => {
               </button>
             </div>
           ) : (
-            <button onClick={startAddingGroup} className="text-xs flex items-center gap-2 font-semibold text-primary bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-all">
-              <Plus className="w-4 h-4" /> {t('config.newGroup')}
-            </button>
+            <Button variant="soft" icon={Plus} onClick={startAddingGroup}>
+              {t('config.newGroup')}
+            </Button>
           )}
         </div>
 
@@ -588,9 +591,9 @@ const ConfigHub: React.FC = () => {
               <p className="text-xs text-slate-500">{t('config.proxySubtitle')}</p>
             </div>
           </div>
-          <button onClick={addProxy} className="text-xs flex items-center gap-2 font-semibold text-primary bg-primary/10 px-4 py-2 rounded-xl hover:bg-primary/20 transition-all">
-            <Plus className="w-4 h-4" /> {t('config.addGateway')}
-          </button>
+          <Button variant="soft" icon={Plus} onClick={addProxy}>
+            {t('config.addGateway')}
+          </Button>
         </div>
         <div className="space-y-3">
           {localProxies.map((p, i) => (
@@ -637,22 +640,20 @@ const ConfigHub: React.FC = () => {
           </p>
           <div className="flex items-center gap-2">
             {dirty && (
-              <button
-                onClick={discardChanges}
-                disabled={saving}
-                className="px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors font-medium text-sm"
-              >
+              <Button variant="outline" size="lg" onClick={discardChanges} disabled={saving}>
                 {t('config.discard')}
-              </button>
+              </Button>
             )}
-            <button
+            <Button
+              size="lg"
               onClick={handleSave}
-              disabled={saving || !dirty}
-              className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold shadow-lg shadow-primary/20 active:scale-95 text-sm"
+              loading={saving}
+              disabled={!dirty}
+              icon={Save}
+              className="px-6 shadow-lg shadow-primary/20"
             >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               {t('config.saveAll')}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

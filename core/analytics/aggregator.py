@@ -149,6 +149,8 @@ def aggregate(entries: list[RawUsageEntry]) -> dict[str, Any]:
                 session_id=e.session_id,
                 target=e.target,
                 project_path=e.project_path,
+                parent_session_id=e.parent_session_id,
+                agent=e.agent,
             )
         su = sessions[s_key]
         update_usage(su, e, cost)
@@ -170,7 +172,7 @@ def aggregate(entries: list[RawUsageEntry]) -> dict[str, Any]:
     daily_list = sorted(daily.values(), key=lambda x: x.date)
     monthly_list = sorted(monthly.values(), key=lambda x: x.month)
     session_list = sorted(
-        sessions.values(), key=lambda x: x.last_activity, reverse=True
+        _nest_subtasks(sessions), key=_rolled_last_activity, reverse=True
     )
 
     return {
@@ -184,12 +186,113 @@ def aggregate(entries: list[RawUsageEntry]) -> dict[str, Any]:
             "total_cache_read_tokens": sum(e.cache_read_tokens for e in entries),
             "targets": sorted({e.target for e in entries}),
             "models": sorted({e.model for e in entries}),
-            "session_count": len(sessions),
+            "session_count": len(session_list),
         },
         "daily": [_daily_to_dict(du) for du in daily_list],
         "monthly": [_monthly_to_dict(mu) for mu in monthly_list],
         "sessions": [_session_to_dict(su) for su in session_list],
     }
+
+
+def _parent_of(
+    sessions: dict[tuple, SessionUsage], su: SessionUsage
+) -> SessionUsage | None:
+    """The session that spawned *su*, or None when it stands on its own."""
+    if not su.parent_session_id:
+        return None
+    parent = sessions.get((su.parent_session_id, su.target))
+    return parent if parent is not su else None
+
+
+def _would_cycle(
+    sessions: dict[tuple, SessionUsage], child: SessionUsage, parent: SessionUsage
+) -> bool:
+    """True when filing *child* under *parent* would close a parent loop."""
+    seen: set[tuple[str, str]] = set()
+    node: SessionUsage | None = parent
+    while node is not None:
+        if node is child:
+            return True
+        key = (node.session_id, node.target)
+        if key in seen:
+            return True
+        seen.add(key)
+        node = _parent_of(sessions, node)
+    return False
+
+
+def _nest_subtasks(sessions: dict[tuple, SessionUsage]) -> list[SessionUsage]:
+    """Files subagent runs under the session that spawned them.
+
+    A subagent run is not a session anyone started, and leaving it at top level
+    buries the ones that were: on a machine with a `@explore`-heavy workflow
+    they outnumber real sessions two to one. A child whose parent is absent --
+    the engine pruned that transcript, say -- stays at top level, because
+    dropping it would take its cost out of the list entirely.
+    """
+    top: list[SessionUsage] = []
+    for su in sessions.values():
+        parent = _parent_of(sessions, su)
+        if parent is None or _would_cycle(sessions, su, parent):
+            top.append(su)
+        else:
+            parent.subtasks.append(su)
+
+    for su in sessions.values():
+        su.subtasks.sort(key=lambda child: _parse_ts(child.last_activity))
+    return top
+
+
+def _rolled_totals(su: SessionUsage) -> tuple[int, int, int, int, float]:
+    """(input, output, cache write, cache read, cost) including every subtask."""
+    input_t = su.input_tokens
+    output_t = su.output_tokens
+    cache_write = su.cache_creation_tokens
+    cache_read = su.cache_read_tokens
+    cost = su.cost
+    for child in su.subtasks:
+        child_in, child_out, child_write, child_read, child_cost = _rolled_totals(child)
+        input_t += child_in
+        output_t += child_out
+        cache_write += child_write
+        cache_read += child_read
+        cost += child_cost
+    return input_t, output_t, cache_write, cache_read, cost
+
+
+def _rolled_last_activity(su: SessionUsage) -> str:
+    """The latest activity across the session and its subtasks.
+
+    A session whose subagents ran on past its own last message would otherwise
+    sort by a timestamp older than the work it is showing.
+    """
+    latest = su.last_activity
+    for child in su.subtasks:
+        candidate = _rolled_last_activity(child)
+        if _parse_ts(candidate) > _parse_ts(latest):
+            latest = candidate
+    return latest
+
+
+def _rolled_breakdowns(su: SessionUsage) -> list[ModelBreakdown]:
+    """Per-model breakdown for the session and its subtasks combined."""
+    merged: dict[str, ModelBreakdown] = {}
+
+    def visit(node: SessionUsage) -> None:
+        for bd in node.model_breakdowns:
+            target = merged.setdefault(
+                bd.model_name, ModelBreakdown(model_name=bd.model_name)
+            )
+            target.input_tokens += bd.input_tokens
+            target.output_tokens += bd.output_tokens
+            target.cache_creation_tokens += bd.cache_creation_tokens
+            target.cache_read_tokens += bd.cache_read_tokens
+            target.cost += bd.cost
+        for child in node.subtasks:
+            visit(child)
+
+    visit(su)
+    return list(merged.values())
 
 
 def _daily_to_dict(du: DailyUsage) -> dict:
@@ -239,24 +342,42 @@ def _monthly_to_dict(mu: MonthlyUsage) -> dict:
 def _session_to_dict(su: SessionUsage) -> dict:
     """Converts a SessionUsage object to a dictionary.
 
+    Token counts, cost and ``lastActivity`` are rolled up over the session's
+    subtasks, so a row reads as "what this piece of work cost". ``own`` keeps
+    the main thread's share addressable, and ``subtasks`` carries the children
+    in the same shape.
+
     Args:
         su: The SessionUsage object to convert.
 
     Returns:
         A dictionary representation of the SessionUsage object.
     """
+    input_t, output_t, cache_write, cache_read, cost = _rolled_totals(su)
+    breakdowns = _rolled_breakdowns(su)
     return {
         "sessionId": su.session_id,
         "target": su.target,
         "projectPath": su.project_path,
-        "inputTokens": su.input_tokens,
-        "outputTokens": su.output_tokens,
-        "cacheCreationTokens": su.cache_creation_tokens,
-        "cacheReadTokens": su.cache_read_tokens,
-        "cost": su.cost,
-        "lastActivity": su.last_activity,
-        "modelsUsed": su.models_used,
-        "modelBreakdowns": [_bd_to_dict(b) for b in su.model_breakdowns],
+        "inputTokens": input_t,
+        "outputTokens": output_t,
+        "cacheCreationTokens": cache_write,
+        "cacheReadTokens": cache_read,
+        "cost": cost,
+        "lastActivity": _rolled_last_activity(su),
+        "modelsUsed": sorted({bd.model_name for bd in breakdowns}),
+        "modelBreakdowns": [_bd_to_dict(b) for b in breakdowns],
+        "agent": su.agent,
+        "parentSessionId": su.parent_session_id,
+        "own": {
+            "inputTokens": su.input_tokens,
+            "outputTokens": su.output_tokens,
+            "cacheCreationTokens": su.cache_creation_tokens,
+            "cacheReadTokens": su.cache_read_tokens,
+            "cost": su.cost,
+            "lastActivity": su.last_activity,
+        },
+        "subtasks": [_session_to_dict(child) for child in su.subtasks],
     }
 
 

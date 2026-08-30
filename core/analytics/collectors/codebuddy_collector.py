@@ -57,6 +57,24 @@ def scan_codebuddy_usage(
         for jsonl_file in project_dir.glob("*.jsonl"):
             _parse_codebuddy_file(jsonl_file, jsonl_file.stem, entries, since_timestamp)
 
+        # Subagent transcripts live in ``<session_id>/subagents/``, which a
+        # flat glob never reaches. A run that spawns its own nests one level
+        # further, so the owner is the nearest ``agent-<id>`` directory.
+        for session_dir in project_dir.iterdir():
+            if not session_dir.is_dir():
+                continue
+            for agent_file in (session_dir / "subagents").rglob("*.jsonl"):
+                owner = agent_file.parent.name
+                _parse_codebuddy_file(
+                    agent_file,
+                    agent_file.stem,
+                    entries,
+                    since_timestamp,
+                    parent_session_id=(
+                        owner if owner.startswith("agent-") else session_dir.name
+                    ),
+                )
+
     return entries
 
 
@@ -65,6 +83,7 @@ def _parse_codebuddy_file(
     session_id: str,
     entries: list[RawUsageEntry],
     since_timestamp: str = "",
+    parent_session_id: str = "",
 ) -> None:
     """Parses a single CodeBuddy JSONL log file and appends entries.
 
@@ -73,6 +92,8 @@ def _parse_codebuddy_file(
         session_id: The session ID associated with the log file (file stem).
         entries: The list to which extracted RawUsageEntry objects are appended.
         since_timestamp: Only include entries newer than this timestamp.
+        parent_session_id: Owning session when ``path`` is a subagent
+            transcript; empty for a session a user started.
     """
     try:
         with open(path, encoding="utf-8") as f:
@@ -121,6 +142,7 @@ def _parse_codebuddy_file(
                         cache_read_tokens=cache_read,
                         project_path=row.get("cwd") or "",
                         target="codebuddy",
+                        parent_session_id=parent_session_id,
                     )
                 )
     except OSError:

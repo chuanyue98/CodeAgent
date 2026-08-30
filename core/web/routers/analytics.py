@@ -125,6 +125,26 @@ async def get_sessions(
             (session.get("target", ""), session.get("sessionId", "")), ""
         )
 
+    def _with_titles(session: dict) -> dict:
+        return {
+            **session,
+            "title": _title(session),
+            "subtasks": [_with_titles(child) for child in session.get("subtasks", ())],
+        }
+
+    def _searchable(session: dict) -> str:
+        # Subagent titles are part of the parent's haystack: the subtask rows
+        # are no longer searchable on their own, and "which session ran that
+        # review" is exactly what the box is used for.
+        parts = [
+            _title(session),
+            str(session.get("sessionId") or ""),
+            str(session.get("projectPath") or ""),
+            str(session.get("target") or ""),
+            *(_title(child) for child in session.get("subtasks", ())),
+        ]
+        return " ".join(parts).lower()
+
     if project:
         target = normalize_project_path(project)
         sessions = [
@@ -136,14 +156,7 @@ async def get_sessions(
     if search:
         needle = search.strip().lower()
         if needle:
-            sessions = [
-                s
-                for s in sessions
-                if needle in _title(s).lower()
-                or needle in str(s.get("sessionId") or "").lower()
-                or needle in str(s.get("projectPath") or "").lower()
-                or needle in str(s.get("target") or "").lower()
-            ]
+            sessions = [s for s in sessions if needle in _searchable(s)]
 
     total = len(sessions)
 
@@ -160,7 +173,7 @@ async def get_sessions(
     page = sessions[:limit]
     has_more = len(sessions) > limit
     return {
-        "sessions": [{**s, "title": _title(s)} for s in page],
+        "sessions": [_with_titles(s) for s in page],
         "nextCursor": _encode_cursor(page[-1]) if page and has_more else None,
         "total": total,
     }

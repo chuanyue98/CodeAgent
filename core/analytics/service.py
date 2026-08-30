@@ -12,12 +12,24 @@ from core.analytics.collectors.opencode_collector import scan_opencode_usage
 from core.analytics.disk_cache import invalidate_cache, load_cache, save_cache
 from core.analytics.history import (
     append_history,
+    backfill_pending,
     get_last_timestamps,
     load_history,
+    mark_backfill_done,
+    merge_history,
     save_history,
 )
 from core.analytics.models import RawUsageEntry
 from core.analytics.pricing import get_rates
+
+# Bumped when a collector starts reading records earlier versions never saw.
+# The incremental scan below is watermarked per engine, so newly-visible old
+# records would otherwise stay invisible forever.
+#   1: subagent runs -- Claude's ``<session>/subagents/*.jsonl`` transcripts,
+#      and OpenCode's parent/agent columns.
+#   2: the agent name behind a Claude subagent run (``attributionAgent``).
+#   3: CodeBuddy's subagent transcripts, and Codex's thread spawn edges.
+BACKFILL_VERSION = 3
 
 
 def _collect_all() -> list[RawUsageEntry]:
@@ -42,6 +54,13 @@ def _collect_all() -> list[RawUsageEntry]:
 
     last_ts = get_last_timestamps()
 
+    # A record a collector has only just learned to read is usually older than
+    # the watermark, so the first scan that can see it has to ignore the
+    # watermark for that engine and merge rather than append.
+    rebuilding = backfill_pending(BACKFILL_VERSION)
+    if rebuilding:
+        last_ts = dict.fromkeys(last_ts, "")
+
     # 2. Collect only new entries
     new_entries: list[RawUsageEntry] = []
     new_entries.extend(scan_claude_usage(since_timestamp=last_ts.get("claude", "")))
@@ -63,7 +82,13 @@ def _collect_all() -> list[RawUsageEntry]:
     history = non_codex_history + list(codex_by_session.values())
 
     # 3. Save new entries to history file
-    if new_entries:
+    if rebuilding:
+        # Additive on purpose: engines prune their own transcripts, so the
+        # archive holds sessions the rescan cannot reproduce.
+        history = merge_history(history, new_entries)
+        save_history(history)
+        mark_backfill_done(BACKFILL_VERSION)
+    elif new_entries:
         append_history(new_entries)
         history.extend(new_entries)
     if codex_snapshots:

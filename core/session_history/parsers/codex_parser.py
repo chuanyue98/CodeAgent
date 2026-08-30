@@ -12,6 +12,7 @@ Each line has ``{timestamp, type, payload}``.  Relevant ``type`` values:
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -269,6 +270,43 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
     )
 
 
+def _thread_lineage(home: Path | None = None) -> dict[str, tuple[str, str]]:
+    """``thread id -> (parent thread id, agent name)`` from Codex's state db.
+
+    Codex runs a subagent as a thread of its own -- indistinguishable from a
+    session someone started, unless the spawn edge it records is read back.
+    Returns an empty map when the database or its columns are absent.
+    """
+    db_path = (home or Path.home()) / ".codex" / "state_5.sqlite"
+    if not db_path.exists():
+        return {}
+
+    con = None
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        con.row_factory = sqlite3.Row
+        edges = {
+            row["child_thread_id"]: row["parent_thread_id"]
+            for row in con.execute(
+                "SELECT child_thread_id, parent_thread_id FROM thread_spawn_edges"
+            )
+            if row["child_thread_id"] and row["parent_thread_id"]
+        }
+        if not edges:
+            return {}
+        agents = {
+            row["id"]: str(row["agent_role"] or row["agent_nickname"] or "")
+            for row in con.execute("SELECT id, agent_role, agent_nickname FROM threads")
+        }
+    except sqlite3.Error:
+        return {}
+    finally:
+        if con is not None:
+            con.close()
+
+    return {child: (parent, agents.get(child, "")) for child, parent in edges.items()}
+
+
 def find_codex_sessions(
     project_path: str | None = None, home: Path | None = None
 ) -> list[UnifiedSession]:
@@ -293,10 +331,14 @@ def find_codex_sessions(
         normalize_project_path(project_path) if project_path is not None else None
     )
     sessions: list[UnifiedSession] = []
+    lineage = _thread_lineage(home)
 
     for jsonl_file in list_files(base, ".jsonl", recursive=True):
         session = parse_codex_session(jsonl_file)
         if session:
+            session.parent_session_id, session.agent = lineage.get(
+                session.session_id, ("", "")
+            )
             if normalized_target is not None:
                 normalized_cwd = normalize_project_path(session.project_path or "")
                 if normalized_cwd != normalized_target:

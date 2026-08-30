@@ -58,6 +58,23 @@ def scan_claude_usage(
                 jsonl_file, session_id, project_path, entries, since_timestamp
             )
 
+        # Subagent transcripts live one level down, in
+        # ``<session_id>/subagents/agent-*.jsonl``. Their rows carry the
+        # *parent's* sessionId, so the file stem is the only id that tells two
+        # subagents of one session apart.
+        for session_dir in project_dir.iterdir():
+            if not session_dir.is_dir():
+                continue
+            for agent_file in (session_dir / "subagents").glob("*.jsonl"):
+                _parse_claude_file(
+                    agent_file,
+                    agent_file.stem,
+                    project_path,
+                    entries,
+                    since_timestamp,
+                    parent_session_id=session_dir.name,
+                )
+
     return entries
 
 
@@ -67,6 +84,7 @@ def _parse_claude_file(
     project_path: str,
     entries: list[RawUsageEntry],
     since_timestamp: str = "",
+    parent_session_id: str = "",
 ) -> None:
     """Parses a single Claude JSONL log file and appends entries to the list.
 
@@ -76,6 +94,8 @@ def _parse_claude_file(
         project_path: The decoded project path for these entries.
         entries: The list to which extracted RawUsageEntry objects will be appended.
         since_timestamp: Only include entries newer than this timestamp.
+        parent_session_id: Owning session when ``path`` is a subagent
+            transcript; empty for a top-level session.
     """
     try:
         with open(path, encoding="utf-8") as f:
@@ -123,6 +143,10 @@ def _parse_claude_file(
                         cache_read_tokens=cache_read,
                         project_path=exact_project_path,
                         target="claude",
+                        parent_session_id=parent_session_id,
+                        # Every row of a subagent transcript is attributed to
+                        # the agent that produced it.
+                        agent=row.get("attributionAgent") or "",
                     )
                 )
     except OSError:

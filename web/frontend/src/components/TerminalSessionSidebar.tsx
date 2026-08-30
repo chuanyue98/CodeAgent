@@ -5,6 +5,8 @@ import { relativeTime, workspaceLabel } from '../utils/workspaceFormat';
 import { useLanguageCode } from '../i18n/context';
 import { useT } from '../i18n/context';
 import { engineDot, findEngine } from './terminalEngines';
+import EmptyState from './shared/EmptyState';
+import { ACTIVE_CHIP } from './shared/activeChip';
 
 const PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 250;
@@ -178,7 +180,7 @@ export default function TerminalSessionSidebar({
   // launcher is already what you are looking at, the button is a no-op and
   // should read as the state you are in, the way the tab strip's + does.
   const newButtonTone = launcherActive
-    ? 'bg-primary/10 text-primary'
+    ? ACTIVE_CHIP
     : 'text-primary hover:bg-primary/10';
 
   const [collapsed, setCollapsed] = useState(readCollapsed);
@@ -283,7 +285,7 @@ export default function TerminalSessionSidebar({
         )}
         {error && <p className="px-2 py-4 text-xs text-red-600">{error}</p>}
         {sessions !== null && !error && sessions.length === 0 && (
-          <p className="px-2 py-4 text-xs text-slate-400">{t('terminalSidebar.empty')}</p>
+          <EmptyState compact title={t('terminalSidebar.empty')} className="px-2" />
         )}
 
         {groups.map(group => {

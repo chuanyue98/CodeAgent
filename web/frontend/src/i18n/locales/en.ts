@@ -169,6 +169,8 @@ export const en = {
   'sessions.selectAllFiltered': 'Select all sessions matching the current filters',
   'sessions.countOne': '{count} session',
   'sessions.count': '{count} sessions',
+  'sessions.subtaskCount': '{count} subtasks',
+  'sessions.orphanSubtask': 'Subtask · parent pruned',
   'sessions.selected': '{count} selected',
   'sessions.deleteSelected': 'Delete selected',
   'sessions.sortDate': 'Date',
@@ -473,6 +475,13 @@ export const en = {
   'tasks.describeIt': 'Describe it, let AI write it',
   'tasks.writeItMyself': 'Write it myself',
   'tasks.noSearchMatch': 'No tasks match your search.',
+  'tasks.activityTitle': 'Run activity',
+  'tasks.statRunning': 'Running',
+  'tasks.statCompleted': 'Completed',
+  'tasks.statFailed': 'Failed',
+  'tasks.lastRun': 'Last run {time}',
+  'tasks.neverRun': 'Never run',
+  'tasks.runFeedEmpty': 'Run a task and it will show up here.',
 
   // ── Agent workspace ───────────────────────────────────────────────────────
 
@@ -528,6 +537,10 @@ export const en = {
   'sessionDetail.loadEarlier': 'Load earlier — showing the last {shown} of {total}',
   'sessionDetail.toTop': 'Jump to the start',
   'sessionDetail.toBottom': 'Jump to the latest',
+  'sessionDetail.subtasks': 'Subtasks ({count})',
+  'sessionDetail.ownShare': 'Main thread {tokens} · {cost}',
+  'sessionDetail.subtaskShare': 'Subtasks {tokens} · {cost}',
+  'sessionDetail.subtaskOfParent': 'A subtask belongs to the session that spawned it -- there is no context of its own to resume.',
   'sessionDetail.conversation': 'Conversation',
   'sessionDetail.loadingConversation': 'Loading conversation…',
   'sessionDetail.noMessages': 'This session has no messages.',

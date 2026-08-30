@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import request from '../../utils/request';
 import Modal from '../shared/Modal';
+import Button from '../shared/Button';
+import ErrorBar from '../shared/ErrorBar';
+import { Field, Input, Textarea } from '../shared/Field';
 import { NAME_PATTERN } from './types';
 import { useT } from '../../i18n/context';
 
@@ -55,40 +58,26 @@ export default function NewTaskModal({
         </button>
       </div>
 
-      {error && (
-        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl text-sm">
-          {error}
-        </div>
-      )}
+      {error && <ErrorBar message={error} />}
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="new-task-name" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            {t('taskModal.fileName')}
-          </label>
-          <input
+        <Field label={t('taskModal.fileName')} htmlFor="new-task-name" error={name && !nameValid ? t('taskModal.nameRule') : undefined}>
+          <Input
             id="new-task-name"
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="daily-audit"
-            className="mt-1 w-full p-2 border border-slate-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="font-mono"
           />
-          {name && !nameValid && (
-            <p className="text-[10px] text-red-500 mt-1">{t('taskModal.nameRule')}</p>
-          )}
-        </div>
-        <div>
-          <label htmlFor="new-task-title" className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            {t('taskModal.title')}
-          </label>
-          <input
+        </Field>
+        <Field label={t('taskModal.title')} htmlFor="new-task-title">
+          <Input
             id="new-task-title"
             value={title}
             onChange={e => setTitle(e.target.value)}
             placeholder={t('taskModal.titlePlaceholder')}
-            className="mt-1 w-full p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
-        </div>
+        </Field>
       </div>
 
       {[
@@ -97,32 +86,27 @@ export default function NewTaskModal({
         [t('taskModal.instructions'), instructions, setInstructions, t('taskModal.instructionsPlaceholder')],
         [t('taskModal.verification'), verification, setVerification, t('taskModal.verificationPlaceholder')],
       ].map(([label, value, setter, placeholder]) => (
-        <div key={label as string}>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{label as string}</label>
-          <textarea
+        <Field key={label as string} label={label as string}>
+          <Textarea
             value={value as string}
             onChange={e => (setter as (v: string) => void)(e.target.value)}
             placeholder={placeholder as string}
             rows={2}
-            className="mt-1 w-full p-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
+            className="resize-y"
           />
-        </div>
+        </Field>
       ))}
 
       <div className="flex justify-end gap-3 pt-2">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors"
-        >
-          {t('common.cancel')}
-        </button>
-        <button
+        <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button
+          icon={Plus}
+          loading={submitting}
+          disabled={!nameValid || !title.trim()}
           onClick={() => void handleSubmit()}
-          disabled={submitting || !nameValid || !title.trim()}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold disabled:opacity-50 hover:opacity-90 transition-all"
         >
-          <Plus className="w-4 h-4" /> {t('taskModal.create')}
-        </button>
+          {t('taskModal.create')}
+        </Button>
       </div>
     </Modal>
   );
