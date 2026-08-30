@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -22,6 +23,22 @@ def _session(session_id: str, project_path: str) -> dict:
         "modelsUsed": ["claude-opus"],
         "modelBreakdowns": [],
     }
+
+
+class _StubSession:
+    """The slice of UnifiedSession the title join reads."""
+
+    def __init__(self, session_id: str, title: str):
+        self.session_id = session_id
+        self.engine = SimpleNamespace(value="claude")
+        self._title = title
+
+    def to_summary_dict(self) -> dict:
+        return {"title": self._title}
+
+
+def _stub_session(session_id: str, title: str) -> _StubSession:
+    return _StubSession(session_id, title)
 
 
 def _get(sessions: list[dict], **params):
@@ -222,3 +239,66 @@ def test_search_narrows_the_total_too():
 
     # Not the unfiltered count -- the UI shows this as "N sessions".
     assert body["total"] == 1
+
+
+def _with_subtask(parent: dict, child: dict) -> dict:
+    return {**parent, "subtasks": [child]}
+
+
+def test_subtasks_are_titled_like_their_parent():
+    """Subagent rows never reach the list on their own any more, so their
+    titles have to be joined on where they now live: inside the parent."""
+    parent = _session("parent", "/work/one")
+    child = {**_session("child", "/work/one"), "agent": "explore"}
+
+    app = FastAPI()
+    app.include_router(analytics.router)
+    with (
+        patch.object(
+            analytics,
+            "get_analytics_data",
+            return_value={"sessions": [_with_subtask(parent, child)]},
+        ),
+        patch.object(
+            analytics,
+            "find_all_sessions",
+            return_value=[
+                _stub_session("parent", "重构任务看板"),
+                _stub_session("child", "前端代码质量检查"),
+            ],
+        ),
+    ):
+        response = TestClient(app).get("/api/analytics/sessions")
+
+    (row,) = response.json()["sessions"]
+    assert row["title"] == "重构任务看板"
+    assert [s["title"] for s in row["subtasks"]] == ["前端代码质量检查"]
+
+
+def test_search_matches_a_subtask_title():
+    """ "Which session ran that review" is the question the box gets asked."""
+    parent = _session("parent", "/work/one")
+    child = _session("child", "/work/one")
+
+    app = FastAPI()
+    app.include_router(analytics.router)
+    with (
+        patch.object(
+            analytics,
+            "get_analytics_data",
+            return_value={"sessions": [_with_subtask(parent, child)]},
+        ),
+        patch.object(
+            analytics,
+            "find_all_sessions",
+            return_value=[
+                _stub_session("parent", "重构任务看板"),
+                _stub_session("child", "前端代码质量检查"),
+            ],
+        ),
+    ):
+        response = TestClient(app).get(
+            "/api/analytics/sessions", params={"search": "质量检查"}
+        )
+
+    assert [s["sessionId"] for s in response.json()["sessions"]] == ["parent"]

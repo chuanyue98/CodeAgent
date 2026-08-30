@@ -318,17 +318,31 @@ def find_claude_sessions(
         ):
             continue
 
-        for jsonl_file in list_files(project_dir, ".jsonl"):
+        candidates: list[tuple[Path, str]] = [
+            (jsonl_file, "") for jsonl_file in list_files(project_dir, ".jsonl")
+        ]
+        # Subagent transcripts sit in ``<session_id>/subagents/``. Every row in
+        # them repeats the *parent's* sessionId, so the owning session comes
+        # from the directory and the child's own id from the file stem (which
+        # is what ``parse_claude_session`` uses).
+        for session_dir in list_dirs(project_dir):
+            candidates.extend(
+                (agent_file, session_dir.name)
+                for agent_file in list_files(session_dir / "subagents", ".jsonl")
+            )
+
+        for jsonl_file, parent_session_id in candidates:
             session = parse_claude_session(jsonl_file)
-            if session:
-                # Use the actual project path from the first message's cwd if available
-                if normalized_target is not None and (
-                    not session.project_path
-                    or session.project_path
-                    == _decode_claude_project_path(project_dir.name)
-                ):
-                    session.project_path = normalized_target
-                sessions.append(session)
+            if not session:
+                continue
+            # Use the actual project path from the first message's cwd if available
+            if normalized_target is not None and (
+                not session.project_path
+                or session.project_path == _decode_claude_project_path(project_dir.name)
+            ):
+                session.project_path = normalized_target
+            session.parent_session_id = parent_session_id
+            sessions.append(session)
 
     sessions.sort(key=lambda s: s.started_at, reverse=True)
     return sessions

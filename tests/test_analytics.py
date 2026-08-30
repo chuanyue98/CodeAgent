@@ -1,12 +1,22 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from core.analytics.aggregator import aggregate
 from core.analytics.collectors.claude_collector import scan_claude_usage
-from core.analytics.history import append_history, get_last_timestamps, load_history
+from core.analytics.history import (
+    append_history,
+    get_last_timestamps,
+    load_history,
+    mark_backfill_done,
+)
 from core.analytics.models import RawUsageEntry
-from core.analytics.service import _collect_all, get_analytics_data
+from core.analytics.service import (
+    BACKFILL_VERSION,
+    _collect_all,
+    get_analytics_data,
+)
 
 
 @pytest.fixture
@@ -20,6 +30,9 @@ def mock_history_file(tmp_path):
         patch("core.analytics.history._history_path", return_value=history_file),
         patch("core.analytics.disk_cache._default_cache_path", return_value=cache_file),
     ):
+        # Most tests assert the steady-state incremental path; the one-off
+        # rescan after an upgrade has its own test and opts back in.
+        mark_backfill_done(BACKFILL_VERSION)
         yield history_file
 
 
@@ -376,3 +389,173 @@ def test_collect_all_purges_removed_targets(
 
     assert {e.target for e in entries} == {"claude"}
     assert {e.target for e in load_history()} == {"claude"}
+
+
+def test_subagent_runs_roll_up_into_the_session_that_spawned_them():
+    entries = [
+        RawUsageEntry(
+            timestamp="2026-08-01T10:00:00Z",
+            session_id="parent",
+            model="claude-test",
+            input_tokens=100,
+            output_tokens=10,
+            target="claude",
+        ),
+        RawUsageEntry(
+            timestamp="2026-08-01T11:00:00Z",
+            session_id="child",
+            model="claude-test",
+            input_tokens=40,
+            output_tokens=4,
+            target="claude",
+            parent_session_id="parent",
+            agent="explore",
+        ),
+    ]
+
+    result = aggregate(entries)
+
+    assert result["summary"]["session_count"] == 1
+    (session,) = result["sessions"]
+    assert session["sessionId"] == "parent"
+    # Rolled totals answer "what did this piece of work cost"...
+    assert session["inputTokens"] == 140
+    # ...while `own` keeps the main thread's share addressable.
+    assert session["own"]["inputTokens"] == 100
+    assert [s["sessionId"] for s in session["subtasks"]] == ["child"]
+    assert session["subtasks"][0]["agent"] == "explore"
+    # The parent's last message predates its subagent's; sorting on the
+    # parent's own timestamp would file the session before work it contains.
+    assert session["lastActivity"] == "2026-08-01T11:00:00Z"
+
+
+def test_a_subagent_whose_parent_is_gone_stays_at_top_level():
+    """The engine prunes transcripts; the archive keeps the usage rows.
+
+    Filing such a row under a parent that no longer exists would drop it out
+    of the list -- and its cost out of every per-session figure with it.
+    """
+    entries = [
+        RawUsageEntry(
+            timestamp="2026-08-01T10:00:00Z",
+            session_id="orphan",
+            model="claude-test",
+            input_tokens=7,
+            output_tokens=1,
+            target="claude",
+            parent_session_id="pruned",
+            agent="explore",
+        ),
+    ]
+
+    result = aggregate(entries)
+
+    (session,) = result["sessions"]
+    assert session["sessionId"] == "orphan"
+    assert session["parentSessionId"] == "pruned"
+
+
+def test_a_parent_cycle_does_not_swallow_the_sessions():
+    entries = [
+        RawUsageEntry(
+            timestamp="2026-08-01T10:00:00Z",
+            session_id="a",
+            model="claude-test",
+            input_tokens=1,
+            output_tokens=1,
+            target="claude",
+            parent_session_id="b",
+        ),
+        RawUsageEntry(
+            timestamp="2026-08-01T10:00:01Z",
+            session_id="b",
+            model="claude-test",
+            input_tokens=1,
+            output_tokens=1,
+            target="claude",
+            parent_session_id="a",
+        ),
+    ]
+
+    result = aggregate(entries)
+
+    assert {s["sessionId"] for s in result["sessions"]} == {"a", "b"}
+
+
+def test_claude_collector_reads_subagent_transcripts(tmp_path):
+    project_dir = tmp_path / ".claude" / "projects" / "-home-user-app"
+    subagents = project_dir / "parent-session" / "subagents"
+    subagents.mkdir(parents=True)
+    (project_dir / "parent-session.jsonl").write_text(
+        '{"timestamp":"2026-08-01T10:00:00Z","cwd":"/home/user/app",'
+        '"message":{"model":"claude-test","usage":{"input_tokens":10,'
+        '"output_tokens":5}}}\n',
+        encoding="utf-8",
+    )
+    # Subagent rows repeat the parent's sessionId, so only the file stem tells
+    # two subagents of one session apart.
+    (subagents / "agent-abc123.jsonl").write_text(
+        '{"timestamp":"2026-08-01T10:05:00Z","cwd":"/home/user/app",'
+        '"sessionId":"parent-session","isSidechain":true,'
+        '"message":{"model":"claude-test","usage":{"input_tokens":40,'
+        '"output_tokens":2}}}\n',
+        encoding="utf-8",
+    )
+
+    entries = scan_claude_usage(home=tmp_path)
+
+    by_session = {e.session_id: e for e in entries}
+    assert set(by_session) == {"parent-session", "agent-abc123"}
+    assert by_session["agent-abc123"].parent_session_id == "parent-session"
+    assert by_session["parent-session"].parent_session_id == ""
+
+
+@patch("core.analytics.service.scan_claude_usage")
+@patch("core.analytics.service.scan_codex_usage", return_value=[])
+@patch("core.analytics.service.scan_opencode_usage", return_value=[])
+@patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
+def test_the_first_collection_after_an_upgrade_rescans_in_full(
+    _mock_codebuddy, _mock_opencode, _mock_codex, mock_claude, mock_history_file
+):
+    """Subagent transcripts were invisible to every earlier scan, so the
+    records that first become readable are older than the watermark. Without a
+    full pass they would never be collected at all."""
+    Path(mock_history_file).parent.joinpath(".ca_analytics_state.json").unlink(
+        missing_ok=True
+    )
+    append_history(
+        [
+            RawUsageEntry(
+                timestamp="2026-05-02T10:00:00Z",
+                session_id="parent",
+                model="claude-test",
+                input_tokens=100,
+                output_tokens=50,
+                target="claude",
+            )
+        ]
+    )
+    # Older than the watermark above, and only now readable.
+    mock_claude.return_value = [
+        RawUsageEntry(
+            timestamp="2026-05-01T10:00:00Z",
+            session_id="agent-abc123",
+            model="claude-test",
+            input_tokens=10,
+            output_tokens=5,
+            target="claude",
+            parent_session_id="parent",
+        )
+    ]
+
+    entries = _collect_all()
+
+    assert mock_claude.call_args[1]["since_timestamp"] == ""
+    assert {e.session_id for e in entries} == {"parent", "agent-abc123"}
+    # The pre-existing row survives -- its transcript may be long gone.
+    assert len(load_history()) == 2
+
+    # And the rebuild happens once: the next collection is incremental again.
+    mock_claude.return_value = []
+    _collect_all()
+    assert mock_claude.call_args[1]["since_timestamp"] == "2026-05-02T10:00:00Z"

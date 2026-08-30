@@ -102,6 +102,9 @@ class UnifiedSession:
         title: Optional human-readable title (if the engine provides one).
         model: The primary model used in the session.
         source_file: The original file/database path this was parsed from.
+        parent_session_id: The session that spawned this one, when it is a
+            subagent run; empty for a session a user started.
+        agent: The subagent's name, when the engine records one.
     """
 
     session_id: str = ""
@@ -113,6 +116,8 @@ class UnifiedSession:
     title: str = ""
     model: str = ""
     source_file: str = ""
+    parent_session_id: str = ""
+    agent: str = ""
 
     @property
     def message_count(self) -> int:
@@ -142,6 +147,8 @@ class UnifiedSession:
             "title": self.title or self.first_user_message,
             "model": self.model,
             "source_file": self.source_file,
+            "parent_session_id": self.parent_session_id,
+            "agent": self.agent,
         }
 
     def to_full_dict(self) -> dict:

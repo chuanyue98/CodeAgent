@@ -65,6 +65,23 @@ def _find_opencode_db(home: Path | None = None) -> Path | None:
     return None
 
 
+def _subagent_columns(con: sqlite3.Connection) -> tuple[str, str]:
+    """SELECT expressions for the parent/agent columns, or empty stand-ins.
+
+    OpenCode grew ``session.parent_id`` and ``session.agent`` with subagents;
+    a database written by an older build has neither, and naming a missing
+    column fails the whole query.
+    """
+    try:
+        present = {row[1] for row in con.execute("PRAGMA table_info(session)")}
+    except sqlite3.Error:
+        present = set()
+    return (
+        "parent_id" if "parent_id" in present else "'' AS parent_id",
+        "agent" if "agent" in present else "'' AS agent",
+    )
+
+
 def parse_opencode_session(
     session_id: str,
     db_path: Path,
@@ -97,9 +114,10 @@ def parse_opencode_session(
     try:
         assert con is not None
         # Fetch session metadata
+        parent_col, agent_col = _subagent_columns(con)
         sess_row = con.execute(
-            "SELECT id, directory, title, model, time_created, time_updated "
-            "FROM session WHERE id = ?",
+            "SELECT id, directory, title, model, time_created, time_updated, "
+            f"{parent_col}, {agent_col} FROM session WHERE id = ?",
             (session_id,),
         ).fetchone()
 
@@ -249,6 +267,8 @@ def parse_opencode_session(
         title=title,
         model=model_str,
         source_file=str(db_path),
+        parent_session_id=sess_row["parent_id"] or "",
+        agent=sess_row["agent"] or "",
     )
 
 

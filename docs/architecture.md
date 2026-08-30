@@ -66,6 +66,10 @@ The orchestration hub containing:
 - Tracks usage across all engine drivers
 - Estimates USD costs based on model-specific pricing
 - Aggregates data for the web dashboard
+- Subagent runs (Claude's `<session>/subagents/*.jsonl`, OpenCode's
+  `session.parent_id`) are collected as sessions of their own and then rolled
+  up under the session that spawned them, so a list row reads as one piece of
+  work while its cost stays complete
 
 **Session History (`core/session_history/`)**
 - Stores and retrieves session data

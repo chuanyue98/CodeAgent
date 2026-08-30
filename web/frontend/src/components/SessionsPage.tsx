@@ -367,6 +367,7 @@ export default function SessionsPage() {
             const key = sessionKey(session);
             const isSelected = selectedKey === key;
             const totalTokens = session.inputTokens + session.outputTokens;
+            const subtaskCount = session.subtasks?.length ?? 0;
             return (
               <div
                 key={key}
@@ -419,6 +420,22 @@ export default function SessionsPage() {
                     <span className={`shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${eb(session.target)}`}>
                       {session.target}
                     </span>
+                    {/* Subagent runs are folded into the session that spawned
+                        them; the count is what tells you the row's tokens and
+                        cost cover more than one transcript. */}
+                    {subtaskCount > 0 && (
+                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                        {t('sessions.subtaskCount', { count: subtaskCount })}
+                      </span>
+                    )}
+                    {/* A subagent run only reaches top level when its parent is
+                        gone -- say the engine pruned that transcript. Marked
+                        rather than hidden, so its cost stays visible. */}
+                    {session.parentSessionId && (
+                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                        {t('sessions.orphanSubtask')}
+                      </span>
+                    )}
                   </div>
                   {/* Allowed to shrink: it already wraps its chips, but
                       `shrink-0` kept them on one line and gave the whole row a

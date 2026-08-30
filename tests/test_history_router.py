@@ -583,3 +583,77 @@ async def test_delete_session_invalid_source_file(two_project_history, monkeypat
         )
         assert res_invalid.status_code == 400
         assert "invalid" in res_invalid.json()["detail"]["error"]
+
+
+def _write_claude_subagent(
+    base: Path, project_dir: str, parent_session_id: str, agent_file: str, text: str
+):
+    """A subagent transcript, where Claude Code puts it: one level below its
+    parent session, with rows that repeat the parent's sessionId."""
+    subagents = base / ".claude" / "projects" / project_dir / parent_session_id
+    subagents = subagents / "subagents"
+    subagents.mkdir(parents=True)
+    (subagents / f"{agent_file}.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "user",
+                "message": {"role": "user", "content": text},
+                "uuid": "u1",
+                "timestamp": "2026-07-10T10:05:00.000Z",
+                "sessionId": parent_session_id,
+                "isSidechain": True,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+@pytest.fixture
+def history_with_a_subagent(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    _write_claude_session(
+        tmp_path,
+        "E--demo-project-a",
+        "sess-a",
+        "2026-07-10T10:00:00.000Z",
+        "hello from a",
+    )
+    _write_claude_subagent(
+        tmp_path,
+        "E--demo-project-a",
+        "sess-a",
+        "agent-abc123",
+        "go review the frontend",
+    )
+    return tmp_path
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_hides_subagent_runs(history_with_a_subagent):
+    """A subagent run belongs to the session that spawned it; listing it
+    alongside real sessions is what buried them in the first place."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get("/api/history")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [s["sessionId"] for s in data["sessions"]] == ["sess-a"]
+    assert data["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_can_include_subagent_runs(history_with_a_subagent):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        response = await ac.get("/api/history", params={"include_subagents": "true"})
+
+    assert response.status_code == 200
+    data = response.json()
+    by_id = {s["sessionId"]: s for s in data["sessions"]}
+    assert set(by_id) == {"sess-a", "agent-abc123"}
+    assert by_id["agent-abc123"]["parentSessionId"] == "sess-a"
+    assert by_id["sess-a"]["parentSessionId"] == ""

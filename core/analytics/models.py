@@ -20,6 +20,10 @@ class RawUsageEntry:
         cost: Pre-computed cost (primarily for OpenCode); 0.0 means derive from pricing.
         project_path: Local filesystem path of the project.
         target: The engine target (e.g., 'claude', 'codex', 'opencode').
+        parent_session_id: Owning session when this entry belongs to a subagent
+            run; empty for a top-level session.
+        agent: Name of the subagent that produced the entry ('explore',
+            'general', ...), when the engine records one.
     """
 
     timestamp: str  # ISO 8601
@@ -32,6 +36,8 @@ class RawUsageEntry:
     cost: float = 0.0  # pre-computed cost (OpenCode); 0 = derive from pricing
     project_path: str = ""
     target: str = ""  # claude | codex | opencode | codebuddy
+    parent_session_id: str = ""
+    agent: str = ""
 
 
 @dataclass
@@ -125,6 +131,12 @@ class SessionUsage:
         last_activity: ISO 8601 timestamp of the last activity in the session.
         models_used: List of unique model names used.
         model_breakdowns: Detailed breakdown per model.
+        parent_session_id: Owning session for a subagent run; empty at top level.
+        agent: Subagent name, when the engine records one.
+        subtasks: Subagent sessions this one spawned. Their tokens and cost are
+            NOT included in this object's own totals -- callers that want the
+            rolled-up figure add them explicitly, so "what did the main thread
+            cost" stays answerable.
     """
 
     session_id: str
@@ -138,3 +150,6 @@ class SessionUsage:
     last_activity: str = ""
     models_used: list[str] = field(default_factory=list)
     model_breakdowns: list[ModelBreakdown] = field(default_factory=list)
+    parent_session_id: str = ""
+    agent: str = ""
+    subtasks: list[SessionUsage] = field(default_factory=list)

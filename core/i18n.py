@@ -345,6 +345,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Found {count} session(s) for {path}:\n",
         "zh": "在 {path} 找到 {count} 个会话:\n",
     },
+    "history.subagents_hidden": {
+        "en": "  ({count} subagent run(s) hidden -- use --include-subagents)\n",
+        "zh": "  (已隐藏 {count} 个子任务，加 --include-subagents 查看)\n",
+    },
     "history.show_hint": {
         "en": (
             "\nShow one:      ca history show <engine> <session_id>"

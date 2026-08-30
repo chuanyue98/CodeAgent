@@ -4,6 +4,8 @@ import {
   ArrowDownToLine,
   ArrowUpToLine,
   Check,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Loader2,
   Play,
@@ -52,6 +54,12 @@ export interface SessionDetailPanelProps {
   onClose: () => void;
   /** Fired after a successful delete so the caller can drop its row. */
   onDeleted?: () => void;
+  /**
+   * Set when this panel is showing a subagent run reached from its parent.
+   * A subagent run has no context of its own to resume or convert, so those
+   * actions are replaced by a way back up.
+   */
+  parent?: { title: string; onBack: () => void };
 }
 
 /**
@@ -69,6 +77,7 @@ export default function SessionDetailPanel({
   usage,
   onClose,
   onDeleted,
+  parent,
 }: SessionDetailPanelProps) {
   const t = useT();
   const navigate = useNavigate();
@@ -80,6 +89,7 @@ export default function SessionDetailPanel({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [openSubtask, setOpenSubtask] = useState<SessionUsage | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [visibleCount, setVisibleCount] = useState(TRANSCRIPT_PAGE);
   /** Distance from the bottom to restore after prepending older messages. */
@@ -237,11 +247,42 @@ export default function SessionDetailPanel({
 
   const projectName = projectPath.split(/[\\/]/).filter(Boolean).pop() || projectPath || '—';
   const totalTokens = usage ? usage.inputTokens + usage.outputTokens : 0;
+  const subtasks = usage?.subtasks ?? [];
+  const own = usage?.own;
+  const ownTokens = own ? own.inputTokens + own.outputTokens : 0;
+
+  // Every hook above has run by now, so swapping the whole panel out for a
+  // subtask is safe here and nowhere earlier.
+  if (openSubtask) {
+    return (
+      <SessionDetailPanel
+        key={`${openSubtask.target}::${openSubtask.sessionId}`}
+        engine={openSubtask.target}
+        sessionId={openSubtask.sessionId}
+        projectPath={openSubtask.projectPath}
+        usage={openSubtask}
+        onClose={onClose}
+        parent={{
+          title: detail?.title || usage?.title || projectName,
+          onBack: () => setOpenSubtask(null),
+        }}
+      />
+    );
+  }
 
   return (
     <div data-testid="session-detail" className="flex h-full min-h-0 flex-col">
       <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
         <div className="min-w-0">
+          {parent && (
+            <button
+              onClick={parent.onBack}
+              className="mb-1 flex max-w-full items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{parent.title}</span>
+            </button>
+          )}
           <h3 className="truncate text-sm font-semibold text-slate-800">
             {detail?.title || projectName}
           </h3>
@@ -287,6 +328,22 @@ export default function SessionDetailPanel({
                   <p className="text-[10px] uppercase tracking-wide text-slate-500">{t('sessionDetail.estCost')}</p>
                 </div>
               </div>
+              {subtasks.length > 0 && own && (
+                <div className="mb-2 flex flex-wrap gap-4 text-xs text-slate-500">
+                  <span>
+                    {t('sessionDetail.ownShare', {
+                      tokens: fmtTokens(ownTokens),
+                      cost: fmtCost(own.cost),
+                    })}
+                  </span>
+                  <span>
+                    {t('sessionDetail.subtaskShare', {
+                      tokens: fmtTokens(totalTokens - ownTokens),
+                      cost: fmtCost(usage.cost - own.cost),
+                    })}
+                  </span>
+                </div>
+              )}
               {usage.modelBreakdowns?.length > 0 && (
                 <div className="space-y-1">
                   {usage.modelBreakdowns.map((mb, i) => (
@@ -304,6 +361,33 @@ export default function SessionDetailPanel({
               <div className="mt-2 flex flex-wrap gap-4 border-t border-slate-50 pt-2 text-xs text-slate-500">
                 <span>{t('sessionDetail.cacheWrite', { tokens: fmtTokens(usage.cacheCreationTokens) })}</span>
                 <span>{t('sessionDetail.cacheRead', { tokens: fmtTokens(usage.cacheReadTokens) })}</span>
+              </div>
+            </section>
+          )}
+
+          {subtasks.length > 0 && (
+            <section data-testid="session-subtasks">
+              <SectionLabel className="mb-2">
+                {t('sessionDetail.subtasks', { count: subtasks.length })}
+              </SectionLabel>
+              <div className="space-y-1">
+                {subtasks.map(child => (
+                  <button
+                    key={`${child.target}::${child.sessionId}`}
+                    onClick={() => setOpenSubtask(child)}
+                    className="flex w-full items-center gap-2 rounded-lg border border-slate-100 px-2 py-1.5 text-left text-xs transition-colors hover:bg-slate-50"
+                  >
+                    {child.agent && <Badge size="sm">{child.agent}</Badge>}
+                    <span className="min-w-0 flex-1 truncate text-slate-700">
+                      {child.title || child.sessionId}
+                    </span>
+                    <span className="shrink-0 text-slate-500">
+                      {fmtTokens(child.inputTokens + child.outputTokens)}
+                    </span>
+                    <span className="shrink-0 text-slate-500">{fmtCost(child.cost)}</span>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300" />
+                  </button>
+                ))}
               </div>
             </section>
           )}
@@ -396,6 +480,10 @@ export default function SessionDetailPanel({
       </div>
 
       <div className="space-y-2 border-t border-slate-100 pt-3">
+        {parent ? (
+          <p className="text-xs text-slate-400">{t('sessionDetail.subtaskOfParent')}</p>
+        ) : (
+        <>
         <Button className="w-full" icon={Play} onClick={() => void handleContinue()}>
           {t('sessionDetail.continue')}
         </Button>
@@ -440,6 +528,8 @@ export default function SessionDetailPanel({
         <Button variant="destructive" size="sm" icon={Trash2} onClick={() => setConfirmingDelete(true)}>
           {t('sessionDetail.delete')}
         </Button>
+        </>
+        )}
         <p className="truncate font-mono text-[10px] text-slate-300" title={sessionId}>
           {sessionId}
         </p>

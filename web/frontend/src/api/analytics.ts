@@ -31,12 +31,23 @@ export interface MonthlyUsage {
   modelBreakdowns: ModelBreakdown[];
 }
 
+/** One session's own share of its rolled-up totals. */
+export interface SessionOwnUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  cost: number;
+  lastActivity: string;
+}
+
 export interface SessionUsage {
   sessionId: string;
   target: string;
   projectPath: string;
   /** Session title joined from native history (may be empty). */
   title?: string;
+  /** Tokens and cost including every subtask below. */
   inputTokens: number;
   outputTokens: number;
   cacheCreationTokens: number;
@@ -45,6 +56,14 @@ export interface SessionUsage {
   lastActivity: string;
   modelsUsed: string[];
   modelBreakdowns: ModelBreakdown[];
+  /** The subagent's name, on a subagent run ('explore', 'general', ...). */
+  agent?: string;
+  /** Set on a subagent run; at top level only when its parent is gone. */
+  parentSessionId?: string;
+  /** This session's own share, excluding `subtasks`. */
+  own?: SessionOwnUsage;
+  /** Subagent runs this session spawned, in the order they finished. */
+  subtasks?: SessionUsage[];
 }
 
 export interface EngineSummary {
