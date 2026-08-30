@@ -8,6 +8,7 @@ import useActivityFilters from '../hooks/useActivityFilters';
 import { useT } from '../i18n/context';
 import { isWithinLocalDayRange } from '../utils/dateRange';
 import ActivityFilterPanel from './ActivityFilterPanel';
+import { eb } from './analytics/present';
 import SessionDetailPanel from './SessionDetailPanel';
 import ConfirmDialog from './shared/ConfirmDialog';
 import ErrorState from './shared/ErrorState';
@@ -417,7 +418,7 @@ export default function SessionsPage() {
                           : session.projectPath}
                       </span>
                     </div>
-                    <span className="shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full uppercase bg-slate-100 text-slate-600">
+                    <span className={`shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${eb(session.target)}`}>
                       {session.target}
                     </span>
                   </div>
