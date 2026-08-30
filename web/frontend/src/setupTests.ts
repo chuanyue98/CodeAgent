@@ -106,6 +106,29 @@ if (typeof globalThis.localStorage === 'undefined' || globalThis.localStorage ==
   });
 }
 
+// jsdom does not implement EventSource. Log streaming components only need
+// construction, addEventListener and close() to not throw — no real events.
+if (typeof globalThis.EventSource === 'undefined') {
+  class MockEventSource {
+    url: string;
+    readyState = 0;
+    onopen: ((event: Event) => void) | null = null;
+    onerror: ((event: Event) => void) | null = null;
+    onmessage: ((event: MessageEvent) => void) | null = null;
+    constructor(url: string) {
+      this.url = url;
+    }
+    addEventListener(): void {}
+    removeEventListener(): void {}
+    close(): void {}
+  }
+  Object.defineProperty(globalThis, 'EventSource', {
+    value: MockEventSource as unknown as typeof EventSource,
+    configurable: true,
+    writable: true,
+  });
+}
+
 // Not implemented by the DOM environment used here, and every listbox that
 // keeps its focused option in view calls it during a passive effect — where a
 // throw is not caught by anything and fails the render outright.
