@@ -47,7 +47,7 @@ Each engine script:
 The orchestration hub containing:
 
 **Services (`core/services/`)**
-- `agent_gateway.py` + `agent_protocol.py` + `agent_store.py` — Unified adapter gateway abstracting provider differences
+- `agent_gateway/` (facade + resources/sessions/commands/events/supervisor) + `agent_protocol.py` + `agent_store.py` — Unified adapter gateway abstracting provider differences
 - `agent_adapters/` — Individual provider adapters (Claude, Codex, OpenCode)
 - `config_service.py` — Configuration loading and resolution
 - `runner_service.py` — Task subprocess management with orphan reaping
