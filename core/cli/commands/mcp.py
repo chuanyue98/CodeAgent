@@ -192,13 +192,24 @@ def mcp_sync(ctx, source, targets, names, overwrite, dry_run):  # type: ignore[n
     default=None,
     help="按 config.json 的组过滤技能,如 --group work;默认挂载全部。",
 )
+@click.option(
+    "--allow-write",
+    is_flag=True,
+    help="注册 skill.run / task.run,允许执行技能脚本与任务(默认只读)。",
+)
+@click.option(
+    "--trust-hooks",
+    is_flag=True,
+    help="再额外注册 hook.fire(任意命令执行,最高危);隐含 --allow-write。",
+)
 @click.pass_context
-def mcp_serve(ctx, http, port, group):  # type: ignore[no-untyped-def]
-    """Serve CodeAgent assets (skills) as an MCP server (read-only).
+def mcp_serve(ctx, http, port, group, allow_write, trust_hooks):  # type: ignore[no-untyped-def]
+    """Serve CodeAgent assets (skills) as an MCP server.
 
     把 CodeAgent 自己的 skills 按 MCP 标准暴露成 tools/resources,
     让任何支持 MCP 的客户端(CodeBuddy / Trae / Cursor / claude / codex)
-    都能直接消费。默认只读,不接触任何 API 密钥。
+    都能直接消费。默认只读,不接触任何 API 密钥;用 --allow-write / --trust-hooks
+    开启写类工具。
 
     在客户端里连接:
       stdio:  uv run python -m core.services.mcp_server_service(或 ca mcp serve 的子进程命令)
@@ -207,12 +218,16 @@ def mcp_serve(ctx, http, port, group):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.services.mcp_server_service import serve
 
+    effective_allow = allow_write or trust_hooks
     try:
         serve(
             config=ctx.obj["config"],
             group=group,
             transport="http" if http else "stdio",
             port=port,
+            allow_write=effective_allow,
+            trust_hooks=trust_hooks,
+            root_dir=ctx.obj["root"],
         )
     except RuntimeError as exc:
         print(click.style(f"✗ {exc}", fg="red"))

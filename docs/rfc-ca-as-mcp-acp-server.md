@@ -185,7 +185,7 @@ core/mcp_server/
 | 里程碑 | 内容 | 验证 |
 |---|---|---|
 | **M1** | `ca mcp serve` stdio + 只读原语(prompts/resources + skill.list/group.info) | MCP Inspector 通过 |
-| **M2** | 写类 tools(`skill.run`、`task.run`、`hook.fire`) + 安全校验 | 在 CodeBuddy/Trae/Cursor 里真实调用 |
+| **M2** | 写类 tools(`skill.run`、`task.run`、`hook.fire`) + 安全校验 | 在 CodeBuddy/Trae/Cursor 里真实调用 | **进行中**(2026-08-30:只读 server 已扩展 `skill_run`/`task_run`/`hook_fire`,由 `--allow-write`/`--trust-hooks` 门控,已含单元测与审计日志) |
 | **M3** | Streamable HTTP + token 鉴权 + `ca doctor` 检查 | 远程客户端 + 审计日志 |
 | **M4** | 决策点:ACP 路线(选项 A/B)评审 | — |
 
