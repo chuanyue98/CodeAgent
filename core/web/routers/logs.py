@@ -67,7 +67,7 @@ def _read_log(path: Path, max_lines: int = 1000) -> str:
 
 @router.get("/files")
 async def list_log_files():
-    return _list_log_files()
+    return await asyncio.to_thread(_list_log_files)
 
 
 @router.get("/{task_id}")
@@ -75,7 +75,7 @@ async def get_log_file(task_id: str):
     path = _resolve_log_path(task_id)
     if path is None:
         raise HTTPException(status_code=404, detail="Log file not found")
-    content = _read_log(path)
+    content = await asyncio.to_thread(_read_log, path)
     return {"taskId": task_id, "content": content}
 
 
@@ -114,7 +114,7 @@ async def stream_log_file(task_id: str):
             # A finished run is read once more before the loop exits, so the
             # last lines written between the previous poll and the exit are
             # not lost to the race.
-            run = _runner.get_run(task_id)
+            run = await asyncio.to_thread(_runner.get_run, task_id)
             finished_as = None if run is None or run.status == "running" else run.status
 
             current_size = await asyncio.to_thread(_size_of, path)

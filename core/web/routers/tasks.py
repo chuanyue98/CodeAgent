@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from core.constants import ENGINES
@@ -48,7 +50,7 @@ def resolve_registered_workspace(workspace: str) -> RegisteredWorkspace:
 
 @router.get("/tasks")
 async def list_tasks():
-    return TaskService(get_tasks_root()).list_tasks()
+    return await asyncio.to_thread(TaskService(get_tasks_root()).list_tasks)
 
 
 @router.post("/tasks")
@@ -62,8 +64,14 @@ async def create_task(
 ):
     """Creates a new task blueprint as a plain markdown file in tasks/."""
     try:
-        return TaskService(get_tasks_root()).create_task(
-            name, title, objective, context, instructions, verification
+        return await asyncio.to_thread(
+            TaskService(get_tasks_root()).create_task,
+            name,
+            title,
+            objective,
+            context,
+            instructions,
+            verification,
         )
     except FileExistsError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -130,8 +138,12 @@ async def generate_task(
         name=name, title=title, description=description.strip()
     )
     try:
-        status = _runner.run_chat_turn(
-            engine, message, group="codeagent", project_path=str(ROOT_DIR)
+        status = await asyncio.to_thread(
+            _runner.run_chat_turn,
+            engine,
+            message,
+            group="codeagent",
+            project_path=str(ROOT_DIR),
         )
     except ValueError as exc:
         # Dispatch failed synchronously, before any agent could have started
@@ -145,20 +157,23 @@ async def generate_task(
 @router.get("/tasks/runs")
 async def list_runs():
     """Lists all background task runs."""
-    return [_wire_run(run) for run in _runner.list_runs()]
+    runs = await asyncio.to_thread(_runner.list_runs)
+    return [_wire_run(run) for run in runs]
 
 
 @router.get("/tasks/runs/{task_id}")
 async def get_run_status(task_id: str):
     """Retrieves the status of a specific background task run, including real-time progress."""
-    status = _runner.get_status(task_id)
+    status = await asyncio.to_thread(_runner.get_status, task_id)
     if not status:
         raise HTTPException(status_code=404, detail="Run not found")
 
     # Enrich with latest task data
     task_name = task_id.rsplit("_", 1)[0]
     task_service = TaskService(get_tasks_root())
-    task_data = task_service.get_task(task_name, log_path=status.log_path)
+    task_data = await asyncio.to_thread(
+        task_service.get_task, task_name, log_path=status.log_path
+    )
 
     return {"status": _wire_run(status), "progress": task_data}
 
@@ -166,13 +181,13 @@ async def get_run_status(task_id: str):
 @router.post("/tasks/runs/{task_id}/stop")
 async def stop_run(task_id: str):
     """Stops a running background task."""
-    success = _runner.stop_task(task_id)
+    success = await asyncio.to_thread(_runner.stop_task, task_id)
     return {"success": success}
 
 
 @router.get("/tasks/{name}")
 async def get_task(name: str, group: str = Query(None)):
-    task = TaskService(get_tasks_root()).get_task(name)
+    task = await asyncio.to_thread(TaskService(get_tasks_root()).get_task, name)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -184,7 +199,7 @@ async def get_task(name: str, group: str = Query(None)):
         # Resolve skills and their scripts
         skills_root = resolve_resource_path("skills", "CA_SKILLS_ROOT")
         skill_service = SkillService(skills_root)
-        detailed_skills = skill_service.get_detailed_skills()
+        detailed_skills = await asyncio.to_thread(skill_service.get_detailed_skills)
 
         task_skills = []
         group_skills_set = set(group_def.get("skills", []))
@@ -203,7 +218,9 @@ async def get_task(name: str, group: str = Query(None)):
 async def update_task(name: str, content: str = Body(..., embed=True)):
     """Overwrites an existing task blueprint's full markdown content."""
     try:
-        return TaskService(get_tasks_root()).update_task(name, content)
+        return await asyncio.to_thread(
+            TaskService(get_tasks_root()).update_task, name, content
+        )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -213,13 +230,13 @@ async def update_task(name: str, content: str = Body(..., embed=True)):
 @router.delete("/tasks/{name}")
 async def delete_task(name: str):
     """Deletes a task blueprint. Blocked while the task has an active run."""
-    if _runner.has_active_task(name):
+    if await asyncio.to_thread(_runner.has_active_task, name):
         raise HTTPException(
             status_code=409,
             detail="Task has an active run; stop it before deleting",
         )
     try:
-        deleted = TaskService(get_tasks_root()).delete_task(name)
+        deleted = await asyncio.to_thread(TaskService(get_tasks_root()).delete_task, name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not deleted:
@@ -237,7 +254,10 @@ async def list_task_runs(name: str, limit: int = Query(50, ge=1, le=500)):
     """
     if not is_valid_task_name(name):
         raise HTTPException(status_code=400, detail="Task name must match [\\w.-]+")
-    return [_wire_run(run) for run in _runner.list_history(task_name=name, limit=limit)]
+    history = await asyncio.to_thread(
+        _runner.list_history, task_name=name, limit=limit
+    )
+    return [_wire_run(run) for run in history]
 
 
 @router.post("/tasks/{name}/run")
@@ -249,20 +269,20 @@ async def run_task(
 ):
     """Launches a task in the background with the selected engine."""
     task_service = TaskService(get_tasks_root())
-    if task_service.get_task(name) is None:
+    if await asyncio.to_thread(task_service.get_task, name) is None:
         raise HTTPException(status_code=404, detail="Task not found")
     resolved_workspace = resolve_registered_workspace(workspace)
     try:
-        return _wire_run(
-            _runner.run_task(
-                name,
-                engine,
-                resolved_workspace.group,
-                tasks_root=get_tasks_root(),
-                workspace=resolved_workspace.path,
-                prevent_overlap=True,
-            )
+        status = await asyncio.to_thread(
+            _runner.run_task,
+            name,
+            engine,
+            resolved_workspace.group,
+            tasks_root=get_tasks_root(),
+            workspace=resolved_workspace.path,
+            prevent_overlap=True,
         )
+        return _wire_run(status)
     except TaskAlreadyRunningError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:

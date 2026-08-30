@@ -64,7 +64,7 @@ def _sections(sections: list) -> list[DoctorSection]:
 @router.get("/health")
 async def get_health():
     try:
-        sections = get_doctor_sections(fix=False)
+        sections = await asyncio.to_thread(get_doctor_sections, fix=False)
         return wire(SystemHealth(status="ok", sections=_sections(sections)))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
