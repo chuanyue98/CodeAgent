@@ -292,6 +292,67 @@ async def test_list_task_runs_route_queries_history_by_task_name(mock_env, monke
 
 
 @pytest.mark.asyncio
+async def test_run_changes_route_404_for_unknown_run(mock_env, monkeypatch):
+    class FakeRunner:
+        def get_run(self, task_id):
+            return None
+
+    monkeypatch.setattr(tasks_router, "_runner", FakeRunner())
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.get("/api/tasks/runs/nope_1/changes")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_run_changes_route_passes_run_window_and_camelizes(
+    mock_env, monkeypatch
+):
+    from core.services.runner_service import TaskRunStatus
+
+    class FakeRunner:
+        def get_run(self, task_id):
+            assert task_id == "review_1"
+            return TaskRunStatus(
+                task_id="review_1",
+                engine="codex",
+                pid=1,
+                status="completed",
+                log_path="/tmp/a.log",
+                start_time=100,
+                end_time=200,
+                workspace="/tmp/ws",
+            )
+
+    captured = {}
+
+    def fake_describe(workspace, start, end):
+        captured.update(workspace=workspace, start=start, end=end)
+        return {
+            "available": False,
+            "reason": "not_git_repo",
+            "workspace": workspace,
+        }
+
+    monkeypatch.setattr(tasks_router, "_runner", FakeRunner())
+    monkeypatch.setattr(tasks_router, "describe_run_changes", fake_describe)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        resp = await ac.get("/api/tasks/runs/review_1/changes")
+
+    assert resp.status_code == 200
+    assert captured == {"workspace": "/tmp/ws", "start": 100, "end": 200}
+    assert resp.json() == {
+        "available": False,
+        "reason": "not_git_repo",
+        "workspace": "/tmp/ws",
+    }
+    assert_camel(resp.json())
+
+
+@pytest.mark.asyncio
 async def test_list_skills_with_frontmatter(mock_env):
     skill_dir = mock_env / "skills" / "base" / "fancy-skill"
     skill_dir.mkdir(parents=True)

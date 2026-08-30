@@ -4,6 +4,7 @@ from fastapi import APIRouter, Body, HTTPException, Query
 
 from core.constants import ENGINES
 from core.services.config_service import ConfigService
+from core.services.git_service import describe_run_changes
 from core.services.runner_service import (
     TaskAlreadyRunningError,
     TaskRunner,
@@ -183,6 +184,18 @@ async def stop_run(task_id: str):
     """Stops a running background task."""
     success = await asyncio.to_thread(_runner.stop_task, task_id)
     return {"success": success}
+
+
+@router.get("/tasks/runs/{task_id}/changes")
+async def get_run_changes(task_id: str):
+    """Returns the local git changes a run made in its workspace."""
+    run = await asyncio.to_thread(_runner.get_run, task_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    changes = await asyncio.to_thread(
+        describe_run_changes, run.workspace, run.start_time, run.end_time
+    )
+    return camelize(changes)
 
 
 @router.get("/tasks/{name}")
