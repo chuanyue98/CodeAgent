@@ -1,5 +1,12 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
+import { notifyManager } from '@tanstack/react-query';
+
+// TanStack Query batches observer notifications through setTimeout(0), which
+// never fires under vi.useFakeTimers -- leaving queries stuck in "pending"
+// no matter how many microtasks act() flushes. Routing them through
+// microtasks restores that flushing without touching real-time tests.
+notifyManager.setScheduler(callback => queueMicrotask(callback));
 
 // Helper to create a mock Response with both text() and json()
 function mockResponse(data: unknown) {

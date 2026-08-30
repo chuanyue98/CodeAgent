@@ -1,7 +1,9 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import SystemPanel from '../components/SystemPanel';
 import { SystemMetricsProvider } from '../context/SystemMetricsContext';
+import { createQueryClient } from '../utils/queryClient';
 import { fetchSystemMetrics, type SystemMetrics } from '../api/system';
 
 vi.mock('../api/system', () => ({
@@ -10,9 +12,11 @@ vi.mock('../api/system', () => ({
 
 function renderPanel() {
   return render(
-    <SystemMetricsProvider>
-      <SystemPanel />
-    </SystemMetricsProvider>,
+    <QueryClientProvider client={createQueryClient()}>
+      <SystemMetricsProvider>
+        <SystemPanel />
+      </SystemMetricsProvider>
+    </QueryClientProvider>,
   );
 }
 

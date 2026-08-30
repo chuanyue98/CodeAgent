@@ -1,8 +1,10 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import SystemPanel from '../components/SystemPanel';
 import SystemPage from '../pages/SystemPage';
 import { SystemMetricsProvider } from '../context/SystemMetricsContext';
+import { createQueryClient } from '../utils/queryClient';
 import { fetchSystemHealth, fetchSystemMetrics, type SystemMetrics } from '../api/system';
 
 vi.mock('../api/system', () => ({
@@ -37,10 +39,12 @@ describe('SystemPanel and SystemPage share one metrics subscription', () => {
     vi.mocked(fetchSystemHealth).mockResolvedValue({ status: 'ok', sections: [] });
 
     render(
-      <SystemMetricsProvider>
-        <SystemPanel />
-        <SystemPage />
-      </SystemMetricsProvider>,
+      <QueryClientProvider client={createQueryClient()}>
+        <SystemMetricsProvider>
+          <SystemPanel />
+          <SystemPage />
+        </SystemMetricsProvider>
+      </QueryClientProvider>,
     );
     await act(async () => {});
 
@@ -59,10 +63,12 @@ describe('SystemPanel and SystemPage share one metrics subscription', () => {
     vi.mocked(fetchSystemHealth).mockResolvedValue({ status: 'ok', sections: [] });
 
     render(
-      <SystemMetricsProvider>
-        <SystemPanel />
-        <SystemPage />
-      </SystemMetricsProvider>,
+      <QueryClientProvider client={createQueryClient()}>
+        <SystemMetricsProvider>
+          <SystemPanel />
+          <SystemPage />
+        </SystemMetricsProvider>
+      </QueryClientProvider>,
     );
     await act(async () => {});
     expect(fetchSystemMetrics).toHaveBeenCalledTimes(1);

@@ -1,8 +1,10 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import TaskDashboard from '../components/TaskDashboard';
 import { ProjectProvider } from '../context/ProjectContext';
+import { createQueryClient } from '../utils/queryClient';
 import type { RunStatus, Task } from '../components/TaskDashboard/types';
 
 const TASKS: Task[] = [
@@ -89,18 +91,19 @@ function routeFetch(overrides: {
     vi.useFakeTimers is active, so the initial mount settles via flushes. */
 async function settle(rounds = 3) {
   for (let i = 0; i < rounds; i += 1) {
-    // eslint-disable-next-line no-await-in-loop
     await act(async () => {});
   }
 }
 
 function renderDashboard(initialPath = '/automations/tasks') {
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <ProjectProvider>
-        <TaskDashboard />
-      </ProjectProvider>
-    </MemoryRouter>,
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <ProjectProvider>
+          <TaskDashboard />
+        </ProjectProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 

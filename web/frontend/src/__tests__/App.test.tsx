@@ -1,9 +1,11 @@
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
+import { QueryClientProvider } from '@tanstack/react-query';
 import App from '../App';
 import { ProjectProvider } from '../context/ProjectContext';
 import { SystemMetricsProvider } from '../context/SystemMetricsContext';
 import { LanguageProvider } from '../i18n/LanguageProvider';
+import { createQueryClient } from '../utils/queryClient';
 import { expect, test, describe } from 'vitest';
 
 /**
@@ -17,15 +19,17 @@ function activeTab(name: string | RegExp) {
 
 function renderWithRouter(initialPath = '/skills') {
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <ProjectProvider>
-        <LanguageProvider>
-          <SystemMetricsProvider>
-            <App />
-          </SystemMetricsProvider>
-        </LanguageProvider>
-      </ProjectProvider>
-    </MemoryRouter>
+    <QueryClientProvider client={createQueryClient()}>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <ProjectProvider>
+          <LanguageProvider>
+            <SystemMetricsProvider>
+              <App />
+            </SystemMetricsProvider>
+          </LanguageProvider>
+        </ProjectProvider>
+      </MemoryRouter>
+    </QueryClientProvider>
   );
 }
 
