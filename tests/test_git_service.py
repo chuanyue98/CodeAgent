@@ -15,9 +15,7 @@ import pytest
 from core.services import git_service
 from core.services.git_service import describe_run_changes
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("git") is None, reason="git not installed"
-)
+pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
 
 GIT = ["git", "-c", "user.name=test", "-c", "user.email=t@example.com"]
 

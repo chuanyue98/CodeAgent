@@ -249,7 +249,9 @@ async def delete_task(name: str):
             detail="Task has an active run; stop it before deleting",
         )
     try:
-        deleted = await asyncio.to_thread(TaskService(get_tasks_root()).delete_task, name)
+        deleted = await asyncio.to_thread(
+            TaskService(get_tasks_root()).delete_task, name
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not deleted:
@@ -267,9 +269,7 @@ async def list_task_runs(name: str, limit: int = Query(50, ge=1, le=500)):
     """
     if not is_valid_task_name(name):
         raise HTTPException(status_code=400, detail="Task name must match [\\w.-]+")
-    history = await asyncio.to_thread(
-        _runner.list_history, task_name=name, limit=limit
-    )
+    history = await asyncio.to_thread(_runner.list_history, task_name=name, limit=limit)
     return [_wire_run(run) for run in history]
 
 

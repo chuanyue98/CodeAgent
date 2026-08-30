@@ -68,9 +68,7 @@ def registered_workspace(gateway: AgentGateway, project_id: str) -> tuple[str, s
     # latter accepts /work/demo-old for a rule of /work/demo.
     best: tuple[int, str] | None = None
     for project in config.get("project_registry", []):
-        if not isinstance(project, dict) or not isinstance(
-            project.get("path"), str
-        ):
+        if not isinstance(project, dict) or not isinstance(project.get("path"), str):
             continue
         try:
             registered = Path(project["path"]).expanduser().resolve()
@@ -139,9 +137,7 @@ def prompt_root(config: dict) -> Path:
     if env_root:
         return Path(env_root)
     resolved = resolve_resource_root_from_config(config, CODE_ROOT)
-    base = (
-        resolved if resolved is not None else get_bundled_resource_root(CODE_ROOT)
-    )
+    base = resolved if resolved is not None else get_bundled_resource_root(CODE_ROOT)
     return Path(base) / "prompt"
 
 

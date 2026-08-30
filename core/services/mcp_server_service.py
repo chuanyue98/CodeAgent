@@ -296,7 +296,9 @@ def build_server(
             ``scripts/run.*`` 或该目录下唯一的脚本文件。若技能无可执行脚本,则回退为
             返回 SKILL.md 原文作为操作指引。仅 --allow-write 时可用。
             """
-            _append_audit(root_dir, "skill.run", {"name": name, "args": args, "script": script})
+            _append_audit(
+                root_dir, "skill.run", {"name": name, "args": args, "script": script}
+            )
             skill_md = _find_skill(root, name)
             if skill_md is None:
                 return f"技能不存在: {name}(可用 skill_list 查看全部)"
@@ -320,7 +322,11 @@ def build_server(
             委托已有的 TaskRunner,返回 run id 与状态摘要。engine 取 claude/codex/
             opencode/codebuddy 之一;group 缺省为 'common'。
             """
-            _append_audit(root_dir, "task.run", {"task_name": task_name, "engine": engine, "group": group})
+            _append_audit(
+                root_dir,
+                "task.run",
+                {"task_name": task_name, "engine": engine, "group": group},
+            )
             from core.services.runner_service import TaskRunner
 
             runner = TaskRunner(root_dir or Path.cwd())

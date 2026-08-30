@@ -76,11 +76,18 @@ def test_add_url_server_with_env_and_transport(monkeypatch, capsys):
     with patch("core.services.mcp_service.add_server") as add_server:
         _run(
             monkeypatch,
-            "mcp", "add", "codex", "remote",
-            "--url", "http://127.0.0.1:9000",
-            "--env", "TOKEN=abc",
-            "--env", "MODE=fast",
-            "--transport", "http",
+            "mcp",
+            "add",
+            "codex",
+            "remote",
+            "--url",
+            "http://127.0.0.1:9000",
+            "--env",
+            "TOKEN=abc",
+            "--env",
+            "MODE=fast",
+            "--transport",
+            "http",
         )
 
     kwargs = add_server.call_args.kwargs
@@ -121,9 +128,7 @@ def test_remove_success(monkeypatch, capsys):
 
 
 def test_remove_unknown_server_exits(monkeypatch, capsys):
-    with patch(
-        "core.services.mcp_service.remove_server", side_effect=KeyError("fs")
-    ):
+    with patch("core.services.mcp_service.remove_server", side_effect=KeyError("fs")):
         with pytest.raises(SystemExit) as excinfo:
             _run(monkeypatch, "mcp", "remove", "codex", "fs")
     assert excinfo.value.code == 1
@@ -137,7 +142,12 @@ def test_sync_prints_per_engine_actions(monkeypatch, capsys):
     results = [
         {"engine": "codex", "name": "fs", "action": "added", "detail": "new"},
         {"engine": "codex", "name": "web", "action": "skipped", "detail": "exists"},
-        {"engine": "claude", "name": "fs", "action": "replaced", "detail": "overwritten"},
+        {
+            "engine": "claude",
+            "name": "fs",
+            "action": "replaced",
+            "detail": "overwritten",
+        },
     ]
     with patch("core.services.mcp_service.sync_servers", return_value=results) as sync:
         _run(monkeypatch, "mcp", "sync", "opencode", "--overwrite")
@@ -154,8 +164,15 @@ def test_sync_dry_run_flags_and_passes_filters(monkeypatch, capsys):
     results = [{"engine": "codex", "name": "fs", "action": "added", "detail": "new"}]
     with patch("core.services.mcp_service.sync_servers", return_value=results) as sync:
         _run(
-            monkeypatch, "mcp", "sync", "claude",
-            "--to", "codex", "--name", "fs", "--dry-run",
+            monkeypatch,
+            "mcp",
+            "sync",
+            "claude",
+            "--to",
+            "codex",
+            "--name",
+            "fs",
+            "--dry-run",
         )
     kwargs = sync.call_args.kwargs
     assert kwargs["targets"] == ["codex"]

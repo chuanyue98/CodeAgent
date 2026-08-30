@@ -257,9 +257,7 @@ class AgentGateway:
     async def start_turn(self, session_id: str, turn: TurnInput) -> str:
         return await sessions.start_turn(self, session_id, turn)
 
-    async def steer_turn(
-        self, session_id: str, turn_id: str, turn: TurnInput
-    ) -> None:
+    async def steer_turn(self, session_id: str, turn_id: str, turn: TurnInput) -> None:
         await sessions.steer_turn(self, session_id, turn_id, turn)
 
     async def cancel_turn(self, session_id: str, turn_id: str) -> None:

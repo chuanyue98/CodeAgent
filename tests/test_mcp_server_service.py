@@ -168,9 +168,7 @@ def test_skill_run_rejects_path_traversal(skills_root):
         config=None, group=None, skills_root=skills_root, allow_write=True
     )
     result = asyncio.run(
-        server.call_tool(
-            "skill_run", {"name": "alpha", "script": "../../etc/passwd"}
-        )
+        server.call_tool("skill_run", {"name": "alpha", "script": "../../etc/passwd"})
     )
     assert "越界" in _text(result)
 
@@ -252,11 +250,8 @@ def test_hook_fire_executes_and_returns_output(skills_root, tmp_path, monkeypatc
         config=None, group=None, skills_root=skills_root, trust_hooks=True
     )
     result = asyncio.run(
-        server.call_tool(
-            "hook_fire", {"hook_name": "demo", "event_json": '{"a": 1}'}
-        )
+        server.call_tool("hook_fire", {"hook_name": "demo", "event_json": '{"a": 1}'})
     )
     out = _text(result)
     assert "exit=0" in out
     assert "got:" in out and '"a": 1' in out
-

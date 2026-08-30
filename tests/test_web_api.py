@@ -306,9 +306,7 @@ async def test_run_changes_route_404_for_unknown_run(mock_env, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_run_changes_route_passes_run_window_and_camelizes(
-    mock_env, monkeypatch
-):
+async def test_run_changes_route_passes_run_window_and_camelizes(mock_env, monkeypatch):
     from core.services.runner_service import TaskRunStatus
 
     class FakeRunner:

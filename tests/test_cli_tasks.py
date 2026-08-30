@@ -157,8 +157,12 @@ def batch_env(monkeypatch, tmp_path):
     return SimpleNamespace(tasks_root=tasks_root, config=config)
 
 
-def test_batch_run_without_registered_projects_exits(monkeypatch, capsys, runner, tmp_path):
-    monkeypatch.setattr("core.cli.helpers.load_config", lambda: {"project_registry": []})
+def test_batch_run_without_registered_projects_exits(
+    monkeypatch, capsys, runner, tmp_path
+):
+    monkeypatch.setattr(
+        "core.cli.helpers.load_config", lambda: {"project_registry": []}
+    )
     monkeypatch.setattr(
         "core.web.resource_paths.resolve_resource_path",
         lambda kind, env_var: tmp_path,
@@ -173,14 +177,14 @@ def test_batch_run_group_filter_is_named_when_it_matches_nothing(
     monkeypatch, capsys, runner, batch_env
 ):
     with pytest.raises(SystemExit):
-        _run(monkeypatch, "batch-run", "review", "--engine", "codex", "--group", "ghost")
+        _run(
+            monkeypatch, "batch-run", "review", "--engine", "codex", "--group", "ghost"
+        )
     assert "in group 'ghost'" in capsys.readouterr().out
 
 
 def test_batch_run_unknown_task_exits(monkeypatch, capsys, runner, batch_env):
-    with patch(
-        "core.services.task_service.TaskService.get_task", return_value=None
-    ):
+    with patch("core.services.task_service.TaskService.get_task", return_value=None):
         with pytest.raises(SystemExit) as excinfo:
             _run(monkeypatch, "batch-run", "ghost", "--engine", "codex")
     assert excinfo.value.code == 1

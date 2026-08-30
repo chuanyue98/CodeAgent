@@ -49,8 +49,13 @@ def test_skills_list_group_flag_changes_the_enabled_view(monkeypatch, capsys):
         lambda root: FakeSkillService(skills),
     ):
         _run(
-            monkeypatch, "resources", "list", "skills",
-            "--group", "common", config=CONFIG,
+            monkeypatch,
+            "resources",
+            "list",
+            "skills",
+            "--group",
+            "common",
+            config=CONFIG,
         )
     out = capsys.readouterr().out
     assert "enabled in 'common'" in out
@@ -77,9 +82,7 @@ def test_prompts_list_uses_the_prompt_service(monkeypatch, capsys):
                 {"id": "work", "description": ""},
             ]
 
-    with patch(
-        "core.services.prompt_service.PromptService", FakePromptService
-    ):
+    with patch("core.services.prompt_service.PromptService", FakePromptService):
         _run(monkeypatch, "resources", "list", "prompts", config=CONFIG)
 
     out = capsys.readouterr().out

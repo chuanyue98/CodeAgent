@@ -121,9 +121,7 @@ def test_convert_unknown_session_reports_not_found(monkeypatch, capsys):
     assert "[X] Session not found: claude/ghost" in capsys.readouterr().out
 
 
-def test_convert_refuses_without_confirmation_when_not_interactive(
-    monkeypatch, capsys
-):
+def test_convert_refuses_without_confirmation_when_not_interactive(monkeypatch, capsys):
     with patch(
         "core.session_history.session_finder.find_session_by_id",
         return_value=_session(),
