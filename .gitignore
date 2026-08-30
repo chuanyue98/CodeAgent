@@ -55,6 +55,9 @@ config.json
 
 gha-creds-*.json
 build/
+# Frontend deps live in web/frontend/node_modules; a root one is a stray
+# tool cache either way.
+node_modules/
 *.png
 
 # Tool caches -- excluded today only because ruff/mypy/pytest each write
@@ -77,3 +80,4 @@ codeagent-audit-report/
 # those notes was committed to a public repository by a `git add -A`.
 .workbuddy/
 .codebuddy/
+.qoder/
