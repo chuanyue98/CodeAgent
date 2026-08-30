@@ -564,6 +564,7 @@ class TaskRunner:
                 subprocess.run(
                     ["taskkill", "/F", "/T", "/PID", str(pid)],
                     capture_output=True,
+                    timeout=10,
                 )
             else:
                 os.killpg(os.getpgid(pid), signal.SIGTERM)

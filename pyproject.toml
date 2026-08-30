@@ -102,10 +102,10 @@ source = ["core", "engines", "ca_launcher.py"]
 [tool.coverage.report]
 # Measured over shipped code only (see [tool.coverage.run] above). A ratchet
 # floor, not a target: raise it as coverage climbs. It sits a point under the
-# current ~75% because threaded code (the PTY reader, the scheduler loop) hits
-# a slightly different line set per run -- observed spread is 75.07-75.67, so
-# a floor at 75 would flake.
-fail_under = 74
+# current ~77% because threaded code (the PTY reader, the scheduler loop) hits
+# a slightly different line set per run -- observed spread is 77.44-77.86, so
+# a floor at 77 would flake.
+fail_under = 76
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",

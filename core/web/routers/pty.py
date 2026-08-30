@@ -411,6 +411,7 @@ class _WindowsSession:  # pragma: no cover - exercised only on Windows
                 subprocess.run,
                 ["taskkill", "/T", "/F", "/PID", str(pid)],
                 capture_output=True,
+                timeout=10,
             )
 
     async def terminate(self) -> None:
