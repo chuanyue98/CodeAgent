@@ -105,6 +105,9 @@ class UnifiedSession:
         parent_session_id: The session that spawned this one, when it is a
             subagent run; empty for a session a user started.
         agent: The subagent's name, when the engine records one.
+        subagent_titles: ``agent id -> the one-line description this session
+            gave that subagent at launch``. Read by the finder to title the
+            subagent runs, whose own transcripts open with the whole prompt.
     """
 
     session_id: str = ""
@@ -118,6 +121,7 @@ class UnifiedSession:
     source_file: str = ""
     parent_session_id: str = ""
     agent: str = ""
+    subagent_titles: dict[str, str] = field(default_factory=dict)
 
     @property
     def message_count(self) -> int:

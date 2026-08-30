@@ -156,6 +156,24 @@ describe('subagent runs in the session list', () => {
 });
 
 describe('subagent runs in the detail panel', () => {
+  test('the agent badge does not repeat itself in the title', async () => {
+    renderPanel(
+      session({
+        sessionId: 'session-parent',
+        subtasks: [
+          session({
+            sessionId: 'agent-frontend',
+            // OpenCode's own name for the run, agent suffix and all.
+            title: '前端代码质量检查 (@explore subagent)',
+            agent: 'explore',
+          }),
+        ],
+      }),
+    );
+
+    expect(await screen.findByText('前端代码质量检查')).toBeVisible();
+  });
+
   test('usage splits the main thread from what the subagents spent', async () => {
     renderPanel(parentWithSubtasks());
 

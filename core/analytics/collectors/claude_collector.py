@@ -144,6 +144,9 @@ def _parse_claude_file(
                         project_path=exact_project_path,
                         target="claude",
                         parent_session_id=parent_session_id,
+                        # Every row of a subagent transcript is attributed to
+                        # the agent that produced it.
+                        agent=row.get("attributionAgent") or "",
                     )
                 )
     except OSError:

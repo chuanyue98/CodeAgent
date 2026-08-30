@@ -27,7 +27,8 @@ from core.analytics.pricing import get_rates
 # records would otherwise stay invisible forever.
 #   1: subagent runs -- Claude's ``<session>/subagents/*.jsonl`` transcripts,
 #      and OpenCode's parent/agent columns.
-BACKFILL_VERSION = 1
+#   2: the agent name behind a Claude subagent run (``attributionAgent``).
+BACKFILL_VERSION = 2
 
 
 def _collect_all() -> list[RawUsageEntry]:

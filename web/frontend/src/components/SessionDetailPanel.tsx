@@ -39,6 +39,17 @@ import SessionProgress from './SessionProgress';
  */
 const TRANSCRIPT_PAGE = 50;
 
+/**
+ * OpenCode names a subagent run "<what it did> (@explore subagent)". The
+ * agent is a badge of its own beside the title here, so the suffix is the
+ * same word twice.
+ */
+function withoutAgentSuffix(title: string, agent?: string): string {
+  if (!agent) return title;
+  const suffix = ` (@${agent} subagent)`;
+  return title.endsWith(suffix) ? title.slice(0, -suffix.length) : title;
+}
+
 type ConvertState =
   | { status: 'idle' }
   | { status: 'loading'; targetEngine: string }
@@ -379,7 +390,7 @@ export default function SessionDetailPanel({
                   >
                     {child.agent && <Badge size="sm">{child.agent}</Badge>}
                     <span className="min-w-0 flex-1 truncate text-slate-700">
-                      {child.title || child.sessionId}
+                      {withoutAgentSuffix(child.title || '', child.agent) || child.sessionId}
                     </span>
                     <span className="shrink-0 text-slate-500">
                       {fmtTokens(child.inputTokens + child.outputTokens)}

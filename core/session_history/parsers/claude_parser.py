@@ -117,6 +117,8 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
     ended_at = ""
     model = ""
     cwd = ""
+    agent = ""
+    subagent_titles: dict[str, str] = {}
 
     try:
         # long_path, not a bare open: these files live under a directory named
@@ -137,6 +139,19 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
                 # Capture cwd from any row that has it
                 if not cwd:
                     cwd = row.get("cwd", "")
+
+                # In a subagent transcript every row is attributed to the
+                # agent that produced it ("general-purpose", "Explore", ...).
+                if not agent:
+                    agent = row.get("attributionAgent") or ""
+
+                # A launcher records each subagent it starts, structured:
+                # {"agentId": ..., "description": ..., "resolvedModel": ...}.
+                launch = row.get("toolUseResult")
+                if isinstance(launch, dict) and launch.get("agentId"):
+                    description = str(launch.get("description") or "").strip()
+                    if description:
+                        subagent_titles[str(launch["agentId"])] = description
 
                 # Extract session title
                 if row_type == "ai-title":
@@ -210,6 +225,8 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
         title=title,
         model=model,
         source_file=str(file_path),
+        agent=agent,
+        subagent_titles=subagent_titles,
     )
 
 
@@ -344,5 +361,27 @@ def find_claude_sessions(
             session.parent_session_id = parent_session_id
             sessions.append(session)
 
+    _title_subagent_runs(sessions)
     sessions.sort(key=lambda s: s.started_at, reverse=True)
     return sessions
+
+
+def _title_subagent_runs(sessions: list[UnifiedSession]) -> None:
+    """Names each subagent run the way its launcher described it.
+
+    A subagent transcript opens with the entire prompt it was handed, so four
+    reviews dispatched from one session all read as the same wall of text.
+    The launcher recorded a one-line description per ``agentId``; the run's
+    own file is named ``agent-<agentId>.jsonl``.
+    """
+    by_id = {session.session_id: session for session in sessions}
+    for session in sessions:
+        if not session.parent_session_id or session.title:
+            continue
+        parent = by_id.get(session.parent_session_id)
+        if parent is None:
+            continue
+        agent_id = session.session_id.removeprefix("agent-")
+        title = parent.subagent_titles.get(agent_id)
+        if title:
+            session.title = title

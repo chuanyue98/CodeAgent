@@ -497,6 +497,7 @@ def test_claude_collector_reads_subagent_transcripts(tmp_path):
     (subagents / "agent-abc123.jsonl").write_text(
         '{"timestamp":"2026-08-01T10:05:00Z","cwd":"/home/user/app",'
         '"sessionId":"parent-session","isSidechain":true,'
+        '"attributionAgent":"general-purpose",'
         '"message":{"model":"claude-test","usage":{"input_tokens":40,'
         '"output_tokens":2}}}\n',
         encoding="utf-8",
@@ -507,6 +508,7 @@ def test_claude_collector_reads_subagent_transcripts(tmp_path):
     by_session = {e.session_id: e for e in entries}
     assert set(by_session) == {"parent-session", "agent-abc123"}
     assert by_session["agent-abc123"].parent_session_id == "parent-session"
+    assert by_session["agent-abc123"].agent == "general-purpose"
     assert by_session["parent-session"].parent_session_id == ""
 
 
