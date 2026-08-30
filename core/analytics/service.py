@@ -28,7 +28,8 @@ from core.analytics.pricing import get_rates
 #   1: subagent runs -- Claude's ``<session>/subagents/*.jsonl`` transcripts,
 #      and OpenCode's parent/agent columns.
 #   2: the agent name behind a Claude subagent run (``attributionAgent``).
-BACKFILL_VERSION = 2
+#   3: CodeBuddy's subagent transcripts, and Codex's thread spawn edges.
+BACKFILL_VERSION = 3
 
 
 def _collect_all() -> list[RawUsageEntry]:
@@ -58,7 +59,7 @@ def _collect_all() -> list[RawUsageEntry]:
     # watermark for that engine and merge rather than append.
     rebuilding = backfill_pending(BACKFILL_VERSION)
     if rebuilding:
-        last_ts = {**last_ts, "claude": "", "opencode": ""}
+        last_ts = dict.fromkeys(last_ts, "")
 
     # 2. Collect only new entries
     new_entries: list[RawUsageEntry] = []

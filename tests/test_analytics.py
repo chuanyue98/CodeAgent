@@ -1,3 +1,5 @@
+import json
+import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 
@@ -5,6 +7,8 @@ import pytest
 
 from core.analytics.aggregator import aggregate
 from core.analytics.collectors.claude_collector import scan_claude_usage
+from core.analytics.collectors.codebuddy_collector import scan_codebuddy_usage
+from core.analytics.collectors.codex_collector import scan_codex_usage
 from core.analytics.history import (
     append_history,
     get_last_timestamps,
@@ -561,3 +565,103 @@ def test_the_first_collection_after_an_upgrade_rescans_in_full(
     mock_claude.return_value = []
     _collect_all()
     assert mock_claude.call_args[1]["since_timestamp"] == "2026-05-02T10:00:00Z"
+
+
+def test_codebuddy_collector_reads_subagent_transcripts(tmp_path):
+    """The same flat glob that hid Claude's subagent runs hid CodeBuddy's."""
+    project_dir = tmp_path / ".codebuddy" / "projects" / "home-user-app"
+    subagents = project_dir / "parent-session" / "subagents"
+    subagents.mkdir(parents=True)
+
+    def _assistant_row(tokens: int) -> str:
+        return json.dumps(
+            {
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "timestamp": 1787585232197,
+                "cwd": "/home/user/app",
+                "content": [{"type": "output_text", "text": "done"}],
+                "providerData": {
+                    "model": "kimi-k3-1",
+                    "usage": {"inputTokens": tokens, "outputTokens": 10},
+                },
+            }
+        )
+
+    (project_dir / "parent-session.jsonl").write_text(
+        _assistant_row(100) + "\n", encoding="utf-8"
+    )
+    (subagents / "agent-abc123.jsonl").write_text(
+        _assistant_row(40) + "\n", encoding="utf-8"
+    )
+
+    entries = scan_codebuddy_usage(home=tmp_path)
+
+    by_session = {e.session_id: e for e in entries}
+    assert set(by_session) == {"parent-session", "agent-abc123"}
+    assert by_session["agent-abc123"].parent_session_id == "parent-session"
+    assert by_session["parent-session"].parent_session_id == ""
+
+
+def test_codex_collector_reads_the_spawn_edge(tmp_path):
+    """Codex runs a subagent as a thread of its own; only the edge it records
+    tells that thread apart from a session someone started."""
+    codex = tmp_path / ".codex"
+    codex.mkdir(parents=True)
+    con = sqlite3.connect(codex / "state_5.sqlite")
+    with con:
+        con.execute(
+            """CREATE TABLE threads (
+                id TEXT PRIMARY KEY, rollout_path TEXT, created_at_ms INTEGER,
+                model TEXT, model_provider TEXT, cwd TEXT, tokens_used INTEGER,
+                agent_role TEXT, agent_nickname TEXT
+            )"""
+        )
+        con.execute(
+            """CREATE TABLE thread_spawn_edges (
+                parent_thread_id TEXT, child_thread_id TEXT, status TEXT
+            )"""
+        )
+        con.execute(
+            "INSERT INTO threads VALUES (?,?,?,?,?,?,?,?,?)",
+            ("t-parent", "", 1, "gpt-5", "openai", "/work", 1000, None, None),
+        )
+        con.execute(
+            "INSERT INTO threads VALUES (?,?,?,?,?,?,?,?,?)",
+            ("t-child", "", 2, "gpt-5", "openai", "/work", 500, "explorer", "Curie"),
+        )
+        con.execute(
+            "INSERT INTO thread_spawn_edges VALUES (?,?,?)",
+            ("t-parent", "t-child", "closed"),
+        )
+    con.close()
+
+    entries = {e.session_id: e for e in scan_codex_usage(home=tmp_path)}
+
+    assert entries["t-child"].parent_session_id == "t-parent"
+    assert entries["t-child"].agent == "explorer"
+    assert entries["t-parent"].parent_session_id == ""
+
+
+def test_codex_collector_survives_a_database_without_spawn_edges(tmp_path):
+    codex = tmp_path / ".codex"
+    codex.mkdir(parents=True)
+    con = sqlite3.connect(codex / "state_5.sqlite")
+    with con:
+        con.execute(
+            """CREATE TABLE threads (
+                id TEXT PRIMARY KEY, rollout_path TEXT, created_at_ms INTEGER,
+                model TEXT, model_provider TEXT, cwd TEXT, tokens_used INTEGER
+            )"""
+        )
+        con.execute(
+            "INSERT INTO threads VALUES (?,?,?,?,?,?,?)",
+            ("t-solo", "", 1, "gpt-5", "openai", "/work", 1000),
+        )
+    con.close()
+
+    (entry,) = scan_codex_usage(home=tmp_path)
+
+    assert entry.parent_session_id == ""
+    assert entry.agent == ""

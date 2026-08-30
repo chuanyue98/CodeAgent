@@ -41,6 +41,10 @@ from core.session_history.models import (
     UnifiedSession,
 )
 from core.session_history.parse_cache import cached_file_parser
+from core.session_history.parsers._subagents import (
+    subagent_files,
+    title_subagent_runs,
+)
 from core.session_history.parsers._synthetic import is_synthetic_user_content
 from core.session_history.paths import (
     normalize_project_path,
@@ -141,6 +145,30 @@ def _codebuddy_dir_matches(dir_name: str, target_path: str) -> bool:
     return dir_name.lower() == _encode_codebuddy_project_dir(normalized_target).lower()
 
 
+#: CodeBuddy closes a finished ``Agent`` result with the transcript it wrote.
+_AGENT_ID_MARKER = re.compile(r"\[Agent ID:\s*(agent-[0-9a-f]+)\]")
+
+
+def _agent_launch_description(arguments: object) -> str:
+    """The one-line description an ``Agent`` call was given, if any."""
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except json.JSONDecodeError:
+            return ""
+    if isinstance(arguments, dict):
+        return str(arguments.get("description") or "").strip()
+    return ""
+
+
+def _launched_agent_id(output: object) -> str:
+    """The ``agent-<id>`` an ``Agent`` result reports having run."""
+    if output is None:
+        return ""
+    match = _AGENT_ID_MARKER.search(json.dumps(output, ensure_ascii=False))
+    return match.group(1) if match else ""
+
+
 @cached_file_parser
 def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
     """Parses a single CodeBuddy JSONL session file into a UnifiedSession.
@@ -165,6 +193,10 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
     # lines. We attach each call to the assistant message that preceded it and
     # fill in its result when the matching ``function_call_result`` arrives.
     tool_calls_by_call_id: dict[str, ToolCallSummary] = {}
+    # ``Agent`` launches: the call carries the description, the result carries
+    # the id of the transcript the run was written to.
+    launch_descriptions: dict[str, str] = {}
+    subagent_titles: dict[str, str] = {}
 
     try:
         # long_path, not a bare open: these files live under a directory named
@@ -233,6 +265,18 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
                             )
                     continue
 
+                if row_type == "function_call" and row.get("name") == "Agent":
+                    description = _agent_launch_description(row.get("arguments"))
+                    call_id = row.get("callId")
+                    if description and call_id:
+                        launch_descriptions[str(call_id)] = description
+
+                if row_type == "function_call_result" and row.get("name") == "Agent":
+                    agent_id = _launched_agent_id(row.get("output"))
+                    call_id = row.get("callId")
+                    if agent_id and call_id in launch_descriptions:
+                        subagent_titles[agent_id] = launch_descriptions[str(call_id)]
+
                 if row_type == "function_call":
                     name = row.get("name", "")
                     args = row.get("arguments")
@@ -295,6 +339,7 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
         title=title,
         model=model,
         source_file=str(file_path),
+        subagent_titles=subagent_titles,
     )
 
 
@@ -362,9 +407,17 @@ def find_codebuddy_sessions(
         ):
             continue
 
-        for jsonl_file in list_files(project_dir, ".jsonl"):
+        candidates: list[tuple[Path, str]] = [
+            (jsonl_file, "") for jsonl_file in list_files(project_dir, ".jsonl")
+        ]
+        # Subagent transcripts sit in ``<session_id>/subagents/``.
+        for session_dir in list_dirs(project_dir):
+            candidates.extend(subagent_files(session_dir))
+
+        for jsonl_file, parent_session_id in candidates:
             session = parse_codebuddy_session(jsonl_file)
             if session:
+                session.parent_session_id = parent_session_id
                 # When the session's own cwd resolves to the target, surface
                 # the canonical (user-supplied) spelling so the UI is stable.
                 if normalized_target is not None and normalize_project_path(
@@ -373,5 +426,6 @@ def find_codebuddy_sessions(
                     session.project_path = normalized_target
                 sessions.append(session)
 
+    title_subagent_runs(sessions)
     sessions.sort(key=lambda s: s.started_at, reverse=True)
     return sessions

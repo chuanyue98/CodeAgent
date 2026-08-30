@@ -22,6 +22,10 @@ from core.session_history.models import (
     UnifiedSession,
 )
 from core.session_history.parse_cache import cached_file_parser
+from core.session_history.parsers._subagents import (
+    subagent_files,
+    title_subagent_runs,
+)
 from core.session_history.parsers._synthetic import is_synthetic_user_content
 from core.session_history.paths import strip_extended_length_prefix
 from core.utils.long_paths import exists as path_exists
@@ -343,10 +347,7 @@ def find_claude_sessions(
         # from the directory and the child's own id from the file stem (which
         # is what ``parse_claude_session`` uses).
         for session_dir in list_dirs(project_dir):
-            candidates.extend(
-                (agent_file, session_dir.name)
-                for agent_file in list_files(session_dir / "subagents", ".jsonl")
-            )
+            candidates.extend(subagent_files(session_dir))
 
         for jsonl_file, parent_session_id in candidates:
             session = parse_claude_session(jsonl_file)
@@ -361,27 +362,6 @@ def find_claude_sessions(
             session.parent_session_id = parent_session_id
             sessions.append(session)
 
-    _title_subagent_runs(sessions)
+    title_subagent_runs(sessions)
     sessions.sort(key=lambda s: s.started_at, reverse=True)
     return sessions
-
-
-def _title_subagent_runs(sessions: list[UnifiedSession]) -> None:
-    """Names each subagent run the way its launcher described it.
-
-    A subagent transcript opens with the entire prompt it was handed, so four
-    reviews dispatched from one session all read as the same wall of text.
-    The launcher recorded a one-line description per ``agentId``; the run's
-    own file is named ``agent-<agentId>.jsonl``.
-    """
-    by_id = {session.session_id: session for session in sessions}
-    for session in sessions:
-        if not session.parent_session_id or session.title:
-            continue
-        parent = by_id.get(session.parent_session_id)
-        if parent is None:
-            continue
-        agent_id = session.session_id.removeprefix("agent-")
-        title = parent.subagent_titles.get(agent_id)
-        if title:
-            session.title = title

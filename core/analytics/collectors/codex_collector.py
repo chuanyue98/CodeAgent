@@ -43,6 +43,45 @@ def _iso_to_ms(iso: str) -> int:
         return 0
 
 
+def _agent_columns(con: sqlite3.Connection) -> tuple[str, str]:
+    """SELECT expressions for the agent columns, or empty stand-ins.
+
+    ``threads`` grew ``agent_role``/``agent_nickname`` with subagents; naming
+    either on a database written by an older Codex fails the whole scan.
+    """
+    try:
+        present = {row[1] for row in con.execute("PRAGMA table_info(threads)")}
+    except sqlite3.Error:
+        present = set()
+    return (
+        "agent_role" if "agent_role" in present else "'' AS agent_role",
+        "agent_nickname" if "agent_nickname" in present else "'' AS agent_nickname",
+    )
+
+
+def _spawn_parents(con: sqlite3.Connection) -> dict[str, str]:
+    """``child thread id -> parent thread id``, empty on an older schema."""
+    try:
+        rows = con.execute(
+            "SELECT child_thread_id, parent_thread_id FROM thread_spawn_edges"
+        ).fetchall()
+    except sqlite3.Error:
+        return {}
+    return {
+        row["child_thread_id"]: row["parent_thread_id"]
+        for row in rows
+        if row["child_thread_id"] and row["parent_thread_id"]
+    }
+
+
+def _agent_name(row: sqlite3.Row) -> str:
+    """The subagent's role, or the codename Codex gave it when it has no role."""
+    keys = row.keys()
+    role = (row["agent_role"] if "agent_role" in keys else "") or ""
+    nickname = (row["agent_nickname"] if "agent_nickname" in keys else "") or ""
+    return str(role or nickname)
+
+
 def scan_codex_usage(
     home: Path | None = None, since_timestamp: str = ""
 ) -> list[RawUsageEntry]:
@@ -67,15 +106,19 @@ def scan_codex_usage(
     try:
         con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         con.row_factory = sqlite3.Row
+        role_col, nickname_col = _agent_columns(con)
         rows = con.execute(
-            """
-            SELECT id, created_at_ms, model, model_provider, cwd, tokens_used
+            f"""
+            SELECT id, created_at_ms, model, model_provider, cwd, tokens_used,
+                   {role_col}, {nickname_col}
             FROM threads
             WHERE tokens_used > 0 AND created_at_ms > ?
             ORDER BY created_at_ms ASC
             """,
             (since_ms,),
         ).fetchall()
+        # Codex spawns a subagent as a thread of its own and records the edge.
+        parents = _spawn_parents(con)
     except sqlite3.Error:
         return []
     finally:
@@ -102,6 +145,8 @@ def scan_codex_usage(
                 cache_read_tokens=0,
                 project_path=row["cwd"] or "",
                 target="codex",
+                parent_session_id=parents.get(row["id"], ""),
+                agent=_agent_name(row),
             )
         )
 
