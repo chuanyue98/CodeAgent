@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import InstancesPage from '../components/InstancesPage';
 
@@ -46,14 +47,22 @@ test('the header separates what is running from what is merely listed', async ()
     instance({ id: 'b' }),
     instance({ id: 'c', status: 'running', stoppable: true }),
   ]);
-  render(<InstancesPage />);
+  render(
+    <MemoryRouter>
+      <InstancesPage />
+    </MemoryRouter>,
+  );
 
   expect(await screen.findByText('1 running · 3 listed')).toBeInTheDocument();
 });
 
 test('an age past two days is counted in days, not hours', async () => {
   mockInstances([instance({ id: 'a' })]);
-  render(<InstancesPage />);
+  render(
+    <MemoryRouter>
+      <InstancesPage />
+    </MemoryRouter>,
+  );
 
   // 45 days in, hours stopped carrying meaning ("1081h 59min").
   expect(await screen.findByText('45d')).toBeInTheDocument();

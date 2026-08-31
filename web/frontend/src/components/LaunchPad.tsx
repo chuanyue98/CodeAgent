@@ -22,6 +22,8 @@ interface TerminalTab {
   engine: string;
   cwd: string;
   sessionId?: string;
+  /** 重新接回一个仍在运行的终端（来自实例管理页）。 */
+  attachId?: string;
 }
 
 let nextTabId = 0;
@@ -46,22 +48,29 @@ export default function LaunchPad() {
     tabsRef.current = tabs;
   }, [tabs]);
 
-  const openTab = useCallback((engine: string, cwd: string, sessionId?: string) => {
-    // Resuming a session that already has a tab focuses it. Opening a second
-    // PTY on one conversation gives two terminals writing the same history.
-    if (sessionId) {
-      const existing = tabsRef.current.find(
-        tab => tab.sessionId === sessionId && tab.engine === engine,
-      );
-      if (existing) {
-        setActiveTabId(existing.id);
-        return;
+  const openTab = useCallback(
+    (engine: string, cwd: string, sessionId?: string, attachId?: string) => {
+      // Resuming a session that already has a tab focuses it. Opening a second
+      // PTY on one conversation gives two terminals writing the same history;
+      // attaching twice to one running terminal shares a mirrored view.
+      const identity = attachId ?? sessionId;
+      if (identity) {
+        const existing = tabsRef.current.find(
+          tab =>
+            (attachId ? tab.attachId === attachId : tab.sessionId === identity) &&
+            tab.engine === engine,
+        );
+        if (existing) {
+          setActiveTabId(existing.id);
+          return;
+        }
       }
-    }
-    const id = `tab-${nextTabId++}`;
-    setTabs(previous => [...previous, { id, engine, cwd, sessionId }]);
-    setActiveTabId(id);
-  }, []);
+      const id = `tab-${nextTabId++}`;
+      setTabs(previous => [...previous, { id, engine, cwd, sessionId, attachId }]);
+      setActiveTabId(id);
+    },
+    [],
+  );
 
   const closeTab = useCallback((id: string) => {
     setTabs(previous => {
@@ -82,16 +91,18 @@ export default function LaunchPad() {
   // Deep link from the session browser: `?engine=&cwd=&session=` opens that
   // session in the terminal here. Resuming used to open a GUI terminal on the
   // machine running the server, which the browser could not reach.
+  // `?attach=`（实例管理页）接回一个断开但引擎仍在跑的终端。
   const openedDeepLinkRef = useRef<string | null>(null);
   useEffect(() => {
     const engine = searchParams.get('engine');
     const cwd = searchParams.get('cwd');
     if (!engine || !cwd) return;
     const sessionId = searchParams.get('session') ?? undefined;
-    const key = `${engine}|${cwd}|${sessionId ?? ''}`;
+    const attachId = searchParams.get('attach') ?? undefined;
+    const key = `${engine}|${cwd}|${sessionId ?? ''}|${attachId ?? ''}`;
     if (openedDeepLinkRef.current === key) return;
     openedDeepLinkRef.current = key;
-    openTab(engine, cwd, sessionId);
+    openTab(engine, cwd, sessionId, attachId);
   }, [searchParams, openTab]);
 
   useEffect(() => {
@@ -250,7 +261,7 @@ export default function LaunchPad() {
               >
                 <TerminalSquare size={13} className="shrink-0" />
                 <span className="max-w-40 truncate">{engineLabel(tab.engine)}</span>
-                {tab.sessionId && (
+                {(tab.sessionId || tab.attachId) && (
                   <span className="rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">
                     {t('launch.resumed')}
                   </span>
@@ -295,6 +306,7 @@ export default function LaunchPad() {
               engine={tab.engine}
               cwd={tab.cwd}
               sessionId={tab.sessionId}
+              attachId={tab.attachId}
               onExit={() => {}}
             />
           </div>

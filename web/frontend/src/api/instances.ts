@@ -12,6 +12,8 @@ export interface AgentInstance {
   pid: number | null;
   startedAt: string;
   stoppable: boolean;
+  /** tmux 承载的终端断开后引擎仍在跑，可重新接回。 */
+  reattachable?: boolean;
 }
 
 export async function fetchInstances(): Promise<AgentInstance[]> {

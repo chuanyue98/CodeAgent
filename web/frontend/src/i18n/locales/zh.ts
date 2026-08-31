@@ -42,6 +42,8 @@ export const zh: Record<TranslationKey, string> = {
   'instances.kind.terminal': '终端',
   'instances.kind.task': '任务',
   'instances.stop': '停止',
+  'instances.attach': '接回',
+  'instances.attachHint': '重新连接到这个仍在运行的终端',
   'instances.stopConfirmTitle': '停止实例',
   'instances.stopConfirmDescription': '确定要停止 {name} 吗？该进程会被终止。',
   'tab.automations.tasks': '任务',

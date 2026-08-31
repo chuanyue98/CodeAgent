@@ -13,6 +13,8 @@ interface BrowserTerminalProps {
   cwd: string;
   /** Resume this session rather than starting a fresh one. */
   sessionId?: string;
+  /** Attach to a live browser terminal by its /api/pty/sessions id. */
+  attachId?: string;
   onExit?: (code: number | null) => void;
 }
 
@@ -23,6 +25,7 @@ export default function BrowserTerminal({
   engine,
   cwd,
   sessionId,
+  attachId,
   onExit,
 }: BrowserTerminalProps) {
   const t = useT();
@@ -90,7 +93,7 @@ export default function BrowserTerminal({
     // by then a later run owns the state -- its "connection closed" would sit
     // over a terminal that is connected and typing fine.
     let superseded = false;
-    const socket = new WebSocket(ptyWebSocketUrl(engine, cwd, sessionId));
+    const socket = new WebSocket(ptyWebSocketUrl(engine, cwd, sessionId, attachId));
 
     const sendResize = () => {
       if (socket.readyState === WebSocket.OPEN) {
@@ -162,7 +165,7 @@ export default function BrowserTerminal({
       termRef.current = null;
       term.dispose();
     };
-  }, [engine, cwd, sessionId, attempt]);
+  }, [engine, cwd, sessionId, attachId, attempt]);
 
   const canRestart = state === 'closed' || state === 'error';
 

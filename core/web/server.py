@@ -214,6 +214,9 @@ async def lifespan(app: FastAPI):
     # than to TaskRunner's constructor, which the CLI also builds for read-only
     # commands. Off the event loop: it stats every log file in the directory.
     await asyncio.to_thread(_task_runner.prune_old_runs)
+    # 浏览器终端的 tmux server：清掉上次异常退出残留的会话（正常关闭时
+    # lifespan 自己会 kill-server），避免引擎进程孤儿化。
+    await asyncio.to_thread(pty.kill_tmux_server)
     from core.services.agent_adapters.base import AgentAdapter
     from core.services.agent_adapters.claude import ClaudeAdapter
     from core.services.agent_adapters.codebuddy import CodeBuddyAdapter
@@ -270,6 +273,10 @@ async def lifespan(app: FastAPI):
     if agent_gateway is not None:
         await agent_gateway.stop()
     app.state.agent_gateway = None
+
+    # 终端随服务一起收摊：tmux 里的引擎在服务关闭后无人能接回，
+    # 留着只会孤儿化地消耗资源。
+    await asyncio.to_thread(pty.kill_tmux_server)
 
     # Clean up background subprocesses
     from core.web.routers.chat import _runner as chat_runner

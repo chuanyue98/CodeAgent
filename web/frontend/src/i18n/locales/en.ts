@@ -46,6 +46,8 @@ export const en = {
   'instances.kind.terminal': 'Terminal',
   'instances.kind.task': 'Task',
   'instances.stop': 'Stop',
+  'instances.attach': 'Attach',
+  'instances.attachHint': 'Reconnect to this running terminal',
   'instances.stopConfirmTitle': 'Stop instance',
   'instances.stopConfirmDescription': 'Stop {name}? The process will be terminated.',
   'tab.automations.tasks': 'Tasks',

@@ -5,6 +5,7 @@ just echoes stdin lines back, so tests can exercise the PTY plumbing without
 spawning a real provider CLI.
 """
 
+import os
 import subprocess
 import sys
 
@@ -13,6 +14,13 @@ for line in sys.stdin:
     line = line.rstrip("\n")
     if line == "exit":
         break
+    if line == "pid" or line.startswith("pid "):
+        # tmux 承载下重连是否回到同一个引擎进程，靠这个判断。带 nonce 的
+        # 形式用于区分"刚打印的"与"重连重绘出来的旧输出"。
+        nonce = line[4:].strip()
+        suffix = f":{nonce}" if nonce else ""
+        print(f"PID:{os.getpid()}{suffix}", flush=True)
+        continue
     if line == "spawn-grandchild":
         # The real launcher execs the provider CLI as its own child, so the
         # engine the user sees is a *grandchild* of the PTY session. Stand in
