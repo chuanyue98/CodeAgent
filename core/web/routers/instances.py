@@ -31,6 +31,8 @@ class Instance(ProtocolModel):
     pid: int | None
     started_at: str
     stoppable: bool
+    # tmux 承载的浏览器终端即使断开也还在跑，可从本页重新接回。
+    reattachable: bool = False
 
 
 def _iso(ts: float) -> str:
@@ -64,7 +66,10 @@ def _chat_instances(request: Request) -> list[Instance]:
     return instances
 
 
-def _terminal_instances() -> list[Instance]:
+async def _terminal_instances() -> list[Instance]:
+    # 断开的终端（引擎还在 tmux 里跑）没有自己的 websocket 通知退出，
+    # 借这次轮询清掉引擎已结束的条目。
+    await pty_router.prune_detached_sessions()
     return [
         Instance(
             kind="terminal",
@@ -76,6 +81,7 @@ def _terminal_instances() -> list[Instance]:
             pid=entry["pid"],
             started_at=entry["started_at"],
             stoppable=True,
+            reattachable=bool(entry.get("tmux_name")),
         )
         for entry in pty_router.list_active_sessions()
     ]
@@ -106,7 +112,11 @@ def _task_instances() -> list[Instance]:
 
 @router.get("")
 async def list_instances(request: Request) -> dict:
-    instances = _chat_instances(request) + _terminal_instances() + _task_instances()
+    instances = (
+        _chat_instances(request)
+        + await _terminal_instances()
+        + _task_instances()
+    )
     instances.sort(key=lambda item: item.started_at, reverse=True)
     return {"instances": [wire(instance) for instance in instances]}
 

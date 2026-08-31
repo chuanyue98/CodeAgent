@@ -37,23 +37,34 @@ CONTRACT = json.loads(
 )
 
 
-def _seed_native_model(db_path: Path, model: dict | None) -> None:
-    """Adds a session row of the kind OpenCode writes for itself.
+def _seed_native_models(db_path: Path, models: list[dict | None]) -> None:
+    """Adds session rows of the kind OpenCode writes for itself.
 
     The converter reads the model out of OpenCode's own history, because the
     source engine's model name ("claude-opus-4") names no OpenCode provider.
+    Rows are seeded oldest-first so the last entry is the "most recent".
     """
     con = sqlite3.connect(str(db_path))
     with con:
-        con.execute(
-            """INSERT INTO session (
-                id, project_id, slug, directory, title, version, model,
-                time_created, time_updated, metadata,
-                summary_additions, summary_deletions, summary_files
-            ) VALUES (?, 'prj_native', 'slug', '/repo', 'native', '1.18.21', ?, 1, 1, '{}', 0, 0, 0)""",
-            ("ses_native", json.dumps(model) if model is not None else None),
-        )
+        for index, model in enumerate(models):
+            con.execute(
+                """INSERT INTO session (
+                    id, project_id, slug, directory, title, version, model,
+                    time_created, time_updated, metadata,
+                    summary_additions, summary_deletions, summary_files
+                ) VALUES (?, 'prj_native', 'slug', '/repo', 'native', '1.18.21', ?, ?, ?, '{}', 0, 0, 0)""",
+                (
+                    f"ses_native_{index}",
+                    json.dumps(model) if model is not None else None,
+                    index + 1,
+                    index + 1,
+                ),
+            )
     con.close()
+
+
+def _seed_native_model(db_path: Path, model: dict | None) -> None:
+    _seed_native_models(db_path, [model])
 
 
 def _convert(tmp_path: Path, monkeypatch, model: dict | None) -> dict:
@@ -146,3 +157,55 @@ def test_a_fresh_install_with_no_model_yet_omits_the_fields(tmp_path, monkeypatc
 
     assert "modelID" not in data
     assert "providerID" not in data
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
+def test_zen_models_are_a_fallback_not_a_first_choice(tmp_path, monkeypatch):
+    """最新的原生会话若是 Zen（providerID=opencode）模型，不能照抄。
+
+    2026-08-31 的事故：最新一行带着 abort 会话留下的 ``big-pickle``/``opencode``，
+    转换把全部 176 条消息盖成它，resume 后第一条 prompt 在
+    SessionPrompt.run 里崩了（X.model.modelID undefined）——这台机器根本
+    没法服务 Zen 模型。应该跳过 Zen，取最近一个真实第三方 provider。
+    """
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    db_path = tmp_path / ".local" / "share" / "opencode" / "opencode.db"
+    db_path.parent.mkdir(parents=True)
+    _init_opencode_db(db_path)
+    _seed_native_models(
+        db_path,
+        [
+            {"id": "glm-5.3", "providerID": "agentrouter"},
+            {"id": "big-pickle", "providerID": "opencode"},  # 更新，但是 Zen
+        ],
+    )
+
+    worktree = tmp_path / "repo"
+    _make_git_repo(worktree)
+
+    session_id = write_opencode_session(
+        UnifiedSession(
+            session_id="orig",
+            engine=EngineType.CLAUDE,
+            project_path=str(worktree),
+            model="claude-opus-4",
+            messages=[
+                UnifiedMessage(role="user", content="hello"),
+                UnifiedMessage(role="assistant", content="hi there"),
+            ],
+        )
+    )
+
+    con = sqlite3.connect(str(db_path))
+    rows = con.execute(
+        "SELECT data FROM message WHERE session_id=?", (session_id,)
+    ).fetchall()
+    con.close()
+
+    for (raw,) in rows:
+        data = json.loads(raw)
+        if data.get("role") == "assistant":
+            assert data["modelID"] == "glm-5.3"
+            assert data["providerID"] == "agentrouter"
+            return
+    raise AssertionError("the converted session has no assistant message")

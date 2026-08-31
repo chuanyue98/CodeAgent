@@ -24,6 +24,10 @@ if TYPE_CHECKING:
 # OpenCode's fallback project for directories that are not git repositories.
 _GLOBAL_PROJECT_ID = "global"
 
+# OpenCode Zen's built-in provider id. Its models run only with Zen
+# credentials, which this install may not have -- see _last_used_model.
+_ZEN_PROVIDER_ID = "opencode"
+
 
 def _now_ms() -> int:
     """Returns current UTC time as Unix milliseconds."""
@@ -125,6 +129,16 @@ def _last_used_model(con: sqlite3.Connection) -> tuple[str, str] | None:
     names no OpenCode provider, and OpenCode resolves the model to continue
     with from the transcript. A value it wrote itself is one it can serve.
 
+    Zen rows (``providerID == "opencode"``) are a fallback, not a first
+    choice: the most recent native session may name a Zen model this
+    install cannot actually serve. Exactly that happened on 2026-08-31 --
+    the newest row carried ``big-pickle``/``opencode`` from an aborted
+    session, every converted turn was stamped with it, and the first
+    prompt after resuming crashed SessionPrompt.run with
+    ``TypeError: undefined is not an object (evaluating 'X.model.modelID')``.
+    A third-party provider configured in auth.json (agentrouter, ...)
+    is one OpenCode resolves for real, so the newest such row wins.
+
     Returns None when this install has no session carrying a model yet, in
     which case the caller omits the fields rather than inventing a provider.
     """
@@ -136,6 +150,7 @@ def _last_used_model(con: sqlite3.Connection) -> tuple[str, str] | None:
     except sqlite3.Error:
         return None
 
+    zen_fallback: tuple[str, str] | None = None
     for (raw,) in rows:
         try:
             model = json.loads(raw)
@@ -143,9 +158,13 @@ def _last_used_model(con: sqlite3.Connection) -> tuple[str, str] | None:
             continue
         model_id = model.get("id")
         provider_id = model.get("providerID")
-        if model_id and provider_id:
-            return str(model_id), str(provider_id)
-    return None
+        if not model_id or not provider_id:
+            continue
+        if str(provider_id) == _ZEN_PROVIDER_ID:
+            zen_fallback = zen_fallback or (str(model_id), str(provider_id))
+            continue
+        return str(model_id), str(provider_id)
+    return zen_fallback
 
 
 def write_opencode_session(session: UnifiedSession) -> str:

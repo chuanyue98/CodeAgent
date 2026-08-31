@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Clock3,
   MessageSquareText,
   Square,
   TerminalSquare,
   Radar,
+  Plug,
 } from 'lucide-react';
 import { fetchInstances, stopInstance, type AgentInstance, type InstanceKind } from '../api/instances';
 import { engineLabel } from '../utils/engines';
@@ -71,8 +73,22 @@ function StatusDot({ status }: { status: string }) {
  */
 export default function InstancesPage() {
   const t = useT();
+  const navigate = useNavigate();
   const [instances, setInstances] = useState<AgentInstance[]>([]);
   const [pendingStop, setPendingStop] = useState<AgentInstance | null>(null);
+
+  /** 接回一个断开但引擎仍在跑的浏览器终端。 */
+  const attachTerminal = useCallback(
+    (instance: AgentInstance) => {
+      const query = new URLSearchParams({
+        engine: instance.engine,
+        cwd: instance.cwd,
+        attach: instance.id,
+      });
+      navigate(`/agent/terminal?${query}`);
+    },
+    [navigate],
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -209,6 +225,18 @@ export default function InstancesPage() {
                     >
                       {elapsedLabel(instance.startedAt)}
                     </span>
+                    {instance.kind === 'terminal' && instance.reattachable && (
+                      <button
+                        type="button"
+                        onClick={() => attachTerminal(instance)}
+                        aria-label={t('instances.attach')}
+                        title={t('instances.attachHint')}
+                        className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-400 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                      >
+                        <Plug className="h-3 w-3" />
+                        {t('instances.attach')}
+                      </button>
+                    )}
                     {instance.stoppable && (
                       <button
                         type="button"

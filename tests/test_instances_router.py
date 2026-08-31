@@ -101,6 +101,9 @@ def test_stop_terminal_instance(monkeypatch):
         async def terminate(self):
             stopped.append("pty1")
 
+        async def shutdown(self):
+            stopped.append("pty1")
+
     pty_router._ACTIVE_SESSIONS["pty1"] = {
         "id": "pty1",
         "engine": "claude",

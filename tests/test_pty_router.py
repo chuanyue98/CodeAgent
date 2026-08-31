@@ -4,10 +4,12 @@ import asyncio
 import concurrent.futures
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 import pytest
@@ -18,6 +20,33 @@ from fastapi.websockets import WebSocketDisconnect
 from core.web.routers import pty as pty_router
 
 FAKE_ENGINE = Path(__file__).parent / "fixtures" / "fake_pty_engine.py"
+
+TMUX = shutil.which("tmux") is not None and sys.platform != "win32"
+
+requires_tmux = pytest.mark.skipif(
+    not TMUX, reason="tmux 承载路径需要 tmux（POSIX）"
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_tmux(monkeypatch: pytest.MonkeyPatch):
+    """每个测试独占一个 tmux socket，跑完杀 server、清注册表。
+
+    专用 socket 避免测试干扰本机正在运行的 CodeAgent 服务（它用默认
+    socket "codeagent"）；kill-server 兜底清理本测试泄漏的会话，否则
+    tmux 里活着的 fake 引擎会污染后面测试的 pgrep 断言。
+    """
+    socket_name = f"ca-pytest-{uuid.uuid4().hex[:8]}"
+    monkeypatch.setenv(pty_router._TMUX_SOCKET_ENV, socket_name)
+    yield
+    if TMUX:
+        subprocess.run(
+            ["tmux", "-L", socket_name, "kill-server"],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    pty_router._ACTIVE_SESSIONS.clear()
 
 
 def _app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FastAPI:
@@ -134,7 +163,10 @@ def test_pty_websocket_drains_buffered_output_before_exit_message(
             assert message["code"] == 0
 
     assert "BURST_DONE" in collected
-    assert collected.count("X") == 2_000
+    # 直接 PTY 是精确的 2000；tmux 承载时保证的是"最终屏幕完整送达"——
+    # 滚出一屏之外的瞬时输出会被 tmux 合并掉（每个 tmux 用户的既有行为），
+    # 因此断言整屏量级的下限，尾部标记 BURST_DONE 必须到达。
+    assert collected.count("X") >= 1_700
 
 
 def test_pty_websocket_rejects_non_dict_client_messages(tmp_path, monkeypatch):
@@ -166,9 +198,50 @@ def test_pty_websocket_rejects_non_dict_client_messages(tmp_path, monkeypatch):
             ws.send_json({"type": "input", "data": "exit\n"})
 
 
-def test_pty_websocket_terminates_process_on_abrupt_disconnect(tmp_path, monkeypatch):
+def _pgrep_fake_engine() -> str:
+    return subprocess.run(
+        ["pgrep", "-f", "fake_pty_engine.py"], capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _read_until(ws, predicate, max_messages: int = 500) -> str:
+    """Receives output frames until *predicate*(accumulated) is true."""
+    collected = ""
+    for _ in range(max_messages):
+        message = ws.receive_json()
+        if message.get("type") != "output":
+            continue
+        collected += message.get("data", "")
+        if predicate(collected):
+            return collected
+    raise AssertionError(f"condition never met; tail was: {collected[-500:]!r}")
+
+
+def _parse_pid(output: str) -> str:
+    return output.split("PID:", 1)[1].split(":", 1)[0].split()[0]
+
+
+def _wait_for(predicate, timeout: float = 5.0) -> None:
+    """轮询等待注册表/handler 的异步清理落地。
+
+    TestClient 的 websocket 上下文退出不等服务端 handler 的 finally 跑完，
+    立刻断言注册表状态会竞态。
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return
+        time.sleep(0.1)
+    raise AssertionError("condition never became true")
+
+
+def test_pty_websocket_terminates_process_on_abrupt_disconnect_without_tmux(
+    tmp_path, monkeypatch
+):
+    """tmux 不可用时的回退行为：断开即终止引擎（改造前的老语义）。"""
     if sys.platform == "win32":
         pytest.skip("PTY sessions are POSIX-only")
+    monkeypatch.setattr(pty_router, "_tmux_binary", lambda: None)
     app = _app(tmp_path, monkeypatch)
     with TestClient(app) as client:
         with client.websocket_connect(
@@ -180,25 +253,287 @@ def test_pty_websocket_terminates_process_on_abrupt_disconnect(tmp_path, monkeyp
     # Poll rather than asserting instantly: teardown signals the process and
     # the kernel reaps it a moment later, so a bare check here races the exit.
     for _ in range(50):
-        result = subprocess.run(
-            ["pgrep", "-f", "fake_pty_engine.py"], capture_output=True, text=True
-        )
-        if not result.stdout.strip():
+        if not _pgrep_fake_engine():
             break
         time.sleep(0.1)
-    assert result.stdout.strip() == ""
+    assert _pgrep_fake_engine() == ""
 
 
-def test_pty_websocket_kills_the_whole_process_group(tmp_path, monkeypatch):
-    """Closing the terminal must take the engine CLI down with the launcher.
+@requires_tmux
+def test_engine_survives_tab_close_and_stop_kills_it(tmp_path, monkeypatch):
+    """关标签页只 detach：引擎在 tmux 里继续跑；实例页停止才真死。"""
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/api/pty/ws",
+            params={"engine": "claude", "cwd": app.state.workspace},
+        ) as ws:
+            _read_until(ws, lambda s: "READY" in s)
+            ws.send_json({"type": "input", "data": "pid\n"})
+            text = _read_until(ws, lambda s: "PID:" in s)
+        # websocket 上下文退出 = 关标签页。断言必须留在 TestClient 上下文
+        # 里：portal 的事件循环一旦关闭，被 shield 的清理任务也跑不完。
+
+        engine_pid = int(_parse_pid(text))
+        _wait_for(
+            lambda: pty_router.list_active_sessions()
+            and pty_router.list_active_sessions()[0]["detached"] is True
+        )
+        entries = pty_router.list_active_sessions()
+        assert len(entries) == 1
+        assert entries[0]["detached"] is True
+        assert entries[0]["pid"] == engine_pid  # pane pid 就是引擎进程
+        os.kill(engine_pid, 0)  # 引擎还活着
+
+        assert asyncio.run(pty_router.stop_active_session(entries[0]["id"])) is True
+
+    for _ in range(50):
+        try:
+            os.kill(engine_pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail("stop 之后引擎进程仍在运行")
+    assert pty_router.list_active_sessions() == []
+
+
+@requires_tmux
+def test_reattach_by_id_reaches_the_same_engine(tmp_path, monkeypatch):
+    """实例页"接回"：断开后用 attach_id 重连，还是同一个引擎进程。"""
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/api/pty/ws",
+            params={"engine": "claude", "cwd": app.state.workspace},
+        ) as ws:
+            _read_until(ws, lambda s: "READY" in s)
+            ws.send_json({"type": "input", "data": "pid one\n"})
+            first_pid = (
+                _parse_pid(_read_until(ws, lambda s: "PID:" in s))
+            )
+
+        # 等 conn1 的清理任务把条目标成 detached 再重连：否则 conn2 会以
+        # guest 身份接回（条目仍被视为"attached"），后续清理归属就乱了。
+        _wait_for(
+            lambda: pty_router.list_active_sessions()
+            and pty_router.list_active_sessions()[0]["detached"] is True
+        )
+        entry_id = pty_router.list_active_sessions()[0]["id"]
+
+        with client.websocket_connect(
+            "/api/pty/ws",
+            params={
+                "engine": "claude",
+                "cwd": app.state.workspace,
+                "attach_id": entry_id,
+            },
+        ) as ws:
+            # nonce "two" 确保读到的是本次刚打印的，而非重绘的旧输出
+            ws.send_json({"type": "input", "data": "pid two\n"})
+            second_pid = (
+                _parse_pid(_read_until(ws, lambda s: ":two" in s))
+            )
+            ws.send_json({"type": "input", "data": "exit\n"})
+
+    assert first_pid == second_pid
+
+
+@requires_tmux
+def test_resume_deep_link_reattaches_the_same_engine(tmp_path, monkeypatch):
+    """会话历史深链（engine+cwd+session）重开：确定性 tmux 名，接回同一引擎。"""
+    # 深链 resume 走的是引擎自身 CLI（claude --resume …），测试里换成
+    # fake 引擎，行为不变：argv 是什么不影响"同名 tmux 会话被重连"。
+    monkeypatch.setattr(
+        pty_router,
+        "resume_command",
+        lambda engine, session_id, project: [sys.executable, str(FAKE_ENGINE), engine],
+    )
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/api/pty/ws",
+            params={
+                "engine": "claude",
+                "cwd": app.state.workspace,
+                "session_id": "sess-1",
+            },
+        ) as ws:
+            _read_until(ws, lambda s: "READY" in s)
+            ws.send_json({"type": "input", "data": "pid one\n"})
+            first_pid = (
+                _parse_pid(_read_until(ws, lambda s: "PID:" in s))
+            )
+
+        # 等 conn1 的清理落地（同 test_reattach_by_id 的理由）
+        _wait_for(
+            lambda: pty_router.list_active_sessions()
+            and pty_router.list_active_sessions()[0]["detached"] is True
+        )
+
+        # 第二次打开同一个深链：不应出现第二个引擎进程
+        with client.websocket_connect(
+            "/api/pty/ws",
+            params={
+                "engine": "claude",
+                "cwd": app.state.workspace,
+                "session_id": "sess-1",
+            },
+        ) as ws:
+            ws.send_json({"type": "input", "data": "pid two\n"})
+            second_pid = (
+                _parse_pid(_read_until(ws, lambda s: ":two" in s))
+            )
+            ws.send_json({"type": "input", "data": "exit\n"})
+            while True:
+                if ws.receive_json().get("type") == "exit":
+                    break
+
+        assert first_pid == second_pid
+        # 引擎退出后注册表条目被 finally 清掉（pane 状态判定）。必须在
+        # TestClient 上下文里等：portal 循环一关，被 shield 的清理任务也停。
+        _wait_for(lambda: pty_router.list_active_sessions() == [])
+    assert pty_router.list_active_sessions() == []
+
+
+@requires_tmux
+def test_attach_after_engine_exit_is_rejected(tmp_path, monkeypatch):
+    """引擎已退出的终端不能再接回（4404），注册表条目随之清除。"""
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/api/pty/ws",
+            params={"engine": "claude", "cwd": app.state.workspace},
+        ) as ws:
+            _read_until(ws, lambda s: "READY" in s)
+            ws.send_json({"type": "input", "data": "exit\n"})
+            while True:
+                message = ws.receive_json()
+                if message.get("type") == "exit":
+                    break
+
+        # exit 后 finally 依据 pane 状态清掉条目（exit 消息先于 finally 发出）
+        _wait_for(lambda: pty_router.list_active_sessions() == [])
+        entries = pty_router.list_active_sessions()
+        assert entries == []
+        for stale in [entry["id"] for entry in entries]:
+            with pytest.raises(WebSocketDisconnect) as exc_info:
+                with client.websocket_connect(
+                    "/api/pty/ws",
+                    params={
+                        "engine": "claude",
+                        "cwd": app.state.workspace,
+                        "attach_id": stale,
+                    },
+                ) as ws:
+                    ws.receive_json()
+            assert exc_info.value.code == 4404
+
+
+def test_attach_to_unknown_id_closes_with_reason(tmp_path, monkeypatch):
+    if sys.platform == "win32":
+        pytest.skip("PTY sessions are POSIX-only")
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect(
+                "/api/pty/ws",
+                params={
+                    "engine": "claude",
+                    "cwd": app.state.workspace,
+                    "attach_id": "does-not-exist",
+                },
+            ) as ws:
+                ws.receive_json()
+    assert exc_info.value.code == 4404
+
+
+@requires_tmux
+@pytest.mark.asyncio
+async def test_prune_detached_sessions_drops_dead_engines(tmp_path, monkeypatch):
+    """detach 后引擎自己退出（没人盯着），实例轮询的 prune 负责收尸。"""
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/api/pty/ws",
+            params={"engine": "claude", "cwd": app.state.workspace},
+        ) as ws:
+            _read_until(ws, lambda s: "READY" in s)
+            ws.send_json({"type": "input", "data": "pid\n"})
+            engine_pid = int(
+                _parse_pid(_read_until(ws, lambda s: "PID:" in s))
+            )
+        # detach；引擎还活着
+        _wait_for(
+            lambda: pty_router.list_active_sessions()
+            and pty_router.list_active_sessions()[0]["detached"] is True
+        )
+        entry = pty_router.list_active_sessions()[0]
+        assert entry["detached"] is True
+
+        # 引擎自己退出（比如干完活了）
+        os.kill(engine_pid, signal.SIGTERM)
+        for _ in range(50):
+            try:
+                os.kill(engine_pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.1)
+
+        await pty_router.prune_detached_sessions()
+        assert pty_router.list_active_sessions() == []
+
+
+@requires_tmux
+def test_detached_grandchild_dies_on_stop(tmp_path, monkeypatch):
+    """tmux 承载下的进程组语义：断开时孙子进程活着，停止时一起死。"""
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/api/pty/ws",
+            params={"engine": "claude", "cwd": app.state.workspace},
+        ) as ws:
+            _read_until(ws, lambda s: "READY" in s)
+            ws.send_json({"type": "input", "data": "spawn-grandchild\n"})
+            text = _read_until(ws, lambda s: "GRANDCHILD:" in s)
+            grandchild_pid = int(text.split("GRANDCHILD:", 1)[1].split()[0])
+            os.kill(grandchild_pid, 0)  # 还活着
+
+        # 断开后仍在跑
+        time.sleep(0.5)
+        os.kill(grandchild_pid, 0)
+
+        _wait_for(
+            lambda: pty_router.list_active_sessions()
+            and pty_router.list_active_sessions()[0]["detached"] is True
+        )
+        entry = pty_router.list_active_sessions()[0]
+        assert asyncio.run(pty_router.stop_active_session(entry["id"])) is True
+
+    for _ in range(50):
+        try:
+            os.kill(grandchild_pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        os.kill(grandchild_pid, signal.SIGKILL)
+        pytest.fail("stop 之后孙子进程仍在运行")
+
+
+def test_pty_websocket_kills_the_whole_process_group_without_tmux(
+    tmp_path, monkeypatch
+):
+    """tmux 不可用时的回退：关闭终端必须连引擎 CLI（孙子进程）一起带走。
 
     The launcher execs the provider CLI as its own child, so signalling only
     the tracked pid left that grandchild alive holding the workspace's
-    ``.codeagent-session.lock`` — and every later launch of that engine in the
-    workspace then blocked forever in ``flock(LOCK_EX)``.
+    ``.codeagent-session.lock`` — and every later launch of that engine in
+    the workspace then blocked forever in ``flock(LOCK_EX)``.
     """
     if sys.platform == "win32":
         pytest.skip("PTY sessions are POSIX-only")
+    monkeypatch.setattr(pty_router, "_tmux_binary", lambda: None)
 
     app = _app(tmp_path, monkeypatch)
     with TestClient(app) as client:
