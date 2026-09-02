@@ -447,6 +447,13 @@ def _resize_fd(fd: int, cols: int, rows: int) -> None:
         fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))  # type: ignore[attr-defined]
 
 
+def _tmux_resize_window(name: str, cols: int, rows: int) -> None:
+    if not name:
+        return
+    with contextlib.suppress(Exception):
+        _run_tmux("resize-window", "-t", name, "-x", str(cols), "-y", str(rows))
+
+
 class _PosixSession:
     def __init__(
         self,
@@ -471,6 +478,7 @@ class _PosixSession:
 
     def resize(self, cols: int, rows: int) -> None:
         _resize_fd(self._master_fd, cols, rows)
+        _tmux_resize_window(self.tmux_name, cols, rows)
 
     async def wait(self) -> int:
         return await self._process.wait()

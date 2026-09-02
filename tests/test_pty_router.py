@@ -733,6 +733,66 @@ def test_pty_websocket_opens_in_an_unregistered_workspace_on_loopback(
 # machine -- still real coverage for the one platform that can't run in CI.
 
 
+@requires_tmux
+@pytest.mark.asyncio
+async def test_posix_session_resize_updates_tmux_window_size(monkeypatch):
+    if sys.platform == "win32":
+        pytest.skip("tmux resizing is POSIX-only")
+    monkeypatch.setattr(pty_router, "_CA_LAUNCHER", FAKE_ENGINE)
+    output_queue: asyncio.Queue = asyncio.Queue()
+    session = await pty_router._spawn_posix("claude", Path.cwd(), output_queue)
+    try:
+        collected = ""
+        while "READY" not in collected:
+            chunk = await asyncio.wait_for(output_queue.get(), timeout=15)
+            assert chunk is not None
+            collected += chunk.decode("utf-8", errors="replace") if isinstance(chunk, bytes) else chunk
+
+        original_display = subprocess.run(
+            [
+                "tmux",
+                "-L",
+                os.environ[pty_router._TMUX_SOCKET_ENV],
+                "display-message",
+                "-p",
+                "-t",
+                session.tmux_name,
+                "#{window_width}x#{window_height}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert original_display.returncode == 0
+        assert original_display.stdout.strip() == "80x24"
+
+        session.resize(132, 50)
+        resized_display = subprocess.run(
+            [
+                "tmux",
+                "-L",
+                os.environ[pty_router._TMUX_SOCKET_ENV],
+                "display-message",
+                "-p",
+                "-t",
+                session.tmux_name,
+                "#{window_width}x#{window_height}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert resized_display.returncode == 0
+        assert resized_display.stdout.strip() == "132x50"
+
+        session.write("exit\r\n")
+        code = await asyncio.wait_for(session.wait(), timeout=15)
+        assert code == 0
+    finally:
+        await session.terminate()
+        await session.close()
+
+
 def test_pty_status_reports_unavailable_without_pywinpty(monkeypatch):
     monkeypatch.setattr(pty_router, "winpty", None)
     monkeypatch.setattr(pty_router.sys, "platform", "win32")
