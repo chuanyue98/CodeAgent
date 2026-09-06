@@ -40,7 +40,8 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 └─────────────────────────────────────────────────────────────┘
 ```
 
-1. **Engines** — Pluggable adapters for different AI agents (`engines/`)
+1. **Engines** — Pluggable adapters for different AI agents (`engines/`),
+   registered in one place (`core/engine_registry.py`):
    - `ca opencode`: Local npm CLI engine with TUI support **(Recommended)**
    - `ca claude`: Anthropic-powered high-reasoning driver
    - `ca codex`: OpenAI Codex CLI-powered engineering driver
@@ -73,7 +74,8 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 
 ### Prerequisites
 
-- **Python 3.13+**
+- **Python 3.13+** and **[uv](https://docs.astral.sh/uv/)** (the project's
+  dependency manager — do not use `pip`/`venv`/`conda`; see AGENTS.md).
 - **At least one provider CLI, already installed and signed in.** CodeAgent drives the
   official CLIs — it does not talk to any API itself, and does not store your keys.
   Any one of `claude`, `opencode`, `codex`, or `codebuddy` is enough to start.
@@ -87,8 +89,7 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 git clone --recurse-submodules https://github.com/chuanyue98/CodeAgent.git
 cd CodeAgent
 
-python -m venv .venv && source .venv/bin/activate
-uv sync                     # or: pip install -e .
+uv sync                     # creates .venv and installs everything; or: uv sync --group dev
 
 ca doctor --fix             # checks the provider CLIs, and creates config.json
 ```
@@ -281,9 +282,10 @@ See [docs/configuration.md](docs/configuration.md) for detailed reference.
 │   ├── services/          # Orchestration services (gateway, runner, scheduler, MCP)
 │   ├── session_history/   # Session persistence & format conversion
 │   ├── web/               # FastAPI web server & API routes
-│   ├── engine_base.py     # Base engine & environment manager
+│   ├── engine_base/       # Base engine & mixins (config, prompts, links, settings)
+│   ├── engine_registry.py # Declarative engine registry (single source of truth)
 │   ├── doctor.py          # Health check & repair
-│   └── scanners/          # Resource discovery (skills, prompts, hooks, plugins)
+│   └── *_scanner.py       # Resource discovery (skills, prompts, hooks, plugins)
 ├── engines/               # LLM Adapters
 │   ├── start_claude_code.py
 │   ├── start_opencode.py
@@ -294,7 +296,7 @@ See [docs/configuration.md](docs/configuration.md) for detailed reference.
 ├── plugins/               # Domain capability bundles
 ├── tasks/                 # Pre-defined execution blueprints
 ├── web/                   # React/Vite frontend for Analytics UI
-├── tests/                 # Quality guardrails (31 test files)
+├── tests/                 # Quality guardrails (80+ test files)
 └── docs/                  # Documentation
 ```
 

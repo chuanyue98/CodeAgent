@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import re
@@ -13,7 +14,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.constants import ENGINES
+from core.engine_registry import ENGINES, get_spec
 from core.host_env import child_environ
 from core.services.run_store import RunStore, TaskRunRecord
 
@@ -62,13 +63,10 @@ def _unlink_quietly(path: Path) -> None:
 
 
 # Field name each engine's JSON(L) output uses for its session identifier.
-# codex calls it "thread_id"; the others call it "session_id"/"sessionID".
+# Derived from the engine registry (AUDIT-002): codex calls it "thread_id";
+# the others call it "session_id"/"sessionID".
 _CHAT_SESSION_ID_FIELDS: dict[str, tuple[str, ...]] = {
-    "claude": ("session_id",),
-    "codex": ("thread_id",),
-    "opencode": ("sessionID",),
-    "codebuddy": ("session_id", "sessionId"),
-    "antigravity": ("session_id", "sessionId", "conversationId", "conversation_id"),
+    name: spec.session_id_fields for name, spec in ENGINES.items()
 }
 
 
@@ -400,30 +398,17 @@ class TaskRunner:
     def _build_engine(self, engine: str):
         """Lazily imports and instantiates the given engine's controller class.
 
-        Lazy per-call imports avoid a core -> engines -> core import cycle
+        The adapter module/class comes from the engine registry
+        (``EngineSpec.adapter``, dotted "module:Class" path). The import is
+        done per call to avoid a core -> engines -> core import cycle
         (engines/start_*.py import from core.engine_base).
         """
-        if engine == "claude":
-            from engines.start_claude_code import ClaudeEngine
-
-            return ClaudeEngine()
-        if engine == "codex":
-            from engines.start_codex import CodexEngine
-
-            return CodexEngine()
-        if engine == "opencode":
-            from engines.start_opencode import OpenCodeEngine
-
-            return OpenCodeEngine()
-        if engine == "codebuddy":
-            from engines.start_codebuddy import CodeBuddyEngine
-
-            return CodeBuddyEngine()
-        if engine == "antigravity":
-            from engines.start_antigravity import AntigravityEngine
-
-            return AntigravityEngine()
-        raise ValueError(f"Invalid engine: {engine!r}")
+        spec = get_spec(engine)
+        if spec is None:
+            raise ValueError(f"Invalid engine: {engine!r}")
+        module_name, _, class_name = spec.adapter.partition(":")
+        module = importlib.import_module(module_name)
+        return getattr(module, class_name)()
 
     _instantiate_engine = _build_engine
 

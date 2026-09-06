@@ -101,20 +101,36 @@ class CodexEngine(BaseEngine):
                 '   trust_level = "trusted"'
             )
 
-    def build_command(self, message: str, non_interactive: bool) -> list[str]:
+    def build_command(
+        self, message: str = "", non_interactive: bool = False, yolo: bool = False
+    ) -> list[str]:
+        effective_yolo = (
+            yolo
+            or getattr(self, "yolo", False)
+            or os.environ.get("CA_YOLO", "").lower() in ("1", "true")
+        )
         if non_interactive:
-            return [
+            cmd = [
                 CODEX_COMMAND,
                 CODEX_EXEC_SUBCOMMAND,
                 CODEX_SKIP_PERMISSIONS_FLAG,
-                message,
             ]
+            if message:
+                cmd.append(message)
+            return cmd
 
-        return [
-            CODEX_COMMAND,
-            CODEX_SKIP_PERMISSIONS_FLAG,
-            message,
-        ]
+        cmd = [CODEX_COMMAND]
+        if effective_yolo:
+            cmd.append(CODEX_SKIP_PERMISSIONS_FLAG)
+        if message:
+            cmd.append(message)
+        return cmd
+
+    def build_interactive_command(
+        self, message: str = "", yolo: bool = False
+    ) -> list[str]:
+        return self.build_command(message, non_interactive=False, yolo=yolo)
+
 
     def build_chat_command(
         self, message: str, session_id: str | None = None
@@ -698,8 +714,8 @@ def parse_arguments() -> tuple[argparse.Namespace, list[str]]:
         "-y",
         "--yolo",
         action="store_true",
-        default=True,
-        help=t("cli.help.yolo_default_on"),
+        default=False,
+        help=t("cli.help.yolo_mode"),
     )
     parser.add_argument(
         "--allow-shell-first",
@@ -887,7 +903,7 @@ def main() -> None:
                 concise_msg = engine.write_temp_prompt(message)
                 try:
                     final_command = engine.build_command(
-                        concise_msg, codex_non_interactive
+                        concise_msg, codex_non_interactive, yolo=args.yolo
                     )
                     print(f"Launching {engine.name}...")
                     engine.run_shell(final_command, env)
@@ -905,7 +921,9 @@ def main() -> None:
         else:
             concise_msg = engine.write_temp_prompt(full_prompt)
             try:
-                final_command = engine.build_command(concise_msg, codex_non_interactive)
+                final_command = engine.build_command(
+                    concise_msg, codex_non_interactive, yolo=args.yolo
+                )
                 print(f"Launching {engine.name}...")
                 engine.run_shell(final_command, env)
             finally:

@@ -6,6 +6,7 @@ import sys
 
 import click
 
+from core.engine_registry import ENGINES
 from core.host_env import child_environ
 from core.i18n import ENV_VAR as CA_LANG_ENV
 from core.i18n import resolve_language, t
@@ -89,7 +90,11 @@ class CodeAgentGroup(click.Group):
 )
 @click.option("--proxy", is_flag=True, help="Enable proxy from config.json")
 @click.option(
-    "-y", "--yolo", is_flag=True, flag_value=True, default=True, help="Enable YOLO mode"
+    "-y",
+    "--yolo",
+    is_flag=True,
+    default=False,
+    help="Enable YOLO mode (bypass sandbox and approvals)",
 )
 @click.pass_context
 def cli(ctx, proxy, yolo):  # type: ignore[no-untyped-def]
@@ -98,13 +103,12 @@ def cli(ctx, proxy, yolo):  # type: ignore[no-untyped-def]
     ctx.ensure_object(dict)
     config = _helpers_mod.load_config()
     root = _helpers_mod._project_root()
+    # Derived from the declarative engine registry (core.engine_registry):
+    # canonical names plus every alias ("ca agy") map to the launch script.
     engine_script_map = {
-        "claude": str(root / "engines" / "start_claude_code.py"),
-        "opencode": str(root / "engines" / "start_opencode.py"),
-        "codex": str(root / "engines" / "start_codex.py"),
-        "codebuddy": str(root / "engines" / "start_codebuddy.py"),
-        "antigravity": str(root / "engines" / "start_antigravity.py"),
-        "agy": str(root / "engines" / "start_antigravity.py"),
+        key: str(root / "engines" / spec.launch_script)
+        for spec in ENGINES.values()
+        for key in (spec.name, *spec.aliases)
     }
     child_env = None
     if proxy:

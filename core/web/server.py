@@ -53,6 +53,12 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 def get_agent_gateway_settings(config: dict) -> dict:
+    # The Agent Gateway (programmatic per-provider adapters behind REST/WS)
+    # is an EXPERIMENTAL subsystem: its primary web UI was retired when the
+    # streaming terminal became the single conversation surface, and the
+    # launch path (engines/start_*.py) is the product's main adapter stack.
+    # So the gateway now defaults OFF (AUDIT-001); enable it explicitly with
+    # CA_AGENT_GATEWAY_ENABLED=1 or "agent_gateway": {"enabled": true}.
     raw = config.get("agent_gateway", {})
     provider_config = raw.get("providers", {})
     providers = {
@@ -64,7 +70,7 @@ def get_agent_gateway_settings(config: dict) -> dict:
     }
     return {
         "enabled": _env_bool(
-            "CA_AGENT_GATEWAY_ENABLED", bool(raw.get("enabled", True))
+            "CA_AGENT_GATEWAY_ENABLED", bool(raw.get("enabled", False))
         ),
         "legacyFallback": _env_bool(
             "CA_AGENT_LEGACY_FALLBACK", bool(raw.get("legacy_fallback", True))

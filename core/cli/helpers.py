@@ -15,6 +15,7 @@ from pathlib import Path
 
 from core.console import configure_console_encoding
 from core.constants import ENGINES  # noqa: F401
+from core.engine_registry import normalize_engine_name
 from core.host_env import child_environ
 from core.i18n import ENV_VAR as CA_LANG_ENV  # noqa: F401
 from core.i18n import resolve_language, t  # noqa: F401
@@ -276,15 +277,18 @@ def _launch_engine(ctx, args: list[str]):  # type: ignore[no-untyped-def]
     if args:
         first_arg = args[0].lower()
         if first_arg in engine_script_map:
-            engine_name = first_arg
+            # Normalize aliases ("agy") to the canonical name so downstream
+            # consumers see the same value they would from "ca antigravity".
+            engine_name = normalize_engine_name(first_arg)
             extra_params = list(args[1:])
         else:
             extra_params = list(args)
 
-    if "-y" not in extra_params:
+    yolo_enabled = bool(obj.get("yolo", False))
+    if yolo_enabled and "-y" not in extra_params and "--yolo" not in extra_params:
         extra_params.append("-y")
 
-    if obj.get("yolo", True):
+    if yolo_enabled or "-y" in extra_params or "--yolo" in extra_params:
         print(t("engine.yolo_warning"))
 
     target_script = engine_script_map[engine_name]

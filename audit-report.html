@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodeAgent — 全仓库工程审计与竞品对标报告</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --paper:#ffffff; --ink:#1a2332; --muted:#5b6675; --line:#e3e7ec;
+    --accent:#2456c8; --accent-soft:#eaf0fd;
+    --red:#c92a2a; --red-bg:#fdecec; --orange:#d9480f; --orange-bg:#fdf0e7;
+    --amber:#b07d08; --amber-bg:#fdf6e3; --green:#2b8a3e; --green-bg:#e9f7ec;
+    --blue:#1971c2; --blue-bg:#e7f1fb; --black:#343a40; --black-bg:#eef0f2;
+    --code-bg:#14181f; --code-ink:#d7dde6;
+    --sidebar:#10141b; --sidebar-ink:#aeb7c4;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",Roboto,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* ── 布局 ─────────────────────────────────────────── */
+  .layout{display:flex;min-height:100vh}
+  nav#toc{width:272px;flex:0 0 272px;background:var(--sidebar);color:var(--sidebar-ink);
+          position:sticky;top:0;height:100vh;overflow-y:auto;padding:22px 0 40px}
+  nav#toc .brand{padding:0 20px 16px;border-bottom:1px solid #232a35;margin-bottom:14px}
+  nav#toc .brand b{color:#fff;font-size:15px;display:block;letter-spacing:.2px}
+  nav#toc .brand span{font-size:11.5px;color:#7a8595;display:block;margin-top:3px}
+  nav#toc a{display:block;color:var(--sidebar-ink);padding:6px 20px;font-size:13.5px;
+            border-left:3px solid transparent;line-height:1.45}
+  nav#toc a:hover{color:#fff;text-decoration:none;background:#181e28}
+  main{flex:1;min-width:0;padding:0 0 90px}
+  .container{max-width:1000px;margin:0 auto;padding:0 40px}
+
+  @media (max-width:1000px){
+    .layout{flex-direction:column}
+    nav#toc{position:relative;width:100%;height:auto;flex:none}
+    .container{padding:0 20px}
+  }
+
+  /* ── 头部 ─────────────────────────────────────────── */
+  header.hero{background:linear-gradient(135deg,#0d1117 0%,#16233d 55%,#1b3a6b 100%);
+              color:#fff;padding:58px 0 50px}
+  header.hero .kicker{font-size:12px;letter-spacing:2.4px;text-transform:uppercase;color:#8fb3ff;margin-bottom:14px}
+  header.hero h1{font-size:33px;line-height:1.3;margin:0 0 16px;font-weight:750;letter-spacing:-.3px}
+  header.hero p.sub{color:#b9c4d6;max-width:780px;margin:0;font-size:15.5px}
+  .hero-meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+  .hero-meta .chip{background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.16);
+                   border-radius:999px;padding:5px 14px;font-size:12.5px;color:#d5deeb;font-family:var(--mono)}
+
+  /* ── 章节 ─────────────────────────────────────────── */
+  section{padding-top:46px}
+  h2{font-size:24px;margin:0 0 6px;letter-spacing:-.3px;padding-top:10px}
+  h2 .no{color:var(--accent);font-family:var(--mono);font-size:15px;margin-right:10px;font-weight:600}
+  h3{font-size:18px;margin:30px 0 10px}
+  h4{font-size:15.5px;margin:22px 0 8px}
+  p{margin:10px 0}
+  .lede{color:var(--muted);font-size:15px;margin:0 0 18px;max-width:840px}
+  code{font-family:var(--mono);font-size:.88em;background:#eef1f5;border-radius:5px;padding:1.5px 6px;color:#24344d}
+
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:12px;
+        padding:24px 28px;margin:18px 0;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+
+  /* ── 评分卡 ───────────────────────────────────────── */
+  .score-hero{display:grid;grid-template-columns:200px 1fr;gap:28px;align-items:center}
+  @media (max-width:720px){.score-hero{grid-template-columns:1fr}}
+  .bigscore{text-align:center;background:var(--accent-soft);border-radius:14px;padding:26px 10px}
+  .bigscore .n{font-size:56px;font-weight:800;color:var(--accent);line-height:1}
+  .bigscore .d{font-size:13px;color:var(--muted);margin-top:8px;letter-spacing:1px}
+  .bars .row{display:grid;grid-template-columns:170px 1fr 52px;gap:14px;align-items:center;margin:9px 0;font-size:14px}
+  .bars .track{background:#edf0f4;border-radius:99px;height:9px;overflow:hidden}
+  .bars .fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#4d79d6,#2456c8)}
+  .bars .val{font-family:var(--mono);font-size:13px;text-align:right;color:var(--muted)}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}
+  @media (max-width:860px){.grid3{grid-template-columns:1fr}}
+  .keyfinding{border-left:4px solid var(--accent);background:var(--accent-soft);
+              border-radius:0 10px 10px 0;padding:14px 18px;font-size:14.5px}
+  .keyfinding b{display:block;margin-bottom:6px}
+  .keyfinding.kf1{border-color:var(--orange);background:var(--orange-bg)}
+  .keyfinding.kf2{border-color:var(--amber);background:var(--amber-bg)}
+  .keyfinding.kf3{border-color:var(--red);background:var(--red-bg)}
+
+  /* ── 徽章 ─────────────────────────────────────────── */
+  .badge{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;
+         padding:2px 8px;letter-spacing:.4px;font-family:var(--mono);vertical-align:middle;white-space:nowrap}
+  .b-p0{background:var(--red);color:#fff}
+  .b-p1{background:var(--orange);color:#fff}
+  .b-p2{background:var(--amber);color:#fff}
+  .b-p3{background:#64748b;color:#fff}
+  .b-high{background:var(--green-bg);color:var(--green);border:1px solid #bfe3c8}
+  .b-med{background:var(--amber-bg);color:var(--amber);border:1px solid #ecd9a0}
+  .b-low{background:var(--blue-bg);color:var(--blue);border:1px solid #c4ddf3}
+
+  /* ── 表格 ─────────────────────────────────────────── */
+  .tblwrap{overflow-x:auto;background:var(--paper);border:1px solid var(--line);border-radius:12px;margin:16px 0}
+  table{border-collapse:collapse;width:100%;font-size:13.8px}
+  th{background:#f2f4f7;text-align:left;padding:10px 14px;font-size:12px;
+     letter-spacing:.6px;color:var(--muted);border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#fafbfc}
+  .mono{font-family:var(--mono);font-size:12.5px}
+
+  /* ── 代码块 ───────────────────────────────────────── */
+  pre{background:var(--code-bg);color:var(--code-ink);border-radius:12px;
+      padding:18px 20px;overflow-x:auto;font-family:var(--mono);font-size:12.6px;line-height:1.65;margin:14px 0}
+  pre .c{color:#7d8aa0}
+  pre .b{color:#79c0ff}
+  code{font-family:var(--mono)}
+
+  /* ── AUDIT 问题块 ─────────────────────────────────── */
+  .finding{background:var(--paper);border:1px solid var(--line);border-left:5px solid var(--orange);
+           border-radius:12px;padding:20px 24px;margin:20px 0}
+  .finding.p2{border-left-color:var(--amber)}
+  .finding h4{margin:0 0 6px;font-size:16.5px}
+  .finding .meta{font-size:12.5px;color:var(--muted);font-family:var(--mono);margin-bottom:12px}
+  .finding dl{margin:0;font-size:14.5px}
+  .finding dt{color:var(--muted);font-weight:700;font-size:13px;margin-top:10px}
+  .finding dt:first-child{margin-top:0}
+  .finding dd{margin:3px 0 0}
+
+  /* ── 健康地图 ─────────────────────────────────────── */
+  .healthmap{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:16px 0}
+  @media (max-width:1000px){.healthmap{grid-template-columns:repeat(2,1fr)}}
+  .hm{border-radius:12px;padding:16px;border:1px solid var(--line);font-size:13px}
+  .hm h5{margin:0 0 8px;font-size:13.5px;display:flex;align-items:center;gap:7px}
+  .hm ul{margin:0;padding-left:16px;color:var(--muted)}
+  .hm li{margin:4px 0}
+  .hm.green{background:var(--green-bg)} .hm.yellow{background:var(--amber-bg)}
+  .hm.orange{background:var(--orange-bg)} .hm.red{background:var(--red-bg)}
+  .hm.black{background:var(--black-bg)}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .dot.g{background:var(--green)} .dot.y{background:#e0b400} .dot.o{background:var(--orange)}
+  .dot.r{background:var(--red)} .dot.k{background:#212529}
+
+  /* ── 决策清单 ─────────────────────────────────────── */
+  .dec{border-radius:12px;border:1px solid var(--line);overflow:hidden;margin:16px 0}
+  .dec .head{padding:12px 20px;font-weight:700;font-size:15px;color:#fff}
+  .dec.red .head{background:var(--red)} .dec.orange .head{background:var(--orange)}
+  .dec.yellow .head{background:#b07d08} .dec.green .head{background:var(--green)}
+  .dec.black .head{background:#343a40}
+  .dec ol{margin:0;padding:16px 20px 16px 44px;background:var(--paper)}
+  .dec li{margin:7px 0;font-size:14.5px}
+
+  /* ── 结论横幅 ─────────────────────────────────────── */
+  .verdict{background:linear-gradient(135deg,#0d1117,#1b3a6b);color:#e6ecf5;border-radius:14px;
+           padding:28px 32px;margin-top:26px}
+  .verdict h3{color:#fff;margin-top:0}
+  .verdict b{color:#8fb3ff}
+
+  /* ── 路线图 ───────────────────────────────────────── */
+  .phase{display:grid;grid-template-columns:180px 1fr;border:1px solid var(--line);
+         border-radius:12px;overflow:hidden;margin:14px 0;background:var(--paper)}
+  .phase .ph{background:#f2f4f7;padding:18px;font-weight:700;border-right:1px solid var(--line)}
+  .phase .ph small{display:block;font-weight:500;color:var(--muted);margin-top:6px;font-size:12px}
+  .phase .pb{padding:16px 20px;font-size:14.5px}
+  .phase .pb .why{color:var(--muted);font-size:13px;margin-top:6px}
+  @media (max-width:720px){.phase{grid-template-columns:1fr}.phase .ph{border-right:none;border-bottom:1px solid var(--line)}}
+
+  footer{color:var(--muted);font-size:12.5px;text-align:center;padding:30px 20px;border-top:1px solid var(--line);margin-top:60px}
+  .up{position:fixed;right:22px;bottom:22px;background:var(--accent);color:#fff;border-radius:10px;
+      padding:9px 14px;font-size:13px;box-shadow:0 4px 14px rgba(36,86,200,.35);opacity:.9}
+  .up:hover{text-decoration:none;opacity:1}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ══════════════════ 侧边目录 ══════════════════ -->
+<nav id="toc">
+  <div class="brand">
+    <b>CodeAgent 审计报告</b>
+    <span>全仓库工程审计 + 竞品对标 · 2026年9月</span>
+  </div>
+  <a href="#ch1">第一章 · 执行摘要</a>
+  <a href="#ch2">第二章 · 项目真实架构</a>
+  <a href="#ch3">第三章 · Top 20 问题</a>
+  <a href="#ch4">第四章 · 架构问题</a>
+  <a href="#ch5">第五章 · 代码结构问题</a>
+  <a href="#ch6">第六章 · CLI / Engine</a>
+  <a href="#ch7">第七章 · 资源体系</a>
+  <a href="#ch8">第八章 · Session / 调度 / Analytics</a>
+  <a href="#ch9">第九章 · Web UI / UX</a>
+  <a href="#ch10">第十章 · 测试与质量</a>
+  <a href="#ch11">第十一章 · 安全与稳定性</a>
+  <a href="#ch12">第十二章 · 开源项目对标</a>
+  <a href="#ch13">第十三章 · 未来能力路线图</a>
+  <a href="#ch14">第十四章 · 技术债地图</a>
+  <a href="#ch15">第十五章 · 重构路线图</a>
+  <a href="#ch16">第十六章 · 代码健康地图</a>
+  <a href="#ch17">第十七章 · 决策清单</a>
+  <a href="#verdict">最终判断</a>
+</nav>
+
+<!-- ══════════════════ 正文 ══════════════════ -->
+<main>
+<header class="hero">
+  <div class="container">
+    <div class="kicker">Engineering Audit Report · 只审查，未修改任何代码</div>
+    <h1>CodeAgent<br>全仓库工程审计 &amp; 竞品对标报告</h1>
+    <p class="sub">审计对象：<code style="background:rgba(255,255,255,.12);color:#dbe6f7">chuanyue98/CodeAgent</code>（基于本地检出）。共 427 次提交（2026-05 → 2026-09），约 124 个已合并 PR。以下每一条结论都基于实际读过的代码；审计过程中实际执行了测试套件（1,059 通过 / 11 跳过 / 57 秒），实测覆盖率 78.15%（门槛 76），ruff 与 mypy 全部通过（139 个文件）。</p>
+    <div class="hero-meta">
+      <span class="chip">core/ 26,234 行</span>
+      <span class="chip">engines/ 1,853 行</span>
+      <span class="chip">前端 ~15,344 行</span>
+      <span class="chip">测试 20,708 行 · 84 个文件</span>
+      <span class="chip">ruff ✓ mypy ✓ pytest ✓</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+
+<!-- ════════ 第一章 ════════ -->
+<section id="ch1">
+  <h2><span class="no">01</span>执行摘要</h2>
+  <p class="lede">一句话：CodeAgent 的实际健康度，比从外面看它的结构要好得多。</p>
+
+  <div class="card">
+    <p>这<b>不是</b>一个正在腐烂的项目——它是一个年轻的、在被积极重构的项目，而且同规模项目里少有地自律：<code>core/</code> 和 <code>engines/</code> 里 <b>TODO/FIXME 为零</b>，覆盖率有带说明注释的棘轮门槛，lint 规则的启用/禁用都写明了理由，提交信息记录的是"为什么"（大量 fix 提交读起来就是一轮轮自审的后续）。真正的风险不是腐烂，而是<b>三个正在叠加效应的结构性决策</b>：</p>
+    <div class="grid3">
+      <div class="keyfinding kf1"><b>① 一套 4,526 行的 Agent Gateway 双栈悬空：主 UI 已经退役</b>提交 <span class="mono">4440181</span>「退役 Web Agent」删掉了 Web Agent 页签，但 gateway 仍在启动路径上运行、仍持久化到 SQLite（schema v4）、仍暴露 6 个端点。</div>
+      <div class="keyfinding kf2"><b>② 核心卖点"加一个引擎"的实测成本：约 37 个文件</b>Antigravity 提交（<span class="mono">c7adcdf</span>）改了 48 个文件（+2,563 行），其中真正的新适配器代码只有约 1,143 行，其余是放射到约 20 个既有模块的连带修改。</div>
+      <div class="keyfinding kf3"><b>③ 危险默认值，出现两次</b>交互式 Codex 默认带 <span class="mono">--dangerously-bypass-approvals-and-sandbox</span> 启动；回环 Web API 默认无 token——两者各自都有文档论证，但组合起来就是"模型无沙箱地改文件 + 本机任意进程能开 shell"。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="score-hero">
+      <div class="bigscore">
+        <div class="n">7.3</div>
+        <div class="d">整体健康度 / 10</div>
+      </div>
+      <div class="bars">
+        <div class="row"><span>架构</span><div class="track"><div class="fill" style="width:75%"></div></div><span class="val">7.5</span></div>
+        <div class="row"><span>代码质量</span><div class="track"><div class="fill" style="width:75%"></div></div><span class="val">7.5</span></div>
+        <div class="row"><span>扩展性</span><div class="track"><div class="fill" style="width:60%"></div></div><span class="val">6.0</span></div>
+        <div class="row"><span>CLI</span><div class="track"><div class="fill" style="width:80%"></div></div><span class="val">8.0</span></div>
+        <div class="row"><span>Engine 架构</span><div class="track"><div class="fill" style="width:70%"></div></div><span class="val">7.0</span></div>
+        <div class="row"><span>Web UI</span><div class="track"><div class="fill" style="width:70%"></div></div><span class="val">7.0</span></div>
+        <div class="row"><span>UX</span><div class="track"><div class="fill" style="width:70%"></div></div><span class="val">7.0</span></div>
+        <div class="row"><span>测试</span><div class="track"><div class="fill" style="width:80%"></div></div><span class="val">8.0</span></div>
+        <div class="row"><span>技术债</span><div class="track"><div class="fill" style="width:50%;background:linear-gradient(90deg,#e0a800,#d9480f)"></div></div><span class="val">中</span></div>
+      </div>
+    </div>
+    <p style="margin-top:18px;color:var(--muted);font-size:14px">正确策略是<b>做减法</b>：决定 gateway 的去留、收敛引擎注册表、拆分 Codex 文件、修掉两个危险默认值。<b>不要</b>重构那些本来就没问题的东西。</p>
+  </div>
+</section>
+
+<!-- ════════ 第二章 ════════ -->
+<section id="ch2">
+  <h2><span class="no">02</span>项目真实架构（README vs 实际）</h2>
+  <p class="lede">下面这张依赖图是从真实 import 关系重建的——不是照抄 README。</p>
+
+  <pre><span class="b">ca_launcher.py</span>  <span class="c">(薄壳，PEP-562 __getattr__ 兼容层)</span>
+  └─ <span class="b">core/cli/</span>            Click 命令组 + commands/{history,mcp,project,resources,switch,tasks,ui}
+       ├─ <span class="b">core/engine_base/</span>  BaseEngine = _ConfigMixin+_PromptMixin+_LinksMixin+_SettingsMixin
+       │    └─ <span class="b">engines/start_*.py</span>   启动期适配器（symlink 注入 TUI、临时 prompt 文件、
+       │                             settings/钩子桥接）
+       ├─ <span class="b">core/services/</span>     TaskRunner(run_store sqlite) · SchedulerLoop · ScheduleService
+       │    ├─ <span class="b">agent_gateway/</span> (facade → resources/sessions/commands/events/supervisor)
+       │    ├─ <span class="b">agent_adapters/</span> (codex JSON-RPC · claude SDK · opencode/codebuddy · fake)
+       │    └─ <span class="b">agent_store.py</span> (sqlite，schema v4 迁移)
+       ├─ <span class="b">core/session_history/</span>  parsers(5) + writers(5) + finder + parse_cache + audit
+       ├─ <span class="b">core/analytics/</span>   collectors(5) + pricing + aggregator + disk_cache + history + service
+       └─ <span class="b">core/web/</span>         FastAPI · 17 个 router · security.py (Host/Origin/Token)
+              └─ <span class="b">web/frontend/</span>  React 19 · Vite · TanStack Query · xterm · vitest · Playwright</pre>
+
+  <div class="tblwrap"><table>
+    <thead><tr><th>README / 文档的说法</th><th>实际情况</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr><td>README 安装步骤：<code>python -m venv .venv && source …</code></td><td><code>AGENTS.md</code> 规定必须用 uv，明确禁止 venv</td><td><span class="badge b-p1">自相矛盾</span> 而且出现在安装页</td></tr>
+      <tr><td>README："31 个测试文件"</td><td>实际 84 个</td><td><span class="badge b-p3">过期</span></td></tr>
+      <tr><td><code>docs/architecture.md</code> 引擎表</td><td>只列 3 个引擎；架构图里 <code>opencode</code> 出现两次；实际有 5 个</td><td><span class="badge b-p3">过期</span></td></tr>
+      <tr><td>"Core — scanners" 在 <code>core/</code> 下</td><td>正确</td><td><span class="badge b-high">✓ 准确</span></td></tr>
+      <tr><td>"扩展无需修改核心框架"</td><td>部分成立——见第四章 / 第十二章</td><td><span class="badge b-med">言过其实</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="card"><p style="margin:0">一个值得表扬的点：这个项目<b>敢删东西而且说明原因</b>。<code>pty.py</code> 注释写明它"取代了打开 GUI 终端窗口的旧方案"及原因；<code>navigation.ts</code> 写明 Timeline 和 Web Agent 页签"为什么被移除"。README 的"七大支柱"是营销化表述，但实质与代码相符。</p></div>
+</section>
+
+<!-- ════════ 第三章 ════════ -->
+<section id="ch3">
+  <h2><span class="no">03</span>Top 20 问题</h2>
+  <p class="lede">按「影响 × 风险 × 修复收益」排序——不是按发现顺序。</p>
+  <div class="tblwrap"><table>
+    <thead><tr><th>#</th><th>ID</th><th>标题</th><th>级别</th><th>置信度</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td class="mono">AUDIT-001</td><td>Agent Gateway 双栈悬空：主 UI 已退役，4.5k 行代码仍在启动路径上</td><td><span class="badge b-p1">P1</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>2</td><td class="mono">AUDIT-002</td><td>新增引擎成本 ≈ 20 个分散触点（实测 37 个文件）</td><td><span class="badge b-p1">P1</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>3</td><td class="mono">AUDIT-003</td><td>交互式 Codex 默认 <code>--dangerously-bypass-approvals-and-sandbox</code></td><td><span class="badge b-p1">P1</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>4</td><td class="mono">AUDIT-004</td><td>回环 API 默认无 token：本机任意进程可开 PTY/shell</td><td><span class="badge b-p1">P1</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>5</td><td class="mono">AUDIT-005</td><td><code>start_codex.py</code> 一个文件三个职责（adapter + code-plan + shell:first）</td><td><span class="badge b-p2">P2</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>6</td><td class="mono">AUDIT-006</td><td>最复杂的两个 adapter 恰好测试最弱（codex 34% / opencode 39%）</td><td><span class="badge b-p2">P2</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>7</td><td class="mono">AUDIT-007</td><td>doctor 没有 CheckProvider 抽象，引擎注册表手工维护两份</td><td><span class="badge b-p2">P2</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>8</td><td class="mono">AUDIT-008</td><td>引擎清单散落 6+ 处，<code>ENGINES</code> 常量没起到单一事实源作用</td><td><span class="badge b-p2">P2</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>9</td><td class="mono">AUDIT-009</td><td>定价表手工维护约 130 个模型；未知模型静默按 Sonnet 计价</td><td><span class="badge b-p2">P2</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>10</td><td class="mono">AUDIT-010</td><td>文档漂移：README 的 venv 指令违反 AGENTS.md；引擎表、测试数过期</td><td><span class="badge b-p2">P2</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>11</td><td class="mono">AUDIT-011</td><td>三套执行抽象并存（Task run / Chat turn / Agent session）</td><td><span class="badge b-p2">P2</span></td><td><span class="badge b-med">中</span></td></tr>
+      <tr><td>12</td><td class="mono">AUDIT-012</td><td>Codex 挂载会改写用户全局 <code>~/.codex/config.toml</code>；备份/还原存在崩溃窗口</td><td><span class="badge b-p2">P2</span></td><td><span class="badge b-med">中</span></td></tr>
+      <tr><td>13</td><td class="mono">AUDIT-013</td><td><code>pty.py</code>（1,046 行）混合了 tmux 管理 / PTY 泵 / HTTP / WS / 注册表</td><td><span class="badge b-p2">P2</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>14</td><td class="mono">AUDIT-014</td><td>Code Plan 与 Task 机制重复（同一套流程换了后缀）</td><td><span class="badge b-p2">P2</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>15</td><td class="mono">AUDIT-015</td><td><code>active_runs</code> 永不清理已结束条目——长驻进程无界增长</td><td><span class="badge b-p3">P3</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>16</td><td class="mono">AUDIT-016</td><td><code>opencode_parser.py:290,343</code> sqlite 连接未关闭（测试运行中的 ResourceWarning 实证）</td><td><span class="badge b-p3">P3</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>17</td><td class="mono">AUDIT-017</td><td><code>HEADLESS_ENGINES</code>/<code>MCP_ENGINES</code> 与 <code>ENGINES</code> 是三个内容完全相同的 frozenset</td><td><span class="badge b-p3">P3</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>18</td><td class="mono">AUDIT-018</td><td>前端大组件（ConfigHub 664 行、SessionDetailPanel 560 行）</td><td><span class="badge b-p3">P3</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>19</td><td class="mono">AUDIT-019</td><td>"Service"命名通胀：数个 <code>*_service.py</code> 只是 Scanner 的薄包装</td><td><span class="badge b-p3">P3</span></td><td><span class="badge b-high">高</span></td></tr>
+      <tr><td>20</td><td class="mono">AUDIT-020</td><td>i18n 双目录维护（后端 212 键 + 前端 en/zh 各约 700 行），无同步机制</td><td><span class="badge b-p3">P3</span></td><td><span class="badge b-med">中</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ════════ 第四章 ════════ -->
+<section id="ch4">
+  <h2><span class="no">04</span>架构问题</h2>
+  <p class="lede">模块边界、依赖方向，以及那个关键的扩展点问题。</p>
+
+  <div class="finding">
+    <h4>AUDIT-001 · Agent Gateway 双栈悬空 <span class="badge b-p1">P1</span> <span class="badge b-high">高置信</span></h4>
+    <div class="meta">core/services/agent_gateway/*（898 行）· agent_adapters/*（2,358 行）· agent_store.py · agent_protocol.py · core/web/routers/agent.py（368 行）· chat.py · instances.py · e2e.py · server.py lifespan</div>
+    <dl>
+      <dt>证据</dt><dd>提交 <span class="mono">4440181</span>「refactor(ui): 退役 Web Agent,终端成为唯一的对话入口」删除了 <span class="mono">AgentWorkspace.tsx</span>。<span class="mono">navigation.ts</span> 注释明确说明基于 gateway 事件的聊天页"已被退役"。但 <span class="mono">server.py:237-248</span> 仍在 lifespan 中构建 adapters + AgentGateway + AgentStore 并启动。剩余消费者只有：<span class="mono">agent.py</span>（REST/WS）、<span class="mono">instances.py:43</span>（只读状态）、<span class="mono">chat.py:43</span>（只读 legacy_fallback 开关）、<span class="mono">e2e.py</span>。</dd>
+      <dt>问题</dt><dd>两套 adapter 体系并存：<span class="mono">engines/start_*.py</span>（启动注入型）与 <span class="mono">agent_adapters/*</span>（SDK/JSON-RPC 程序化型）。后者的主 UI 已经没了。</dd>
+      <dt>根因</dt><dd>gateway 是正确的长期方向（行业也在验证这个方向，见第十二章），但产品迭代发现终端流式体验更好，先砍了 UI，代码留了下来。</dd>
+      <dt>影响</dt><dd>约 4.5k 行代码 + sqlite 迁移（v4）+ 6 个端点 + FakeAgentAdapter 环境变量的持续维护税；新人必须同时理解两套 session 概念。</dd>
+      <dt>建议方向</dt><dd>二选一并显式化：(a) 保留为实验特性——默认 <span class="mono">CA_AGENT_GATEWAY_ENABLED=0</span> + README 标注 experimental；(b) 若短期无回归计划，归档到独立分支。倾向 (a)：claude-agent-sdk 那个适配器写得很好，且行业趋势支持。</dd>
+      <dt>范围 / 风险</dt><dd>Small / Low · <b>值得现在修：是</b></dd>
+    </dl>
+  </div>
+
+  <div class="finding">
+    <h4>AUDIT-002 · 新增引擎的成本——核心架构指标 <span class="badge b-p1">P1</span> <span class="badge b-high">高置信</span></h4>
+    <div class="meta">实测自提交 c7adcdf「全面接入 Google Antigravity (agy) 引擎」：48 个文件，+2,563 −104 · 非测试文件 37 个</div>
+    <dl>
+      <dt>证据</dt><dd>真正的新代码约 1,143 行：<span class="mono">start_antigravity.py</span>（93）+ collector（341）+ parser（576）+ writer（133）。放射到约 20 处的连带修改：<span class="mono">constants</span>、<span class="mono">cli/main</span>、<span class="mono">cli_utils</span>、<span class="mono">doctor</span>、<span class="mono">i18n</span>、<span class="mono">runner_service</span>、<span class="mono">resume_commands</span>、<span class="mono">mcp_service</span>、session 的 models/finder/parsers/writers 注册、analytics 的 service/models、web 的 4 个 router、cli 的 4 个命令、前端 4 个文件。</dd>
+      <dt>根因</dt><dd>没有 Engine Registry。"引擎"的知识散落在：<span class="mono">constants.ENGINES</span>（frozenset）· <span class="mono">cli/main.py:50-57</span> 的 engine_script_map（硬编码路径映射）· <span class="mono">runner_service._build_engine</span>（if 链式懒加载）· <span class="mono">_CHAT_SESSION_ID_FIELDS</span> · <span class="mono">cli/commands/tasks.py</span> batch-run 的 click.Choice · <span class="mono">doctor.py</span> 的 ENGINE_BINARIES + INSTALL_HINTS · <span class="mono">mcp_service.py</span> 的各引擎配置路径 · 前端 <span class="mono">ENGINE_LABELS</span>。</dd>
+      <dt>影响</dt><dd>每加一个引擎都要"记得"改约 20 处，漏掉任何一处都没有告警。doctor.py 自己的注释就承认了：<i>"an engine missing here is one the health check silently says nothing about"</i>（引擎不在这里 = 健康检查对它沉默）。这正是产品头号卖点（LLM 无关性）的扩展瓶颈。</dd>
+      <dt>建议方向</dt><dd>做一个声明式 <b>EngineSpec</b>（name、aliases、binary、install_hint、script、headless、mcp_paths、session_id_fields、display_name）。CLI 映射、doctor、Choice、前端（经已有的 /api/engines）全部从它派生。预期效果：新引擎触点从 ~20 降到 ~8（5 个新文件 + 3 个注册点）。</dd>
+      <dt>范围 / 风险</dt><dd>Medium / Low-Medium（纯收敛，行为不变）· <b>值得现在修：是——最高优先级</b></dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">其他边界结论</h3>
+    <ul>
+      <li><b>无循环依赖。</b><span class="mono">runner_service._build_engine</span> 在函数内懒 import 引擎模块，明确绕开 <span class="mono">core→engines→core</span> 环——有注释说明，属可接受取舍。</li>
+      <li><b>Web↔Core 耦合适度。</b>router 调 service 层，没有 router 直接伸手进扫描器内部。唯一皱点：<span class="mono">routers/tasks.py</span> 与 <span class="mono">routers/chat.py</span> 通过裸导入共享单例 <span class="mono">_runner</span>（<span class="mono"># noqa: F401 — shared singleton</span>）——能用，但属隐式耦合。</li>
+      <li><b>没有 God Module。</b><span class="mono">cli/main.py</span> 只有 141 行；<span class="mono">server.py</span> 组装职责清晰。</li>
+      <li><b>AUDIT-008</b> 值得在做完整 registry 之前单独立项：CLI 的 map、click.Choice、<span class="mono">_build_engine</span> 都应从 <span class="mono">constants.ENGINES</span> 派生——这个常量已经存在，却被它自己的消费者绕过了。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ════════ 第五章 ════════ -->
+<section id="ch5">
+  <h2><span class="no">05</span>代码结构问题</h2>
+  <p class="lede">core/ 26,234 行 + engines/ 1,853 行 + 前端 ~15,344 行 + 测试 20,708 行。</p>
+
+  <div class="finding p2">
+    <h4>AUDIT-005 · start_codex.py（934 行）—— 八问八答拆解</h4>
+    <dl>
+      <dt>为什么这么大？</dt><dd>约 40% 是 CodexEngine 类（与 opencode/claude 对等），约 60% 是模块级机器：code-plan 模式（历史载入/保存、交互选择、range）、<span class="mono">shell:first</span> 块提取器与预启动命令执行器、marketplace/cache 插件注册。</dd>
+      <dt>内聚吗？</dt><dd>不。三个可以独立测试的子系统，被"因为 codex 需要它们"堆进了 adapter 文件。</dd>
+      <dt>该拆什么？</dt><dd><span class="mono">shell_first.py</span>（<span class="mono">run_prelaunch_commands</span> 有确认门 / 环境变量门 / fail-closed 设计，值得独立测试）；<span class="mono">code_plan.py</span>；marketplace 注册可并入插件机制。</dd>
+      <dt>拆分边界？</dt><dd>类留在原文件；三个模块级子系统各成一个文件；<span class="mono">main()</span> 负责编排。</dd>
+      <dt>拆后依赖更复杂吗？</dt><dd>更简单——shell:first 和 code-plan 互相依赖，但都不依赖引擎类。</dd>
+      <dt>值得拆吗？</dt><dd>值得，且风险低：34% 的覆盖率正是"先拆再补测试"的动机。</dd>
+      <dt>怎么渐进式拆？</dt><dd>先搬 <span class="mono">extract_shell_first_blocks</span> + <span class="mono">run_prelaunch_commands</span>（已有 415 行的 <span class="mono">test_codex_shell_first.py</span> 直接保护），再搬 code-plan。</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">其他结构发现</h3>
+    <ul>
+      <li><span class="badge b-p2">P2</span> <b>AUDIT-013</b>——<span class="mono">pty.py</span>（1,046 行）：tmux 会话管理、POSIX/ConPTY 双路 PTY 泵、WS 消息循环、<span class="mono">_ACTIVE_SESSIONS</span> 注册表、resize 处理。内聚度中等；拆分边界清晰（tmux 层 / 会话注册表 / 路由），但不紧迫——测试覆盖 90%。</li>
+      <li><span class="badge b-p3">P3</span> <b>AUDIT-019</b>——<span class="mono">hook_service</span>(57) / <span class="mono">skill_service</span>(92) / <span class="mono">prompt_service</span>(72) / <span class="mono">plugin_service</span>(50) 是 Scanner 的薄包装，多半只为 Web 端点存在。无害，但"Service"一词通胀，模糊了它们与真 service（runner/scheduler/config）的区别。</li>
+      <li><span class="badge b-p3">P3</span> <b>AUDIT-017</b>——三个内容完全相同的 frozenset（<span class="mono">ENGINES</span>/<span class="mono">HEADLESS_ENGINES</span>/<span class="mono">MCP_ENGINES</span>）。注释暗示曾经不同；现在要么派生要么删。</li>
+      <li><b>没有死代码、没有注释掉的旧代码、没有魔法数通胀。</b>常量集中在模块顶部并带解释（如 <span class="mono">RUN_RETENTION_DAYS=30</span> / <span class="mono">KEEP=200</span>）。<span class="mono">_LEGACY_PROBE_NAMES</span> 这类历史清扫代码有明确的生命周期注释。</li>
+      <li><b>重复代码判定：</b>每个引擎的五连 <span class="mono">finally:</span> 清理是可接受的（顺序与目标路径确有差异）；五个 analytics collector 各自独立是<b>正确的</b>——各家 JSONL/schema 差异真实存在，强行抽公共基类只会增加间接性而不减少复杂度。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ════════ 第六章 ════════ -->
+<section id="ch6">
+  <h2><span class="no">06</span>CLI / Engine 编排——核心能力评估</h2>
+
+  <div class="card">
+    <h3 style="margin-top:0">CLI —— 8/10</h3>
+    <p><span class="mono">CodeAgentGroup.resolve_command</span> 把"保留子命令"与"第一个参数是引擎名"两种派发分开，再加 <span class="mono">_launch</span> 兜底——这是一个务实的设计，让 <span class="mono">ca claude do something</span> 和 <span class="mono">ca "do something"</span> 两种心智模型共存。Epilog 带示例；<span class="mono">-y</span> 默认开且打印警告；i18n 覆盖到 help 文案与错误提示。<b>缺：</b>shell 自动补全（click 原生支持，便宜可捡）和 <span class="mono">ca ps --json</span>（可脚本性）。</p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Engine 启动架构 —— 7/10</h3>
+    <p>这是项目最真实的价值所在，细节质量很高：</p>
+    <ul>
+      <li><b>OpenCode 没有 settings.json 概念</b> → 生成 JS 桥接插件来跑 shell 钩子，带工具名归一化表（<span class="mono">TOOL_NAME_MAP</span>：bash→Bash…），denial 语义经 <span class="mono">throw</span> 转换——四个引擎共享同一份钩子契约，注释证明是实测结论（<i>"opencode 1.18 的二进制里完全搜不到该文件名"</i>）。</li>
+      <li><b>所有注入文件都带标记</b> <span class="mono">_ca_injected: true</span>，拒绝覆写非托管路径，崩溃残留由 doctor 清扫（包括对 <span class="mono">.codex/config.toml</span> 的 TOML 解析，以及 <span class="mono">with_name(name+".bak")</span> 备份路径 bug 的修复史）。</li>
+      <li><span class="mono">write_temp_prompt</span> 用系统临时目录 mkstemp 解决命令行超长问题；resource lock 防并发注入。</li>
+      <li><b>Windows 投入是真实的：</b>junction 探测放进私有临时目录、<span class="mono">\\?\</span> 长路径、taskkill /T、ConPTY、PowerShell shell:first。</li>
+    </ul>
+    <p style="margin-bottom:0"><b>减分项：</b>AUDIT-003/004（见第九/十一章）与 AUDIT-012——codex 插件挂载需要改写<b>用户全局</b>的 <span class="mono">~/.codex/config.toml</span>（marketplace 注册 + cache install + enabled 状态）。虽有保留式备份还原和两轮崩溃保护注释，但崩溃窗口加上 <span class="mono">"MARKETPLACE_NAME not in content"</span> 这种启发式判断，意味着脏写仍可能发生。如果 Codex 原生 marketplace 格式变化，这里会是第一个断裂点。</p>
+  </div>
+</section>
+
+<!-- ════════ 第七章 ════════ -->
+<section id="ch7">
+  <h2><span class="no">07</span>Prompt / Skill / Plugin / Hook / Task——资源体系</h2>
+  <p class="lede">五个概念——是真实边界还是概念通胀？判定：真实边界。</p>
+  <div class="tblwrap"><table>
+    <thead><tr><th>概念</th><th>生命周期</th><th>载体</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr><td><b>Prompt</b></td><td>注入合成后的 prompt 文本</td><td class="mono">markdown + scanner</td><td><span class="badge b-high">必要</span></td></tr>
+      <tr><td><b>Skill</b></td><td>符号链接挂载 SKILL.md + scripts</td><td class="mono">目录 + scanner + links</td><td><span class="badge b-high">必要</span></td></tr>
+      <tr><td><b>Hook</b></td><td>before/after_tool 外壳命令，按引擎注入</td><td class="mono">metadata.json + settings/bridge</td><td><span class="badge b-high">必要</span>（对齐 Claude Code 语义）</td></tr>
+      <tr><td><b>Plugin</b></td><td>把以上三者打包分发</td><td class="mono">_plugin_dir + 生成适配器</td><td><span class="badge b-high">必要</span>（分发单元）</td></tr>
+      <tr><td><b>Task</b></td><td>可重放的执行蓝图</td><td class="mono">tasks/*.md + task_lib</td><td><span class="badge b-high">必要</span>（自动化单元）</td></tr>
+    </tbody>
+  </table></div>
+  <div class="card">
+    <p>Group（资源组）+ Scanner + Mount + <span class="mono">project_registry</span> 的绑定模型是连贯的；<span class="mono">ca resources list --group</span> 能核对生效状态；doctor 会检查解析失败。<b>唯一的重叠：</b>AUDIT-014——codex 的 <span class="mono">-cp code_plan</span> 模式重新实现了一遍 task 机制（同样的选择/历史/range 流程，差别只有后缀 <span class="mono">.md</span>、<span class="mono">code_plan*</span> 目录和独立的 history.json）。应该回灌进 <span class="mono">core/task_lib</span>。</p>
+    <p style="margin-bottom:0"><b>性能：</b>扫描器每次启动重跑（目录小，毫秒级）。没有扫描缓存，而且<b>不需要加</b>——别为此加缓存（防过度设计）。</p>
+  </div>
+</section>
+
+<!-- ════════ 第八章 ════════ -->
+<section id="ch8">
+  <h2><span class="no">08</span>Session / Scheduler / Background / Analytics</h2>
+
+  <div class="card">
+    <h3 style="margin-top:0">Session 子域 —— 好</h3>
+    <p>parsers(5) + writers(5) + <span class="mono">session_finder</span> + <span class="mono">parse_cache</span> + <span class="mono">audit</span> 已经构成独立子域，模型统一，每个引擎都有 convert-contract 测试。OpenCode 解析器直读 sqlite，<span class="mono">parse_cache</span> 用行数 + 最新行时间做变更令牌（注释里量化过：~20ms vs 1.3s 全量重解码）——质量很高。唯一瑕疵：AUDIT-016 的连接泄漏。</p>
+    <h3>Scheduler —— 好</h3>
+    <p><span class="mono">scheduler_tick_loop</span>（30 秒 tick）、<span class="mono">_settle_finished_runs</span> 把 "started" 结算成真实终态（修掉了"任务 30 秒前就失败了，状态还挂着 started"）、workspace 三类校验错误分别记账、<span class="mono">prevent_overlap</span>、webhook 尽力而为不阻塞事件循环。教科书级的小型调度器。</p>
+    <h3>三套执行抽象 —— AUDIT-011</h3>
+    <p><span class="mono">run_task</span>（子进程跑 <span class="mono">ca &lt;engine&gt; -t</span>）、<span class="mono">run_chat_turn</span>（直接调 <span class="mono">build_chat_command</span>，绕过注入——v1 范围有文档说明）、AgentGateway session（SDK/长连接）。三者有真实差异（是否注入、是否长连、谁管生命周期），<b>不算重复系统</b>。但在概念上，用户看到的是 Tasks/Chat/Terminal 三个互不引用的东西。尤其是 <span class="mono">run_chat_turn</span> 跳过资源注入这个事实，应该在 UI 上可见（用户会疑惑为什么 chat 回答没带 skills）。</p>
+    <h3>Analytics —— 好，但有软肋</h3>
+    <p>collector 水位增量 + <span class="mono">BACKFILL_VERSION</span> 回填协议（v5）正确处理了"新可见的旧记录"；codex 全量重扫有明确理由（session 级可变 token 总量）；disk cache + 双重检查锁 + 预热线程。<b>软肋 = AUDIT-009：</b>手工维护的定价表加上 <span class="mono">_UNKNOWN</span> 落回 Sonnet 价格，意味着新模型上线就会静默报错误成本，而且 UI 不区分"精确/估算"。建议：数据外置 JSON + 加载时新鲜度戳 + UI 估算标记。</p>
+  </div>
+</section>
+
+<!-- ════════ 第九章 ════════ -->
+<section id="ch9">
+  <h2><span class="no">09</span>Web UI / UX</h2>
+
+  <div class="card">
+    <h3 style="margin-top:0">UI —— 7/10</h3>
+    <p>信息架构是刻意修剪过的五个区（Home / Agent / Automations / Activity / Settings），而且删除决策都带理由（Timeline 被删是因为"它搜索的是客户端封顶窗口，回答不了它想回答的问题"）。<span class="mono">shared/</span> 有 20 个小部件（EmptyState / ErrorState / Toast / ConfirmDialog…），错误与空态是系统化的，不是每页自造。React Query + 轮询 hook + 异步守卫 hook 是正规军打法。深色模式和信息密度良好。大组件（AUDIT-018）可以接受，但 ConfigHub 已到"每加一个配置项都变难"的临界点。</p>
+    <h3>UX —— 7/10</h3>
+    <p><b>优秀的地方：</b><span class="mono">ca doctor --fix</span>（config 种子、stale 注入修复带 <span class="mono">--dry-run</span> 预览、codex trust 警告、MCP 漂移检测）；首次启动的 group 绑定引导；<span class="mono">ca switch</span> 一步转换+直接拉起；错误信息直接给出下一步命令（<i>"Run: ca doctor --fix"</i>）。</p>
+    <p style="margin-bottom:0"><b>最大的 UX 风险（AUDIT-003/004）：</b><span class="mono">build_command()</span> 在<i>交互模式</i>下也带 <span class="mono">--dangerously-bypass-approvals-and-sandbox</span>；<span class="mono">-y</span> 默认 True 只配一行警告。对比 codex CLI 自己的审批体系，这等于把引擎原生安全层整体短路，而且新用户未必理解那行警告。<span class="mono">security.py auth_enabled()</span>：回环默认免 token（docstring 论证充分：Host+Origin 已挡住浏览器攻击，同用户进程本来就能读 token 文件）。但残余风险是真实的：<b>本机任意低权限进程可以 POST /api/pty 拿到一个 shell。</b>建议方向——不动架构：(a) codex 交互默认走审批，仅在显式传 <span class="mono">--yolo</span> 时 bypass（其他引擎维持现状）；(b) 提供 <span class="mono">CA_UI_AUTH=1</span> 的一键文档路径；回环默认可以保留——非回环警告文案已经存在，这点做得好。</p>
+  </div>
+</section>
+
+<!-- ════════ 第十章 ════════ -->
+<section id="ch10">
+  <h2><span class="no">10</span>测试与质量</h2>
+  <div class="card">
+    <p><b>受保护的核心</b>（1,059 个测试 / 84 个文件 / 78.15% / 棘轮 76 / 单测 60 秒超时 / Playwright e2e + axe-core 无障碍 / 前端 vitest 40 个文件）：agent_gateway（659 行测试）、PTY（1,069）、ca_launcher（1,057）、session_history（1,050）、每个引擎的 convert contract、scheduler_loop、auth（含 bind-address 跟随）、Windows 长路径原子写。隔离用 <span class="mono">fixtures/fake_pty_engine</span>；没有 sleep 依赖的坏味道；套件 57–63 秒稳定。</p>
+    <p><b>保护最薄弱的，按风险排序：</b></p>
+    <ol>
+      <li><span class="badge b-p2">P2</span> <b>AUDIT-006</b>——<span class="mono">engines/start_codex.py</span> 34%、<span class="mono">start_opencode.py</span> 39%——恰好是含 shell:first 安全门、marketplace 改写、崩溃恢复逻辑的两个文件。<span class="mono">test_codex_shell_first.py</span> 护住了预启动命令，但 <span class="mono">ensure_plugins_available</span> 的备份/还原矩阵和 <span class="mono">cleanup_plugins_available</span> 的各分支（备份存在 / 不存在 / config 已脏）没有直接测试。</li>
+      <li>doctor 的 fix 路径（<span class="mono">fix_stale_injections</span>）测过，但 <span class="mono">_sweep_legacy_probes</span> 的 Windows junction 分支只能在 Windows CI 上真正执行——而它不存在。</li>
+      <li><b>没有 Windows CI job</b>——代码里有大量 win32 分支；建议加一个 <span class="mono">windows-latest</span> job（可先设为允许失败）。</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ════════ 第十一章 ════════ -->
+<section id="ch11">
+  <h2><span class="no">11</span>安全与稳定性（按风险排序）</h2>
+  <div class="tblwrap"><table>
+    <thead><tr><th>风险</th><th>攻击面 → 触发条件 → 影响</th><th>现状</th></tr></thead>
+    <tbody>
+      <tr><td><b>Codex bypass 默认开启</b></td><td>用户目录内的恶意 prompt/code-plan → 模型未经审批执行 → 任意代码</td><td><span class="mono">shell:first</span> 有门（fail-closed + 逐条确认 + 环境变量覆盖），但模型自身的工具执行无审批 <span class="badge b-p1">AUDIT-003</span></td></tr>
+      <tr><td><b>回环 API 无 token</b></td><td>本机进程 → POST /api/pty → 持久 shell</td><td>Host/Origin 中间件 + 非回环强制 token <span class="badge b-p1">AUDIT-004</span>（文档完备）</td></tr>
+      <tr><td><b>全局 config 改写</b></td><td>崩溃窗口 → <span class="mono">~/.codex/config.toml</span> 脏写</td><td>保留式备份还原 + doctor 清扫；启发式判断窗口仍在 <span class="badge b-p2">AUDIT-012</span></td></tr>
+      <tr><td><b>注入标记可伪造</b></td><td>恶意仓库预置 <span class="mono">_ca_injected</span> 文件 → 清理逻辑误删/误留</td><td>影响限于被标记文件本身——低</td></tr>
+      <tr><td><b>插件/Skill/Hook 信任边界</b></td><td>下载的 skill 脚本在引擎权限下执行</td><td>shell:first 门覆盖预启动；挂载时加一条来源警告会更稳</td></tr>
+      <tr><td><b>正面项</b></td><td colspan="2"><span class="mono">stop_task</span> 用进程组 SIGTERM + taskkill /T · runner 名称正则 + 日志路径逃逸校验 · e2e 路由仅 <span class="mono">CA_E2E=1</span> 时挂载 · token 文件 chmod 0600 <span class="badge b-high">✓</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="card"><p style="margin:0">没有"吞异常黑洞"：<span class="mono">except Exception</span> 都伴随 logger/注释/用户输出。唯一的裸 <span class="mono">pass</span> 群在 opencode 清理路径（可接受——失败模式是"留一个文件等 doctor 清扫"）。</p></div>
+</section>
+
+<!-- ════════ 第十二章 ════════ -->
+<section id="ch12">
+  <h2><span class="no">12</span>开源项目对标</h2>
+  <p class="lede">CodeAgent 的定位是 CLI 编排层，因此对标分三组：同赛道（多 agent 会话管理器）、被编排对象（各家 CLI 的扩展模型）、以及框架层（用来确认"不做什么"）。来源：公开搜索结果与项目文档（本沙箱环境无法直连 GitHub）。</p>
+
+  <h3>12.2 能力矩阵</h3>
+  <div class="tblwrap"><table>
+    <thead><tr><th>能力</th><th>CodeAgent</th><th>OpenCode</th><th>Claude Code</th><th>Codex CLI</th><th>Aider</th><th>Claude Squad</th></tr></thead>
+    <tbody>
+      <tr><td>多引擎切换 + 会话带走</td><td><span class="badge b-high">★★</span></td><td>★（单引擎）</td><td>—</td><td>—</td><td>—</td><td><span class="badge b-high">★★</span>（worktree）</td></tr>
+      <tr><td>Prompt 主权（markdown）</td><td><span class="badge b-high">★★</span></td><td>★</td><td>—（自有体系）</td><td>—</td><td><span class="badge b-high">★★</span></td><td>—</td></tr>
+      <tr><td>Skills / Hooks / Plugins</td><td><span class="badge b-high">★★</span> 跨引擎</td><td>—</td><td><span class="badge b-high">★★</span> 原生</td><td>★（TOML）</td><td>—</td><td>—</td></tr>
+      <tr><td>MCP 统一管理 + 同步</td><td><span class="badge b-high">★★</span></td><td>★ 原生</td><td>★ 原生</td><td>★ 原生</td><td>—</td><td>—</td></tr>
+      <tr><td>Session 跨格式转换</td><td><span class="badge b-high">★★</span></td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td>Cron / 后台任务 / 批量</td><td><span class="badge b-high">★★</span></td><td>—</td><td>—（云端）</td><td>—</td><td>—</td><td>★（进程级）</td></tr>
+      <tr><td>用量 / 成本分析</td><td><span class="badge b-high">★★</span></td><td>★</td><td>★（云端）</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td>Web Dashboard</td><td><span class="badge b-high">★★</span></td><td>—</td><td>★（云端）</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td>Doctor / 自修复</td><td><span class="badge b-high">★★</span></td><td>★</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td>git worktree 隔离</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="badge b-high">★★</span></td></tr>
+      <tr><td>并行会话终端总览</td><td>—（用 web 替代）</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="badge b-high">★★</span></td></tr>
+    </tbody>
+  </table></div>
+  <p style="color:var(--muted);font-size:13.5px">★ 原生具备 / ★★ 突出 / — 不具备。OpenCode（约 95k★）、OpenHands、Cline 等属于"引擎"赛道——是 CodeAgent 的上下游而非竞品，这本身就是定位验证。调研中发现的新兴同赛道项目：<span class="mono">claw-orchestrator</span>（"把 Claude Code、Codex、Antigravity、OpenCode 包装成持久会话"）、<span class="mono">mco</span>（"Claude Code、Codex CLI、Gemini CLI、OpenCode 的中立编排层"）、Claude Squad（约 7.9k★，tmux + git worktree）、Warp 的多 agent 工作流。</p>
+
+  <h3>12.3 CodeAgent 反而做得更好的</h3>
+  <div class="card"><ol style="margin:0">
+    <li><b>会话跨引擎带走</b>（<span class="mono">ca switch</span>）——矩阵中独一无二。新出现的编排项目证明这个需求存在，但没有一家做到了格式级 parser + writer + contract 测试。</li>
+    <li><b>MCP 配置同步 + 漂移检测</b>——各家原生 MCP 配置互不相通，CodeAgent 是唯一直读各家原生格式（甚至处理 JSONC 注释）并做 sync 的工具。</li>
+    <li><b>Doctor 文化</b>——stale 注入清扫、codex trust 警告、junction 探测自愈：对标项目里没有等价物。</li>
+    <li><b>删除的勇气</b>——Timeline、Web Agent、退役引擎都有完整的清理路径（包括 collector 清除名单）。</li>
+  </ol></div>
+
+  <h3>12.4 明显缺失</h3>
+  <div class="card"><p style="margin:0">① git worktree 隔离（Claude Squad 的核心价值）——<span class="mono">batch-run</span> 跨项目并行已是强项，但同一项目的并行实例会互相踩工作区。② shell 补全。③ 终端侧的并行会话总览（目前只在 web 里）。</p></div>
+
+  <h3>12.5 值得借鉴</h3>
+  <div class="tblwrap"><table>
+    <thead><tr><th>项目</th><th>借鉴点</th><th>为什么值得</th><th>怎么借鉴</th><th>现在做？</th></tr></thead>
+    <tbody>
+      <tr><td><b>Claude Squad</b>（smtg-ai，约 7.9k★）</td><td>worktree-per-run + 会话生命周期（总览/停止/合并）</td><td>batch-run/scheduler 天然需要隔离；目前并行任务互相踩工作区</td><td><span class="mono">ca batch-run --worktree</span>；TaskRunStatus 记录分支</td><td><span class="badge b-med">否——Phase 4</span></td></tr>
+      <tr><td><b>Claude Code 扩展生态</b>（hooks/skills/plugins/MCP）</td><td>"插件 = skill+hook+MCP 打包"已被验证为分发形态</td><td>CodeAgent 的 plugin 概念与之同构；顺势靠拢而非发明私有格式</td><td>metadata.json 向 CC 插件清单靠拢；不自建 marketplace，先做目录 + git URL</td><td><span class="badge b-med">否——B 级</span></td></tr>
+      <tr><td><b>OpenCode 插件系统</b></td><td>tool.execute.before/after 桥接</td><td>已经吸收完毕——作为"设计已被消化"的证据列出</td><td>—</td><td><span class="badge b-high">已做</span></td></tr>
+      <tr><td><b>Aider</b>（conventions.md / repo-map）</td><td>"约定文件即上下文"哲学</td><td>与 prompt/ 目录哲学同源；markdown-first 本身就是差异化</td><td>无需新增</td><td><span class="badge b-med">否</span></td></tr>
+      <tr><td><b>LangGraph / PydanticAI / CrewAI / OpenAI Agents SDK / OpenHands</b></td><td>无</td><td>它们编排"模型调用"，CodeAgent 编排"CLI 进程"——抽象层级不同</td><td>不引入；wire 协议的 Pydantic 化已完成</td><td><span class="badge b-med">否</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ════════ 第十三章 ════════ -->
+<section id="ch13">
+  <h2><span class="no">13</span>未来能力路线图</h2>
+  <div class="tblwrap"><table>
+    <thead><tr><th>分级</th><th>能力</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge b-p1">S——必须增加</span></td><td>① <b>Engine Registry</b>（AUDIT-002）——不做它，每个新引擎都在为旧债付息。② <b>权限姿态可配置</b>：每引擎 <span class="mono">approval_mode</span>，codex 默认走审批，仅 <span class="mono">--yolo</span> 显式传参时 bypass（修 AUDIT-003）。③ <b>Windows CI job</b>。</td></tr>
+      <tr><td><span class="badge b-p2">A——建议增加</span></td><td>④ click shell 补全 · ⑤ <span class="mono">ca ps --json</span>（可脚本化）· ⑥ 定价数据外置 + 估算标记 · ⑦ 把"chat turn 跳过资源注入"在 UI 上可见</td></tr>
+      <tr><td><span class="badge b-p3">B——可以考虑</span></td><td>⑧ worktree 隔离的 batch-run · ⑨ 插件分发（借 CC marketplace 形态）· ⑩ 服务端跨引擎 session 搜索</td></tr>
+      <tr><td><span class="badge b-low">C——以后再说</span></td><td>⑪ Agent Teams / 多智能体编排（<span class="mono">docs/multi-agent-orchestration-design.md</span> 已有设计稿——放着就好）· ⑫ 多用户 / 远程 dashboard 鉴权</td></tr>
+      <tr><td><span class="badge b-p0">N/A——明确不要</span></td><td>自建 LLM 调用层 / 任何 Agent Framework 依赖 · Memory/RAG/向量库 · 自建模型网关 · Clean Architecture/DDD 重写 · 把 i18n 拆成按域多文件（纯折腾）</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ════════ 第十四章 ════════ -->
+<section id="ch14">
+  <h2><span class="no">14</span>技术债地图</h2>
+  <div class="tblwrap"><table>
+    <thead><tr><th>类别</th><th>条目</th></tr></thead>
+    <tbody>
+      <tr><td><b>结构性</b></td><td>gateway 双栈悬空 · 引擎注册散落 · start_codex 三合一 · pty.py 体量</td></tr>
+      <tr><td><b>功能性</b></td><td>code-plan/task 重复 · HEADLESS/MCP_ENGINES 的空洞区分 · chat legacy fallback 去留待决</td></tr>
+      <tr><td><b>架构级</b></td><td>引擎扩展点（核心瓶颈，⚫ 级）</td></tr>
+      <tr><td><b>测试债</b></td><td>codex/opencode 启动脚本 34/39% 覆盖 · 无 Windows CI</td></tr>
+      <tr><td><b>UX 债</b></td><td>两个危险默认值（bypass、tokenless 回环）</td></tr>
+      <tr><td><b>工程化债</b></td><td>定价表写死在代码里 · README/docs 漂移（venv 指令、引擎表、测试数）</td></tr>
+      <tr><td><b>历史遗留（已有界，别动）</b></td><td><span class="mono">ENGINE_ALIASES</span> 的 gemini→antigravity · collector 清除名单 · <span class="mono">.codex/settings.json</span> 孤儿清扫——全部有界且带注释。<b>不需要动。</b></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ════════ 第十五章 ════════ -->
+<section id="ch15">
+  <h2><span class="no">15</span>重构路线图</h2>
+  <p class="lede">只提出，不执行。每一阶段为下一阶段解锁前提。</p>
+
+  <div class="phase"><div class="ph">Phase 0<small>保护网——不改行为</small></div><div class="pb">
+    给 codex 的备份/还原矩阵和 <span class="mono">cleanup_plugins_available</span> 补直接测试；搭起 Windows CI。
+    <div class="why">为什么：这是后续一切的地基。涉及：<span class="mono">tests/test_codex_engine_hooks.py</span> 等。风险：无。收益：关掉 AUDIT-006/012 的暴露面。</div>
+  </div></div>
+  <div class="phase"><div class="ph">Phase 1<small>Quick Wins——≤1 天</small></div><div class="pb">
+    修 README 的 venv 指令和 docs 引擎表；删除重复的引擎 frozenset；<span class="mono">opencode_parser</span> 的 sqlite 连接改成 <span class="mono">with</span>；<span class="mono">active_runs</span> 终态即逐出（<span class="mono">--all</span> 改读 store）。
+    <div class="why">收益：关掉 AUDIT-010 / 015 / 016 / 017。</div>
+  </div></div>
+  <div class="phase"><div class="ph">Phase 2<small>局部治理——1–2 周</small></div><div class="pb">
+    Engine Registry（AUDIT-002/008）；<span class="mono">start_codex</span> 三拆（AUDIT-005）——先 shell:first（测试已在），再 code-plan；权限姿态可配置（AUDIT-003）。
+    <div class="why">风险：中——全部处于现有测试覆盖之下。</div>
+  </div></div>
+  <div class="phase"><div class="ph">Phase 3<small>核心决策——产品级</small></div><div class="pb">
+    Gateway 去留（AUDIT-001）：默认关闭 + experimental 标注（推荐）；doctor 引入 CheckProvider，退役手写 <span class="mono">_LightweightResolver</span> stub（AUDIT-007）。
+  </div></div>
+  <div class="phase"><div class="ph">Phase 4<small>产品能力升级</small></div><div class="pb">
+    worktree batch-run · 插件分发 · shell 补全 / <span class="mono">--json</span>。
+  </div></div>
+</section>
+
+<!-- ════════ 第十六章 ════════ -->
+<section id="ch16">
+  <h2><span class="no">16</span>代码健康地图</h2>
+  <p class="lede">整个项目的分类。🟢 不要动 · 🟡 观察 · 🟠 技术债 · 🔴 优先修 · ⚫ 继续堆功能就会失控的核心区。</p>
+  <div class="healthmap">
+    <div class="hm green"><h5><span class="dot g"></span>🟢 健康区</h5><ul>
+      <li>CLI 层（Click 架构）</li><li>Scheduler + ScheduleService</li><li>RunStore/AgentStore 迁移</li><li>安全中间件设计</li><li>Session parsers/writers + contract</li><li>Analytics collector 管线</li><li>前端 IA 与 shared 组件</li><li>CI / lint / 类型纪律</li></ul></div>
+    <div class="hm yellow"><h5><span class="dot y"></span>🟡 观察区</h5><ul>
+      <li>前端大组件（ConfigHub…）</li><li>"Service"命名通胀</li><li>i18n 双维护</li><li>pty.py 内聚度（测试 90%）</li><li>各引擎 finally 清理重复（可接受）</li></ul></div>
+    <div class="hm orange"><h5><span class="dot o"></span>🟠 技术债区</h5><ul>
+      <li>start_codex.py（34% 覆盖）</li><li>定价表在代码里</li><li>文档漂移</li><li>code-plan/task 重复</li><li>active_runs 增长 · sqlite 泄漏</li></ul></div>
+    <div class="hm red"><h5><span class="dot r"></span>🔴 高风险区</h5><ul>
+      <li>两个危险默认值（bypass、tokenless）</li><li>Codex 全局 config 改写窗口</li><li>Gateway 去留未决</li></ul></div>
+    <div class="hm black"><h5><span class="dot k"></span>⚫ 架构核心风险区</h5><ul>
+      <li><b>引擎扩展点</b>——每个新引擎放射到约 20 个模块。这里就是"再堆一个功能就失控"的地方。</li></ul></div>
+  </div>
+</section>
+
+<!-- ════════ 第十七章 ════════ -->
+<section id="ch17">
+  <h2><span class="no">17</span>决策清单</h2>
+
+  <div class="dec red">
+    <div class="head">🔴 强烈建议修复（最多 10 个）</div>
+    <ol>
+      <li><b>AUDIT-002</b> Engine Registry——产品核心卖点的扩展瓶颈</li>
+      <li><b>AUDIT-003</b> Codex 交互默认 bypass 审批</li>
+      <li><b>AUDIT-001</b> Gateway 去留显式化（默认关 + experimental）</li>
+      <li><b>AUDIT-002 子项</b> <span class="mono">cli/main.py</span> 映射 / <span class="mono">tasks.py</span> Choice / <span class="mono">_build_engine</span> 收敛到 <span class="mono">constants.ENGINES</span></li>
+      <li><b>AUDIT-006</b> start_codex / start_opencode 测试补强（Phase 0）</li>
+      <li><b>AUDIT-010</b> README <span class="mono">python -m venv</span> → uv（与 AGENTS.md 对齐）+ 引擎表 + 测试数</li>
+      <li><b>AUDIT-007</b> doctor 的双份引擎注册表 → 从 registry 派生</li>
+      <li><b>AUDIT-009</b> 定价表外置 + 估算标记</li>
+      <li><b>AUDIT-005</b> 拆分 start_codex</li>
+      <li>Windows CI job</li>
+    </ol>
+  </div>
+
+  <div class="dec orange">
+    <div class="head">🟠 建议修复（10 个）</div>
+    <ol>
+      <li>AUDIT-004 回环无 token——一键开启路径 + 强化警告</li>
+      <li>AUDIT-011 三套执行抽象的差异在 UI/文档上说明（尤其：chat 不注入）</li>
+      <li>AUDIT-012 还原路径测试化</li>
+      <li>AUDIT-013 拆出 pty.py 的 tmux 层</li>
+      <li>AUDIT-014 code-plan 回灌 task_lib</li>
+      <li>AUDIT-015 active_runs 逐出</li>
+      <li>AUDIT-016 sqlite 连接关闭</li>
+      <li>AUDIT-017 删除/派生重复的引擎 frozenset</li>
+      <li>chat legacy fallback 去留决策</li>
+      <li>Shell 补全</li>
+    </ol>
+  </div>
+
+  <div class="dec yellow">
+    <div class="head">🟡 可以以后处理（5 个）</div>
+    <ol>
+      <li>AUDIT-018 前端大组件</li>
+      <li>AUDIT-019 Service 命名</li>
+      <li>AUDIT-020 i18n 双维护</li>
+      <li>覆盖率棘轮提到 80</li>
+      <li>收敛 <span class="mono">_runner</span> 单例导入模式</li>
+    </ol>
+  </div>
+
+  <div class="dec green">
+    <div class="head">🟢 不建议动——代码不漂亮，但设计是对的</div>
+    <ol>
+      <li><b>4-mixin 的 BaseEngine</b>——小、有 TYPE_CHECKING 契约、每个引擎差异真实。改成组合只会加间接层。</li>
+      <li><b>ca_launcher.py 垫片</b>——有测试锚定的兼容层，每个保留符号都有注释解释。</li>
+      <li><b>每个引擎五连 finally 清理</b>——冗长但顺序与目标路径真有差异；抽象它是"为对齐而对齐"。</li>
+      <li><b>五个各自独立的 collector</b>——schema 差异真实；统一基类是伪抽象。</li>
+      <li><b>i18n 数据写在代码里</b>——212 个键在单文件里可 grep、可 diff，比外置 YAML 更适合当前规模。</li>
+      <li><b>resolve_command 的保留子命令派发</b>——务实且有测试覆盖。</li>
+      <li><b>shell:first 确认门</b>——fail-closed + 显式环境变量 + 逐条确认：教科书级安全设计。</li>
+    </ol>
+  </div>
+
+  <div class="dec black">
+    <div class="head">🚫 不建议增加——别人有，但 CodeAgent 现在不该做</div>
+    <ol>
+      <li>Agent Framework 依赖（LangGraph / CrewAI / AutoGen / PydanticAI）</li>
+      <li>自建 Memory / RAG</li>
+      <li>自建 marketplace 基础设施</li>
+      <li>模型 API 直连层</li>
+      <li>Agent Teams 编排（现阶段）</li>
+      <li>向量检索 / 会话 embedding</li>
+      <li>把 Web UI 套壳成 Electron/桌面应用</li>
+      <li>DDD / Clean Architecture 全面重写</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ════════ 最终判断 ════════ -->
+<section id="verdict">
+  <div class="verdict">
+    <h3>最终判断</h3>
+    <p>CodeAgent 已经是同类定位里完成度最高的 <b>"AI Engineering Shell"</b>。它的护城河恰恰是那些别人没有的脏活：<b>跨引擎会话转换、MCP 同步、doctor</b>。它当前唯一的危险不是功能太少，而是<b>三个"再堆一个功能就失控"的节点</b>：引擎注册散落、gateway 悬空、危险默认值。</p>
+    <p style="margin-bottom:0">按 Phase 0→2 处理完，扩展性评分会从 6 回到 8+——而且<b>全程不需要重写任何东西</b>。</p>
+  </div>
+</section>
+
+<footer>
+  基于本地仓库检出生成 · 所有结论均经源码验证 · 审计过程中实际执行了测试套件（1,059 通过）· 只审查，未修改任何代码。
+</footer>
+
+</div><!-- /container -->
+</main>
+</div><!-- /layout -->
+<a class="up" href="#ch1">↑ 顶部</a>
+</body>
+</html>

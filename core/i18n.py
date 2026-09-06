@@ -189,6 +189,11 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "YOLO mode (on by default)",
         "zh": "开启 YOLO 模式 (默认开启)",
     },
+    "cli.help.yolo_mode": {
+        "en": "YOLO mode (bypass approvals/sandbox)",
+        "zh": "开启 YOLO 模式 (跳过审批与沙箱)",
+    },
+
     "cli.help.review_pr_url": {
         "en": "PR URL to review",
         "zh": "代码审查 PR URL",

@@ -15,6 +15,7 @@ from pathlib import Path
 import click
 
 from core.constants import TEMP_PROMPT_DIRNAME
+from core.engine_registry import ENGINES
 from core.hook_scanner import get_hooks_to_inject
 from core.i18n import t
 from core.link_manager import is_windows_link
@@ -61,25 +62,15 @@ class Section:
 
 # ── Engine binary map ─────────────────────────────────────────────────────────
 
-#: Keep in step with :data:`core.constants.ENGINES` -- an engine missing here
-#: is one the health check silently says nothing about, so a user with it
-#: broken gets no diagnosis and a user without it gets no install hint.
-ENGINE_BINARIES = {
-    "claude": ["claude", "claude.cmd"],
-    "opencode": ["opencode", "opencode.cmd"],
-    "codex": ["codex", "codex.cmd"],
-    "codebuddy": ["codebuddy", "codebuddy.cmd"],
-    "antigravity": ["agy", "agy.exe"],
-}
+#: Derived from the declarative engine registry (core.engine_registry,
+#: AUDIT-007): the registry is the single source, so a newly registered
+#: engine is health-checked with no edits here. (The previous hand-copied
+#: table could silently know nothing about an engine -- its own comment
+#: admitted as much.)
+ENGINE_BINARIES = {spec.name: list(spec.cli_candidates) for spec in ENGINES.values()}
 ENGINE_COMMANDS = ENGINE_BINARIES
 
-ENGINE_INSTALL_HINTS = {
-    "claude": "npm install -g @anthropic-ai/claude-code",
-    "opencode": "npm install -g opencode-ai",
-    "codex": "npm install -g @openai/codex",
-    "codebuddy": "npm install -g @tencent-ai/codebuddy-code",
-    "antigravity": "Install Google Antigravity CLI (agy)",
-}
+ENGINE_INSTALL_HINTS = {spec.name: spec.install_hint for spec in ENGINES.values()}
 
 # ── Individual check functions ────────────────────────────────────────────────
 
