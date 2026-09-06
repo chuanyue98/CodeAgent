@@ -1,229 +1,87 @@
-# Task 2 Report: Graceful Subprocess Cleanup on Shutdown
+# Task 2 执行与自检报告：规范化 Agent Gateway 默认关闭与状态声明 (AUDIT-001)
 
-## Status: DONE
+## 1. 状态：DONE
 
-## Files Modified
-- [runner_service.py](file:///home/cy/github/chuanyue98/CodeAgent/core/services/runner_service.py) - Implemented `kill_all` on `TaskRunner`.
-- [server.py](file:///home/cy/github/chuanyue98/CodeAgent/core/web/server.py) - Called `kill_all` on `chat_runner` and `tasks_runner` inside the lifespan shutdown handler.
-- [test_runner_service.py](file:///home/cy/github/chuanyue98/CodeAgent/tests/test_runner_service.py) - Added TDD failing/passing test `test_task_runner_kill_all`.
+- **Git Commit**: `eb26685` (`fix(gateway): Agent Gateway 明确标记为实验性并默认关闭 (AUDIT-001)`)
+- **文件变更**:
+  - [core/web/server.py](file:///home/cy/github/chuanyue98/CodeAgent/core/web/server.py)
+  - [tests/test_web_api.py](file:///home/cy/github/chuanyue98/CodeAgent/tests/test_web_api.py)
+- **测试结果**: 45 passed (100%)
+- **Lint 结果**: All checks passed
 
-## Implementation Details
+---
 
-1. **`TaskRunner.kill_all(self)`**:
-   - Loops over all running processes in `self._processes`.
-   - Attempts to terminate each process gracefully (`process.terminate()`) and waits with a timeout of 1.0 second.
-   - Falls back to killing the process (`process.kill()`) if termination fails or raises an error.
-   - Updates the status of terminated tasks in `self.active_runs` to `"stopped"`.
+## 2. 任务背景与目标 (AUDIT-001)
 
-2. **Lifespan Shutdown Hook**:
-   - Inside FastAPI's `lifespan` function, added imports for `chat_runner` (from `core.web.routers.chat`) and `tasks_runner` (from `core.web.routers.tasks`).
-   - Invokes `chat_runner.kill_all()` and `tasks_runner.kill_all()` on application exit, cleaning up any orphaned subprocesses.
+Agent Gateway（基于 REST/WS 的按提供方适配的编程式接口）属于实验性子系统：
+- 随着流式终端（streaming terminal）成为统一的对话交互界面，原始 Web UI 已被精简；
+- 启动链路（`engines/start_*.py` / `core/engine_registry.py`）是产品的主适配层；
+- 之前 `get_agent_gateway_settings()` 中 `enabled` 默认被设置为 `True`，导致未声明或未配置情况下默认启动了实验性网关；
+- 本任务根据 AUDIT-001 要求，将 Agent Gateway 明确标记为实验性，默认策略调整为关闭（`False`），仅在显式传入环境变量 `CA_AGENT_GATEWAY_ENABLED=1` 或配置项 `"agent_gateway": {"enabled": True}` 时启用。
 
-## Test Commands and Outputs
+---
 
-### 1. Failing Test Run (Before Implementation)
-**Command**:
+## 3. 具体改动
+
+### 3.1 `core/web/server.py`
+在 `get_agent_gateway_settings(config: dict)` 函数中：
+- 将默认开启逻辑收敛为默认关闭：
+  ```python
+  "enabled": _env_bool(
+      "CA_AGENT_GATEWAY_ENABLED", bool(raw.get("enabled", False))
+  ),
+  ```
+- 增加了关于实验性子系统以及 AUDIT-001 设计决策的代码注释说明。
+
+### 3.2 `tests/test_web_api.py`
+添加与完善单元测试 `test_agent_gateway_defaults_to_off`：
+- 在未配置环境变量且无特定配置时，断言 `get_agent_gateway_settings({})["enabled"] is False`；
+- 在显式配置 `{"agent_gateway": {"enabled": True}}` 时，断言其为 `True`；
+- 在环境变量 `CA_AGENT_GATEWAY_ENABLED="1"` 显式注入时，断言其为 `True`。
+
+---
+
+## 4. 验证记录
+
+### 4.1 测试套件执行
 ```bash
-.venv/bin/python -m pytest tests/test_runner_service.py -k test_task_runner_kill_all
+uv run pytest tests/test_web_api.py tests/test_agent_gateway.py -v
 ```
-**Output**:
-```
+**输出结果**：
+```text
 ============================= test session starts ==============================
-platform linux -- Python 3.14.5, pytest-9.0.2, pluggy-1.6.0
+platform linux -- Python 3.13.13, pytest-9.1.1, pluggy-1.6.0 -- /home/cy/github/chuanyue98/CodeAgent/.venv/bin/python3
+cachedir: .pytest_cache
 rootdir: /home/cy/github/chuanyue98/CodeAgent
 configfile: pyproject.toml
-plugins: anyio-4.13.0, asyncio-1.3.0, cov-7.0.0
+plugins: anyio-4.13.0, timeout-2.4.0, asyncio-1.3.0, cov-7.1.0
+timeout: 60.0s
+timeout method: signal
+timeout func_only: False
 asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collecting ... collected 5 items / 4 deselected / 1 selected                                  
+collecting ... collected 45 items
 
-tests/test_runner_service.py F                                           [100%]
+tests/test_web_api.py::test_health_check PASSED                          [  2%]
+tests/test_web_api.py::test_agent_gateway_settings_support_config_and_environment PASSED [  4%]
+tests/test_web_api.py::test_agent_gateway_defaults_to_off PASSED         [  6%]
+...
+tests/test_agent_gateway.py::test_execute_command_failure_is_not_cached_and_unblocks_waiters PASSED [100%]
 
-=================================== FAILURES ===================================
-__________________________ test_task_runner_kill_all ___________________________
-
-tmp_path = PosixPath('/tmp/pytest-of-cy/pytest-54/test_task_runner_kill_all0')
-
-    def test_task_runner_kill_all(tmp_path):
-        from core.services.runner_service import TaskRunner
-        import time
-        from unittest.mock import MagicMock
-        runner = TaskRunner(tmp_path)
-        # Start a dummy long-running command (like sleep 10)
-        import subprocess
-        dummy_proc = subprocess.Popen(["sleep", "10"])
-        runner.active_runs["dummy"] = MagicMock(pid=dummy_proc.pid, status="running")
-        runner._processes["dummy"] = dummy_proc
-    
->       runner.kill_all()
-        ^^^^^^^^^^^^^^^
-E       AttributeError: 'TaskRunner' object has no attribute 'kill_all'
-
-tests/test_runner_service.py:81: AttributeError
-=========================== short test summary info ============================
-FAILED tests/test_runner_service.py::test_task_runner_kill_all - AttributeErr...
-======================= 1 failed, 4 deselected in 0.03s ========================
+============================== 45 passed in 2.25s ==============================
 ```
 
-### 2. Passing Test Run (After Implementation)
-**Command**:
+### 4.2 Ruff 代码规范检查
 ```bash
-.venv/bin/python -m pytest tests/test_runner_service.py -k test_task_runner_kill_all
+uv run ruff check core/web/server.py tests/test_web_api.py
 ```
-**Output**:
-```
-============================= test session starts ==============================
-platform linux -- Python 3.14.5, pytest-9.0.2, pluggy-1.6.0
-rootdir: /home/cy/github/chuanyue98/CodeAgent
-configfile: pyproject.toml
-plugins: anyio-4.13.0, asyncio-1.3.0, cov-7.0.0
-asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collecting ... collected 5 items / 4 deselected / 1 selected                                  
-
-tests/test_runner_service.py .                                           [100%]
-
-======================= 1 passed, 4 deselected in 0.11s ========================
+**输出结果**：
+```text
+All checks passed!
 ```
 
-### 3. Full Test Suite Run
-**Command**:
-```bash
-.venv/bin/python -m pytest
-```
-**Output**:
-```
-============================= test session starts ==============================
-platform linux -- Python 3.14.5, pytest-9.0.2, pluggy-1.6.0
-rootdir: /home/cy/github/chuanyue98/CodeAgent
-configfile: pyproject.toml
-plugins: anyio-4.13.0, asyncio-1.3.0, cov-7.0.0
-asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collecting ... collected 182 items                                                            
+---
 
-tests/test_analytics.py .....                                            [  2%]
-tests/test_ca_launcher.py ...............                                [ 10%]
-tests/test_chat_router.py ...........                                    [ 17%]
-tests/test_chat_service.py ..........                                    [ 22%]
-tests/test_config_service.py ....                                        [ 24%]
-tests/test_engine_base.py .................                              [ 34%]
-tests/test_history_router.py ..........                                  [ 39%]
-tests/test_hook_injection.py ..                                          [ 40%]
-tests/test_hook_scanner.py ...                                           [ 42%]
-tests/test_hook_scanner_dynamic.py ..                                    [ 43%]
-tests/test_mcp_router.py ......                                          [ 46%]
-tests/test_mcp_service.py .....................                          [ 58%]
-tests/test_plugin.py .......                                             [ 62%]
-tests/test_prompt_kit.py ....                                            [ 64%]
-tests/test_prompt_scanner.py ....                                        [ 66%]
-tests/test_resource_services.py ..                                       [ 67%]
-tests/test_runner_service.py .....                                       [ 70%]
-tests/test_schedule_service.py ..........                                [ 75%]
-tests/test_scheduler_loop.py .....                                       [ 78%]
-tests/test_schedules_router.py ........                                  [ 82%]
-tests/test_session_history.py ................                           [ 91%]
-tests/test_skill_scanner.py ...                                          [ 93%]
-tests/test_web_api.py ............                                       [100%]
+## 5. 交付物与结论
 
-============================= 182 passed in 1.22s ==============================
-```
-
-## Commit
-- **Commit Hash**: `3fbfb0093e70a843a965d20167b0eacd1083137a`
-- **Commit Message**: `feat(backend): reap orphaned processes on shutdown`
-
-## Concerns
-- None.
-
-## Fix Review and Issues Resolved
-
-### Issues Addressed:
-1. **Runner Service (`kill_all`) KeyError and zombie reaping**:
-   - Fixed potential `KeyError` by checking `if task_id in self.active_runs` before modifying status.
-   - Added `process.wait()` after calling `process.kill()` to reap zombie processes properly.
-   - Added test `test_task_runner_kill_all_missing_from_active_runs` to verify that `kill_all` executes cleanly without `KeyError` and terminates the process when a task is in `_processes` but not in `active_runs`.
-2. **FastAPI Lifespan Cleanup Try/Except Isolation**:
-   - Wrapped `chat_runner.kill_all()` and `tasks_runner.kill_all()` in independent `try...except Exception: pass` blocks in `core/web/server.py` lifespan manager.
-   - Added test `test_server_lifespan_cleanup_exceptions` in `tests/test_web_api.py` to verify that an exception raised by one runner's `kill_all()` does not prevent execution of the other's cleanup.
-
-### Verification Runs:
-**Command**:
-```bash
-.venv/bin/pytest tests/test_runner_service.py -k test_task_runner_kill_all_missing_from_active_runs
-```
-**Output**:
-```
-============================= test session starts ==============================
-platform linux -- Python 3.14.5, pytest-9.0.2, pluggy-1.6.0
-rootdir: /home/cy/github/chuanyue98/CodeAgent
-configfile: pyproject.toml
-plugins: anyio-4.13.0, asyncio-1.3.0, cov-7.0.0
-asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collecting ... collected 6 items / 5 deselected / 1 selected
-
-tests/test_runner_service.py .                                           [100%]
-
-======================= 1 passed, 5 deselected in 0.12s ========================
-```
-
-**Command**:
-```bash
-.venv/bin/pytest tests/test_web_api.py -k test_server_lifespan_cleanup_exceptions
-```
-**Output**:
-```
-============================= test session starts ==============================
-platform linux -- Python 3.14.5, pytest-9.0.2, pluggy-1.6.0
-rootdir: /home/cy/github/chuanyue98/CodeAgent
-configfile: pyproject.toml
-plugins: anyio-4.13.0, asyncio-1.3.0, cov-7.0.0
-asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collecting ... collected 13 items / 12 deselected / 1 selected
-
-tests/test_web_api.py .                                                  [100%]
-
-======================= 1 passed, 12 deselected in 0.19s =======================
-```
-
-**Full test suite verification command**:
-```bash
-.venv/bin/pytest
-```
-**Output**:
-```
-============================= test session starts ==============================
-platform linux -- Python 3.14.5, pytest-9.0.2, pluggy-1.6.0
-rootdir: /home/cy/github/chuanyue98/CodeAgent
-configfile: pyproject.toml
-plugins: anyio-4.13.0, asyncio-1.3.0, cov-7.0.0
-asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collecting ... collected 184 items
-
-tests/test_analytics.py .....                                            [  2%]
-tests/test_ca_launcher.py ...............                                [ 10%]
-tests/test_chat_router.py ...........                                    [ 16%]
-tests/test_chat_service.py ..........                                    [ 22%]
-tests/test_config_service.py ....                                        [ 24%]
-tests/test_engine_base.py .................                              [ 33%]
-tests/test_history_router.py ..........                                  [ 39%]
-tests/test_hook_injection.py ..                                          [ 40%]
-tests/test_hook_scanner.py ...                                           [ 41%]
-tests/test_hook_scanner_dynamic.py ..                                    [ 42%]
-tests/test_mcp_router.py ......                                          [ 46%]
-tests/test_mcp_service.py .....................                          [ 57%]
-tests/test_plugin.py .......                                             [ 61%]
-tests/test_prompt_kit.py ....                                            [ 63%]
-tests/test_prompt_scanner.py ....                                        [ 65%]
-tests/test_resource_services.py ..                                       [ 66%]
-tests/test_runner_service.py ......                                      [ 70%]
-tests/test_schedule_service.py ..........                                [ 75%]
-tests/test_scheduler_loop.py .....                                       [ 78%]
-tests/test_schedules_router.py ........                                  [ 82%]
-tests/test_session_history.py ................                           [ 91%]
-tests/test_skill_scanner.py ...                                          [ 92%]
-tests/test_web_api.py .............                                      [100%]
-
-============================= 184 passed in 1.34s ==============================
-```
-
-### Git Commit for Fixes:
-- **Commit Hash**: `c413d97a3355b978497043b82dca4c63512baf80`
-- **Commit Message**: `fix: resolve KeyError in runner_service.py kill_all and isolate lifespan runner exceptions`
+- 提交已生成：`eb26685 fix(gateway): Agent Gateway 明确标记为实验性并默认关闭 (AUDIT-001)`
+- 针对 AUDIT-001 的安全与默认最小权限原则已落地，回归测试全部通过。

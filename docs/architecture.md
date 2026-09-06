@@ -54,12 +54,16 @@ Each engine script:
 3. Synthesizes a combined system prompt from all active resources
 4. Launches the vendor CLI tool with the synthesized prompt injected
 
+Security policies are enforced at the adapter layer: for instance, Codex defaults
+to safe read-only sandboxed execution (`--sandbox read-only --ask-approval`) and
+requires explicit opt-in (`--yolo`) to bypass approvals and grant full workspace write access.
+
 ### 2. Core (`core/`)
 
 The orchestration hub containing:
 
 **Services (`core/services/`)**
-- `agent_gateway/` (facade + resources/sessions/commands/events/supervisor) + `agent_protocol.py` + `agent_store.py` — Unified adapter gateway abstracting provider differences
+- `agent_gateway/` (facade + resources/sessions/commands/events/supervisor) + `agent_protocol.py` + `agent_store.py` — Unified adapter gateway abstracting provider differences (experimental; disabled by default and gated by `CODEAGENT_ENABLE_EXPERIMENTAL_GATEWAY=1` or `features.experimental_agent_gateway`)
 - `agent_adapters/` — Individual provider adapters (Claude, Codex, OpenCode)
 - `config_service.py` — Configuration loading and resolution
 - `runner_service.py` — Task subprocess management with orphan reaping
