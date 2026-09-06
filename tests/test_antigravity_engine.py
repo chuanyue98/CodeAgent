@@ -83,3 +83,40 @@ def test_cli_antigravity_routing():
 
         runner.invoke(cli, ["agy"])
         assert mock_launch.call_args[0][1][0] == "agy"
+
+
+def test_start_antigravity_main(monkeypatch):
+    import sys
+    from unittest.mock import MagicMock
+
+    import pytest
+
+    import engines.start_antigravity as start_mod
+
+    # 1. --list flag
+    mock_show = MagicMock()
+    monkeypatch.setattr(start_mod, "show_tasks", mock_show)
+    monkeypatch.setattr(sys, "argv", ["start_antigravity.py", "--list"])
+    start_mod.main()
+    assert mock_show.called
+
+    # 2. CLI missing -> sys.exit(1)
+    monkeypatch.setattr(start_mod, "require_engine_cli", lambda _: False)
+    monkeypatch.setattr(sys, "argv", ["start_antigravity.py", "some prompt"])
+    with pytest.raises(SystemExit) as exc:
+        start_mod.main()
+    assert exc.value.code == 1
+
+    # 3. Normal launch with -t task
+    monkeypatch.setattr(start_mod, "require_engine_cli", lambda _: True)
+    monkeypatch.setattr(start_mod, "handle_task_mode", lambda *a, **kw: "task content")
+    mock_run = MagicMock()
+    monkeypatch.setattr(start_mod.AntigravityEngine, "run_shell", mock_run)
+    monkeypatch.setattr(
+        sys, "argv", ["start_antigravity.py", "-t", "001", "additional input"]
+    )
+    start_mod.main()
+    assert mock_run.called
+    cmd, env = mock_run.call_args[0]
+    assert "agy" in cmd
+    assert any("task content" in arg for arg in cmd)
