@@ -80,6 +80,8 @@ def _validate_source_file_path(source_file: str, engine: str) -> Path:
         allowed_dirs.append((home / ".local" / "share" / "opencode").resolve())
     elif engine == "codebuddy":
         allowed_dirs.append((home / ".codebuddy" / "projects").resolve())
+    elif engine == "antigravity":
+        allowed_dirs.append((home / ".gemini" / "antigravity-cli").resolve())
 
     for allowed in allowed_dirs:
         if file_path.is_relative_to(allowed):
