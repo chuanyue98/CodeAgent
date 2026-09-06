@@ -190,8 +190,19 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
     ended_at = ""
     model = ""
 
+    inferred_project_path = ""
     for row in raw_rows:
         row_type = row.get("type", "")
+        if not inferred_project_path:
+            for tc in row.get("tool_calls") or []:
+                if isinstance(tc, dict):
+                    args = tc.get("args")
+                    if isinstance(args, dict):
+                        cwd = args.get("Cwd") or args.get("SearchDirectory") or args.get("TargetFile")
+                        if cwd and isinstance(cwd, str) and (cwd.startswith("/") or (len(cwd) > 2 and cwd[1] == ":")):
+                            inferred_project_path = str(Path(cwd).parent if args.get("TargetFile") else cwd).strip("\"'")
+                            break
+
         if row_type not in ("USER_INPUT", "PLANNER_RESPONSE"):
             continue
 
@@ -234,10 +245,12 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
     if not messages:
         return None
 
+    resolved_project_path = meta.get("project_path", "") or inferred_project_path
+
     return UnifiedSession(
         session_id=session_id,
         engine=EngineType.ANTIGRAVITY,
-        project_path=meta.get("project_path", ""),
+        project_path=resolved_project_path,
         started_at=started_at,
         ended_at=ended_at,
         messages=messages,

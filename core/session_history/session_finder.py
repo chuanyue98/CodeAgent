@@ -118,7 +118,7 @@ def find_all_sessions(
     if engine is None or engine == "codebuddy":
         all_sessions.extend(find_codebuddy_sessions(project_path, home))
 
-    if engine is None or engine == "antigravity":
+    if engine is None or engine in ("antigravity", "agy"):
         all_sessions.extend(find_antigravity_sessions(project_path, home))
 
     # A provider may expose multiple backing files for one logical session.

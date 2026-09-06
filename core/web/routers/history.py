@@ -80,7 +80,7 @@ def _validate_source_file_path(source_file: str, engine: str) -> Path:
         allowed_dirs.append((home / ".local" / "share" / "opencode").resolve())
     elif engine == "codebuddy":
         allowed_dirs.append((home / ".codebuddy" / "projects").resolve())
-    elif engine == "antigravity":
+    elif engine in ("antigravity", "agy"):
         allowed_dirs.append((home / ".gemini" / "antigravity-cli").resolve())
 
     for allowed in allowed_dirs:
@@ -475,6 +475,21 @@ async def delete_session(
         finally:
             if con is not None:
                 con.close()
+    elif engine in ("antigravity", "agy"):
+        try:
+            if validated_path.is_file():
+                validated_path.unlink(missing_ok=True)
+            db_path = (Path.home() / ".gemini" / "antigravity-cli" / "conversation_summaries.db").resolve()
+            if db_path.is_file():
+                with sqlite3.connect(str(db_path)) as con:
+                    con.execute(
+                        "DELETE FROM conversation_summaries WHERE conversation_id = ?",
+                        (session_id,),
+                    )
+        except (OSError, sqlite3.Error) as e:
+            raise HTTPException(
+                status_code=500, detail={"error": f"Failed to delete session file: {e}"}
+            ) from e
     else:
         try:
             validated_path.unlink()

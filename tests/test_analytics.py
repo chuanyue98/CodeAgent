@@ -117,12 +117,18 @@ def test_incremental_history(mock_history_file):
     assert get_last_timestamps()["claude"] == "2026-05-01T11:00:00Z"
 
 
+@patch("core.analytics.service.scan_antigravity_usage", return_value=[])
 @patch("core.analytics.service.scan_claude_usage")
 @patch("core.analytics.service.scan_codex_usage")
 @patch("core.analytics.service.scan_opencode_usage")
 @patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
 def test_service_incremental_collection(
-    mock_codebuddy, mock_opencode, mock_codex, mock_claude, mock_history_file
+    mock_codebuddy,
+    mock_opencode,
+    mock_codex,
+    mock_claude,
+    _mock_antigravity,
+    mock_history_file,
 ):
     # Setup initial history
     initial_entry = RawUsageEntry(
@@ -159,12 +165,18 @@ def test_service_incremental_collection(
     assert len(load_history()) == 2
 
 
+@patch("core.analytics.service.scan_antigravity_usage", return_value=[])
 @patch("core.analytics.service.scan_claude_usage", return_value=[])
 @patch("core.analytics.service.scan_opencode_usage", return_value=[])
 @patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
 @patch("core.analytics.service.scan_codex_usage")
 def test_codex_session_snapshot_is_replaced(
-    mock_codex, _mock_codebuddy, _mock_opencode, _mock_claude, mock_history_file
+    mock_codex,
+    _mock_codebuddy,
+    _mock_opencode,
+    _mock_claude,
+    _mock_antigravity,
+    mock_history_file,
 ):
     append_history(
         [
@@ -348,6 +360,68 @@ def test_codebuddy_collector_incremental_skips_older(tmp_path):
     )
 
 
+def test_antigravity_collector(tmp_path):
+    import json
+    import sqlite3
+
+    from core.analytics.collectors.antigravity_collector import scan_antigravity_usage
+
+    base_dir = tmp_path / ".gemini" / "antigravity-cli"
+    brain_dir = base_dir / "brain" / "sess-1" / ".system_generated" / "logs"
+    brain_dir.mkdir(parents=True)
+    db_path = base_dir / "conversation_summaries.db"
+
+    with sqlite3.connect(str(db_path)) as con:
+        con.execute(
+            "CREATE TABLE conversation_summaries ("
+            "conversation_id TEXT, workspace_uris TEXT, last_modified_time TEXT, "
+            "step_count INTEGER, parent_conversation_id TEXT, agent_name TEXT)"
+        )
+        con.execute(
+            "INSERT INTO conversation_summaries VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                "sess-1",
+                json.dumps(["file:///home/user/project"]),
+                "2026-07-14 03:58:41.000+00:00",
+                10,
+                "",
+                "",
+            ),
+        )
+
+    with (brain_dir / "transcript.jsonl").open("w", encoding="utf-8") as f:
+        f.write(
+            json.dumps(
+                {
+                    "type": "USER_INPUT",
+                    "content": "hello",
+                    "created_at": "2026-07-14T03:50:00Z",
+                }
+            )
+            + "\n"
+        )
+        f.write(
+            json.dumps(
+                {
+                    "type": "PLANNER_RESPONSE",
+                    "content": "world",
+                    "thinking": "analyzing...",
+                    "created_at": "2026-07-14T03:50:05Z",
+                }
+            )
+            + "\n"
+        )
+
+    entries = scan_antigravity_usage(home=tmp_path)
+    assert len(entries) == 1
+    assert entries[0].target == "antigravity"
+    assert entries[0].session_id == "sess-1"
+    assert entries[0].project_path == "/home/user/project"
+    assert entries[0].timestamp == "2026-07-14T03:50:05Z"
+    assert entries[0].output_tokens > 0
+
+
+@patch("core.analytics.service.scan_antigravity_usage", return_value=[])
 @patch("core.analytics.service.scan_claude_usage", return_value=[])
 @patch("core.analytics.service.scan_codex_usage", return_value=[])
 @patch("core.analytics.service.scan_opencode_usage", return_value=[])
@@ -357,6 +431,7 @@ def test_collect_all_purges_removed_targets(
     _mock_opencode,
     _mock_codex,
     _mock_claude,
+    _mock_antigravity,
     mock_history_file,
 ):
     """Stale trae/workbuddy snapshots are dropped from the history store."""
@@ -516,12 +591,18 @@ def test_claude_collector_reads_subagent_transcripts(tmp_path):
     assert by_session["parent-session"].parent_session_id == ""
 
 
+@patch("core.analytics.service.scan_antigravity_usage", return_value=[])
 @patch("core.analytics.service.scan_claude_usage")
 @patch("core.analytics.service.scan_codex_usage", return_value=[])
 @patch("core.analytics.service.scan_opencode_usage", return_value=[])
 @patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
 def test_the_first_collection_after_an_upgrade_rescans_in_full(
-    _mock_codebuddy, _mock_opencode, _mock_codex, mock_claude, mock_history_file
+    _mock_codebuddy,
+    _mock_opencode,
+    _mock_codex,
+    mock_claude,
+    _mock_antigravity,
+    mock_history_file,
 ):
     """Subagent transcripts were invisible to every earlier scan, so the
     records that first become readable are older than the watermark. Without a
