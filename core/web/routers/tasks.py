@@ -336,4 +336,10 @@ async def list_engines():
             "description": "Tencent Engineering Driver",
             "supportsResume": True,
         },
+        {
+            "id": "antigravity",
+            "name": "Google Antigravity",
+            "description": "Google Next-Gen Agent CLI",
+            "supportsResume": True,
+        },
     ]

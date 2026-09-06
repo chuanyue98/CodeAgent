@@ -10,18 +10,27 @@ ENGINE_CLI_CANDIDATES: dict[str, tuple[str, ...]] = {
     "claude": ("claude", "claude.cmd"),
     "opencode": ("opencode", "opencode.cmd"),
     "codex": ("codex", "codex.cmd"),
+    "codebuddy": ("codebuddy", "codebuddy.cmd"),
+    "antigravity": ("agy", "agy.cmd", "agy.exe"),
+    "agy": ("agy", "agy.cmd", "agy.exe"),
 }
 
 ENGINE_INSTALL_HINTS: dict[str, str] = {
     "claude": "npm install -g @anthropic-ai/claude-code",
     "opencode": "npm install -g opencode-ai",
     "codex": "npm install -g @openai/codex",
+    "codebuddy": "npm install -g @tencent-ai/codebuddy-code",
+    "antigravity": "Follow https://antigravity.google/docs/cli to install agy",
+    "agy": "Follow https://antigravity.google/docs/cli to install agy",
 }
 
 ENGINE_DISPLAY_NAMES: dict[str, str] = {
     "claude": "Claude Code",
     "opencode": "OpenCode",
     "codex": "Codex",
+    "codebuddy": "CodeBuddy",
+    "antigravity": "Antigravity",
+    "agy": "Antigravity (agy)",
 }
 
 

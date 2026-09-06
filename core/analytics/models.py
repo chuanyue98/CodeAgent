@@ -35,7 +35,7 @@ class RawUsageEntry:
     cache_read_tokens: int = 0
     cost: float = 0.0  # pre-computed cost (OpenCode); 0 = derive from pricing
     project_path: str = ""
-    target: str = ""  # claude | codex | opencode | codebuddy
+    target: str = ""  # claude | codex | opencode | codebuddy | antigravity
     parent_session_id: str = ""
     agent: str = ""
 
