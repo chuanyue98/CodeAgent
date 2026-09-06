@@ -9,6 +9,7 @@ from pathlib import Path
 
 import click
 
+from core.engine_registry import ENGINES
 from core.i18n import t
 
 from .. import helpers as _helpers
@@ -67,7 +68,7 @@ def stop(ctx, task_id):  # type: ignore[no-untyped-def]
 @click.option(
     "--engine",
     required=True,
-    type=click.Choice(["claude", "opencode", "codex", "codebuddy", "antigravity"]),
+    type=click.Choice(sorted(ENGINES)),
     help="Engine to run the task with in every target project.",
 )
 @click.option(

@@ -13,8 +13,9 @@ CodeAgent is built on a **Seven Pillars** architecture that cleanly separates co
 │──────────────│──────────────│────────────────────────────────────│
 │  opencode    │  Services    │  ┌──────────┐ ┌──────────┐        │
 │  claude      │  Scanners    │  │ Prompts  │ │  Skills  │        │
-│  opencode    │  Analytics   │  │ (Soul)   │ │ (Tools)  │        │
-│  codex       │  Web API     │  └──────────┘ └──────────┘        │
+│  codex       │  Analytics   │  │ (Soul)   │ │ (Tools)  │        │
+│  codebuddy   │  Web API     │  └──────────┘ └──────────┘        │
+│  antigravity │              │                                    │
 │              │              │  ┌──────────┐ ┌──────────┐        │
 │              │              │  │  Hooks   │ │  Plugins │        │
 │              │              │  │(Lifecycle)│ │ (Bundles)│        │
@@ -35,10 +36,21 @@ Pluggable adapters that wrap official CLI tools from each AI provider:
 | Claude | `engines/start_claude_code.py` | `claude` CLI |
 | OpenCode | `engines/start_opencode.py` | `opencode` CLI |
 | Codex | `engines/start_codex.py` | `codex` CLI |
+| CodeBuddy | `engines/start_codebuddy.py` | `codebuddy` CLI |
+| Antigravity | `engines/start_antigravity.py` | `agy` CLI |
+
+Engine identity is declarative: every engine is registered once in
+`core/engine_registry.py` (`EngineSpec` — launch script, CLI binary
+candidates, install hint, adapter class, session-id fields, aliases). The
+CLI dispatch map, doctor's engine checks and install hints, TaskRunner's
+adapter construction, and the `ca batch-run --engine` choices are all
+derived from that registry rather than hand-copied, so registering a new
+engine is a one-edit change plus the engine's own adapter code.
 
 Each engine script:
 1. Discovers the project root and loads `config.json`
 2. Scans for skills, prompts, hooks, and plugins via `core/` scanners
+   (identity and metadata come from `core/engine_registry.py`)
 3. Synthesizes a combined system prompt from all active resources
 4. Launches the vendor CLI tool with the synthesized prompt injected
 
@@ -56,7 +68,7 @@ The orchestration hub containing:
 - `hook_service.py` / `plugin_service.py` / `skill_service.py` / `prompt_service.py` — Resource management
 - `task_service.py` — Task execution service
 
-**Scanners (`core/`)**
+**Scanners (`core/`)** — one module per resource kind: `skill_scanner.py`, `prompt_scanner.py`, `hook_scanner.py`, `plugin_scanner.py`
 - `skill_scanner.py` — Discovers skill directories and loads their `SKILL.md`
 - `prompt_scanner.py` — Collects prompt markdown files
 - `hook_scanner.py` — Finds hook configurations
@@ -143,7 +155,7 @@ Note: the hook directory named `pre-commit` is just a hook's name — it is not 
 `pre-commit` hook mechanism, and its actual `event` value is `before_tool` like the others.
 
 `before_tool`/`after_tool` are translated to each engine's vendor-specific event names via
-`EVENT_MAP` in the engine adapter (`core/engine_base.py`). As of this writing, `EVENT_MAP`
+`EVENT_MAP` in the engine adapter (`core/engine_base/settings_mixin.py`). As of this writing, `EVENT_MAP`
 is only populated for the Claude (`PreToolUse`/`PostToolUse`) and CodeBuddy
 (`BeforeTool`/`AfterTool`) engines; the Codex and OpenCode adapters do not yet declare one.
 
