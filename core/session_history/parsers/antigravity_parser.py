@@ -26,6 +26,7 @@ from core.session_history.models import (
     UnifiedSession,
 )
 from core.session_history.parse_cache import cached_file_parser
+from core.session_history.parsers._subagents import title_subagent_runs
 from core.session_history.paths import (
     normalize_project_path,
     strip_extended_length_prefix,
@@ -34,6 +35,48 @@ from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_dirs, long_path
 
 _USER_REQUEST_RE = re.compile(r"<USER_REQUEST>(.*?)</USER_REQUEST>", re.DOTALL)
+
+
+def _is_valid_project_path(path_str: str) -> bool:
+    if not path_str:
+        return False
+    p = path_str.strip("\"' ")
+    if not (p.startswith("/") or (len(p) > 2 and p[1] == ":")):
+        return False
+    if "/.gemini/" in p or p.endswith("/.gemini") or p.startswith("/tmp"):
+        return False
+    return True
+
+
+def _find_repo_root(path_str: str) -> str:
+    try:
+        curr = Path(path_str)
+        if not curr.is_dir():
+            curr = curr.parent
+        for _ in range(len(curr.parts)):
+            if (curr / ".git").exists() or (curr / "pyproject.toml").exists() or (curr / "package.json").exists():
+                return str(curr)
+            if curr.parent == curr:
+                break
+            curr = curr.parent
+    except Exception:
+        pass
+    return path_str
+
+
+def _clean_title(content: str) -> str:
+    """Derives a concise, clean human-readable title from user content."""
+    m = _USER_REQUEST_RE.search(content)
+    text = m.group(1).strip() if m else content.strip()
+    role_m = re.search(r"^\s*你是\s*(.+?)[。，：:\n]", text)
+    if role_m:
+        return role_m.group(1).strip()
+    first_lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if first_lines:
+        clean = first_lines[0]
+        clean = re.sub(r"^([#*->\d.]+\s*)+", "", clean).strip()
+        return clean[:80]
+    return ""
 
 
 def _uri_to_path(uri: str) -> str:
@@ -191,17 +234,57 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
     model = ""
 
     inferred_project_path = ""
+    computed_title = ""
+    subagent_titles: dict[str, str] = {}
     for row in raw_rows:
         row_type = row.get("type", "")
+        # 1. Infer project path
         if not inferred_project_path:
-            for tc in row.get("tool_calls") or []:
-                if isinstance(tc, dict):
-                    args = tc.get("args")
-                    if isinstance(args, dict):
-                        cwd = args.get("Cwd") or args.get("SearchDirectory") or args.get("TargetFile")
-                        if cwd and isinstance(cwd, str) and (cwd.startswith("/") or (len(cwd) > 2 and cwd[1] == ":")):
-                            inferred_project_path = str(Path(cwd).parent if args.get("TargetFile") else cwd).strip("\"'")
+            content_str = row.get("content") or ""
+            m = re.search(r"^\s*(/[^\s\n\r]+|[a-zA-Z]:[/\\][^\s\n\r]+)\s*->", content_str, re.M)
+            if m and _is_valid_project_path(m.group(1)):
+                inferred_project_path = _find_repo_root(m.group(1).strip("\"' "))
+            else:
+                for tc in row.get("tool_calls") or []:
+                    if isinstance(tc, dict):
+                        args = tc.get("args")
+                        if isinstance(args, dict):
+                            cwd = args.get("Cwd")
+                            if cwd and isinstance(cwd, str) and _is_valid_project_path(cwd):
+                                inferred_project_path = _find_repo_root(cwd.strip("\"' "))
+                                break
+                            for k in ("SearchDirectory", "DirectoryPath", "SearchPath", "TargetFile", "AbsolutePath"):
+                                raw_val = args.get(k)
+                                if raw_val and isinstance(raw_val, str) and _is_valid_project_path(raw_val):
+                                    cand = raw_val.strip("\"' ")
+                                    inferred_project_path = _find_repo_root(cand)
+                                    break
+                        if inferred_project_path:
                             break
+
+        # 2. Collect subagent titles from invoke_subagent tool calls
+        for tc in row.get("tool_calls") or []:
+            if isinstance(tc, dict) and tc.get("name") == "invoke_subagent":
+                args = tc.get("args") or {}
+                subs = args.get("Subagents")
+                if isinstance(subs, str):
+                    try:
+                        subs = json.loads(subs)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                if isinstance(subs, list):
+                    curr_step = row.get("step_index", 0)
+                    for r2 in raw_rows:
+                        if r2.get("step_index", 0) > curr_step:
+                            c2 = r2.get("content") or ""
+                            if "conversationId" in c2:
+                                cids = re.findall(r'"conversationId":\s*"([^"]+)"', c2)
+                                for idx, cid in enumerate(cids):
+                                    if idx < len(subs) and isinstance(subs[idx], dict):
+                                        role = subs[idx].get("Role") or subs[idx].get("TypeName")
+                                        if role:
+                                            subagent_titles[cid] = role
+                                break
 
         if row_type not in ("USER_INPUT", "PLANNER_RESPONSE"):
             continue
@@ -214,6 +297,8 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
 
         if row_type == "USER_INPUT":
             raw_content = row.get("content") or ""
+            if not computed_title:
+                computed_title = _clean_title(raw_content)
             content = _extract_user_content(raw_content)
             if content:
                 messages.append(
@@ -246,6 +331,7 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
         return None
 
     resolved_project_path = meta.get("project_path", "") or inferred_project_path
+    resolved_title = meta.get("title", "") or computed_title
 
     return UnifiedSession(
         session_id=session_id,
@@ -254,11 +340,12 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
         started_at=started_at,
         ended_at=ended_at,
         messages=messages,
-        title=meta.get("title", ""),
+        title=resolved_title,
         model=model,
         source_file=str(file_path),
         parent_session_id=meta.get("parent_session_id", ""),
         agent=meta.get("agent", ""),
+        subagent_titles=subagent_titles,
     )
 
 
@@ -314,13 +401,6 @@ def find_antigravity_sessions(
                         except (json.JSONDecodeError, TypeError):
                             pass
 
-                    if normalized_target is not None:
-                        if (
-                            not sess_project
-                            or normalize_project_path(sess_project) != normalized_target
-                        ):
-                            continue
-
                     transcript_file = (
                         brain_dir
                         / sess_id
@@ -360,15 +440,28 @@ def find_antigravity_sessions(
             if not session:
                 continue
 
-            if normalized_target is not None:
-                if (
-                    not session.project_path
-                    or normalize_project_path(session.project_path) != normalized_target
-                ):
-                    continue
-
             sessions.append(session)
             seen_ids.add(sess_id)
+
+    # Inherit project path from parent session when subagent project path is empty
+    by_id = {s.session_id: s for s in sessions}
+    for s in sessions:
+        if not s.project_path and s.parent_session_id:
+            parent = by_id.get(s.parent_session_id)
+            if parent and parent.project_path:
+                s.project_path = parent.project_path
+
+    # Apply subagent titles from parent sessions
+    title_subagent_runs(sessions)
+
+    # Filter by project path if requested
+    if normalized_target is not None:
+        sessions = [
+            s
+            for s in sessions
+            if s.project_path
+            and normalize_project_path(s.project_path) == normalized_target
+        ]
 
     sessions.sort(key=lambda s: s.started_at, reverse=True)
     return sessions

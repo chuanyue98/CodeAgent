@@ -391,7 +391,7 @@ export default function SessionsPage() {
                     }
                   }}
                 >
-                  <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <input
                       type="checkbox"
                       aria-label={t('sessions.select', { id: session.sessionId })}
@@ -400,10 +400,23 @@ export default function SessionsPage() {
                       onChange={() => toggleSelected(key)}
                       className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-primary focus:ring-primary"
                     />
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-sm font-medium text-slate-700 truncate">
-                        {session.title || session.projectPath.split(/[\\/]/).pop() || session.projectPath || '—'}
-                      </span>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-medium text-slate-700 truncate">
+                          {session.title || session.projectPath.split(/[\\/]/).pop() || session.projectPath || '—'}
+                        </span>
+                        <span className={`shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${eb(session.target)}`}>
+                          {session.target}
+                        </span>
+                        {/* Subagent runs are folded into the session that spawned
+                            them; the count is what tells you the row's tokens and
+                            cost cover more than one transcript. */}
+                        {subtaskCount > 0 && (
+                          <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                            {t('sessions.subtaskCount', { count: subtaskCount })}
+                          </span>
+                        )}
+                      </div>
                       {/* Under a workspace filter the path is the filter value
                           repeated on every row, so the line goes to the models
                           that actually ran the session -- which the list shows
@@ -414,20 +427,15 @@ export default function SessionsPage() {
                       >
                         {project
                           ? session.modelsUsed.join(', ')
-                          : session.projectPath}
+                          : (session.projectPath || '—')}
                       </span>
                     </div>
-                    <span className={`shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${eb(session.target)}`}>
-                      {session.target}
-                    </span>
-                    {/* Subagent runs are folded into the session that spawned
-                        them; the count is what tells you the row's tokens and
-                        cost cover more than one transcript. */}
-                    {subtaskCount > 0 && (
-                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                        {t('sessions.subtaskCount', { count: subtaskCount })}
-                      </span>
-                    )}
+                  </div>
+                  {/* Allowed to shrink: it already wraps its chips, but
+                      `shrink-0` kept them on one line and gave the whole row a
+                      hard minimum width, so a narrower list scrolled sideways
+                      instead of wrapping. */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
                     {/* A subagent run only reaches top level when its parent is
                         gone -- say the engine pruned that transcript. Marked
                         rather than hidden, so its cost stays visible. */}
@@ -436,12 +444,6 @@ export default function SessionsPage() {
                         {t('sessions.orphanSubtask')}
                       </span>
                     )}
-                  </div>
-                  {/* Allowed to shrink: it already wraps its chips, but
-                      `shrink-0` kept them on one line and gave the whole row a
-                      hard minimum width, so a narrower list scrolled sideways
-                      instead of wrapping. */}
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
                     <span className="text-xs text-slate-500 flex items-center gap-1">
                       <FileText className="w-3 h-3" />{fmtTokens(totalTokens)}
                     </span>

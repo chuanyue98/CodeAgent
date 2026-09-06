@@ -1,12 +1,40 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from core.analytics.models import RawUsageEntry
 from core.session_history.paths import strip_extended_length_prefix
+
+
+def _is_valid_project_path(path_str: str) -> bool:
+    if not path_str:
+        return False
+    p = path_str.strip("\"' ")
+    if not (p.startswith("/") or (len(p) > 2 and p[1] == ":")):
+        return False
+    if "/.gemini/" in p or p.endswith("/.gemini") or p.startswith("/tmp"):
+        return False
+    return True
+
+
+def _find_repo_root(path_str: str) -> str:
+    try:
+        curr = Path(path_str)
+        if not curr.is_dir():
+            curr = curr.parent
+        for _ in range(len(curr.parts)):
+            if (curr / ".git").exists() or (curr / "pyproject.toml").exists() or (curr / "package.json").exists():
+                return str(curr)
+            if curr.parent == curr:
+                break
+            curr = curr.parent
+    except Exception:
+        pass
+    return path_str
 
 
 def _uri_to_path(uri: str) -> str:
@@ -76,13 +104,26 @@ def _parse_transcript(
 
                 tool_calls = row.get("tool_calls") or []
                 if not inferred_path:
-                    for tc in tool_calls:
-                        if isinstance(tc, dict):
-                            args = tc.get("args")
-                            if isinstance(args, dict):
-                                cwd = args.get("Cwd") or args.get("SearchDirectory") or args.get("TargetFile")
-                                if cwd and isinstance(cwd, str) and (cwd.startswith("/") or (len(cwd) > 2 and cwd[1] == ":")):
-                                    inferred_path = str(Path(cwd).parent if args.get("TargetFile") else cwd).strip("\"'")
+                    content_str = row.get("content") or ""
+                    m = re.search(r"^\s*(/[^\s\n\r]+|[a-zA-Z]:[/\\][^\s\n\r]+)\s*->", content_str, re.M)
+                    if m and _is_valid_project_path(m.group(1)):
+                        inferred_path = _find_repo_root(m.group(1).strip("\"' "))
+                    else:
+                        for tc in tool_calls:
+                            if isinstance(tc, dict):
+                                args = tc.get("args")
+                                if isinstance(args, dict):
+                                    cwd = args.get("Cwd")
+                                    if cwd and isinstance(cwd, str) and _is_valid_project_path(cwd):
+                                        inferred_path = _find_repo_root(cwd.strip("\"' "))
+                                        break
+                                    for k in ("SearchDirectory", "DirectoryPath", "SearchPath", "TargetFile", "AbsolutePath"):
+                                        raw_val = args.get(k)
+                                        if raw_val and isinstance(raw_val, str) and _is_valid_project_path(raw_val):
+                                            cand = raw_val.strip("\"' ")
+                                            inferred_path = _find_repo_root(cand)
+                                            break
+                                if inferred_path:
                                     break
 
                 row_type = row.get("type", "")
@@ -256,5 +297,15 @@ def scan_antigravity_usage(
                 since_timestamp,
             )
             entries.extend(file_entries)
+
+    # Inherit project_path for subagents or sessions that share a parent
+    session_to_project: dict[str, str] = {
+        e.session_id: e.project_path for e in entries if e.project_path
+    }
+    for e in entries:
+        if not e.project_path and e.parent_session_id:
+            parent_proj = session_to_project.get(e.parent_session_id)
+            if parent_proj:
+                e.project_path = parent_proj
 
     return entries

@@ -31,7 +31,8 @@ from core.analytics.pricing import get_rates
 #   2: the agent name behind a Claude subagent run (``attributionAgent``).
 #   3: CodeBuddy's subagent transcripts, and Codex's thread spawn edges.
 #   4: Antigravity session history and transcripts.
-BACKFILL_VERSION = 4
+#   5: Antigravity project_path inference from Cwd and user_information.
+BACKFILL_VERSION = 5
 
 
 def _collect_all() -> list[RawUsageEntry]:
