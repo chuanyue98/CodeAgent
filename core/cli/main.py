@@ -137,35 +137,6 @@ def _launch(ctx, args):  # type: ignore[no-untyped-def]
     return _helpers_mod._launch_engine(ctx, list(args))
 
 
-@cli.command(
-    name="antigravity",
-    context_settings=dict(
-        ignore_unknown_options=True,
-        allow_extra_args=True,
-        add_help_option=False,
-    ),
-    help="Start the Google Antigravity engine",
-)
-@click.argument("args", nargs=-1, type=click.UNPROCESSED)
-@click.pass_context
-def antigravity_cmd(ctx, args):  # type: ignore[no-untyped-def]
-    return _helpers_mod._launch_engine(ctx, ["antigravity", *args])
-
-
-@cli.command(
-    name="agy",
-    context_settings=dict(
-        ignore_unknown_options=True,
-        allow_extra_args=True,
-        add_help_option=False,
-    ),
-    help="Alias for ca antigravity",
-)
-@click.argument("args", nargs=-1, type=click.UNPROCESSED)
-@click.pass_context
-def agy_cmd(ctx, args):  # type: ignore[no-untyped-def]
-    return _helpers_mod._launch_engine(ctx, ["agy", *args])
-
 
 # Register extracted subcommands — keeps the original ``ca history`` / ``ca mcp`` etc. names.
 cli.add_command(history)

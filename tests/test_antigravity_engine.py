@@ -68,7 +68,18 @@ def test_doctor_engine_commands():
 
 
 def test_cli_antigravity_routing():
+    from unittest.mock import patch
+
+    from click.testing import CliRunner
+
     from core.cli.main import cli
 
-    assert "antigravity" in cli.commands
-    assert "agy" in cli.commands
+    runner = CliRunner()
+    with patch("core.cli.helpers._launch_engine") as mock_launch:
+        mock_launch.return_value = 0
+        runner.invoke(cli, ["antigravity"])
+        assert mock_launch.called
+        assert mock_launch.call_args[0][1][0] == "antigravity"
+
+        runner.invoke(cli, ["agy"])
+        assert mock_launch.call_args[0][1][0] == "agy"
