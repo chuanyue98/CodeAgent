@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """自动启动 Google Antigravity (agy) 并执行任务 (统一架构版)"""
+
 from __future__ import annotations
 
 import argparse
@@ -77,7 +78,7 @@ def main() -> None:
     message = " ".join(unknown).strip()
     if args.task is not None:
         task_prompt = handle_task_mode(args.task, file_suffix=TASK_FILE_SUFFIX)
-        if task_prompt:
+        if isinstance(task_prompt, str) and task_prompt:
             message = f"{message}\n\n{task_prompt}".strip() if message else task_prompt
 
     env = engine.env_manager.get_env()

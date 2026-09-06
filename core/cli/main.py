@@ -137,7 +137,6 @@ def _launch(ctx, args):  # type: ignore[no-untyped-def]
     return _helpers_mod._launch_engine(ctx, list(args))
 
 
-
 # Register extracted subcommands — keeps the original ``ca history`` / ``ca mcp`` etc. names.
 cli.add_command(history)
 cli.add_command(mcp)

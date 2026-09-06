@@ -14,7 +14,9 @@ from __future__ import annotations
 ENGINES = frozenset({"claude", "opencode", "codex", "codebuddy", "antigravity"})
 
 # Engines that support headless/non-interactive execution mode.
-HEADLESS_ENGINES = frozenset({"claude", "opencode", "codex", "codebuddy", "antigravity"})
+HEADLESS_ENGINES = frozenset(
+    {"claude", "opencode", "codex", "codebuddy", "antigravity"}
+)
 
 # Engines that support MCP server configuration and synchronization.
 MCP_ENGINES = frozenset({"claude", "opencode", "codex", "codebuddy", "antigravity"})
@@ -36,4 +38,3 @@ def normalize_engine_name(name: str) -> str:
     """Normalizes an engine identifier or alias to its canonical name."""
     cleaned = (name or "").strip().lower()
     return ENGINE_ALIASES.get(cleaned, cleaned)
-

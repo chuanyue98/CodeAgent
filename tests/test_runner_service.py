@@ -425,4 +425,3 @@ def test_extract_chat_session_id_antigravity(tmp_path, new_runner, field, value)
     log = tmp_path / "chat.jsonl"
     log.write_text(json.dumps({field: value}) + "\n", encoding="utf-8")
     assert runner._extract_chat_session_id("antigravity", log) == value
-

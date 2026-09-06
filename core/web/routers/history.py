@@ -479,7 +479,12 @@ async def delete_session(
         try:
             if validated_path.is_file():
                 validated_path.unlink(missing_ok=True)
-            db_path = (Path.home() / ".gemini" / "antigravity-cli" / "conversation_summaries.db").resolve()
+            db_path = (
+                Path.home()
+                / ".gemini"
+                / "antigravity-cli"
+                / "conversation_summaries.db"
+            ).resolve()
             if db_path.is_file():
                 with sqlite3.connect(str(db_path)) as con:
                     con.execute(

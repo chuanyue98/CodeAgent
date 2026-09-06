@@ -54,7 +54,11 @@ def _find_repo_root(path_str: str) -> str:
         if not curr.is_dir():
             curr = curr.parent
         for _ in range(len(curr.parts)):
-            if (curr / ".git").exists() or (curr / "pyproject.toml").exists() or (curr / "package.json").exists():
+            if (
+                (curr / ".git").exists()
+                or (curr / "pyproject.toml").exists()
+                or (curr / "package.json").exists()
+            ):
                 return str(curr)
             if curr.parent == curr:
                 break
@@ -114,7 +118,10 @@ def _find_summaries_db(file_path: Path, home: Path | None = None) -> Path | None
         candidate = parent / "conversation_summaries.db"
         if candidate.is_file():
             return candidate
-        if parent.name == "brain" and (parent.parent / "conversation_summaries.db").is_file():
+        if (
+            parent.name == "brain"
+            and (parent.parent / "conversation_summaries.db").is_file()
+        ):
             return parent.parent / "conversation_summaries.db"
 
     base_dir = (home or Path.home()) / ".gemini" / "antigravity-cli"
@@ -241,7 +248,9 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
         # 1. Infer project path
         if not inferred_project_path:
             content_str = row.get("content") or ""
-            m = re.search(r"^\s*(/[^\s\n\r]+|[a-zA-Z]:[/\\][^\s\n\r]+)\s*->", content_str, re.M)
+            m = re.search(
+                r"^\s*(/[^\s\n\r]+|[a-zA-Z]:[/\\][^\s\n\r]+)\s*->", content_str, re.M
+            )
             if m and _is_valid_project_path(m.group(1)):
                 inferred_project_path = _find_repo_root(m.group(1).strip("\"' "))
             else:
@@ -250,12 +259,28 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
                         args = tc.get("args")
                         if isinstance(args, dict):
                             cwd = args.get("Cwd")
-                            if cwd and isinstance(cwd, str) and _is_valid_project_path(cwd):
-                                inferred_project_path = _find_repo_root(cwd.strip("\"' "))
+                            if (
+                                cwd
+                                and isinstance(cwd, str)
+                                and _is_valid_project_path(cwd)
+                            ):
+                                inferred_project_path = _find_repo_root(
+                                    cwd.strip("\"' ")
+                                )
                                 break
-                            for k in ("SearchDirectory", "DirectoryPath", "SearchPath", "TargetFile", "AbsolutePath"):
+                            for k in (
+                                "SearchDirectory",
+                                "DirectoryPath",
+                                "SearchPath",
+                                "TargetFile",
+                                "AbsolutePath",
+                            ):
                                 raw_val = args.get(k)
-                                if raw_val and isinstance(raw_val, str) and _is_valid_project_path(raw_val):
+                                if (
+                                    raw_val
+                                    and isinstance(raw_val, str)
+                                    and _is_valid_project_path(raw_val)
+                                ):
                                     cand = raw_val.strip("\"' ")
                                     inferred_project_path = _find_repo_root(cand)
                                     break
@@ -281,7 +306,9 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
                                 cids = re.findall(r'"conversationId":\s*"([^"]+)"', c2)
                                 for idx, cid in enumerate(cids):
                                     if idx < len(subs) and isinstance(subs[idx], dict):
-                                        role = subs[idx].get("Role") or subs[idx].get("TypeName")
+                                        role = subs[idx].get("Role") or subs[idx].get(
+                                            "TypeName"
+                                        )
                                         if role:
                                             subagent_titles[cid] = role
                                 break
@@ -395,7 +422,9 @@ def find_antigravity_sessions(
                             uris = json.loads(uris_str)
                             if isinstance(uris, list):
                                 for uri in uris:
-                                    if isinstance(uri, str) and uri.startswith("file://"):
+                                    if isinstance(uri, str) and uri.startswith(
+                                        "file://"
+                                    ):
                                         sess_project = _uri_to_path(uri)
                                         break
                         except (json.JSONDecodeError, TypeError):
@@ -430,7 +459,9 @@ def find_antigravity_sessions(
             sess_id = sess_dir.name
             if sess_id in seen_ids:
                 continue
-            transcript_file = sess_dir / ".system_generated" / "logs" / "transcript.jsonl"
+            transcript_file = (
+                sess_dir / ".system_generated" / "logs" / "transcript.jsonl"
+            )
             if not transcript_file.is_file():
                 transcript_file = sess_dir / "transcript.jsonl"
             if not transcript_file.is_file():

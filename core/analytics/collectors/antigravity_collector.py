@@ -27,7 +27,11 @@ def _find_repo_root(path_str: str) -> str:
         if not curr.is_dir():
             curr = curr.parent
         for _ in range(len(curr.parts)):
-            if (curr / ".git").exists() or (curr / "pyproject.toml").exists() or (curr / "package.json").exists():
+            if (
+                (curr / ".git").exists()
+                or (curr / "pyproject.toml").exists()
+                or (curr / "package.json").exists()
+            ):
                 return str(curr)
             if curr.parent == curr:
                 break
@@ -105,7 +109,11 @@ def _parse_transcript(
                 tool_calls = row.get("tool_calls") or []
                 if not inferred_path:
                     content_str = row.get("content") or ""
-                    m = re.search(r"^\s*(/[^\s\n\r]+|[a-zA-Z]:[/\\][^\s\n\r]+)\s*->", content_str, re.M)
+                    m = re.search(
+                        r"^\s*(/[^\s\n\r]+|[a-zA-Z]:[/\\][^\s\n\r]+)\s*->",
+                        content_str,
+                        re.M,
+                    )
                     if m and _is_valid_project_path(m.group(1)):
                         inferred_path = _find_repo_root(m.group(1).strip("\"' "))
                     else:
@@ -114,12 +122,28 @@ def _parse_transcript(
                                 args = tc.get("args")
                                 if isinstance(args, dict):
                                     cwd = args.get("Cwd")
-                                    if cwd and isinstance(cwd, str) and _is_valid_project_path(cwd):
-                                        inferred_path = _find_repo_root(cwd.strip("\"' "))
+                                    if (
+                                        cwd
+                                        and isinstance(cwd, str)
+                                        and _is_valid_project_path(cwd)
+                                    ):
+                                        inferred_path = _find_repo_root(
+                                            cwd.strip("\"' ")
+                                        )
                                         break
-                                    for k in ("SearchDirectory", "DirectoryPath", "SearchPath", "TargetFile", "AbsolutePath"):
+                                    for k in (
+                                        "SearchDirectory",
+                                        "DirectoryPath",
+                                        "SearchPath",
+                                        "TargetFile",
+                                        "AbsolutePath",
+                                    ):
                                         raw_val = args.get(k)
-                                        if raw_val and isinstance(raw_val, str) and _is_valid_project_path(raw_val):
+                                        if (
+                                            raw_val
+                                            and isinstance(raw_val, str)
+                                            and _is_valid_project_path(raw_val)
+                                        ):
                                             cand = raw_val.strip("\"' ")
                                             inferred_path = _find_repo_root(cand)
                                             break
@@ -226,7 +250,9 @@ def scan_antigravity_usage(
                         except (json.JSONDecodeError, TypeError):
                             pass
 
-                    last_modified = str(row["last_modified_time"] or "").replace(" ", "T")
+                    last_modified = str(row["last_modified_time"] or "").replace(
+                        " ", "T"
+                    )
                     parent_id = str(row["parent_conversation_id"] or "")
                     agent = str(row["agent_name"] or "")
                     step_count = int(row["step_count"] or 0)
@@ -283,7 +309,9 @@ def scan_antigravity_usage(
             if session_id in seen_sessions:
                 continue
 
-            transcript_file = sess_dir / ".system_generated" / "logs" / "transcript.jsonl"
+            transcript_file = (
+                sess_dir / ".system_generated" / "logs" / "transcript.jsonl"
+            )
             if not transcript_file.is_file():
                 transcript_file = sess_dir / "transcript.jsonl"
             if not transcript_file.is_file():

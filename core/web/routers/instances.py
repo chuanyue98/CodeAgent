@@ -113,9 +113,7 @@ def _task_instances() -> list[Instance]:
 @router.get("")
 async def list_instances(request: Request) -> dict:
     instances = (
-        _chat_instances(request)
-        + await _terminal_instances()
-        + _task_instances()
+        _chat_instances(request) + await _terminal_instances() + _task_instances()
     )
     instances.sort(key=lambda item: item.started_at, reverse=True)
     return {"instances": [wire(instance) for instance in instances]}

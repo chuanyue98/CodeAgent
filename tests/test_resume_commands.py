@@ -44,7 +44,11 @@ def test_unknown_engine_is_rejected():
 
 @pytest.mark.parametrize("alias", ["agy", "gemini"])
 def test_engine_aliases_are_normalized(alias):
-    assert resume_command(alias, "sess-1", PROJECT) == ["agy", "--conversation", "sess-1"]
+    assert resume_command(alias, "sess-1", PROJECT) == [
+        "agy",
+        "--conversation",
+        "sess-1",
+    ]
 
 
 @pytest.mark.parametrize(

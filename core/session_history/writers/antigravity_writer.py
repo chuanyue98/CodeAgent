@@ -19,9 +19,7 @@ if TYPE_CHECKING:
     from core.session_history.models import UnifiedSession
 
 
-def write_antigravity_session(
-    session: UnifiedSession, home: Path | None = None
-) -> str:
+def write_antigravity_session(session: UnifiedSession, home: Path | None = None) -> str:
     """Converts a UnifiedSession and writes it to Antigravity native format.
 
     Args:

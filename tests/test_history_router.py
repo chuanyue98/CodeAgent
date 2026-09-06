@@ -664,7 +664,12 @@ async def test_list_sessions_can_include_subagent_runs(history_with_a_subagent):
 def test_validate_source_file_path_antigravity_allowed(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     allowed_file = (
-        tmp_path / ".gemini" / "antigravity-cli" / "brain" / "sess-1" / "transcript.jsonl"
+        tmp_path
+        / ".gemini"
+        / "antigravity-cli"
+        / "brain"
+        / "sess-1"
+        / "transcript.jsonl"
     )
     allowed_file.parent.mkdir(parents=True)
     allowed_file.write_text("{}", encoding="utf-8")
@@ -682,5 +687,3 @@ def test_validate_source_file_path_antigravity_forbidden(tmp_path, monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         _validate_source_file_path(str(outside_file), "antigravity")
     assert exc_info.value.status_code == 403
-
-
