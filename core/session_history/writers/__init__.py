@@ -20,6 +20,9 @@ __all__ = [
 ]
 
 
+from core.constants import normalize_engine_name
+
+
 def write_session(session, target_engine: str) -> str:
     """Dispatches to the appropriate writer based on target engine.
 
@@ -33,6 +36,7 @@ def write_session(session, target_engine: str) -> str:
     Raises:
         ValueError: If the target engine is not supported.
     """
+    normalized_target = normalize_engine_name(target_engine)
     writers = {
         "claude": write_claude_session,
         "codex": write_codex_session,
@@ -41,7 +45,7 @@ def write_session(session, target_engine: str) -> str:
         "antigravity": write_antigravity_session,
     }
 
-    writer = writers.get(target_engine)
+    writer = writers.get(normalized_target)
     if not writer:
         raise ValueError(f"Unsupported target engine: {target_engine}")
 

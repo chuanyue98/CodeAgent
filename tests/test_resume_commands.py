@@ -39,7 +39,12 @@ def test_opencode_takes_the_project_as_an_argument():
 
 def test_unknown_engine_is_rejected():
     with pytest.raises(ValueError, match="Unknown engine"):
-        resume_command("gemini", "sess-1", PROJECT)
+        resume_command("unknown_engine", "sess-1", PROJECT)
+
+
+@pytest.mark.parametrize("alias", ["agy", "gemini"])
+def test_engine_aliases_are_normalized(alias):
+    assert resume_command(alias, "sess-1", PROJECT) == ["agy", "--conversation", "sess-1"]
 
 
 @pytest.mark.parametrize(

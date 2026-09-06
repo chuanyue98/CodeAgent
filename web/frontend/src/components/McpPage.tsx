@@ -19,9 +19,9 @@ interface Engine {
   name: string;
 }
 
-// codex and opencode register MCP servers in a single global config file
-// regardless of cwd — confirmed live, see docs/mcp-cli-spike-results.md.
-const GLOBAL_SCOPE_ENGINES = new Set(['codex', 'opencode']);
+// codex, opencode, and antigravity register MCP servers in a single global config file
+// regardless of cwd.
+const GLOBAL_SCOPE_ENGINES = new Set(['codex', 'opencode', 'antigravity']);
 
 function parseEnvText(text: string): Record<string, string> {
   const env: Record<string, string> = {};

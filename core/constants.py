@@ -24,3 +24,16 @@ MCP_ENGINES = frozenset({"claude", "opencode", "codex", "codebuddy", "antigravit
 # really use -- it previously checked a project-root path that
 # `write_temp_prompt` had long since stopped writing to.
 TEMP_PROMPT_DIRNAME = "codeagent-prompts"
+
+# Canonical engine aliases
+ENGINE_ALIASES: dict[str, str] = {
+    "agy": "antigravity",
+    "gemini": "antigravity",
+}
+
+
+def normalize_engine_name(name: str) -> str:
+    """Normalizes an engine identifier or alias to its canonical name."""
+    cleaned = (name or "").strip().lower()
+    return ENGINE_ALIASES.get(cleaned, cleaned)
+

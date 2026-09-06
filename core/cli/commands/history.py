@@ -7,7 +7,7 @@ from pathlib import Path
 
 import click
 
-from core.constants import ENGINES
+from core.constants import ENGINES, normalize_engine_name
 from core.i18n import t
 
 from .. import helpers as _helpers
@@ -17,6 +17,8 @@ def _history_list(ctx, engine, include_subagents=False):  # type: ignore[no-unty
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.session_history.session_finder import find_all_sessions
 
+    if engine:
+        engine = normalize_engine_name(engine)
     project_path = str(Path.cwd())
     sessions = find_all_sessions(project_path, engine=engine)
     hidden = 0
@@ -69,6 +71,7 @@ def show(ctx, engine_name, session_id):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.session_history.session_finder import find_session_by_id
 
+    engine_name = normalize_engine_name(engine_name)
     project_path = str(Path.cwd())
     session = find_session_by_id(session_id, engine_name, project_path)
     if not session:
@@ -112,6 +115,8 @@ def convert(ctx, source_engine, session_id, target_engine, yes):  # type: ignore
     from core.session_history.session_finder import find_session_by_id
     from core.session_history.writers import write_session
 
+    source_engine = normalize_engine_name(source_engine)
+    target_engine = normalize_engine_name(target_engine)
     project_path = str(Path.cwd())
     session = find_session_by_id(session_id, source_engine, project_path)
     if not session:

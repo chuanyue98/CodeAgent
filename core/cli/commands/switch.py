@@ -20,7 +20,7 @@ from pathlib import Path
 
 import click
 
-from core.constants import ENGINES
+from core.constants import ENGINES, normalize_engine_name
 from core.i18n import t
 
 from .. import helpers as _helpers
@@ -48,7 +48,9 @@ def switch(ctx, target_engine, selector, source_engine, no_launch):  # type: ign
     SELECTOR is the number `ca history` printed, or a session id. Omit it to
     take the most recent session in this project.
     """
-    target_engine = target_engine.lower()
+    target_engine = normalize_engine_name(target_engine)
+    if source_engine:
+        source_engine = normalize_engine_name(source_engine)
     if target_engine not in ENGINES:
         print(t("switch.unknown_engine", engine=target_engine))
         print(t("switch.known_engines", engines=", ".join(sorted(ENGINES))))

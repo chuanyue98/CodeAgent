@@ -34,7 +34,7 @@ CodeAgent uses `config.json` at the project root for all configuration. The file
 ### Default Engine
 
 `default_engine` picks which engine a bare `ca` (or `ca <free-form prompt>`)
-starts. Accepted values are `claude`, `opencode`, `codex`, and `codebuddy`; naming
+starts. Accepted values are `claude`, `opencode`, `codex`, `codebuddy`, and `antigravity` (or `agy`); naming
 an engine explicitly — `ca claude ...` — always wins over this setting.
 
 Without it, `ca` always started one fixed engine, so anyone working primarily in
