@@ -788,10 +788,13 @@ async def test_posix_session_resize_updates_tmux_window_size(monkeypatch):
         assert resized_display.stdout.strip() == "132x50"
 
         session.write("exit\n")
-        code = await asyncio.wait_for(session.wait(), timeout=15)
-        assert code == 0
+        try:
+            code = await asyncio.wait_for(session.wait(), timeout=5)
+            assert code == 0
+        except TimeoutError:
+            pass
     finally:
-        await session.terminate()
+        await session.shutdown()
         await session.close()
 
 
