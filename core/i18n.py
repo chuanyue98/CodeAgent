@@ -421,6 +421,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "   Resume with: opencode (select from history)",
         "zh": "   恢复方式: opencode (从历史记录中选择)",
     },
+    "convert.resume_antigravity": {
+        "en": "   Resume with: agy --conversation {session_id}",
+        "zh": "   恢复方式: agy --conversation {session_id}",
+    },
     "convert.failed": {
         "en": "[X] Conversion failed: {error}",
         "zh": "[X] 转换失败: {error}",

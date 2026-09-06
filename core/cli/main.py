@@ -20,7 +20,7 @@ from .commands.tasks import batch_run, doctor, new, ps, stop, ui
 from .helpers import init_cli_runtime
 
 EPILOG = """\
-Engines: opencode, claude, codex, codebuddy
+Engines: opencode, claude, codex, codebuddy, antigravity (agy)
          (default: opencode; set "default_engine" in config.json to change)
 
 YOLO mode is enabled by default.
@@ -103,6 +103,8 @@ def cli(ctx, proxy, yolo):  # type: ignore[no-untyped-def]
         "opencode": str(root / "engines" / "start_opencode.py"),
         "codex": str(root / "engines" / "start_codex.py"),
         "codebuddy": str(root / "engines" / "start_codebuddy.py"),
+        "antigravity": str(root / "engines" / "start_antigravity.py"),
+        "agy": str(root / "engines" / "start_antigravity.py"),
     }
     child_env = None
     if proxy:
@@ -133,6 +135,36 @@ def cli(ctx, proxy, yolo):  # type: ignore[no-untyped-def]
 @click.pass_context
 def _launch(ctx, args):  # type: ignore[no-untyped-def]
     return _helpers_mod._launch_engine(ctx, list(args))
+
+
+@cli.command(
+    name="antigravity",
+    context_settings=dict(
+        ignore_unknown_options=True,
+        allow_extra_args=True,
+        add_help_option=False,
+    ),
+    help="Start the Google Antigravity engine",
+)
+@click.argument("args", nargs=-1, type=click.UNPROCESSED)
+@click.pass_context
+def antigravity_cmd(ctx, args):  # type: ignore[no-untyped-def]
+    return _helpers_mod._launch_engine(ctx, ["antigravity", *args])
+
+
+@cli.command(
+    name="agy",
+    context_settings=dict(
+        ignore_unknown_options=True,
+        allow_extra_args=True,
+        add_help_option=False,
+    ),
+    help="Alias for ca antigravity",
+)
+@click.argument("args", nargs=-1, type=click.UNPROCESSED)
+@click.pass_context
+def agy_cmd(ctx, args):  # type: ignore[no-untyped-def]
+    return _helpers_mod._launch_engine(ctx, ["agy", *args])
 
 
 # Register extracted subcommands — keeps the original ``ca history`` / ``ca mcp`` etc. names.

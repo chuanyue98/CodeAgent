@@ -69,13 +69,16 @@ ENGINE_BINARIES = {
     "opencode": ["opencode", "opencode.cmd"],
     "codex": ["codex", "codex.cmd"],
     "codebuddy": ["codebuddy", "codebuddy.cmd"],
+    "antigravity": ["agy", "agy.exe"],
 }
+ENGINE_COMMANDS = ENGINE_BINARIES
 
 ENGINE_INSTALL_HINTS = {
     "claude": "npm install -g @anthropic-ai/claude-code",
     "opencode": "npm install -g opencode-ai",
     "codex": "npm install -g @openai/codex",
     "codebuddy": "npm install -g @tencent-ai/codebuddy-code",
+    "antigravity": "Install Google Antigravity CLI (agy)",
 }
 
 # ── Individual check functions ────────────────────────────────────────────────
