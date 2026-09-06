@@ -16,6 +16,11 @@ from core.session_history.parsers import (
     find_antigravity_sessions,
     parse_antigravity_session,
 )
+from core.session_history.parsers.antigravity_parser import (
+    _clean_title,
+    _find_repo_root,
+    _is_valid_project_path,
+)
 from core.session_history.session_finder import find_all_sessions
 from core.session_history.writers import write_session
 from core.session_history.writers.antigravity_writer import write_antigravity_session
@@ -321,3 +326,102 @@ def test_session_finder_find_all_sessions_includes_antigravity(tmp_path: Path):
     assert len(sessions) == 1
     assert sessions[0].session_id == "finder-sess-1"
     assert sessions[0].engine == EngineType.ANTIGRAVITY
+
+
+def test_antigravity_find_repo_root(tmp_path: Path):
+    repo = tmp_path / "my_project"
+    sub = repo / "core" / "services"
+    sub.mkdir(parents=True)
+    git_dir = repo / ".git"
+    git_dir.mkdir()
+
+    # Subdirectory resolves to git repo root
+    assert _find_repo_root(str(sub)) == str(repo)
+
+    # Package root without .git but with pyproject.toml
+    py_project = tmp_path / "python_lib"
+    py_sub = py_project / "src" / "pkg"
+    py_sub.mkdir(parents=True)
+    (py_project / "pyproject.toml").write_text("[project]\nname='pkg'\n")
+    assert _find_repo_root(str(py_sub)) == str(py_project)
+
+    # Path without markers returns itself
+    plain_dir = tmp_path / "plain_dir"
+    plain_dir.mkdir()
+    assert _find_repo_root(str(plain_dir)) == str(plain_dir)
+
+
+def test_antigravity_is_valid_project_path():
+    assert _is_valid_project_path("/home/cy/github/chuanyue98/CodeAgent")
+    assert _is_valid_project_path('"/home/cy/github/chuanyue98/CodeAgent"')
+    assert _is_valid_project_path("C:/Users/name/repo")
+    assert not _is_valid_project_path("")
+    assert not _is_valid_project_path("relative/path")
+    assert not _is_valid_project_path("/home/cy/.gemini/antigravity-cli")
+    assert not _is_valid_project_path("/tmp/scratch")
+
+
+def test_antigravity_clean_title():
+    prompt = (
+        "<USER_REQUEST>\n你是 Task 1 实现者。请按以下流程完成 Task 1：\n</USER_REQUEST>"
+    )
+    assert _clean_title(prompt) == "Task 1 实现者"
+
+    prompt_colon = "你是 Codebase Researcher: 请分析项目结构"
+    assert _clean_title(prompt_colon) == "Codebase Researcher"
+
+    normal_req = "<USER_REQUEST>\n帮我查看系统端口占用情况\n</USER_REQUEST>"
+    assert _clean_title(normal_req) == "帮我查看系统端口占用情况"
+
+    markdown_heading = "### 1. 任务说明\n请执行测试"
+    assert _clean_title(markdown_heading) == "任务说明"
+
+
+def test_antigravity_subagent_role_title_extraction(tmp_path: Path):
+    # Session where DB has generic 'New Session' but transcript contains subagent prompt
+    sub_session_id = "subagent-session-uuid"
+    cli_dir = tmp_path / ".gemini" / "antigravity-cli"
+    brain_dir = cli_dir / "brain" / sub_session_id / ".system_generated" / "logs"
+    brain_dir.mkdir(parents=True, exist_ok=True)
+
+    transcript = brain_dir / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps(
+            {
+                "step_index": 1,
+                "source": "USER_EXPLICIT",
+                "type": "USER_INPUT",
+                "status": "DONE",
+                "created_at": "2026-07-14T03:00:00Z",
+                "content": "<USER_REQUEST>\n你是 Task 3 实现者。请按以下流程完成 Task 3：\n</USER_REQUEST>",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    db_path = cli_dir / "conversation_summaries.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversation_summaries (
+                conversation_id text PRIMARY KEY,
+                title text,
+                created_at text,
+                updated_at text
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO conversation_summaries VALUES (?, ?, ?, ?)",
+            (
+                sub_session_id,
+                "New Session",
+                "2026-07-14T03:00:00Z",
+                "2026-07-14T03:01:00Z",
+            ),
+        )
+
+    sessions = find_antigravity_sessions(home=tmp_path)
+    assert len(sessions) == 1
+    assert sessions[0].title == "Task 3 实现者"
