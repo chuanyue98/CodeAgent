@@ -38,14 +38,28 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from core.constants import ENGINES
+from core.constants import ENGINES, MCP_ENGINES
 
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
 
+#: freebuff 没有原生 MCP 配置面（既不写 ``.mcp.json`` 也没有 ``mcp`` 子命令），
+#: 所以 list/add/remove/sync 的默认目标集都从 MCP_ENGINES 取，而不是 ENGINES。
+MCP_SUPPORTED_ENGINES = frozenset(MCP_ENGINES)
+
 
 def _validate_engine(engine: str) -> None:
+    """Validates a request against the MCP-capable engine set.
+
+    freebuff 是合法引擎（在 ENGINES 里）但没有 MCP 配置面，所以单独在这里
+    拦截，给出可操作的原因而不是让它落到某个默认分支。
+    """
     if engine not in ENGINES:
         raise ValueError(f"Invalid engine: {engine!r}")
+    if engine not in MCP_SUPPORTED_ENGINES:
+        raise ValueError(
+            f"Engine {engine!r} has no native MCP configuration; "
+            "`ca mcp` only manages claude/codex/opencode/codebuddy"
+        )
 
 
 def _validate_name(name: str) -> None:
@@ -499,7 +513,7 @@ def sync_servers(
     _validate_engine(source_engine)
 
     if targets is None:
-        target_engines = sorted(ENGINES - {source_engine})
+        target_engines = sorted(MCP_SUPPORTED_ENGINES - {source_engine})
     else:
         target_engines = list(dict.fromkeys(targets))
         for target in target_engines:

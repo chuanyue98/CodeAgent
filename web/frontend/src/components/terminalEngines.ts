@@ -20,20 +20,32 @@ export interface Engine {
 // Engine names and their vendor blurbs are brands, so they are not translated;
 // only OpenCode's descriptive line is prose, and it carries a key instead.
 export const ENGINES: Engine[] = [
-  { id: 'claude',    name: 'Claude',    description: 'Anthropic · Claude Code CLI',      accent: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },
-  { id: 'opencode',  name: 'OpenCode',  descriptionKey: 'launch.opencodeDescription',    accent: 'bg-violet-100 text-violet-600', dot: 'bg-violet-500' },
-  { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',               accent: 'bg-emerald-100 text-emerald-600', dot: 'bg-emerald-500' },
-  { id: 'codebuddy', name: 'CodeBuddy', description: 'Tencent · CodeBuddy Code CLI',     accent: 'bg-sky-100 text-sky-600', dot: 'bg-sky-500' },
+  { id: 'claude',    name: 'Claude',    description: 'Anthropic · Claude Code CLI',       accent: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },
+  { id: 'opencode',  name: 'OpenCode',  descriptionKey: 'launch.opencodeDescription',     accent: 'bg-violet-100 text-violet-600', dot: 'bg-violet-500' },
+  { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',                accent: 'bg-emerald-100 text-emerald-600', dot: 'bg-emerald-500' },
+  { id: 'codebuddy', name: 'CodeBuddy', description: 'Tencent · CodeBuddy Code CLI',      accent: 'bg-sky-100 text-sky-600', dot: 'bg-sky-500' },
+  { id: 'freebuff',  name: 'Freebuff',  description: 'Freebuff · free AI coding agent CLI', accent: 'bg-fuchsia-100 text-fuchsia-700', dot: 'bg-fuchsia-500' },
   { id: 'shell',     nameKey: 'launch.shellName', descriptionKey: 'launch.shellDescription', accent: 'bg-slate-200 text-slate-600', dot: 'bg-slate-400' },
 ];
 
-/** The plain shell starts no agent at all, so it is offered apart from the
-    four that do — and it is what makes the list an odd five, which no column
-    count divides evenly. */
 export const SHELL_ENGINE_ID = 'shell';
+export const FREEBUFF_ENGINE_ID = 'freebuff';
 
-export const AGENT_ENGINES = ENGINES.filter(engine => engine.id !== SHELL_ENGINE_ID);
-export const SHELL_ENGINE = ENGINES.find(engine => engine.id === SHELL_ENGINE_ID)!;
+/** 主网格：四个可由 ca_launcher 注入启动的引擎。刻意保持四个——任何列宽都
+    能整除成整齐的行，奇数个卡片会在常用宽度留下 4+1 的破洞。 */
+export const INJECTED_ENGINES = ENGINES.filter(
+  engine => engine.id !== SHELL_ENGINE_ID && engine.id !== FREEBUFF_ENGINE_ID,
+);
+
+/** 直连终端：freebuff（免费版 CLI 无注入通道，ca 只能裸拉它的 TUI）与纯
+    shell。两者都放在主网格下方并排，避免让上方变成奇数张卡片。 */
+export const DIRECT_TERMINALS = ENGINES.filter(
+  engine => engine.id === SHELL_ENGINE_ID || engine.id === FREEBUFF_ENGINE_ID,
+);
+
+export const SHELL_ENGINE = DIRECT_TERMINALS.find(
+  engine => engine.id === SHELL_ENGINE_ID,
+)!;
 
 // Sessions come back tagged with whatever engine wrote them, including ones
 // this build no longer offers a card for, so both lookups fall back rather

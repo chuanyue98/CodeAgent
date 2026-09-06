@@ -69,6 +69,7 @@ ENGINE_BINARIES = {
     "opencode": ["opencode", "opencode.cmd"],
     "codex": ["codex", "codex.cmd"],
     "codebuddy": ["codebuddy", "codebuddy.cmd"],
+    "freebuff": ["freebuff"],
 }
 
 ENGINE_INSTALL_HINTS = {
@@ -76,6 +77,7 @@ ENGINE_INSTALL_HINTS = {
     "opencode": "npm install -g opencode-ai",
     "codex": "npm install -g @openai/codex",
     "codebuddy": "npm install -g @tencent-ai/codebuddy-code",
+    "freebuff": "npm install -g freebuff",
 }
 
 # ── Individual check functions ────────────────────────────────────────────────
@@ -518,12 +520,14 @@ def check_mcp_drift(section: Section) -> None:
     user to diff four native config files by hand.
     """
     try:
-        from core.constants import ENGINES
+        # freebuff 没有 MCP 配置面，列入比较只会把它"少配置的服务器"全部报成
+        # 漂移；只在有原生 MCP 配置的引擎之间比较。
+        from core.constants import MCP_ENGINES
         from core.services import mcp_service
 
         project = str(Path.cwd())
         by_engine: dict[str, set[str]] = {}
-        for name in sorted(ENGINES):
+        for name in sorted(MCP_ENGINES):
             by_engine[name] = {
                 entry["name"] for entry in mcp_service.list_servers(name, project)
             }

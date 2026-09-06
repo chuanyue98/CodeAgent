@@ -20,6 +20,9 @@ PROJECT = Path("/work/project-a")
         ("claude", ["claude", "--resume", "sess-1"]),
         ("codex", ["codex", "resume", "sess-1"]),
         ("codebuddy", ["codebuddy", "--resume", "sess-1"]),
+        # freebuff 会话 id 就是 ~/.config/manicode/projects/<repo>/chats/ 下的
+        # ISO 时间戳目录名；--continue 在该目录名上继续（cwd 由调用方设到项目）。
+        ("freebuff", ["freebuff", "--continue", "sess-1"]),
     ],
 )
 def test_each_engine_gets_its_own_spelling(engine, expected):
@@ -65,6 +68,8 @@ def test_ids_that_could_be_read_as_flags_or_paths_are_rejected(session_id):
         "0199a1b2-c3d4-7e8f-9012-3456789abcde",  # claude / codex uuid
         "ses_8f2a1c4b9d",  # opencode
         "abc.123_XYZ-9",
+        # freebuff chat-dir name: dots are separators, not separators of doom.
+        "2026-08-12T05-10-04.784Z",
     ],
 )
 def test_real_engine_ids_pass(session_id):

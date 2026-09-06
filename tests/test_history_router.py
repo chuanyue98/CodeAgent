@@ -657,3 +657,94 @@ async def test_list_sessions_can_include_subagent_runs(history_with_a_subagent):
     assert set(by_id) == {"sess-a", "agent-abc123"}
     assert by_id["agent-abc123"]["parentSessionId"] == "sess-a"
     assert by_id["sess-a"]["parentSessionId"] == ""
+
+
+def _write_freebuff_chat(base: Path, repo: str, chat_id: str, text: str) -> Path:
+    """Writes one Freebuff conversation under ``base`` (a fake home)."""
+    chat_dir = base / ".config" / "manicode" / "projects" / repo / "chats" / chat_id
+    chat_dir.mkdir(parents=True)
+    project_root = str(base / "work" / repo)
+    (chat_dir / "chat-messages.json").write_text(
+        json.dumps(
+            [
+                {
+                    "id": "user-1786515103000",
+                    "variant": "user",
+                    "content": text,
+                    "timestamp": "02:11 PM",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (chat_dir / "chat-meta.json").write_text(
+        json.dumps({"messageCount": 1, "firstPrompt": text}), encoding="utf-8"
+    )
+    (chat_dir / "run-state.json").write_text(
+        json.dumps(
+            {
+                "sessionState": {
+                    "fileContext": {"projectRoot": project_root, "cwd": project_root},
+                    "mainAgentState": {"agentType": "base3-free-deepseek-flash"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return chat_dir / "chat-messages.json"
+
+
+@pytest.mark.asyncio
+async def test_freebuff_session_list_continue_and_delete(tmp_path, monkeypatch):
+    """freebuff 会话走完整的历史链路：列出（repo 名匹配）、恢复（继续目标是
+    freebuff --continue <chat 目录名>）、删除（只允许删 ~/.config/manicode
+    projects 内的文件）。"""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    chat_id = "2026-08-12T05-10-04.784Z"
+    _write_freebuff_chat(tmp_path, "CodeAgent", chat_id, "你浏览下我们项目")
+    project = str(tmp_path / "work" / "CodeAgent")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        # List, filtered to this checkout by its repo name.
+        response = await ac.get(
+            "/api/history", params={"project": project, "engine": "freebuff"}
+        )
+    assert response.status_code == 200
+    sessions = response.json()["sessions"]
+    assert len(sessions) == 1
+    assert sessions[0]["sessionId"] == chat_id
+    assert sessions[0]["engine"] == "freebuff"
+    assert sessions[0]["projectPath"] == project
+
+    monkeypatch.setattr(
+        "core.web.routers.history._resolve_history_workspace", lambda p: p
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        # Continue: the answer is a browser-terminal target for freebuff.
+        cont = await ac.post(
+            f"/api/history/freebuff/{chat_id}/continue",
+            params={"project": project},
+        )
+        assert cont.status_code == 200
+        assert cont.json() == {
+            "status": "ready",
+            "engine": "freebuff",
+            "sessionId": chat_id,
+            "project": project,
+        }
+
+        # Delete removes the transcript (the session id is the chat dir name).
+        deleted = await ac.delete(
+            f"/api/history/freebuff/{chat_id}", params={"project": project}
+        )
+        assert deleted.status_code == 200
+        assert deleted.json()["status"] == "deleted"
+
+        response = await ac.get(
+            "/api/history", params={"project": project, "engine": "freebuff"}
+        )
+        assert response.json()["count"] == 0

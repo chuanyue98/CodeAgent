@@ -9,9 +9,9 @@ import RecentSessions from './RecentSessions';
 import SectionLabel from './shared/SectionLabel';
 import TerminalSessionSidebar from './TerminalSessionSidebar';
 import {
-  AGENT_ENGINES,
+  INJECTED_ENGINES,
+  DIRECT_TERMINALS,
   findEngine,
-  SHELL_ENGINE,
   SHELL_ENGINE_ID,
   type Engine,
 } from './terminalEngines';
@@ -219,10 +219,14 @@ export default function LaunchPad() {
             fifth card used to sit in this grid and wrap 3 + 2, leaving a
             card-shaped hole at the width the page is usually read at. */}
         <div className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-          {AGENT_ENGINES.map(engineCard)}
+          {INJECTED_ENGINES.map(engineCard)}
         </div>
-        {/* And, separately, no agent at all. */}
-        <div className="pt-1">{engineCard(SHELL_ENGINE)}</div>
+        {/* 直连终端（freebuff / shell）单独一排：freebuff 免费版 CLI 没有
+            headless/注入通道，ca 只能裸拉它的 TUI，放进上方网格会让四个
+            引擎的整齐排布变成奇数张卡片。 */}
+        <div className="grid auto-rows-fr grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
+          {DIRECT_TERMINALS.map(engineCard)}
+        </div>
       </section>
 
       <RecentSessions

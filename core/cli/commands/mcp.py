@@ -7,12 +7,14 @@ from pathlib import Path
 
 import click
 
-from core.constants import ENGINES
+from core.constants import MCP_ENGINES
 from core.i18n import t
 
 from .. import helpers as _helpers
 
-_ENGINE_CHOICE = click.Choice(sorted(ENGINES))
+# freebuff 没有原生 MCP 配置面，`ca mcp` 的 add/remove/sync/list 都不该把
+# 它当成可选引擎，否则每个命令都会列出/报错一个必然为空的配置。
+_ENGINE_CHOICE = click.Choice(sorted(MCP_ENGINES))
 
 
 @click.group(name="mcp", invoke_without_command=True)
@@ -32,7 +34,7 @@ def mcp_list(ctx, engine):  # type: ignore[no-untyped-def]
     from core.services import mcp_service
 
     project_path = str(Path.cwd())
-    engines = [engine] if engine else sorted(ENGINES)
+    engines = [engine] if engine else sorted(MCP_ENGINES)
     for name in engines:
         try:
             servers = mcp_service.list_servers(name, project_path)
@@ -94,7 +96,7 @@ def mcp_add(ctx, engine, name, command, url, env_pairs, transport):  # type: ign
         sys.exit(1)
     scope = t("mcp.scope_project") if engine == "claude" else t("mcp.scope_global")
     print(t("mcp.added", name=name, engine=engine, scope=scope))
-    others = sorted(ENGINES - {engine})
+    others = sorted(MCP_ENGINES - {engine})
     print(t("mcp.sync_hint", engine=engine))
     print(t("mcp.sync_targets", targets=", ".join(others)))
 

@@ -20,7 +20,7 @@ from .commands.tasks import batch_run, doctor, new, ps, stop, ui
 from .helpers import init_cli_runtime
 
 EPILOG = """\
-Engines: opencode, claude, codex, codebuddy
+Engines: opencode, claude, codex, codebuddy, freebuff
          (default: opencode; set "default_engine" in config.json to change)
 
 YOLO mode is enabled by default.
@@ -103,6 +103,7 @@ def cli(ctx, proxy, yolo):  # type: ignore[no-untyped-def]
         "opencode": str(root / "engines" / "start_opencode.py"),
         "codex": str(root / "engines" / "start_codex.py"),
         "codebuddy": str(root / "engines" / "start_codebuddy.py"),
+        "freebuff": str(root / "engines" / "start_freebuff.py"),
     }
     child_env = None
     if proxy:

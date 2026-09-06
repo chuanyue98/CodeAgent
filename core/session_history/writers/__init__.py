@@ -7,6 +7,7 @@ session storage directory in that engine's native format.
 from core.session_history.writers.claude_writer import write_claude_session
 from core.session_history.writers.codebuddy_writer import write_codebuddy_session
 from core.session_history.writers.codex_writer import write_codex_session
+from core.session_history.writers.freebuff_writer import write_freebuff_session
 from core.session_history.writers.opencode_writer import write_opencode_session
 
 __all__ = [
@@ -14,6 +15,7 @@ __all__ = [
     "write_codebuddy_session",
     "write_codex_session",
     "write_opencode_session",
+    "write_freebuff_session",
     "write_session",
 ]
 
@@ -23,7 +25,9 @@ def write_session(session, target_engine: str) -> str:
 
     Args:
         session: A UnifiedSession to convert and write.
-        target_engine: The target engine name ("claude", "codex", "opencode", "codebuddy").
+        target_engine: The target engine name ("claude", "codex", "opencode",
+            "codebuddy"). "freebuff" 在映射表中但 writer 是预留占位——转换到它
+            会得到 NotImplementedError（见 freebuff_writer 模块 doc）。
 
     Returns:
         str: The new session ID in the target engine's format.
@@ -36,6 +40,8 @@ def write_session(session, target_engine: str) -> str:
         "codex": write_codex_session,
         "opencode": write_opencode_session,
         "codebuddy": write_codebuddy_session,
+        # 预留：转换“到” freebuff 目前明确失败（见 freebuff_writer 模块 doc）。
+        "freebuff": write_freebuff_session,
     }
 
     writer = writers.get(target_engine)

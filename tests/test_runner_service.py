@@ -74,6 +74,16 @@ def test_task_runner_rejects_unknown_engine(tmp_path, new_runner):
         runner.run_task("review", "shell", "common")
 
 
+def test_task_runner_rejects_headless_missing_engine(tmp_path, new_runner):
+    """后台任务在无 TTY 下运行，freebuff 免费 CLI 没有 headless 通道——
+    必须在派生前就拒绝，而不是把交互 TUI 拉进后台挂起。"""
+    runner = new_runner(tmp_path)
+    with pytest.raises(ValueError, match="no headless channel"):
+        runner.run_task("review", "freebuff", "common")
+    with pytest.raises(ValueError, match="no headless channel"):
+        runner.run_chat_turn("freebuff", "hi", project_path=str(tmp_path))
+
+
 def test_task_library_uses_explicit_tasks_root(tmp_path, monkeypatch):
     tasks_root = tmp_path / "external-tasks"
     tasks_root.mkdir()

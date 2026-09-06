@@ -13,6 +13,7 @@ from core.session_history.parsers import (
     find_claude_sessions,
     find_codebuddy_sessions,
     find_codex_sessions,
+    find_freebuff_sessions,
     find_opencode_sessions,
 )
 
@@ -97,7 +98,7 @@ def find_all_sessions(
             sessions from every project are returned unfiltered.
         home: Optional home directory override.
         engine: Optional filter — only return sessions from this engine
-            (e.g. "claude", "codex", "opencode", "codebuddy").
+            (e.g. "claude", "codex", "opencode", "codebuddy", "freebuff").
 
     Returns:
         list[UnifiedSession]: All sessions found, sorted by start time
@@ -117,6 +118,9 @@ def find_all_sessions(
     if engine is None or engine == "codebuddy":
         all_sessions.extend(find_codebuddy_sessions(project_path, home))
 
+    if engine is None or engine == "freebuff":
+        all_sessions.extend(find_freebuff_sessions(project_path, home))
+
     # A provider may expose multiple backing files for one logical session.
     all_sessions = _deduplicate_sessions(all_sessions)
 
@@ -135,7 +139,7 @@ def find_session_by_id(
 
     Args:
         session_id: The session ID to find.
-        engine: The engine type ("claude", "codex", "opencode", "codebuddy").
+        engine: The engine type ("claude", "codex", "opencode", "codebuddy", "freebuff").
         project_path: The project path to search within.
         home: Optional home directory override.
 

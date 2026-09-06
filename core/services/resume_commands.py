@@ -54,4 +54,10 @@ def resume_command(engine: str, session_id: str, project: Path) -> list[str]:
         return ["codex", "resume", session_id]
     if engine == "codebuddy":
         return ["codebuddy", "--resume", session_id]
+    if engine == "freebuff":
+        # freebuff 的免费 CLI 只有 login/--continue/--cwd。会话 id 是
+        # ``~/.config/manicode/projects/<repo>/chats/<ISO-时间戳>/`` 的目录名
+        # （实测），``--continue`` 在当前 cwd 的仓库里找它；调用方把 cwd 设
+        # 成会话所属项目即可。
+        return ["freebuff", "--continue", session_id]
     raise ValueError(f"Unknown engine: {engine}")

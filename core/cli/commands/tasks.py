@@ -9,6 +9,7 @@ from pathlib import Path
 
 import click
 
+from core.constants import HEADLESS_ENGINES
 from core.i18n import t
 
 from .. import helpers as _helpers
@@ -67,7 +68,9 @@ def stop(ctx, task_id):  # type: ignore[no-untyped-def]
 @click.option(
     "--engine",
     required=True,
-    type=click.Choice(["claude", "opencode", "codex", "codebuddy"]),
+    # batch-run 每个项目都要无人值守跑完整任务，只有带 headless 通道的引擎
+    # 能胜任（freebuff 的免费 CLI 只有交互 TUI，会挂在无 TTY 的后台）。
+    type=click.Choice(sorted(HEADLESS_ENGINES)),
     help="Engine to run the task with in every target project.",
 )
 @click.option(

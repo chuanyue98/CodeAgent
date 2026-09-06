@@ -45,6 +45,20 @@ def test_create_schedule_rejects_invalid_engine(service):
         service.create_schedule("task", "shell", "common", "* * * * *")
 
 
+def test_create_schedule_rejects_headless_missing_engine(service):
+    """调度在后台无人值守触发任务，freebuff 免费 CLI 没有 headless 通道，
+    必须在这里被拒而不是等点火后在无 TTY 的后台挂起。"""
+    with pytest.raises(ValueError, match="no headless channel"):
+        service.create_schedule("task", "freebuff", "common", "* * * * *")
+
+
+def test_update_schedule_rejects_headless_missing_engine(service):
+    record = service.create_schedule("task", "claude", "common", "* * * * *")
+
+    with pytest.raises(ValueError, match="no headless channel"):
+        service.update_schedule(record["id"], engine="freebuff")
+
+
 def test_update_schedule_toggles_enabled(service):
     record = service.create_schedule("task", "claude", "common", "* * * * *")
 

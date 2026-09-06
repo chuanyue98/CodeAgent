@@ -13,9 +13,27 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.constants import ENGINES
+from core.constants import ENGINES, HEADLESS_ENGINES
 from core.host_env import child_environ
 from core.services.run_store import RunStore, TaskRunRecord
+
+
+def _require_headless_engine(engine: str) -> None:
+    """Rejects a request whose engine cannot run unattended.
+
+    freebuff 的免费 CLI 只有交互 TUI：后台任务与 Chat 单轮都需要 headless
+    （非交互 + 结构化输出）通道，直接放行会让子进程挂在没有 TTY 的后台。
+    未知引擎与已知但无 headless 通道的引擎分开报错，前者是拼写错误、后者
+    是能力边界。
+    """
+    if engine not in ENGINES:
+        raise ValueError(f"Invalid engine: {engine!r}")
+    if engine not in HEADLESS_ENGINES:
+        raise ValueError(
+            f"Invalid engine: {engine!r} has no headless channel; "
+            "background runs need one of "
+            f"{', '.join(sorted(HEADLESS_ENGINES))}"
+        )
 
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
 
@@ -140,8 +158,7 @@ class TaskRunner:
             raise ValueError(f"Invalid task name: {task_name!r}")
         if not _SAFE_NAME_RE.match(group):
             raise ValueError(f"Invalid group name: {group!r}")
-        if engine not in ENGINES:
-            raise ValueError(f"Invalid engine: {engine!r}")
+        _require_headless_engine(engine)
 
         working_dir = (
             Path(workspace).expanduser().resolve() if workspace else Path.cwd()
@@ -243,8 +260,7 @@ class TaskRunner:
         ``.jsonl`` log so ``logs.py``'s ``*.log`` glob doesn't pick it up.
         """
 
-        if engine not in ENGINES:
-            raise ValueError(f"Invalid engine: {engine!r}")
+        _require_headless_engine(engine)
         if not message or not message.strip():
             raise ValueError("message must not be empty")
 

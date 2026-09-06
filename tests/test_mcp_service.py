@@ -34,6 +34,21 @@ def test_list_servers_rejects_unknown_engine(tmp_path):
         mcp_service.list_servers("shell", str(tmp_path))
 
 
+def test_freebuff_is_rejected_across_the_mcp_surface(tmp_path):
+    """freebuff 是合法引擎但没有原生 MCP 配置面；每个入口都要给出可读的拒绝
+    而不是落到某个默认分支（比如把它当成 opencode 去读全局配置）。"""
+    for call in (
+        lambda: mcp_service.list_servers("freebuff", str(tmp_path)),
+        lambda: mcp_service.add_server(
+            "freebuff", str(tmp_path), "srv", command=["echo"]
+        ),
+        lambda: mcp_service.remove_server("freebuff", str(tmp_path), "srv"),
+        lambda: mcp_service.sync_servers("freebuff", str(tmp_path)),
+    ):
+        with pytest.raises(ValueError, match="no native MCP configuration"):
+            call()
+
+
 def test_add_server_rejects_unknown_engine(tmp_path):
     with pytest.raises(ValueError, match="Invalid engine"):
         mcp_service.add_server("shell", str(tmp_path), "name", command=["echo"])

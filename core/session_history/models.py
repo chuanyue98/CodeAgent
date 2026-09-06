@@ -27,12 +27,18 @@ class EngineType(str, Enum):
     targets and engine validation). codebuddy is driven through the ACP
     (Agent Client Protocol) adapter in
     ``core/services/agent_adapters/codebuddy.py``.
+
+    freebuff 也在 ENGINES 里（交互启动 + ``freebuff --continue`` 恢复 + 历史
+    浏览/分析可用），但免费版 CLI 没有 headless/ACP 通道——它不在
+    ``core.constants.HEADLESS_ENGINES`` 中，因此转换写入它的 writer 是预留
+    占位，转换“到” freebuff 会得到明确的 NotImplementedError。
     """
 
     CLAUDE = "claude"
     CODEX = "codex"
     OPENCODE = "opencode"
     CODEBUDDY = "codebuddy"
+    FREEBUFF = "freebuff"
 
 
 @dataclass

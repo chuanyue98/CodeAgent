@@ -417,6 +417,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "   Resume with: codebuddy --resume {session_id}",
         "zh": "   恢复方式: codebuddy --resume {session_id}",
     },
+    "convert.resume_freebuff": {
+        "en": "   Resume with: freebuff --continue {session_id}",
+        "zh": "   恢复方式: freebuff --continue {session_id}",
+    },
     "convert.resume_opencode": {
         "en": "   Resume with: opencode (select from history)",
         "zh": "   恢复方式: opencode (从历史记录中选择)",

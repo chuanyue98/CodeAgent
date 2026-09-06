@@ -52,6 +52,7 @@ config.json
 
 # Task/chat run logs (written by TaskRunner at runtime)
 .ca_task_logs/
+.run/
 
 gha-creds-*.json
 build/

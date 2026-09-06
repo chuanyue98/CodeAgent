@@ -80,6 +80,10 @@ def _validate_source_file_path(source_file: str, engine: str) -> Path:
         allowed_dirs.append((home / ".local" / "share" / "opencode").resolve())
     elif engine == "codebuddy":
         allowed_dirs.append((home / ".codebuddy" / "projects").resolve())
+    elif engine == "freebuff":
+        allowed_dirs.append(
+            (home / ".config" / "manicode" / "projects").resolve()
+        )
 
     for allowed in allowed_dirs:
         if file_path.is_relative_to(allowed):
@@ -178,7 +182,7 @@ async def list_sessions(
     Args:
         project: Optional project directory path filter. Omit to search
             across every project the user has session history for.
-        engine: Optional engine filter ("claude", "codex", "opencode", "codebuddy").
+        engine: Optional engine filter ("claude", "codex", "opencode", "codebuddy", "freebuff").
         limit: Maximum number of sessions to return.
         include_subagents: Whether subagent runs are listed alongside the
             sessions that spawned them.
@@ -216,7 +220,7 @@ async def get_audit_events(
     session parsers.
 
     Args:
-        engine: Optional engine filter ("claude", "codex", "opencode", "codebuddy").
+        engine: Optional engine filter ("claude", "codex", "opencode", "codebuddy", "freebuff").
         project: Optional project directory path filter. Omit to search
             across every project the user has session history for.
         since: Optional ISO 8601 lower bound on event timestamp (inclusive).

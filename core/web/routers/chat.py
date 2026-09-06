@@ -29,7 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import Field
 
-from core.constants import ENGINES
+from core.constants import HEADLESS_ENGINES
 from core.services.config_service import ConfigService
 from core.web.case_convert import ProtocolModel, wire
 from core.web.routers.config import get_config_path
@@ -153,7 +153,9 @@ async def get_chat_capabilities(
     provider-native capabilities remain unknown because their discovery is
     internal to each CLI and is not exposed by the one-shot protocol.
     """
-    if engine not in ENGINES:
+    # Legacy Chat 走每个引擎的 headless 单轮命令；freebuff 免费 CLI 只有
+    # 交互 TUI，无法驱动单轮，直接排除而不是等到运行时挂起。
+    if engine not in HEADLESS_ENGINES:
         raise HTTPException(status_code=400, detail=f"Invalid engine: {engine!r}")
 
     service = ConfigService(get_config_path())

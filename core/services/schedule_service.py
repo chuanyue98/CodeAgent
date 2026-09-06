@@ -6,8 +6,21 @@ from typing import Any
 
 from croniter import croniter
 
-from core.constants import ENGINES
+from core.constants import ENGINES, HEADLESS_ENGINES
 from core.services.config_service import ConfigService
+
+
+def _require_headless_engine(engine: str) -> None:
+    """Schedules fire unattended (``run_task`` with no TTY), so only engines
+    with a headless channel make sense as a schedule's engine."""
+    if engine not in ENGINES:
+        raise ValueError(f"Invalid engine: {engine!r}")
+    if engine not in HEADLESS_ENGINES:
+        raise ValueError(
+            f"Invalid engine: {engine!r} has no headless channel; "
+            "schedules need one of "
+            f"{', '.join(sorted(HEADLESS_ENGINES))}"
+        )
 
 _SCHEDULES_KEY = "schedules"
 
@@ -62,8 +75,7 @@ class ScheduleService:
         enabled: bool = True,
         workspace: str | None = None,
     ) -> dict:
-        if engine not in ENGINES:
-            raise ValueError(f"Invalid engine: {engine!r}")
+        _require_headless_engine(engine)
         if not croniter.is_valid(cron_expr):
             raise ValueError(f"Invalid cron expression: {cron_expr!r}")
 
@@ -90,8 +102,8 @@ class ScheduleService:
         return record
 
     def update_schedule(self, schedule_id: str, **fields: Any) -> dict:
-        if fields.get("engine") is not None and fields["engine"] not in ENGINES:
-            raise ValueError(f"Invalid engine: {fields['engine']!r}")
+        if fields.get("engine") is not None:
+            _require_headless_engine(fields["engine"])
         new_cron_expr = fields.get("cron_expr")
         if new_cron_expr is not None and not croniter.is_valid(new_cron_expr):
             raise ValueError(f"Invalid cron expression: {new_cron_expr!r}")
