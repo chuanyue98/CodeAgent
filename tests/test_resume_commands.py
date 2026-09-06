@@ -20,6 +20,7 @@ PROJECT = Path("/work/project-a")
         ("claude", ["claude", "--resume", "sess-1"]),
         ("codex", ["codex", "resume", "sess-1"]),
         ("codebuddy", ["codebuddy", "--resume", "sess-1"]),
+        ("antigravity", ["agy", "--conversation", "sess-1"]),
     ],
 )
 def test_each_engine_gets_its_own_spelling(engine, expected):

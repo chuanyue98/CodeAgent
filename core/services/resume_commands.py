@@ -54,4 +54,6 @@ def resume_command(engine: str, session_id: str, project: Path) -> list[str]:
         return ["codex", "resume", session_id]
     if engine == "codebuddy":
         return ["codebuddy", "--resume", session_id]
+    if engine == "antigravity":
+        return ["agy", "--conversation", session_id]
     raise ValueError(f"Unknown engine: {engine}")

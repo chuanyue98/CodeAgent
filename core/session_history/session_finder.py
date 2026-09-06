@@ -10,6 +10,7 @@ from pathlib import Path
 
 from core.session_history.models import UnifiedMessage, UnifiedSession
 from core.session_history.parsers import (
+    find_antigravity_sessions,
     find_claude_sessions,
     find_codebuddy_sessions,
     find_codex_sessions,
@@ -116,6 +117,9 @@ def find_all_sessions(
 
     if engine is None or engine == "codebuddy":
         all_sessions.extend(find_codebuddy_sessions(project_path, home))
+
+    if engine is None or engine == "antigravity":
+        all_sessions.extend(find_antigravity_sessions(project_path, home))
 
     # A provider may expose multiple backing files for one logical session.
     all_sessions = _deduplicate_sessions(all_sessions)
