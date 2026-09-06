@@ -300,6 +300,7 @@ async def test_list_engines_reports_supports_resume():
         "opencode": True,
         "codex": True,
         "codebuddy": True,
+        "antigravity": True,
     }
 
 

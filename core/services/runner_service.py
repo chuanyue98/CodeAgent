@@ -68,6 +68,7 @@ _CHAT_SESSION_ID_FIELDS: dict[str, tuple[str, ...]] = {
     "codex": ("thread_id",),
     "opencode": ("sessionID",),
     "codebuddy": ("session_id", "sessionId"),
+    "antigravity": ("session_id", "sessionId", "conversationId", "conversation_id"),
 }
 
 
@@ -418,7 +419,13 @@ class TaskRunner:
             from engines.start_codebuddy import CodeBuddyEngine
 
             return CodeBuddyEngine()
+        if engine == "antigravity":
+            from engines.start_antigravity import AntigravityEngine
+
+            return AntigravityEngine()
         raise ValueError(f"Invalid engine: {engine!r}")
+
+    _instantiate_engine = _build_engine
 
     def _extract_chat_session_id(self, engine: str, log_path: Path) -> str | None:
         """Scans a completed chat turn's JSONL log for the engine-reported session id."""

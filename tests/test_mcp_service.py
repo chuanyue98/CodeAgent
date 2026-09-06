@@ -249,6 +249,53 @@ def test_remove_opencode_refuses_to_destroy_comments(tmp_path, home):
     assert config_path.read_text(encoding="utf-8") == original
 
 
+def test_list_antigravity_reads_config(tmp_path, home):
+    cfg_dir = home / ".gemini" / "config"
+    cfg_dir.mkdir(parents=True)
+    (cfg_dir / "mcp_config.json").write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "srv1": {
+                        "command": "echo",
+                        "args": ["hi"],
+                        "env": {"FOO": "bar"},
+                    },
+                    "srv2": {
+                        "serverUrl": "https://example.com/mcp",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    servers = mcp_service.list_servers("antigravity", "/any/project")
+
+    assert servers == [
+        {
+            "name": "srv1",
+            "scope": "user",
+            "transport": "stdio",
+            "command": ["echo", "hi"],
+            "url": None,
+            "env": {"FOO": "bar"},
+        },
+        {
+            "name": "srv2",
+            "scope": "user",
+            "transport": "http",
+            "command": None,
+            "url": "https://example.com/mcp",
+            "env": {},
+        },
+    ]
+
+
+def test_list_antigravity_missing_file_returns_empty(tmp_path, home):
+    assert mcp_service.list_servers("antigravity", "/any/project") == []
+
+
 # --- mutations: add via CLI ---------------------------------------------
 
 
@@ -319,6 +366,41 @@ def test_add_server_codebuddy_builds_expected_argv(tmp_path, fake_bin):
     ]
 
 
+def test_add_server_antigravity_builds_expected_argv(tmp_path, fake_bin):
+    write_fake_cli(fake_bin, "agy")
+
+    mcp_service.add_server(
+        "antigravity",
+        str(tmp_path),
+        "srv1",
+        command=["echo", "hi"],
+        env={"FOO": "bar"},
+    )
+
+    argv = recorded_argv(fake_bin, "agy")
+    assert argv == [
+        "mcp",
+        "add",
+        "--env",
+        "FOO=bar",
+        "srv1",
+        "--",
+        "echo",
+        "hi",
+    ]
+
+
+def test_add_server_antigravity_url_variant(tmp_path, fake_bin):
+    write_fake_cli(fake_bin, "agy")
+
+    mcp_service.add_server(
+        "antigravity", str(tmp_path), "srv1", url="https://example.com/mcp"
+    )
+
+    argv = recorded_argv(fake_bin, "agy")
+    assert argv == ["mcp", "add", "srv1", "https://example.com/mcp"]
+
+
 def test_add_server_url_variant(tmp_path, fake_bin):
     write_fake_cli(fake_bin, "codex")
 
@@ -376,6 +458,14 @@ def test_remove_server_codebuddy_via_cli(tmp_path, fake_bin):
     ]
 
 
+def test_remove_server_antigravity_builds_expected_argv(tmp_path, fake_bin):
+    write_fake_cli(fake_bin, "agy")
+
+    mcp_service.remove_server("antigravity", str(tmp_path), "srv1")
+
+    assert recorded_argv(fake_bin, "agy") == ["mcp", "remove", "srv1"]
+
+
 def test_remove_server_opencode_via_file_edit_preserves_others(tmp_path, home):
     config_dir = home / ".config" / "opencode"
     config_dir.mkdir(parents=True)
@@ -430,7 +520,12 @@ def test_sync_defaults_to_every_other_engine(tmp_path, home, calls):
 
     results = mcp_service.sync_servers("claude", str(tmp_path))
 
-    assert {r["engine"] for r in results} == {"codex", "opencode", "codebuddy"}
+    assert {r["engine"] for r in results} == {
+        "codex",
+        "opencode",
+        "codebuddy",
+        "antigravity",
+    }
     # codebuddy's project scope IS claude's ``.mcp.json`` (verified live), so
     # it already "has" srv1 and correctly reports skipped rather than added.
     for r in results:
@@ -439,6 +534,7 @@ def test_sync_defaults_to_every_other_engine(tmp_path, home, calls):
     assert {engine for kind, engine, *_ in calls if kind == "add"} == {
         "codex",
         "opencode",
+        "antigravity",
     }
 
 

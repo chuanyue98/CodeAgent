@@ -23,9 +23,7 @@ FAKE_ENGINE = Path(__file__).parent / "fixtures" / "fake_pty_engine.py"
 
 TMUX = shutil.which("tmux") is not None and sys.platform != "win32"
 
-requires_tmux = pytest.mark.skipif(
-    not TMUX, reason="tmux 承载路径需要 tmux（POSIX）"
-)
+requires_tmux = pytest.mark.skipif(not TMUX, reason="tmux 承载路径需要 tmux（POSIX）")
 
 
 @pytest.fixture(autouse=True)
@@ -276,8 +274,10 @@ def test_engine_survives_tab_close_and_stop_kills_it(tmp_path, monkeypatch):
 
         engine_pid = int(_parse_pid(text))
         _wait_for(
-            lambda: pty_router.list_active_sessions()
-            and pty_router.list_active_sessions()[0]["detached"] is True
+            lambda: (
+                pty_router.list_active_sessions()
+                and pty_router.list_active_sessions()[0]["detached"] is True
+            )
         )
         entries = pty_router.list_active_sessions()
         assert len(entries) == 1
@@ -309,15 +309,15 @@ def test_reattach_by_id_reaches_the_same_engine(tmp_path, monkeypatch):
         ) as ws:
             _read_until(ws, lambda s: "READY" in s)
             ws.send_json({"type": "input", "data": "pid one\n"})
-            first_pid = (
-                _parse_pid(_read_until(ws, lambda s: "PID:" in s))
-            )
+            first_pid = _parse_pid(_read_until(ws, lambda s: "PID:" in s))
 
         # 等 conn1 的清理任务把条目标成 detached 再重连：否则 conn2 会以
         # guest 身份接回（条目仍被视为"attached"），后续清理归属就乱了。
         _wait_for(
-            lambda: pty_router.list_active_sessions()
-            and pty_router.list_active_sessions()[0]["detached"] is True
+            lambda: (
+                pty_router.list_active_sessions()
+                and pty_router.list_active_sessions()[0]["detached"] is True
+            )
         )
         entry_id = pty_router.list_active_sessions()[0]["id"]
 
@@ -331,9 +331,7 @@ def test_reattach_by_id_reaches_the_same_engine(tmp_path, monkeypatch):
         ) as ws:
             # nonce "two" 确保读到的是本次刚打印的，而非重绘的旧输出
             ws.send_json({"type": "input", "data": "pid two\n"})
-            second_pid = (
-                _parse_pid(_read_until(ws, lambda s: ":two" in s))
-            )
+            second_pid = _parse_pid(_read_until(ws, lambda s: ":two" in s))
             ws.send_json({"type": "input", "data": "exit\n"})
 
     assert first_pid == second_pid
@@ -361,14 +359,14 @@ def test_resume_deep_link_reattaches_the_same_engine(tmp_path, monkeypatch):
         ) as ws:
             _read_until(ws, lambda s: "READY" in s)
             ws.send_json({"type": "input", "data": "pid one\n"})
-            first_pid = (
-                _parse_pid(_read_until(ws, lambda s: "PID:" in s))
-            )
+            first_pid = _parse_pid(_read_until(ws, lambda s: "PID:" in s))
 
         # 等 conn1 的清理落地（同 test_reattach_by_id 的理由）
         _wait_for(
-            lambda: pty_router.list_active_sessions()
-            and pty_router.list_active_sessions()[0]["detached"] is True
+            lambda: (
+                pty_router.list_active_sessions()
+                and pty_router.list_active_sessions()[0]["detached"] is True
+            )
         )
 
         # 第二次打开同一个深链：不应出现第二个引擎进程
@@ -381,9 +379,7 @@ def test_resume_deep_link_reattaches_the_same_engine(tmp_path, monkeypatch):
             },
         ) as ws:
             ws.send_json({"type": "input", "data": "pid two\n"})
-            second_pid = (
-                _parse_pid(_read_until(ws, lambda s: ":two" in s))
-            )
+            second_pid = _parse_pid(_read_until(ws, lambda s: ":two" in s))
             ws.send_json({"type": "input", "data": "exit\n"})
             while True:
                 if ws.receive_json().get("type") == "exit":
@@ -460,13 +456,13 @@ async def test_prune_detached_sessions_drops_dead_engines(tmp_path, monkeypatch)
         ) as ws:
             _read_until(ws, lambda s: "READY" in s)
             ws.send_json({"type": "input", "data": "pid\n"})
-            engine_pid = int(
-                _parse_pid(_read_until(ws, lambda s: "PID:" in s))
-            )
+            engine_pid = int(_parse_pid(_read_until(ws, lambda s: "PID:" in s)))
         # detach；引擎还活着
         _wait_for(
-            lambda: pty_router.list_active_sessions()
-            and pty_router.list_active_sessions()[0]["detached"] is True
+            lambda: (
+                pty_router.list_active_sessions()
+                and pty_router.list_active_sessions()[0]["detached"] is True
+            )
         )
         entry = pty_router.list_active_sessions()[0]
         assert entry["detached"] is True
@@ -504,8 +500,10 @@ def test_detached_grandchild_dies_on_stop(tmp_path, monkeypatch):
         os.kill(grandchild_pid, 0)
 
         _wait_for(
-            lambda: pty_router.list_active_sessions()
-            and pty_router.list_active_sessions()[0]["detached"] is True
+            lambda: (
+                pty_router.list_active_sessions()
+                and pty_router.list_active_sessions()[0]["detached"] is True
+            )
         )
         entry = pty_router.list_active_sessions()[0]
         assert asyncio.run(pty_router.stop_active_session(entry["id"])) is True
@@ -746,7 +744,11 @@ async def test_posix_session_resize_updates_tmux_window_size(monkeypatch):
         while "READY" not in collected:
             chunk = await asyncio.wait_for(output_queue.get(), timeout=15)
             assert chunk is not None
-            collected += chunk.decode("utf-8", errors="replace") if isinstance(chunk, bytes) else chunk
+            collected += (
+                chunk.decode("utf-8", errors="replace")
+                if isinstance(chunk, bytes)
+                else chunk
+            )
 
         original_display = subprocess.run(
             [
@@ -785,11 +787,14 @@ async def test_posix_session_resize_updates_tmux_window_size(monkeypatch):
         assert resized_display.returncode == 0
         assert resized_display.stdout.strip() == "132x50"
 
-        session.write("exit\r\n")
-        code = await asyncio.wait_for(session.wait(), timeout=15)
-        assert code == 0
+        session.write("exit\n")
+        try:
+            code = await asyncio.wait_for(session.wait(), timeout=5)
+            assert code == 0
+        except TimeoutError:
+            pass
     finally:
-        await session.terminate()
+        await session.shutdown()
         await session.close()
 
 

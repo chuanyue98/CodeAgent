@@ -117,12 +117,18 @@ def test_incremental_history(mock_history_file):
     assert get_last_timestamps()["claude"] == "2026-05-01T11:00:00Z"
 
 
+@patch("core.analytics.service.scan_antigravity_usage", return_value=[])
 @patch("core.analytics.service.scan_claude_usage")
 @patch("core.analytics.service.scan_codex_usage")
 @patch("core.analytics.service.scan_opencode_usage")
 @patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
 def test_service_incremental_collection(
-    mock_codebuddy, mock_opencode, mock_codex, mock_claude, mock_history_file
+    mock_codebuddy,
+    mock_opencode,
+    mock_codex,
+    mock_claude,
+    _mock_antigravity,
+    mock_history_file,
 ):
     # Setup initial history
     initial_entry = RawUsageEntry(
@@ -159,12 +165,18 @@ def test_service_incremental_collection(
     assert len(load_history()) == 2
 
 
+@patch("core.analytics.service.scan_antigravity_usage", return_value=[])
 @patch("core.analytics.service.scan_claude_usage", return_value=[])
 @patch("core.analytics.service.scan_opencode_usage", return_value=[])
 @patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
 @patch("core.analytics.service.scan_codex_usage")
 def test_codex_session_snapshot_is_replaced(
-    mock_codex, _mock_codebuddy, _mock_opencode, _mock_claude, mock_history_file
+    mock_codex,
+    _mock_codebuddy,
+    _mock_opencode,
+    _mock_claude,
+    _mock_antigravity,
+    mock_history_file,
 ):
     append_history(
         [
@@ -348,6 +360,254 @@ def test_codebuddy_collector_incremental_skips_older(tmp_path):
     )
 
 
+def test_antigravity_collector(tmp_path):
+    import json
+    import sqlite3
+
+    from core.analytics.collectors.antigravity_collector import scan_antigravity_usage
+
+    base_dir = tmp_path / ".gemini" / "antigravity-cli"
+    brain_dir = base_dir / "brain" / "sess-1" / ".system_generated" / "logs"
+    brain_dir.mkdir(parents=True)
+    db_path = base_dir / "conversation_summaries.db"
+
+    with sqlite3.connect(str(db_path)) as con:
+        con.execute(
+            "CREATE TABLE conversation_summaries ("
+            "conversation_id TEXT, workspace_uris TEXT, last_modified_time TEXT, "
+            "step_count INTEGER, parent_conversation_id TEXT, agent_name TEXT)"
+        )
+        con.execute(
+            "INSERT INTO conversation_summaries VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                "sess-1",
+                json.dumps(["file:///home/user/project"]),
+                "2026-07-14 03:58:41.000+00:00",
+                10,
+                "",
+                "",
+            ),
+        )
+
+    with (brain_dir / "transcript.jsonl").open("w", encoding="utf-8") as f:
+        f.write(
+            json.dumps(
+                {
+                    "type": "USER_INPUT",
+                    "content": "hello",
+                    "created_at": "2026-07-14T03:50:00Z",
+                }
+            )
+            + "\n"
+        )
+        f.write(
+            json.dumps(
+                {
+                    "type": "PLANNER_RESPONSE",
+                    "content": "world",
+                    "thinking": "analyzing...",
+                    "created_at": "2026-07-14T03:50:05Z",
+                }
+            )
+            + "\n"
+        )
+
+    entries = scan_antigravity_usage(home=tmp_path)
+    assert len(entries) == 1
+    assert entries[0].target == "antigravity"
+    assert entries[0].session_id == "sess-1"
+    assert entries[0].project_path == "/home/user/project"
+    assert entries[0].timestamp == "2026-07-14T03:50:05Z"
+    assert entries[0].output_tokens > 0
+
+
+def test_antigravity_collector_configured_models(tmp_path):
+    from core.analytics.collectors.antigravity_collector import _read_configured_model
+
+    base_dir = tmp_path / ".gemini" / "antigravity-cli"
+    base_dir.mkdir(parents=True)
+
+    # Default when no file
+    assert _read_configured_model(base_dir) == "gemini-3.8-flash"
+
+    # Various model patterns
+    for pattern, expected in [
+        ("gemini-3-pro", "gemini-3-pro"),
+        ("gemini-2.5-pro", "gemini-2.5-pro"),
+        ("gemini-2.5-flash", "gemini-2.5-flash"),
+        ("gemini-2.0-flash", "gemini-2.0-flash"),
+        ("gemini-3.6-flash", "gemini-3.6-flash"),
+        ("gemini-3.8-flash", "gemini-3.8-flash"),
+    ]:
+        (base_dir / "settings.json").write_text(
+            json.dumps({"model": pattern}), encoding="utf-8"
+        )
+        assert _read_configured_model(base_dir) == expected
+
+    # Malformed json
+    (base_dir / "settings.json").write_text("invalid json", encoding="utf-8")
+    assert _read_configured_model(base_dir) == "gemini-3.8-flash"
+
+
+def test_antigravity_collector_brain_scan_and_subagents(tmp_path):
+    from core.analytics.collectors.antigravity_collector import (
+        _find_repo_root,
+        _is_valid_project_path,
+        _uri_to_path,
+        scan_antigravity_usage,
+    )
+
+    base_dir = tmp_path / ".gemini" / "antigravity-cli"
+    parent_id = "parent-sess"
+    sub_id = "sub-sess"
+
+    parent_dir = base_dir / "brain" / parent_id / ".system_generated" / "logs"
+    parent_dir.mkdir(parents=True)
+    sub_dir = base_dir / "brain" / sub_id / ".system_generated" / "logs"
+    sub_dir.mkdir(parents=True)
+
+    # Project path helper tests
+    assert _is_valid_project_path("/home/user/project")
+    assert not _is_valid_project_path("/tmp/test")
+    assert _uri_to_path("file:///home/user/project") == "/home/user/project"
+    assert _find_repo_root("/home/user/project") == "/home/user/project"
+
+    # Parent transcript with tool call Cwd
+    proj_path = "/home/user/my_project"
+
+    with (parent_dir / "transcript.jsonl").open("w", encoding="utf-8") as f:
+        f.write(
+            json.dumps(
+                {
+                    "type": "USER_INPUT",
+                    "content": f"{proj_path} -> project",
+                    "created_at": "2026-07-14T04:00:00Z",
+                }
+            )
+            + "\n"
+        )
+        f.write(
+            json.dumps(
+                {
+                    "type": "PLANNER_RESPONSE",
+                    "content": "Running task",
+                    "thinking": "analyzing...",
+                    "created_at": "2026-07-14T04:01:00Z",
+                    "tool_calls": [
+                        {
+                            "name": "run_command",
+                            "args": {"CommandLine": "ls", "Cwd": proj_path},
+                        }
+                    ],
+                }
+            )
+            + "\n"
+        )
+
+    # Subagent transcript (without explicit project path)
+    with (sub_dir / "transcript.jsonl").open("w", encoding="utf-8") as f:
+        f.write(
+            json.dumps(
+                {
+                    "type": "PLANNER_RESPONSE",
+                    "content": "Subagent reply",
+                    "created_at": "2026-07-14T04:02:00Z",
+                }
+            )
+            + "\n"
+        )
+
+    # DB with parent and subagent link
+    db_path = base_dir / "conversation_summaries.db"
+    with sqlite3.connect(str(db_path)) as con:
+        con.execute(
+            "CREATE TABLE conversation_summaries ("
+            "conversation_id TEXT, workspace_uris TEXT, last_modified_time TEXT, "
+            "step_count INTEGER, parent_conversation_id TEXT, agent_name TEXT)"
+        )
+        con.execute(
+            "INSERT INTO conversation_summaries VALUES (?, ?, ?, ?, ?, ?)",
+            (parent_id, "", "2026-07-14 04:01:00.000+00:00", 2, "", ""),
+        )
+        con.execute(
+            "INSERT INTO conversation_summaries VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                sub_id,
+                "",
+                "2026-07-14 04:02:00.000+00:00",
+                1,
+                parent_id,
+                "Task 1 Implementer",
+            ),
+        )
+
+    entries = scan_antigravity_usage(home=tmp_path)
+    assert len(entries) == 2
+    # Check parent project path inferred from git repo
+    parent_entry = next(e for e in entries if e.session_id == parent_id)
+    assert parent_entry.project_path == proj_path
+    # Check subagent inherited project path from parent
+    sub_entry = next(e for e in entries if e.session_id == sub_id)
+    assert sub_entry.project_path == proj_path
+    assert sub_entry.agent == "Task 1 Implementer"
+
+    # Test since_timestamp filter
+    filtered = scan_antigravity_usage(
+        home=tmp_path, since_timestamp="2026-07-14T04:01:30Z"
+    )
+    assert len(filtered) == 1
+    assert filtered[0].session_id == sub_id
+
+
+def test_antigravity_collector_missing_transcript_and_unregistered_brain(tmp_path):
+    from core.analytics.collectors.antigravity_collector import scan_antigravity_usage
+
+    base_dir = tmp_path / ".gemini" / "antigravity-cli"
+    # 1. DB has entry but transcript file doesn't exist -> falls back to step_count estimation
+    db_path = base_dir / "conversation_summaries.db"
+    base_dir.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(str(db_path)) as con:
+        con.execute(
+            "CREATE TABLE conversation_summaries ("
+            "conversation_id TEXT, workspace_uris TEXT, last_modified_time TEXT, "
+            "step_count INTEGER, parent_conversation_id TEXT, agent_name TEXT)"
+        )
+        con.execute(
+            "INSERT INTO conversation_summaries VALUES (?, ?, ?, ?, ?, ?)",
+            ("missing-transcript-sess", "", "2026-07-14 05:00:00.000+00:00", 5, "", ""),
+        )
+
+    # 2. Brain directory has a session NOT present in conversation_summaries.db
+    unindexed_dir = base_dir / "brain" / "unindexed-sess" / ".system_generated" / "logs"
+    unindexed_dir.mkdir(parents=True)
+    with (unindexed_dir / "transcript.jsonl").open("w", encoding="utf-8") as f:
+        f.write(
+            json.dumps(
+                {
+                    "type": "PLANNER_RESPONSE",
+                    "content": "Unindexed response",
+                    "created_at": "2026-07-14T05:10:00Z",
+                    "tool_calls": [
+                        {
+                            "name": "list_dir",
+                            "args": {"DirectoryPath": "/home/user/project"},
+                        }
+                    ],
+                }
+            )
+            + "\n"
+        )
+
+    entries = scan_antigravity_usage(home=tmp_path)
+    # Both missing-transcript-sess (fallback estimation) and unindexed-sess should be captured
+    ids = {e.session_id for e in entries}
+    assert "missing-transcript-sess" in ids
+    assert "unindexed-sess" in ids
+    unindexed_entry = next(e for e in entries if e.session_id == "unindexed-sess")
+    assert unindexed_entry.project_path == "/home/user/project"
+
+
+@patch("core.analytics.service.scan_antigravity_usage", return_value=[])
 @patch("core.analytics.service.scan_claude_usage", return_value=[])
 @patch("core.analytics.service.scan_codex_usage", return_value=[])
 @patch("core.analytics.service.scan_opencode_usage", return_value=[])
@@ -357,6 +617,7 @@ def test_collect_all_purges_removed_targets(
     _mock_opencode,
     _mock_codex,
     _mock_claude,
+    _mock_antigravity,
     mock_history_file,
 ):
     """Stale trae/workbuddy snapshots are dropped from the history store."""
@@ -516,12 +777,18 @@ def test_claude_collector_reads_subagent_transcripts(tmp_path):
     assert by_session["parent-session"].parent_session_id == ""
 
 
+@patch("core.analytics.service.scan_antigravity_usage", return_value=[])
 @patch("core.analytics.service.scan_claude_usage")
 @patch("core.analytics.service.scan_codex_usage", return_value=[])
 @patch("core.analytics.service.scan_opencode_usage", return_value=[])
 @patch("core.analytics.service.scan_codebuddy_usage", return_value=[])
 def test_the_first_collection_after_an_upgrade_rescans_in_full(
-    _mock_codebuddy, _mock_opencode, _mock_codex, mock_claude, mock_history_file
+    _mock_codebuddy,
+    _mock_opencode,
+    _mock_codex,
+    mock_claude,
+    _mock_antigravity,
+    mock_history_file,
 ):
     """Subagent transcripts were invisible to every earlier scan, so the
     records that first become readable are older than the watermark. Without a

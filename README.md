@@ -6,7 +6,7 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 
 ## Features
 
-- **Multi-Engine Support** — Seamlessly switch between Claude, OpenCode, Codex, and CodeBuddy without changing your workflow
+- **Multi-Engine Support** — Seamlessly switch between Claude, OpenCode, Codex, CodeBuddy, and Google Antigravity without changing your workflow
 - **Prompt Sovereignty** — Your engineering rules live in your repo as Plain Markdown. No hidden system prompts
 - **Modular Skills System** — Atomic, reusable automation capabilities with instruction files and executable scripts
 - **Lifecycle Hooks** — Execute custom commands on the `before_tool` / `after_tool` events (e.g. branch protection, CI monitoring, pre-commit linting)
@@ -32,8 +32,9 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 │──────────│──────────│──────────│──────────│─────────────────│
 │ opencode │ Services │  base/   │  base/   │  lifecycle      │
 │ claude   │ Scanners │ coding/  │ custom/  │  triggers       │
-│ opencode │ Analytics│ eng/     │          │  bundles        │
-│ codex    │ Web API  │          │          │                 │
+│ codex    │ Analytics│ eng/     │          │  bundles        │
+│codebuddy │ Web API  │          │          │                 │
+│antigrav. │          │          │          │                 │
 ├──────────┴──────────┴──────────┴──────────┴─────────────────┤
 │                    Tasks · Web UI · Tests                     │
 └─────────────────────────────────────────────────────────────┘
@@ -43,6 +44,8 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
    - `ca opencode`: Local npm CLI engine with TUI support **(Recommended)**
    - `ca claude`: Anthropic-powered high-reasoning driver
    - `ca codex`: OpenAI Codex CLI-powered engineering driver
+   - `ca codebuddy`: Tencent engineering driver
+   - `ca antigravity` (or `ca agy`): Google Next-Gen Agent CLI driver
 
 2. **Prompts** — Your modular engineering "Soul" (`prompt/`)
    - `base/`: Core philosophy, language rules, and values
@@ -119,11 +122,13 @@ python ca_launcher.py
 python ca_launcher.py opencode              # OpenCode TUI
 python ca_launcher.py claude                # Anthropic Claude
 python ca_launcher.py codex                 # OpenAI Codex
+python ca_launcher.py codebuddy             # CodeBuddy Code
+python ca_launcher.py antigravity           # Google Antigravity (alias: agy)
 
 # Execute a task directly
 python ca_launcher.py opencode "Refactor this module"
 python ca_launcher.py claude -t refactor    # Run pre-defined task
-python ca_launcher.py opencode -t code_review
+python ca_launcher.py antigravity -t code_review
 ```
 
 The `ca` command is also registered as a console script after `pip install -e .`:

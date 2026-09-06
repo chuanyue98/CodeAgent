@@ -11,10 +11,30 @@ from __future__ import annotations
 # The engine CLIs CodeAgent knows how to launch/manage. Used for
 # request validation (reject an unknown `engine` field) and for iterating
 # "every engine" (e.g. building the /api/engines list).
-ENGINES = frozenset({"claude", "opencode", "codex", "codebuddy"})
+ENGINES = frozenset({"claude", "opencode", "codex", "codebuddy", "antigravity"})
+
+# Engines that support headless/non-interactive execution mode.
+HEADLESS_ENGINES = frozenset(
+    {"claude", "opencode", "codex", "codebuddy", "antigravity"}
+)
+
+# Engines that support MCP server configuration and synchronization.
+MCP_ENGINES = frozenset({"claude", "opencode", "codex", "codebuddy", "antigravity"})
 
 # Directory under the system temp dir where engines drop the assembled
 # prompt for a run. Shared so `ca doctor` probes the location engines
 # really use -- it previously checked a project-root path that
 # `write_temp_prompt` had long since stopped writing to.
 TEMP_PROMPT_DIRNAME = "codeagent-prompts"
+
+# Canonical engine aliases
+ENGINE_ALIASES: dict[str, str] = {
+    "agy": "antigravity",
+    "gemini": "antigravity",
+}
+
+
+def normalize_engine_name(name: str) -> str:
+    """Normalizes an engine identifier or alias to its canonical name."""
+    cleaned = (name or "").strip().lower()
+    return ENGINE_ALIASES.get(cleaned, cleaned)

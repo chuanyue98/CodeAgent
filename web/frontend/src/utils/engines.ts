@@ -8,6 +8,7 @@ export const ENGINE_LABELS: Record<string, string> = {
   opencode: 'OpenCode',
   codex: 'Codex',
   codebuddy: 'CodeBuddy',
+  antigravity: 'Antigravity',
 };
 
 /**

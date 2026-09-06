@@ -401,3 +401,27 @@ def test_the_newest_runs_survive_the_window(tmp_path, new_runner, monkeypatch):
 
     surviving = {r.task_id for r in reopened._run_store.list_history()}
     assert surviving == {"run-2", "run-3"}
+
+
+def test_instantiate_engine_antigravity(tmp_path, new_runner):
+    from engines.start_antigravity import AntigravityEngine
+
+    runner = new_runner(tmp_path)
+    engine = runner._instantiate_engine("antigravity")
+    assert isinstance(engine, AntigravityEngine)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("session_id", "sess-1"),
+        ("sessionId", "sess-2"),
+        ("conversationId", "sess-3"),
+        ("conversation_id", "sess-4"),
+    ],
+)
+def test_extract_chat_session_id_antigravity(tmp_path, new_runner, field, value):
+    runner = new_runner(tmp_path)
+    log = tmp_path / "chat.jsonl"
+    log.write_text(json.dumps({field: value}) + "\n", encoding="utf-8")
+    assert runner._extract_chat_session_id("antigravity", log) == value

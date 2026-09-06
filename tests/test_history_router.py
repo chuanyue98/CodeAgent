@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
+from core.web.routers.history import _validate_source_file_path
 from core.web.server import app
 
 
@@ -657,3 +659,31 @@ async def test_list_sessions_can_include_subagent_runs(history_with_a_subagent):
     assert set(by_id) == {"sess-a", "agent-abc123"}
     assert by_id["agent-abc123"]["parentSessionId"] == "sess-a"
     assert by_id["sess-a"]["parentSessionId"] == ""
+
+
+def test_validate_source_file_path_antigravity_allowed(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    allowed_file = (
+        tmp_path
+        / ".gemini"
+        / "antigravity-cli"
+        / "brain"
+        / "sess-1"
+        / "transcript.jsonl"
+    )
+    allowed_file.parent.mkdir(parents=True)
+    allowed_file.write_text("{}", encoding="utf-8")
+
+    result = _validate_source_file_path(str(allowed_file), "antigravity")
+    assert result == allowed_file.resolve()
+
+
+def test_validate_source_file_path_antigravity_forbidden(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    outside_file = tmp_path / "other" / "transcript.jsonl"
+    outside_file.parent.mkdir(parents=True)
+    outside_file.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_source_file_path(str(outside_file), "antigravity")
+    assert exc_info.value.status_code == 403

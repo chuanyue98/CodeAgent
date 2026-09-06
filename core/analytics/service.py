@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import Any
 
 from core.analytics.aggregator import _entry_cost, aggregate
+from core.analytics.collectors.antigravity_collector import scan_antigravity_usage
 from core.analytics.collectors.claude_collector import scan_claude_usage
 from core.analytics.collectors.codebuddy_collector import scan_codebuddy_usage
 from core.analytics.collectors.codex_collector import scan_codex_usage
@@ -29,7 +30,9 @@ from core.analytics.pricing import get_rates
 #      and OpenCode's parent/agent columns.
 #   2: the agent name behind a Claude subagent run (``attributionAgent``).
 #   3: CodeBuddy's subagent transcripts, and Codex's thread spawn edges.
-BACKFILL_VERSION = 3
+#   4: Antigravity session history and transcripts.
+#   5: Antigravity project_path inference from Cwd and user_information.
+BACKFILL_VERSION = 5
 
 
 def _collect_all() -> list[RawUsageEntry]:
@@ -67,6 +70,9 @@ def _collect_all() -> list[RawUsageEntry]:
     new_entries.extend(scan_opencode_usage(since_timestamp=last_ts.get("opencode", "")))
     new_entries.extend(
         scan_codebuddy_usage(since_timestamp=last_ts.get("codebuddy", ""))
+    )
+    new_entries.extend(
+        scan_antigravity_usage(since_timestamp=last_ts.get("antigravity", ""))
     )
 
     # Codex exposes a mutable session-level token total keyed by thread ID. Its

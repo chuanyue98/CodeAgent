@@ -24,6 +24,7 @@ export const ENGINES: Engine[] = [
   { id: 'opencode',  name: 'OpenCode',  descriptionKey: 'launch.opencodeDescription',    accent: 'bg-violet-100 text-violet-600', dot: 'bg-violet-500' },
   { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',               accent: 'bg-emerald-100 text-emerald-600', dot: 'bg-emerald-500' },
   { id: 'codebuddy', name: 'CodeBuddy', description: 'Tencent · CodeBuddy Code CLI',     accent: 'bg-sky-100 text-sky-600', dot: 'bg-sky-500' },
+  { id: 'antigravity', name: 'Antigravity', description: 'Google · Antigravity CLI', accent: 'bg-indigo-100 text-indigo-700', dot: 'bg-indigo-500' },
   { id: 'shell',     nameKey: 'launch.shellName', descriptionKey: 'launch.shellDescription', accent: 'bg-slate-200 text-slate-600', dot: 'bg-slate-400' },
 ];
 

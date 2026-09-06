@@ -27,7 +27,7 @@ def mcp(ctx):  # type: ignore[no-untyped-def]
 @click.argument("engine", type=_ENGINE_CHOICE, required=False)
 @click.pass_context
 def mcp_list(ctx, engine):  # type: ignore[no-untyped-def]
-    """List configured MCP servers for ENGINE (default: all four)."""
+    """List configured MCP servers for ENGINE (default: all engines)."""
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.services import mcp_service
 
@@ -39,7 +39,7 @@ def mcp_list(ctx, engine):  # type: ignore[no-untyped-def]
         except Exception as exc:
             click.echo(f"{click.style(name, bold=True)}: ⚠️  {exc}")
             continue
-        scope = "project" if name == "claude" else "global"
+        scope = "project" if name in ("claude", "codebuddy") else "global"
         header = f"{name} ({scope})"
         if not servers:
             click.echo(f"{click.style(header, bold=True)}: (none)")

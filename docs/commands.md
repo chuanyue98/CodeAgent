@@ -26,8 +26,9 @@ ca                         # Launch default engine (opencode)
 ca codex                   # Launch Codex engine
 ca claude                  # Launch Claude engine
 ca opencode                # Launch OpenCode engine
-ca codex                   # Launch Codex engine
-ca codex "Refactor this"   # Execute a task with Codex
+ca codebuddy               # Launch CodeBuddy engine
+ca antigravity             # Launch Antigravity engine (alias: agy)
+ca agy "Refactor this"     # Execute a task with Antigravity
 ca claude -t refactor      # Run a pre-defined task with Claude
 ```
 
@@ -38,6 +39,8 @@ ca claude -t refactor      # Run a pre-defined task with Claude
 | `claude` | `claude` | Anthropic Claude Code CLI |
 | `opencode` | `opencode` | OpenCode TUI (recommended) |
 | `codex` | `codex` | OpenAI Codex CLI |
+| `codebuddy` | `codebuddy` | Tencent CodeBuddy Code CLI |
+| `antigravity` / `agy` | `agy` | Google Antigravity Next-Gen Agent CLI |
 
 By default, YOLO mode is enabled (`-y` is appended automatically).
 
@@ -56,7 +59,7 @@ Checks are grouped into five sections (see `core/doctor.py`):
 
 **Runtime**
 - Python version — confirms Python 3.13+ is in use
-- Engine availability — checks whether each provider CLI (`claude`, `opencode`, `codex`, `codebuddy`) is found on `PATH`
+- Engine availability — checks whether each provider CLI (`claude`, `opencode`, `codex`, `codebuddy`, `agy`) is found on `PATH`
 
 **Configuration**
 - `config.json` validity — confirms the file exists and parses correctly
@@ -131,7 +134,7 @@ ca history convert claude <session_id> opencode
 ca history convert claude <session_id> codex
 ```
 
-Supported engines for conversion: `claude`, `opencode`, `codex`, `codebuddy`
+Supported engines for conversion: `claude`, `opencode`, `codex`, `codebuddy`, `antigravity` (or `agy`)
 
 ### `new`
 

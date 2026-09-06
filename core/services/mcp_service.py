@@ -64,6 +64,10 @@ def _codex_config_path() -> Path:
     return Path.home() / ".codex" / "config.toml"
 
 
+def _antigravity_config_path() -> Path:
+    return Path.home() / ".gemini" / "config" / "mcp_config.json"
+
+
 _OPENCODE_CONFIG_NAMES = ("opencode.jsonc", "opencode.json")
 
 
@@ -218,7 +222,7 @@ def _normalize_entry(name: str, scope: str, cfg: dict) -> dict:
         full_command = [command, *args]
     else:
         full_command = None
-    url = cfg.get("url") or cfg.get("httpUrl")
+    url = cfg.get("url") or cfg.get("httpUrl") or cfg.get("serverUrl")
     transport = cfg.get("type") or (
         "http" if url else "stdio" if full_command else "unknown"
     )
@@ -292,6 +296,13 @@ def _list_codebuddy(project: Path) -> list[dict]:
     ]
 
 
+def _list_antigravity() -> list[dict]:
+    servers = _read_json(_antigravity_config_path()).get("mcpServers", {})
+    return [
+        _normalize_entry(name, "user", cfg) for name, cfg in _server_entries(servers)
+    ]
+
+
 def list_servers(engine: str, project_path: str) -> list[dict]:
     """Lists configured MCP servers for one engine, read from its native config."""
     _validate_engine(engine)
@@ -302,6 +313,8 @@ def list_servers(engine: str, project_path: str) -> list[dict]:
         return _list_codex()
     if engine == "codebuddy":
         return _list_codebuddy(project)
+    if engine == "antigravity":
+        return _list_antigravity()
     return _list_opencode()
 
 
@@ -388,6 +401,18 @@ def _build_add_command(
             cmd += command
         return cmd
 
+    if engine == "antigravity":
+        cmd = ["agy", "mcp", "add"]
+        for pair in env_pairs:
+            cmd += ["--env", pair]
+        cmd.append(name)
+        if url:
+            cmd.append(url)
+        else:
+            cmd.append("--")
+            cmd += command or []
+        return cmd
+
     # opencode
     cmd = ["opencode", "mcp", "add", name]
     for pair in env_pairs:
@@ -435,6 +460,8 @@ def remove_server(engine: str, project_path: str, name: str) -> None:
         _run_cli(
             ["codebuddy", "mcp", "remove", name, "-s", "project"], cwd=project_path
         )
+    elif engine == "antigravity":
+        _run_cli(["agy", "mcp", "remove", name], cwd=project_path)
     else:
         _remove_key(_opencode_config_path(), "mcp", name)
 

@@ -15,6 +15,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from core.constants import normalize_engine_name
+
 #: A session id ends up as one element of an argv list. Nothing here reaches a
 #: shell, so there is no quoting hazard, but an id beginning with ``-`` would
 #: be read by the engine CLI as a flag rather than as an id. Engines issue
@@ -46,6 +48,7 @@ def resume_command(engine: str, session_id: str, project: Path) -> list[str]:
     """
     if not is_safe_session_id(session_id):
         raise ValueError(f"Unsafe session id: {session_id!r}")
+    engine = normalize_engine_name(engine)
     if engine == "opencode":
         return ["opencode", str(project), "-s", session_id]
     if engine == "claude":
@@ -54,4 +57,6 @@ def resume_command(engine: str, session_id: str, project: Path) -> list[str]:
         return ["codex", "resume", session_id]
     if engine == "codebuddy":
         return ["codebuddy", "--resume", session_id]
+    if engine == "antigravity":
+        return ["agy", "--conversation", session_id]
     raise ValueError(f"Unknown engine: {engine}")

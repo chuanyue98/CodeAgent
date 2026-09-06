@@ -2,7 +2,7 @@ import asyncio
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
-from core.constants import ENGINES
+from core.constants import ENGINES, normalize_engine_name
 from core.services.config_service import ConfigService
 from core.services.git_service import describe_run_changes
 from core.services.runner_service import (
@@ -281,6 +281,7 @@ async def run_task(
     workspace: str = Body(..., embed=True),
 ):
     """Launches a task in the background with the selected engine."""
+    engine = normalize_engine_name(engine)
     task_service = TaskService(get_tasks_root())
     if await asyncio.to_thread(task_service.get_task, name) is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -334,6 +335,12 @@ async def list_engines():
             "id": "codebuddy",
             "name": "CodeBuddy Code",
             "description": "Tencent Engineering Driver",
+            "supportsResume": True,
+        },
+        {
+            "id": "antigravity",
+            "name": "Google Antigravity",
+            "description": "Google Next-Gen Agent CLI",
             "supportsResume": True,
         },
     ]

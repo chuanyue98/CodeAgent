@@ -33,6 +33,7 @@ class EngineType(str, Enum):
     CODEX = "codex"
     OPENCODE = "opencode"
     CODEBUDDY = "codebuddy"
+    ANTIGRAVITY = "antigravity"
 
 
 @dataclass

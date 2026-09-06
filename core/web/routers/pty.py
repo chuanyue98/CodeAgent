@@ -144,9 +144,7 @@ def _tmux_session_name(engine: str, working_dir: Path, session_id: str | None) -
     return f"ca-{engine}-{digest}"
 
 
-def _tmux_ensure_session(
-    name: str, engine_argv: list[str], working_dir: Path
-) -> None:
+def _tmux_ensure_session(name: str, engine_argv: list[str], working_dir: Path) -> None:
     """Creates the tmux session running *engine_argv* if it doesn't exist.
 
     The session is first created *without* a command (a default shell holds
@@ -196,15 +194,26 @@ def _tmux_ensure_session(
         # detach-client 会打在半初始化的客户端上而失效，客户端随后完成
         # 握手、永远挂在死 pane 上（间歇性复现）。run-shell 晚几毫秒，
         # 握手已结束，detach 稳定生效。
-        ("set-hook", "-t", name, "pane-died",
-         f"run-shell 'tmux -L {_tmux_socket()} detach-client -s {name}'"),
+        (
+            "set-hook",
+            "-t",
+            name,
+            "pane-died",
+            f"run-shell 'tmux -L {_tmux_socket()} detach-client -s {name}'",
+        ),
         ("set-option", "-t", name, "status", "off"),
         ("set-option", "-t", name, "escape-time", "10"),
         ("set-option", "-t", name, "history-limit", "10000"),
     ):
         _run_tmux(*args)
     result = _run_tmux(
-        "respawn-pane", "-k", "-t", name, "-c", str(working_dir), shlex.join(engine_argv)
+        "respawn-pane",
+        "-k",
+        "-t",
+        name,
+        "-c",
+        str(working_dir),
+        shlex.join(engine_argv),
     )
     if result.returncode != 0:
         with contextlib.suppress(Exception):
@@ -447,7 +456,7 @@ def _resize_fd(fd: int, cols: int, rows: int) -> None:
         fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))  # type: ignore[attr-defined]
 
 
-def _tmux_resize_window(name: str, cols: int, rows: int) -> None:
+def _tmux_resize_window(name: str | None, cols: int, rows: int) -> None:
     if not name:
         return
     with contextlib.suppress(Exception):
@@ -946,9 +955,7 @@ async def pty_websocket(
                     await session.terminate()
                 return
 
-    engine_watch_task = (
-        asyncio.create_task(watch_engine_gone()) if tmux_name else None
-    )
+    engine_watch_task = asyncio.create_task(watch_engine_gone()) if tmux_name else None
 
     try:
         while not process_exited.is_set():

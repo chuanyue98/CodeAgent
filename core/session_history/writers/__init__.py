@@ -4,12 +4,14 @@ Each writer takes a UnifiedSession and writes it to the target engine's
 session storage directory in that engine's native format.
 """
 
+from core.session_history.writers.antigravity_writer import write_antigravity_session
 from core.session_history.writers.claude_writer import write_claude_session
 from core.session_history.writers.codebuddy_writer import write_codebuddy_session
 from core.session_history.writers.codex_writer import write_codex_session
 from core.session_history.writers.opencode_writer import write_opencode_session
 
 __all__ = [
+    "write_antigravity_session",
     "write_claude_session",
     "write_codebuddy_session",
     "write_codex_session",
@@ -18,12 +20,15 @@ __all__ = [
 ]
 
 
+from core.constants import normalize_engine_name
+
+
 def write_session(session, target_engine: str) -> str:
     """Dispatches to the appropriate writer based on target engine.
 
     Args:
         session: A UnifiedSession to convert and write.
-        target_engine: The target engine name ("claude", "codex", "opencode", "codebuddy").
+        target_engine: The target engine name ("claude", "codex", "opencode", "codebuddy", "antigravity").
 
     Returns:
         str: The new session ID in the target engine's format.
@@ -31,14 +36,16 @@ def write_session(session, target_engine: str) -> str:
     Raises:
         ValueError: If the target engine is not supported.
     """
+    normalized_target = normalize_engine_name(target_engine)
     writers = {
         "claude": write_claude_session,
         "codex": write_codex_session,
         "opencode": write_opencode_session,
         "codebuddy": write_codebuddy_session,
+        "antigravity": write_antigravity_session,
     }
 
-    writer = writers.get(target_engine)
+    writer = writers.get(normalized_target)
     if not writer:
         raise ValueError(f"Unsupported target engine: {target_engine}")
 

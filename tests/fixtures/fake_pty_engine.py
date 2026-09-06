@@ -11,7 +11,7 @@ import sys
 
 print("READY", flush=True)
 for line in sys.stdin:
-    line = line.rstrip("\n")
+    line = line.rstrip("\r\n")
     if line == "exit":
         break
     if line == "pid" or line.startswith("pid "):

@@ -41,6 +41,16 @@ _PRICING: dict[str, tuple[float, float, float, float]] = {
     "claude-opus-4-6": (5.0, 25.0, 6.25, 0.5),
     "claude-opus-4-6-thinking": (5.0, 25.0, 6.25, 0.5),
     "claude-opus-4-7": (5.0, 25.0, 6.25, 0.5),
+    # ── Google / Antigravity ──────────────────────────────────────────────────
+    "gemini-3.8-flash": (0.3, 2.5, 0.0, 0.075),
+    "gemini-3.6-flash": (0.3, 2.5, 0.0, 0.075),
+    "gemini-3-flash-preview": (0.3, 2.5, 0.0, 0.075),
+    "gemini-3-pro": (2.0, 12.0, 0.0, 0.0),
+    "gemini-3-pro-preview": (2.0, 12.0, 0.0, 0.0),
+    "gemini-2.5-pro": (1.25, 10.0, 0.0, 0.3125),
+    "gemini-2.5-flash": (0.3, 2.5, 0.0, 0.075),
+    "gemini-2.0-flash": (0.1, 0.4, 0.0, 0.025),
+    "gemini-2.0-flash-exp": (0.0, 0.0, 0.0, 0.0),
     # ── OpenAI / Codex ────────────────────────────────────────────────────────
     "gpt-4o": (2.5, 10.0, 0.0, 1.25),
     "gpt-4o-2024-08-06": (2.5, 10.0, 0.0, 1.25),
@@ -121,6 +131,9 @@ _PRICING: dict[str, tuple[float, float, float, float]] = {
 
 # Aliases: model name → canonical key in _PRICING (from CCS MODEL_PRICING_ALIASES)
 _ALIASES: dict[str, str] = {
+    "gemini-3-flash": "gemini-3-flash-preview",
+    "gemini-3.1-pro-preview": "gemini-3-pro-preview",
+    "gemini-3.1-flash-preview": "gemini-3-flash-preview",
     "qwen3-coder": "qwen3-coder-plus",
     "qwen3-235b": "qwen3-max",
     "deepseek-v3.2": "deepseek-chat",
