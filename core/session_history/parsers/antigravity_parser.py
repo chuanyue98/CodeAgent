@@ -111,22 +111,78 @@ def _extract_session_id(file_path: Path) -> str:
     return file_path.stem
 
 
+def _normalize_model_name(raw: str) -> str:
+    """Normalizes raw model name or descriptor string to a standard identifier."""
+    s = raw.lower().strip()
+    if "3.8" in s and "flash" in s:
+        return "gemini-3.8-flash"
+    if "3.6" in s and "flash" in s:
+        return "gemini-3.6-flash"
+    if "3" in s and "pro" in s:
+        return "gemini-3-pro"
+    if "2.5" in s and "pro" in s:
+        return "gemini-2.5-pro"
+    if "2.5" in s and "flash" in s:
+        return "gemini-2.5-flash"
+    if "2.0" in s and "flash" in s:
+        return "gemini-2.0-flash"
+    if s.startswith("gemini-"):
+        return s
+    return raw.strip()
+
+
+def _read_configured_model(file_path: Path) -> str:
+    """Reads configured model from nearby settings.json or user home."""
+    try:
+        curr = file_path.resolve()
+        for _ in range(len(curr.parts)):
+            settings = curr / "settings.json"
+            if path_exists(settings):
+                try:
+                    with open(long_path(settings), encoding="utf-8") as f:
+                        data = json.load(f)
+                        m = data.get("model")
+                        if m:
+                            return _normalize_model_name(str(m))
+                except (OSError, json.JSONDecodeError):
+                    pass
+            if curr.name == "antigravity-cli":
+                break
+            if curr.parent == curr:
+                break
+            curr = curr.parent
+    except Exception:
+        pass
+
+    home_settings = Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
+    if path_exists(home_settings):
+        try:
+            with open(long_path(home_settings), encoding="utf-8") as f:
+                data = json.load(f)
+                m = data.get("model")
+                if m:
+                    return _normalize_model_name(str(m))
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    return "gemini-3.8-flash"
+
+
 def _find_summaries_db(file_path: Path, home: Path | None = None) -> Path | None:
     """Locates conversation_summaries.db near file_path or in home."""
     curr = file_path.resolve()
     for parent in curr.parents:
         candidate = parent / "conversation_summaries.db"
-        if candidate.is_file():
+        if path_exists(candidate):
             return candidate
-        if (
-            parent.name == "brain"
-            and (parent.parent / "conversation_summaries.db").is_file()
+        if parent.name == "brain" and path_exists(
+            parent.parent / "conversation_summaries.db"
         ):
             return parent.parent / "conversation_summaries.db"
 
     base_dir = (home or Path.home()) / ".gemini" / "antigravity-cli"
     candidate = base_dir / "conversation_summaries.db"
-    if candidate.is_file():
+    if path_exists(candidate):
         return candidate
     return None
 
@@ -140,7 +196,7 @@ def _get_metadata_from_db(db_path: Path, session_id: str) -> dict[str, str]:
         "agent": "",
     }
     try:
-        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+        with sqlite3.connect(f"file:{long_path(db_path)}?mode=ro", uri=True) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 "SELECT title, preview, workspace_uris, parent_conversation_id, agent_name "
@@ -313,6 +369,21 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
                                             subagent_titles[cid] = role
                                 break
 
+        # 3. Extract model information if present
+        if not model:
+            raw_model = row.get("model") or row.get("modelTier")
+            if isinstance(raw_model, str) and raw_model:
+                model = _normalize_model_name(raw_model)
+            else:
+                c_text = row.get("content") or ""
+                m_match = re.search(
+                    r"(?:Model Selection`?\s+from.*?to|model(?:_name)?\s*[:=])\s*([a-zA-Z0-9\.\-\_\s]+)",
+                    c_text,
+                    re.IGNORECASE,
+                )
+                if m_match:
+                    model = _normalize_model_name(m_match.group(1).strip("`'\" ()"))
+
         if row_type not in ("USER_INPUT", "PLANNER_RESPONSE"):
             continue
 
@@ -356,6 +427,13 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
 
     if not messages:
         return None
+
+    if not model:
+        model = _read_configured_model(file_path)
+
+    for msg in messages:
+        if msg.role == "assistant" and not msg.model:
+            msg.model = model
 
     resolved_project_path = meta.get("project_path", "") or inferred_project_path
     resolved_title = meta.get("title", "") or computed_title

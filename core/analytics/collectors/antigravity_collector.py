@@ -8,6 +8,8 @@ from urllib.parse import unquote, urlparse
 
 from core.analytics.models import RawUsageEntry
 from core.session_history.paths import strip_extended_length_prefix
+from core.utils.long_paths import exists as path_exists
+from core.utils.long_paths import list_dirs, long_path
 
 
 def _is_valid_project_path(path_str: str) -> bool:
@@ -55,9 +57,9 @@ def _uri_to_path(uri: str) -> str:
 def _read_configured_model(base_dir: Path) -> str:
     """Reads configured model from settings.json or returns default."""
     settings_file = base_dir / "settings.json"
-    if settings_file.is_file():
+    if path_exists(settings_file):
         try:
-            with open(settings_file, encoding="utf-8") as f:
+            with open(long_path(settings_file), encoding="utf-8") as f:
                 data = json.load(f)
                 model_raw = str(data.get("model", "")).lower()
                 if "3.8" in model_raw and "flash" in model_raw:
@@ -87,13 +89,13 @@ def _parse_transcript(
     agent: str = "",
 ) -> list[RawUsageEntry]:
     """Parses an Antigravity transcript file into raw usage entries."""
-    if not path.is_file():
+    if not path_exists(path):
         return []
 
     entries: list[RawUsageEntry] = []
     inferred_path = project_path
     try:
-        with open(path, encoding="utf-8", errors="replace") as f:
+        with open(long_path(path), encoding="utf-8", errors="replace") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -211,7 +213,7 @@ def scan_antigravity_usage(
         List of RawUsageEntry objects.
     """
     base_dir = (home or Path.home()) / ".gemini" / "antigravity-cli"
-    if not base_dir.exists():
+    if not path_exists(base_dir):
         return []
 
     model = _read_configured_model(base_dir)
@@ -222,9 +224,11 @@ def scan_antigravity_usage(
     seen_sessions: set[str] = set()
 
     # 1. From conversation_summaries.db
-    if db_path.is_file():
+    if path_exists(db_path):
         try:
-            with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+            with sqlite3.connect(
+                f"file:{long_path(db_path)}?mode=ro", uri=True
+            ) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
                     "SELECT conversation_id, workspace_uris, last_modified_time, "
@@ -264,7 +268,7 @@ def scan_antigravity_usage(
                         / "logs"
                         / "transcript.jsonl"
                     )
-                    if not transcript_file.is_file():
+                    if not path_exists(transcript_file):
                         transcript_file = brain_dir / session_id / "transcript.jsonl"
 
                     file_entries = _parse_transcript(
@@ -301,10 +305,8 @@ def scan_antigravity_usage(
             pass
 
     # 2. Transcripts in brain_dir not covered by conversation_summaries.db
-    if brain_dir.is_dir():
-        for sess_dir in brain_dir.iterdir():
-            if not sess_dir.is_dir():
-                continue
+    if path_exists(brain_dir):
+        for sess_dir in list_dirs(brain_dir):
             session_id = sess_dir.name
             if session_id in seen_sessions:
                 continue
@@ -312,9 +314,9 @@ def scan_antigravity_usage(
             transcript_file = (
                 sess_dir / ".system_generated" / "logs" / "transcript.jsonl"
             )
-            if not transcript_file.is_file():
+            if not path_exists(transcript_file):
                 transcript_file = sess_dir / "transcript.jsonl"
-            if not transcript_file.is_file():
+            if not path_exists(transcript_file):
                 continue
 
             file_entries = _parse_transcript(

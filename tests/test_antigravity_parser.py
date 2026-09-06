@@ -425,3 +425,91 @@ def test_antigravity_subagent_role_title_extraction(tmp_path: Path):
     sessions = find_antigravity_sessions(home=tmp_path)
     assert len(sessions) == 1
     assert sessions[0].title == "Task 3 实现者"
+
+
+def test_antigravity_model_extraction_from_settings(tmp_path: Path):
+    session_id = "test-model-settings-uuid"
+    cli_dir = tmp_path / ".gemini" / "antigravity-cli"
+    brain_dir = cli_dir / "brain" / session_id / ".system_generated" / "logs"
+    brain_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write settings.json
+    (cli_dir / "settings.json").write_text(
+        json.dumps({"model": "gemini-3-pro"}), encoding="utf-8"
+    )
+
+    transcript = brain_dir / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps(
+            {
+                "step_index": 1,
+                "source": "USER_EXPLICIT",
+                "type": "USER_INPUT",
+                "status": "DONE",
+                "created_at": "2026-07-14T03:00:00Z",
+                "content": "<USER_REQUEST>你好</USER_REQUEST>",
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "step_index": 2,
+                "source": "MODEL",
+                "type": "PLANNER_RESPONSE",
+                "status": "DONE",
+                "created_at": "2026-07-14T03:01:00Z",
+                "content": "你好！有什么我可以帮你的？",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    session = parse_antigravity_session(transcript)
+    assert session is not None
+    assert session.model == "gemini-3-pro"
+    assert session.messages[1].model == "gemini-3-pro"
+
+
+def test_antigravity_model_extraction_from_transcript(tmp_path: Path):
+    session_id = "test-model-transcript-uuid"
+    cli_dir = tmp_path / ".gemini" / "antigravity-cli"
+    brain_dir = cli_dir / "brain" / session_id / ".system_generated" / "logs"
+    brain_dir.mkdir(parents=True, exist_ok=True)
+
+    transcript = brain_dir / "transcript.jsonl"
+    transcript.write_text(
+        json.dumps(
+            {
+                "step_index": 1,
+                "source": "USER_EXPLICIT",
+                "type": "USER_INPUT",
+                "status": "DONE",
+                "created_at": "2026-07-14T03:00:00Z",
+                "content": (
+                    "<USER_REQUEST>测试模型提取</USER_REQUEST>\n"
+                    "<USER_SETTINGS_CHANGE>\n"
+                    "The user changed setting `Model Selection` from None to Gemini 3.8 Flash (Medium).\n"
+                    "</USER_SETTINGS_CHANGE>"
+                ),
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "step_index": 2,
+                "source": "MODEL",
+                "type": "PLANNER_RESPONSE",
+                "status": "DONE",
+                "created_at": "2026-07-14T03:01:00Z",
+                "content": "已切换并识别。",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    session = parse_antigravity_session(transcript)
+    assert session is not None
+    assert session.model == "gemini-3.8-flash"
+    assert session.messages[1].model == "gemini-3.8-flash"
