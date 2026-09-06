@@ -284,10 +284,11 @@ def _launch_engine(ctx, args: list[str]):  # type: ignore[no-untyped-def]
         else:
             extra_params = list(args)
 
-    if "-y" not in extra_params:
+    yolo_enabled = bool(obj.get("yolo", False))
+    if yolo_enabled and "-y" not in extra_params and "--yolo" not in extra_params:
         extra_params.append("-y")
 
-    if obj.get("yolo", True):
+    if yolo_enabled or "-y" in extra_params or "--yolo" in extra_params:
         print(t("engine.yolo_warning"))
 
     target_script = engine_script_map[engine_name]

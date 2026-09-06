@@ -90,7 +90,11 @@ class CodeAgentGroup(click.Group):
 )
 @click.option("--proxy", is_flag=True, help="Enable proxy from config.json")
 @click.option(
-    "-y", "--yolo", is_flag=True, flag_value=True, default=True, help="Enable YOLO mode"
+    "-y",
+    "--yolo",
+    is_flag=True,
+    default=False,
+    help="Enable YOLO mode (bypass sandbox and approvals)",
 )
 @click.pass_context
 def cli(ctx, proxy, yolo):  # type: ignore[no-untyped-def]

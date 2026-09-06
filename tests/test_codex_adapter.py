@@ -13,6 +13,7 @@ from core.services.agent_protocol import (
     PermissionMode,
     TurnInput,
 )
+from engines.start_codex import CodexEngine
 
 
 @pytest.mark.asyncio
@@ -222,3 +223,45 @@ async def test_codex_live_approval_decline_and_cancel():
                 break
     finally:
         await adapter.stop()
+
+
+def test_codex_default_does_not_bypass_sandbox():
+    engine = CodexEngine()
+    cmd = engine.build_interactive_command(yolo=False)
+    assert "--dangerously-bypass-approvals-and-sandbox" not in cmd
+
+
+def test_codex_yolo_explicitly_bypasses_sandbox():
+    engine = CodexEngine()
+    cmd = engine.build_interactive_command(yolo=True)
+    assert "--dangerously-bypass-approvals-and-sandbox" in cmd
+
+
+def test_codex_build_command_default_interactive_no_bypass():
+    engine = CodexEngine()
+    cmd = engine.build_command("test prompt", non_interactive=False, yolo=False)
+    assert "--dangerously-bypass-approvals-and-sandbox" not in cmd
+    assert "test prompt" in cmd
+
+
+def test_codex_build_command_yolo_true_bypasses():
+    engine = CodexEngine()
+    cmd = engine.build_command("test prompt", non_interactive=False, yolo=True)
+    assert "--dangerously-bypass-approvals-and-sandbox" in cmd
+    assert "test prompt" in cmd
+
+
+def test_codex_build_command_ca_yolo_env_bypasses(monkeypatch):
+    monkeypatch.setenv("CA_YOLO", "1")
+    engine = CodexEngine()
+    cmd = engine.build_command("test prompt", non_interactive=False, yolo=False)
+    assert "--dangerously-bypass-approvals-and-sandbox" in cmd
+
+
+def test_codex_build_command_non_interactive_bypasses():
+    engine = CodexEngine()
+    cmd = engine.build_command("test prompt", non_interactive=True, yolo=False)
+    assert "--dangerously-bypass-approvals-and-sandbox" in cmd
+    assert "exec" in cmd
+    assert "test prompt" in cmd
+

@@ -317,6 +317,17 @@ def test_main_engine_selection(monkeypatch):
         cmd = args[0]
         assert "start_claude_code.py" in cmd[1]
         assert "do something" in cmd
+        assert "-y" not in cmd
+
+
+def test_main_engine_selection_with_yolo(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "-y", "claude", "do something"])
+    with patch("subprocess.run") as mock_run:
+        ca_launcher.main()
+        args, kwargs = mock_run.call_args
+        cmd = args[0]
+        assert "start_claude_code.py" in cmd[1]
+        assert "do something" in cmd
         assert "-y" in cmd
 
 
@@ -357,7 +368,7 @@ def test_proxy_word_after_prompt_is_not_treated_as_a_flag(monkeypatch):
         assert "start_claude_code.py" in args[0][1]
         assert "HTTP_PROXY" not in kwargs["env"]
         assert kwargs["env"][ca_launcher.CA_LANG_ENV] in ("en", "zh")
-        assert args[0][2:] == ["do", "something", "--proxy", "settings", "-y"]
+        assert args[0][2:] == ["do", "something", "--proxy", "settings"]
 
 
 def test_main_passes_dash_p_through_to_engine(monkeypatch):
@@ -385,7 +396,7 @@ def test_prompt_starting_with_a_reserved_word_still_launches_the_engine(monkeypa
         args, kwargs = mock_run.call_args
         cmd = args[0]
         assert "start_opencode.py" in cmd[1]
-        assert cmd[2:] == ["new", "is", "broken", "please", "fix", "-y"]
+        assert cmd[2:] == ["new", "is", "broken", "please", "fix"]
 
 
 def test_history_prompt_words_still_launch_the_engine(monkeypatch):
@@ -397,7 +408,7 @@ def test_history_prompt_words_still_launch_the_engine(monkeypatch):
         args, kwargs = mock_run.call_args
         cmd = args[0]
         assert "start_opencode.py" in cmd[1]
-        assert cmd[2:] == ["history", "please", "explain", "this", "-y"]
+        assert cmd[2:] == ["history", "please", "explain", "this"]
 
 
 def test_new_command_with_a_real_name_still_dispatches_to_new(monkeypatch):
@@ -421,8 +432,8 @@ def test_engine_exit_code_propagates_to_ca_process_exit(monkeypatch):
 
 
 def test_yolo_flag_is_not_inverted(monkeypatch):
-    # -y/--yolo is documented as "enable YOLO mode" and defaults to True;
-    # explicitly passing it must not flip the parsed value to False.
+    # -y/--yolo is documented as "enable YOLO mode" and defaults to False;
+    # explicitly passing it must set the parsed value to True.
     captured = {}
     original = ca_launcher._launch_engine
 
@@ -434,6 +445,20 @@ def test_yolo_flag_is_not_inverted(monkeypatch):
     with patch("subprocess.run"):
         ca_launcher.cli.main(["-y", "claude", "hi"], standalone_mode=False)
     assert captured["yolo"] is True
+
+
+def test_yolo_flag_defaults_to_false(monkeypatch):
+    captured = {}
+    original = ca_launcher._launch_engine
+
+    def spy(ctx, args):
+        captured["yolo"] = ctx.obj["yolo"]
+        return original(ctx, args)
+
+    monkeypatch.setattr("core.cli.helpers._launch_engine", spy)
+    with patch("subprocess.run"):
+        ca_launcher.cli.main(["claude", "hi"], standalone_mode=False)
+    assert captured["yolo"] is False
 
 
 def test_build_proxy_env_falls_back_on_malformed_proxy_config():
