@@ -82,6 +82,23 @@ def test_agent_gateway_settings_support_config_and_environment(monkeypatch):
     }
 
 
+def test_agent_gateway_defaults_to_off(monkeypatch):
+    """The gateway is experimental (AUDIT-001): opt-in, default disabled."""
+    monkeypatch.delenv("CA_AGENT_GATEWAY_ENABLED", raising=False)
+
+    assert server.get_agent_gateway_settings({})["enabled"] is False
+    # An explicit config value still wins.
+    assert (
+        server.get_agent_gateway_settings({"agent_gateway": {"enabled": True}})[
+            "enabled"
+        ]
+        is True
+    )
+    # Environment variable enables it.
+    monkeypatch.setenv("CA_AGENT_GATEWAY_ENABLED", "1")
+    assert server.get_agent_gateway_settings({})["enabled"] is True
+
+
 @pytest.mark.asyncio
 async def test_api_root_without_built_frontend():
     async with AsyncClient(
