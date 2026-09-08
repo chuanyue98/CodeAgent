@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router';
 import { Menu, X } from 'lucide-react';
 import CommandPalette from './components/CommandPalette';
+import NotificationBell from './components/NotificationBell';
 import SectionLayout from './components/SectionLayout';
 import SystemPanel from './components/SystemPanel';
 import WorkspaceSwitcher from './components/WorkspaceSwitcher';
@@ -151,6 +152,7 @@ function App() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <CommandPalette />
+              <NotificationBell />
               <SystemPanel />
               <WorkspaceSwitcher />
             </div>

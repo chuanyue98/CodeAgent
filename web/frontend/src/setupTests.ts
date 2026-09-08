@@ -83,6 +83,12 @@ globalThis.fetch = vi.fn().mockImplementation((url: string) => {
   if (url.includes('/api/plugins')) {
     return Promise.resolve(mockResponse({}));
   }
+  if (url.includes('/api/notifications/unread-count')) {
+    return Promise.resolve(mockResponse({ count: 0 }));
+  }
+  if (url.includes('/api/notifications')) {
+    return Promise.resolve(mockResponse([]));
+  }
   return Promise.reject(new Error(`Unhandled fetch to ${url}`));
 });
 
