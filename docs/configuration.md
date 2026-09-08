@@ -214,11 +214,15 @@ Cron-style scheduled task definitions:
 {
   "schedules": [
     {
-      "name": "daily_code_review",
-      "cron": "0 9 * * 1-5",
-      "task": "code_review",
+      "id": "a1b2c3d4",
+      "task_name": "daily_code_review",
+      "cron_expr": "0 9 * * 1-5",
       "engine": "opencode",
-      "group": "work"
+      "group": "work",
+      "workspace": "/path/to/project",
+      "enabled": true,
+      "notify_on": "always",
+      "created_from_input": "工作日每天早上 9 点做代码审查"
     }
   ]
 }
@@ -226,11 +230,15 @@ Cron-style scheduled task definitions:
 
 | Field | Description |
 |-------|-------------|
-| `name` | Schedule identifier |
-| `cron` | Cron expression for timing |
-| `task` | Task name from `tasks/` |
-| `engine` | Engine to use |
+| `id` | Unique schedule identifier |
+| `task_name` | Task name from `tasks/` |
+| `cron_expr` | Standard 5-field cron expression |
+| `engine` | Engine to use (`claude`, `opencode`, `codex`, `codebuddy`, `antigravity`) |
 | `group` | Configuration group |
+| `workspace` | Target project workspace root |
+| `enabled` | Whether the schedule is active (`true` / `false`) |
+| `notify_on` | Notification trigger policy: `"always"`, `"success"`, `"failure"`, or `"never"` |
+| `created_from_input` | Original natural language prompt, if created via NL Cron |
 
 ## Notifications
 
