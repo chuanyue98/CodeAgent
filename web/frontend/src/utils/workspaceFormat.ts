@@ -18,3 +18,14 @@ export function relativeTime(value: string | null | undefined, language: Languag
   if (Number.isNaN(date.getTime())) return '';
   return formatDistanceToNow(date, { addSuffix: true, locale: DATE_LOCALES[language] });
 }
+
+export function formatWorkspaceLabel(path: string, group?: string): string {
+  if (!path) return '';
+  const trimmed = path.replace(/[/\\]+$/, '');
+  const basename = trimmed.split(/[/\\]/).pop() || path;
+  if (group && group !== 'common') {
+    return `${basename} (${group})`;
+  }
+  return basename;
+}
+
