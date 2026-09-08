@@ -3,7 +3,8 @@ import { useIsMounted } from '../hooks/useAsyncGuards';
 import { Clock, Plus, Trash2, Play, PauseCircle, PlayCircle, Pencil, X, Sparkles, CheckCircle2 } from 'lucide-react';
 import cronstrue from 'cronstrue';
 import { useProject } from '../context/ProjectContext';
-import { useT } from '../i18n/context';
+import { useLanguageCode, useT } from '../i18n/context';
+import { formatWorkspaceLabel, formatRelativeCountdown } from '../utils/workspaceFormat';
 import usePolling from '../hooks/usePolling';
 import request from '../utils/request';
 import Button from './shared/Button';
@@ -57,6 +58,7 @@ export default function CronPage() {
     setSelectedWorkspace: setWorkspace,
   } = useProject();
   const t = useT();
+  const langCode = useLanguageCode();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -372,10 +374,10 @@ export default function CronPage() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 min-h-full lg:h-full">
+    <div className="w-full grid grid-cols-1 xl:grid-cols-12 gap-6 min-h-full pb-8">
       <section
         ref={formRef}
-        className={`w-full lg:w-80 shrink-0 glass-card p-5 space-y-4 transition-all ${
+        className={`xl:col-span-5 w-full glass-card p-5 space-y-4 transition-all ${
           editingScheduleId ? 'ring-2 ring-primary/40 border-primary/40' : ''
         }`}
       >
@@ -479,7 +481,7 @@ export default function CronPage() {
         )}
       </section>
 
-      <div className="flex-1 min-w-0 glass-card p-5 flex flex-col">
+      <div className="xl:col-span-7 min-w-0 glass-card p-5 flex flex-col">
         {/* Natural Language Cron parse area */}
         <div className="mb-3.5 rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
@@ -593,6 +595,9 @@ export default function CronPage() {
           )}
           {filteredSchedules.map(schedule => {
             const isEditing = editingScheduleId === schedule.id;
+            const countdown = schedule.nextRunAt
+              ? formatRelativeCountdown(schedule.nextRunAt, langCode)
+              : '';
             return (
               <div
                 key={schedule.id}
@@ -630,12 +635,41 @@ export default function CronPage() {
                     <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-mono">
                       {schedule.cronExpr}
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 bg-primary/5 text-primary rounded truncate max-w-56">
-                      {schedule.workspace || t('cron.workspaceRequired')}
+                    <span
+                      title={schedule.workspace ?? ''}
+                      className="text-[10px] px-1.5 py-0.5 bg-primary/5 text-primary rounded truncate max-w-56"
+                    >
+                      {formatWorkspaceLabel(schedule.workspace ?? '', schedule.group) || t('cron.workspaceRequired')}
                     </span>
+                    {schedule.notifyOn && (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                          schedule.notifyOn === 'always'
+                            ? 'bg-sky-50 text-sky-700 border border-sky-200/60'
+                            : schedule.notifyOn === 'success'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                              : schedule.notifyOn === 'failure'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
+                        }`}
+                      >
+                        {schedule.notifyOn === 'always'
+                          ? t('cron.notifyAlways')
+                          : schedule.notifyOn === 'success'
+                            ? t('cron.notifySuccess')
+                            : schedule.notifyOn === 'failure'
+                              ? t('cron.notifyFailure')
+                              : t('cron.notifyNever')}
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-3">
-                    <span>{t('cron.next', { time: formatTimestamp(schedule.nextRunAt) })}</span>
+                    <span>
+                      {t('cron.next', { time: formatTimestamp(schedule.nextRunAt) })}
+                      {countdown && (
+                        <span className="font-medium text-primary ml-1">({countdown})</span>
+                      )}
+                    </span>
                     {schedule.lastRunStatus && (
                       <span>
                         {t('cron.last', { status: schedule.lastRunStatus, time: formatTimestamp(schedule.lastRunAt) })}

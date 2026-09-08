@@ -207,3 +207,73 @@ describe('CronPage natural language parsing', () => {
     expect(await screen.findByText('LLM service unavailable')).toBeVisible();
   });
 });
+
+describe('CronPage schedule card enhancements', () => {
+  test('renders notification policy badges on schedule cards', async () => {
+    schedulesFixture = [
+      makeSchedule({ id: 'sched-always', taskName: 'task_always', notifyOn: 'always' }),
+      makeSchedule({ id: 'sched-fail', taskName: 'task_failure', notifyOn: 'failure' }),
+      makeSchedule({ id: 'sched-succ', taskName: 'task_success', notifyOn: 'success' }),
+      makeSchedule({ id: 'sched-never', taskName: 'task_never', notifyOn: 'never' }),
+    ];
+    renderCronPage();
+
+    const alwaysTitle = await screen.findByText('task_always');
+    const alwaysCard = alwaysTitle.closest('.glass-card') as HTMLElement;
+    const alwaysBadge = within(alwaysCard).getByText('Always');
+    expect(alwaysBadge).toBeVisible();
+    expect(alwaysBadge).toHaveClass('bg-sky-50');
+
+    const failTitle = screen.getByText('task_failure');
+    const failCard = failTitle.closest('.glass-card') as HTMLElement;
+    const failBadge = within(failCard).getByText('On failure');
+    expect(failBadge).toBeVisible();
+    expect(failBadge).toHaveClass('bg-amber-50');
+
+    const succTitle = screen.getByText('task_success');
+    const succCard = succTitle.closest('.glass-card') as HTMLElement;
+    const succBadge = within(succCard).getByText('On success');
+    expect(succBadge).toBeVisible();
+    expect(succBadge).toHaveClass('bg-emerald-50');
+
+    const neverTitle = screen.getByText('task_never');
+    const neverCard = neverTitle.closest('.glass-card') as HTMLElement;
+    const neverBadge = within(neverCard).getByText('Never');
+    expect(neverBadge).toBeVisible();
+    expect(neverBadge).toHaveClass('bg-slate-100');
+  });
+
+  test('displays relative countdown when nextRunAt is in the future', async () => {
+    const nowSec = 1700000000;
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowSec * 1000);
+    try {
+      const futureSec = nowSec + 3600;
+      schedulesFixture = [
+        makeSchedule({ id: 'sched-future', taskName: 'future_task', nextRunAt: futureSec }),
+      ];
+      renderCronPage();
+
+      expect(await screen.findByText('future_task')).toBeVisible();
+      expect(screen.getByText('(in 1h)')).toBeVisible();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  test('displays formatted workspace label with title hovering tooltip', async () => {
+    schedulesFixture = [
+      makeSchedule({
+        id: 'sched-ws',
+        taskName: 'ws_task',
+        workspace: '/var/repos/my-app',
+        group: 'frontend-team',
+      }),
+    ];
+    renderCronPage();
+
+    expect(await screen.findByText('ws_task')).toBeVisible();
+    const wsBadge = screen.getByText('my-app (frontend-team)');
+    expect(wsBadge).toBeVisible();
+    expect(wsBadge).toHaveAttribute('title', '/var/repos/my-app');
+  });
+});
