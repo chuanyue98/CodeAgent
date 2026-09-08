@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections.abc import Callable
 from pathlib import Path
 
 from core.logging_config import get_logger
 from core.services.notifier import notify
+from core.services.run_store import RunStore
 from core.services.runner_service import TaskAlreadyRunningError, TaskRunner
 from core.services.schedule_service import ScheduleService
 from core.services.task_service import TaskService
@@ -81,10 +83,76 @@ async def _record_and_notify(
     )
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
+
+
+def _should_notify(notify_on: str, run_status: str) -> bool:
+    if notify_on == "never":
+        return False
+    if notify_on == "always":
+        return True
+    if notify_on == "success" and run_status in ("completed", "success"):
+        return True
+    if notify_on == "failure" and run_status in ("failed", "task_not_found"):
+        return True
+    return False
+
+
+async def _maybe_record_notification(
+    run_store: RunStore | None,
+    record: dict,
+    run_status: str,
+    run_id: str,
+    log_path: str | None = None,
+    tasks_root: Path | None = None,
+) -> None:
+    if run_store is None:
+        return
+    notify_on = record.get("notify_on", "always")
+    if not _should_notify(notify_on, run_status):
+        return
+
+    title = record.get("task_name", "")
+    summary = ""
+    task_name = record.get("task_name", "")
+    if tasks_root and task_name:
+        try:
+            task_service = TaskService(tasks_root)
+            task_data = await asyncio.to_thread(
+                task_service.get_task, task_name, log_path=log_path
+            )
+            if task_data:
+                title = task_data.get("title") or task_name
+                raw_logs = task_data.get("logs") or ""
+                summary = _strip_ansi(raw_logs).strip()[-200:]
+        except Exception:
+            pass
+
+    try:
+        await asyncio.to_thread(
+            run_store.add_notification,
+            schedule_id=record.get("id", ""),
+            task_id=run_id,
+            task_name=task_name,
+            engine=record.get("engine", ""),
+            status=run_status,
+            title=title,
+            summary=summary,
+        )
+    except Exception:
+        logger.exception("Failed to record notification for schedule %s", record.get("id"))
+
+
 async def _settle_finished_runs(
     schedule_service: ScheduleService,
     task_runner: TaskRunner,
     schedules: list[dict],
+    run_store: RunStore | None = None,
+    tasks_root: Path | None = None,
 ) -> None:
     """Replaces "started" with what the run it fired actually did.
 
@@ -98,6 +166,9 @@ async def _settle_finished_runs(
     ``schedules`` is mutated in place so the caller's copy stays truthful for
     the rest of this tick.
     """
+    if run_store is None:
+        run_store = getattr(task_runner, "_run_store", None)
+
     for record in schedules:
         if record.get("last_run_status") != _PENDING_STATUS:
             continue
@@ -117,6 +188,14 @@ async def _settle_finished_runs(
             advance_schedule=False,
             set_run_at=False,
         )
+        await _maybe_record_notification(
+            run_store,
+            record,
+            run.status,
+            run_id,
+            log_path=getattr(run, "log_path", None),
+            tasks_root=tasks_root,
+        )
 
 
 async def scheduler_tick_loop(
@@ -124,6 +203,7 @@ async def scheduler_tick_loop(
     task_runner: TaskRunner,
     get_tasks_root: Callable[[], Path],
     tick_interval: float = TICK_INTERVAL_SECONDS,
+    run_store: RunStore | None = None,
 ) -> None:
     """Background loop firing any enabled, due schedule.
 
@@ -132,7 +212,9 @@ async def scheduler_tick_loop(
     """
     while True:
         try:
-            await tick_once(schedule_service, task_runner, get_tasks_root)
+            await tick_once(
+                schedule_service, task_runner, get_tasks_root, run_store=run_store
+            )
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -146,6 +228,7 @@ async def tick_once(
     schedule_service: ScheduleService,
     task_runner: TaskRunner,
     get_tasks_root: Callable[[], Path],
+    run_store: RunStore | None = None,
 ) -> None:
     """Fires every enabled schedule whose next_run_at has passed.
 
@@ -154,8 +237,17 @@ async def tick_once(
     can't take down the loop for every other schedule.
     """
     now = time.time()
+    tasks_root = get_tasks_root()
+    if run_store is None:
+        run_store = getattr(task_runner, "_run_store", None)
     schedules = await asyncio.to_thread(schedule_service.list_schedules)
-    await _settle_finished_runs(schedule_service, task_runner, schedules)
+    await _settle_finished_runs(
+        schedule_service,
+        task_runner,
+        schedules,
+        run_store=run_store,
+        tasks_root=tasks_root,
+    )
     for record in schedules:
         try:
             if not record.get("enabled"):
