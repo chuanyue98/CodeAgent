@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useIsMounted } from '../hooks/useAsyncGuards';
 import { Clock, Plus, Trash2, Play, PauseCircle, PlayCircle, Pencil, X, Sparkles, CheckCircle2 } from 'lucide-react';
 import cronstrue from 'cronstrue';
@@ -51,6 +52,16 @@ function formatTimestamp(ts: number | null): string {
   return new Date(ts * 1000).toLocaleString();
 }
 
+function useSafeSearchParams(): [URLSearchParams, (params: Record<string, string>, options?: { replace?: boolean }) => void] {
+  try {
+    return useSearchParams();
+  } catch {
+    const fallbackParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+    const fallbackSet = () => {};
+    return [fallbackParams, fallbackSet];
+  }
+}
+
 export default function CronPage() {
   const {
     projects,
@@ -59,11 +70,12 @@ export default function CronPage() {
   } = useProject();
   const t = useT();
   const langCode = useLanguageCode();
+  const [searchParams, setSearchParams] = useSafeSearchParams();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [engines, setEngines] = useState<Engine[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [taskName, setTaskName] = useState('');
-  const [engine, setEngine] = useState('');
+  const [taskName, setTaskName] = useState(() => searchParams.get('task') || '');
+  const [engine, setEngine] = useState(() => searchParams.get('engine') || '');
   const [cronExpr, setCronExpr] = useState('0 9 * * *');
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +97,21 @@ export default function CronPage() {
 
   const isMounted = useIsMounted();
   const formRef = useRef<HTMLElement>(null);
+  const appliedParamsRef = useRef(false);
+
+  useEffect(() => {
+    if (appliedParamsRef.current) return;
+    appliedParamsRef.current = true;
+    const wsParam = searchParams.get('workspace');
+    if (wsParam) {
+      setWorkspace(wsParam);
+    }
+    const hasParams = searchParams.get('task') || wsParam || searchParams.get('engine');
+    if (hasParams) {
+      setSearchParams({}, { replace: true });
+      formRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [searchParams, setSearchParams, setWorkspace]);
 
   // Debounced live preview: translates the raw cron syntax into plain
   // English and the next few actual fire times, so the user isn't expected

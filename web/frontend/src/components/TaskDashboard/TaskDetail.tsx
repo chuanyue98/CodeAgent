@@ -160,6 +160,14 @@ export default function TaskDetail({
   const hasPriorRuns = runHistory.length > 0;
   const runLabel = hasPriorRuns ? t('common.retry') : t('taskDetail.run');
 
+  const goToSchedule = () => {
+    const params = new URLSearchParams();
+    params.set('task', task.name);
+    if (workspace) params.set('workspace', workspace);
+    if (selectedEngine) params.set('engine', selectedEngine);
+    navigate(`/automations/schedules?${params.toString()}`);
+  };
+
   const handleDelete = async () => {
     setDeleteError(null);
     // The backend refuses to delete a task with an active run (409). Surface
@@ -266,7 +274,7 @@ export default function TaskDetail({
             </button>
 
             <button
-              onClick={() => navigate('/automations/schedules')}
+              onClick={goToSchedule}
               className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors"
             >
               <Clock className="w-4 h-4" />
@@ -634,7 +642,7 @@ export default function TaskDetail({
             </p>
             <button
               type="button"
-              onClick={() => navigate('/automations/schedules')}
+              onClick={goToSchedule}
               className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors shadow-sm"
             >
               <Clock className="w-3.5 h-3.5 text-primary" />

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import CronPage from '../components/CronPage';
 import { ProjectProvider } from '../context/ProjectContext';
@@ -275,5 +276,25 @@ describe('CronPage schedule card enhancements', () => {
     const wsBadge = screen.getByText('my-app (frontend-team)');
     expect(wsBadge).toBeVisible();
     expect(wsBadge).toHaveAttribute('title', '/var/repos/my-app');
+  });
+
+  test('prefills form fields from URL search parameters', async () => {
+    taskLibrary = [
+      { name: 'code_review', title: 'Code Review' },
+      { name: 'custom_task', title: 'Custom Task' },
+    ];
+    render(
+      <MemoryRouter initialEntries={['/automations/schedules?task=custom_task&engine=claude']}>
+        <ProjectProvider>
+          <CronPage />
+        </ProjectProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('code_review');
+    const taskSelect = screen.getByLabelText(/Task|任务/i) as HTMLSelectElement;
+    await waitFor(() => {
+      expect(taskSelect.value).toBe('custom_task');
+    });
   });
 });
