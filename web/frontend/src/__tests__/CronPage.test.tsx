@@ -152,7 +152,6 @@ describe('CronPage natural language parsing', () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       if (url === '/api/schedules/parse' && init?.method === 'POST') {
-        const body = JSON.parse(String(init.body)) as { input: string };
         return jsonResponse({
           cronExpr: '0 9 * * 1',
           task: {

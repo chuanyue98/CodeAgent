@@ -39,7 +39,7 @@ def list_notifications(
     rows = store.list_notifications(limit=limit, unread_only=unread_only)
     result = []
     for row in rows:
-        item = wire(NotificationItem(**row))
+        item = wire(NotificationItem.model_validate(row))
         item["task_id"] = row.get("task_id")
         item["schedule_id"] = row.get("schedule_id")
         item["task_name"] = row.get("task_name")
