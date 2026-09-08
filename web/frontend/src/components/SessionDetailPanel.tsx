@@ -30,12 +30,13 @@ import Badge from './shared/Badge';
 import Button from './shared/Button';
 import SectionLabel from './shared/SectionLabel';
 import { useT } from '../i18n/context';
+import type { TranslationKey } from '../i18n/locales/en';
 import MarkdownMessage from './MarkdownMessage';
 import SessionProgress from './SessionProgress';
 
 export type MessageFilter = 'all' | 'user' | 'assistant' | 'tool' | 'thinking';
 
-const FILTER_OPTIONS: { key: MessageFilter; labelKey: string }[] = [
+const FILTER_OPTIONS: { key: MessageFilter; labelKey: TranslationKey }[] = [
   { key: 'all', labelKey: 'sessions.filterAll' },
   { key: 'user', labelKey: 'sessions.filterUser' },
   { key: 'assistant', labelKey: 'sessions.filterAssistant' },
