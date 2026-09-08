@@ -25,6 +25,7 @@ import TaskBlueprintView from './TaskBlueprintView';
 import { formatWorkspaceLabel } from '../../utils/workspaceFormat';
 import { classifyStageStatus, type Engine, type RunStatus, type Task } from './types';
 import { useLanguageCode, useT } from '../../i18n/context';
+import { fetchSchedules } from '../../api/schedules';
 import request from '../../utils/request';
 
 function stageIcon(status: string) {
@@ -122,6 +123,7 @@ export default function TaskDetail({
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [linkedScheduleCount, setLinkedScheduleCount] = useState(0);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<StudioTab>(() => (activeRun ? 'logs' : 'blueprint'));
@@ -179,6 +181,17 @@ export default function TaskDetail({
       setDeleteError(e instanceof Error ? e.message : t('taskDetail.deleteFailed'));
       setConfirmDelete(false);
     }
+  };
+
+  const initiateDelete = async () => {
+    try {
+      const schedules = await fetchSchedules();
+      const linked = schedules.filter(s => s.taskName === task.name && s.enabled);
+      setLinkedScheduleCount(linked.length);
+    } catch {
+      setLinkedScheduleCount(0);
+    }
+    setConfirmDelete(true);
   };
 
   return (
@@ -282,7 +295,7 @@ export default function TaskDetail({
             </button>
 
             <button
-              onClick={() => setConfirmDelete(true)}
+              onClick={() => void initiateDelete()}
               disabled={!!activeRun}
               title={activeRun ? t('taskDetail.deleteBlocked') : undefined}
               className="flex items-center gap-1.5 px-3 py-2 border border-red-100 text-red-500 rounded-xl text-sm font-medium hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -723,7 +736,11 @@ export default function TaskDetail({
       {confirmDelete && (
         <ConfirmDialog
           title={t('taskDetail.confirmDeleteTitle')}
-          description={t('taskDetail.confirmDeleteDescription', { name: task.title })}
+          description={
+            linkedScheduleCount > 0
+              ? `${t('taskDetail.confirmDeleteDescription', { name: task.title })}\n\n${t('taskDetail.deleteLinkedSchedules', { count: linkedScheduleCount })}`
+              : t('taskDetail.confirmDeleteDescription', { name: task.title })
+          }
           confirmLabel={t('common.delete')}
           onConfirm={() => void handleDelete()}
           onCancel={() => setConfirmDelete(false)}

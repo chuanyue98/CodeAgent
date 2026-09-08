@@ -709,6 +709,7 @@ export const zh: Record<TranslationKey, string> = {
   'taskDetail.exitCode': '退出码',
   'taskDetail.confirmDeleteTitle': '删除这个任务？',
   'taskDetail.confirmDeleteDescription': '"{name}" 将被永久删除，此操作不可撤销。',
+  'taskDetail.deleteLinkedSchedules': '此任务被 {count} 个活跃定时计划引用，删除后将自动禁用这些计划。',
   'taskDetail.deleteFailed': '删除任务失败',
   'taskDetail.deleteBlocked': '请先停止该任务正在运行的实例，再执行删除。',
   'taskDetail.tabBlueprint': '任务蓝图',

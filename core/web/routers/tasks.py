@@ -10,6 +10,7 @@ from core.services.runner_service import (
     TaskRunner,
     TaskRunStatus,
 )
+from core.services.schedule_service import ScheduleService
 from core.services.skill_service import SkillService
 from core.services.task_service import TaskService, is_valid_task_name
 from core.services.workspace_service import (
@@ -242,7 +243,11 @@ async def update_task(name: str, content: str = Body(..., embed=True)):
 
 @router.delete("/tasks/{name}")
 async def delete_task(name: str):
-    """Deletes a task blueprint. Blocked while the task has an active run."""
+    """Deletes a task blueprint. Blocked while the task has an active run.
+
+    Any active schedules referencing this task are automatically disabled
+    to prevent ghost schedule failure loops.
+    """
     if await asyncio.to_thread(_runner.has_active_task, name):
         raise HTTPException(
             status_code=409,
@@ -256,7 +261,18 @@ async def delete_task(name: str):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="Task not found")
-    return {"status": "deleted", "name": name}
+
+    disabled_schedules = 0
+    try:
+        schedule_svc = ScheduleService(ConfigService(get_config_path()))
+        for schedule in schedule_svc.list_schedules():
+            if schedule.get("task_name") == name and schedule.get("enabled", False):
+                schedule_svc.update_schedule(schedule["id"], enabled=False)
+                disabled_schedules += 1
+    except Exception:
+        pass
+
+    return {"status": "deleted", "name": name, "disabledSchedules": disabled_schedules}
 
 
 @router.get("/tasks/{name}/runs")

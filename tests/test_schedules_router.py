@@ -22,6 +22,9 @@ class _FakeRunner:
         self.calls: list[tuple] = []
         self.already_running = False
 
+    def has_active_task(self, name):
+        return False
+
     def run_task(
         self,
         task_name,
@@ -451,3 +454,39 @@ async def test_parse_schedule_bad_output(fake_runner):
         body = r.json()
         assert body["cronExpr"] == ""
         assert body["rawOutput"] is not None
+
+
+@pytest.mark.asyncio
+async def test_delete_task_disables_linked_schedules(tmp_path, monkeypatch, fake_runner):
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    (tasks_dir / "my_task.md").write_text("# My Task\n\nObjective: do something", encoding="utf-8")
+    monkeypatch.setenv("CA_TASKS_ROOT", str(tasks_dir))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        sched = await ac.post(
+            "/api/schedules",
+            json={
+                "task_name": "my_task",
+                "engine": "claude",
+                "group": "common",
+                "workspace": os.environ["CA_TEST_WORKSPACE"],
+                "cron_expr": "0 9 * * *",
+                "notify_on": "always",
+            },
+        )
+        assert sched.status_code == 200
+        sched_id = sched.json()["id"]
+        assert sched.json()["enabled"] is True
+
+        del_resp = await ac.delete("/api/tasks/my_task")
+        assert del_resp.status_code == 200
+        assert del_resp.json()["disabledSchedules"] == 1
+
+        sched_list = await ac.get("/api/schedules")
+        assert sched_list.status_code == 200
+        matching = [s for s in sched_list.json() if s["id"] == sched_id]
+        assert len(matching) == 1
+        assert matching[0]["enabled"] is False

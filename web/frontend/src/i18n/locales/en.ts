@@ -725,6 +725,7 @@ export const en = {
   'taskDetail.exitCode': 'Exit code',
   'taskDetail.confirmDeleteTitle': 'Delete this task?',
   'taskDetail.confirmDeleteDescription': '"{name}" will be permanently removed. This cannot be undone.',
+  'taskDetail.deleteLinkedSchedules': 'This task is referenced by {count} active schedule(s). Deleting it will automatically disable these schedules.',
   'taskDetail.deleteFailed': 'Failed to delete task',
   'taskDetail.deleteBlocked': 'Stop the active run before deleting this task.',
   'taskDetail.tabBlueprint': 'Blueprint',
