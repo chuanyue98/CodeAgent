@@ -446,17 +446,31 @@ const ConfigHub: React.FC = () => {
             return (
             <div key={p.uiId} className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center bg-slate-50/30 p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
               <div className="flex-1 min-w-0">
-                <input
-                  id={`project-path-${p.uiId}`}
-                  type="text"
-                  aria-label={t('config.workspacePath', { index: i + 1 })}
-                  value={p.path}
-                  onChange={(e) => updateProject(p.uiId, 'path', e.target.value)}
-                  placeholder="/absolute/path/to/your/project"
-                  className={`w-full p-2 bg-transparent border-b outline-none text-sm font-mono ${
-                    missing ? 'border-amber-400 text-amber-800' : 'border-slate-200 focus:border-primary'
+                <div
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border shadow-xs transition-all focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary ${
+                    missing
+                      ? 'border-amber-300 bg-amber-50/20'
+                      : 'border-slate-200 bg-white/80'
                   }`}
-                />
+                >
+                  <Folder className="w-4 h-4 text-slate-400 shrink-0" data-testid="workspace-folder-icon" />
+                  <input
+                    id={`project-path-${p.uiId}`}
+                    type="text"
+                    aria-label={t('config.workspacePath', { index: i + 1 })}
+                    value={p.path}
+                    onChange={(e) => updateProject(p.uiId, 'path', e.target.value)}
+                    placeholder="/absolute/path/to/your/project"
+                    className={`flex-1 min-w-0 bg-transparent border-none outline-none font-mono text-sm ${
+                      missing ? 'text-amber-800' : 'text-slate-800'
+                    }`}
+                  />
+                  {missing ? (
+                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" data-testid="workspace-status-missing" />
+                  ) : savedProject?.available === true ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" data-testid="workspace-status-available" />
+                  ) : null}
+                </div>
                 {missing && (
                   <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-700">
                     <AlertTriangle className="w-3 h-3 shrink-0" />
@@ -561,11 +575,11 @@ const ConfigHub: React.FC = () => {
                   <button
                     onClick={() => {
                       setCurrentGroup(name);
-                      navigate('/settings/resources');
+                      navigate(`/settings/resources?group=${encodeURIComponent(name)}`);
                     }}
-                    className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
+                    className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 transition-colors border border-primary/20"
                   >
-                    {t('config.manageMembers')} <ArrowRight className="w-3.5 h-3.5" />
+                    {t('config.viewResources')} <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 )}
                 {name !== 'codeagent' && name !== 'common' && (
