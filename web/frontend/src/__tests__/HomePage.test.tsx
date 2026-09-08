@@ -13,15 +13,17 @@ interface Backend {
   sessions?: unknown[];
   daily?: unknown[];
   runs?: unknown[];
+  schedules?: unknown[];
   metrics?: Record<string, number>;
 }
 
-function mockBackend({ events = [], sessions = [], daily = [], runs = [], metrics }: Backend = {}) {
+function mockBackend({ events = [], sessions = [], daily = [], runs = [], schedules = [], metrics }: Backend = {}) {
   globalThis.fetch = vi.fn().mockImplementation((url: string) => {
     if (url.includes('/api/history/audit')) return jsonResponse({ events, count: events.length });
     if (url.includes('/api/analytics/sessions')) return jsonResponse({ sessions, nextCursor: null });
     if (url.includes('/api/analytics/daily')) return jsonResponse(daily);
     if (url.includes('/api/tasks/runs')) return jsonResponse(runs);
+    if (url.includes('/api/schedules')) return jsonResponse(schedules);
     if (url.includes('/api/system/metrics')) {
       return jsonResponse(
         metrics ?? {
@@ -252,3 +254,64 @@ test('the system card reads from the shared metrics subscription', async () => {
   expect(screen.getByText('6.4 / 16.0 GB')).toBeInTheDocument();
   expect(screen.getByText('220 / 400 GB')).toBeInTheDocument();
 });
+
+test('hero quick actions link to terminal, tasks, and schedules', async () => {
+  mockBackend();
+  renderHome();
+
+  const terminalLink = await screen.findByRole('link', { name: /Open Terminal/ });
+  expect(terminalLink).toHaveAttribute('href', '/agent/terminal');
+
+  const taskLink = screen.getByRole('link', { name: /New Automation Task/ });
+  expect(taskLink).toHaveAttribute('href', '/automations/tasks');
+
+  const scheduleLink = screen.getByRole('link', { name: /New Schedule/ });
+  expect(scheduleLink).toHaveAttribute('href', '/automations/schedules');
+});
+
+test('automation monitor widget displays upcoming schedule and relative countdown', async () => {
+  const futureSec = Math.floor(Date.now() / 1000) + 600;
+  mockBackend({
+    schedules: [
+      {
+        id: 'sched-1',
+        taskName: 'Nightly Build',
+        engine: 'claude',
+        enabled: true,
+        nextRunAt: futureSec,
+      },
+      {
+        id: 'sched-2',
+        taskName: 'Later Build',
+        engine: 'codex',
+        enabled: true,
+        nextRunAt: futureSec + 3600,
+      },
+      {
+        id: 'sched-disabled',
+        taskName: 'Disabled Build',
+        engine: 'gemini',
+        enabled: false,
+        nextRunAt: futureSec - 100,
+      },
+    ],
+  });
+  renderHome();
+
+  expect(await screen.findByText('Nightly Build')).toBeInTheDocument();
+  expect(screen.getByText(/in (9|10)m/)).toBeInTheDocument();
+  expect(screen.queryByText('Later Build')).not.toBeInTheDocument();
+  expect(screen.queryByText('Disabled Build')).not.toBeInTheDocument();
+});
+
+test('automation widget shows empty upcoming state and navigation links', async () => {
+  mockBackend({ schedules: [] });
+  renderHome();
+
+  expect(await screen.findByText('No upcoming schedules')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /All Tasks & Schedules/ })).toHaveAttribute(
+    'href',
+    '/automations/schedules',
+  );
+});
+

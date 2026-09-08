@@ -3,6 +3,7 @@ import {
   Activity,
   ArrowRight,
   ArrowUpRight,
+  Calendar,
   Clock3,
   Cpu,
   HardDrive,
@@ -12,11 +13,13 @@ import {
 import { Link } from 'react-router';
 import { fetchAuditEvents, type AuditEvent } from '../api/audit';
 import { fetchDaily, fetchSessions, type SessionUsage } from '../api/analytics';
+import { fetchSchedules, type Schedule } from '../api/schedules';
 import request from '../utils/request';
 import { useSystemMetrics } from '../context/SystemMetricsContext';
 import { buildResumeLink } from '../utils/sessionLink';
 import { buttonClass } from '../components/shared/buttonClass';
-import { useT } from '../i18n/context';
+import { formatRelativeCountdown } from '../utils/workspaceFormat';
+import { useLanguageCode, useT } from '../i18n/context';
 import type { RunStatus } from '../components/TaskDashboard/types';
 
 /** Home shows only enough of a run to identify it; the dashboard shows the rest. */
@@ -105,11 +108,23 @@ function workspaceLabel(path: string): string {
  */
 export default function HomePage() {
   const t = useT();
+  const lang = useLanguageCode();
   const recentEvents = useRecentActivity(RECENT_ACTIVITY_LIMIT);
   const recentSessions = useRecentSessions(RECENT_SESSIONS_LIMIT);
   const activityBars = useActivityBars(ACTIVITY_BAR_DAYS);
   const runs = useRunningTasks();
+  const schedules = useSchedules();
   const { metrics } = useSystemMetrics();
+
+  const upcomingSchedule = schedules
+    ? schedules
+        .filter(s => s.enabled && typeof s.nextRunAt === 'number' && s.nextRunAt > 0)
+        .sort((a, b) => (a.nextRunAt ?? 0) - (b.nextRunAt ?? 0))[0] ?? null
+    : null;
+
+  const countdown = upcomingSchedule?.nextRunAt
+    ? formatRelativeCountdown(upcomingSchedule.nextRunAt, lang)
+    : '';
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-3 p-2 sm:space-y-4 sm:p-4 lg:p-6">
@@ -140,13 +155,25 @@ export default function HomePage() {
               {t('home.headingPrefix')}<span className="font-display italic text-primary">{t('home.headingAccent')}</span>{t('home.headingSuffix')}
             </h2>
             {/* Quick actions stay one compact row — the sidebar owns
-                navigation; these are just the two most common starts. */}
-            <div className="mt-4 flex flex-wrap gap-2">
+                navigation; these are just the three most common starts. */}
+            <div className="mt-4 flex flex-wrap items-center gap-2.5" aria-label={t('home.quickActions')}>
               <Link
                 to="/agent/terminal"
                 className={buttonClass('primary', 'md')}
               >
-                <Terminal className="h-3.5 w-3.5" /> {t('home.openTerminal')}
+                <Terminal className="h-3.5 w-3.5" /> {t('home.actionAgent')}
+              </Link>
+              <Link
+                to="/automations/tasks"
+                className={buttonClass('outline', 'md', 'bg-white/80 border-slate-200 text-slate-700 shadow-sm hover:bg-white hover:text-slate-900')}
+              >
+                <Clock3 className="h-3.5 w-3.5 text-slate-500" /> {t('home.actionTask')}
+              </Link>
+              <Link
+                to="/automations/schedules"
+                className={buttonClass('outline', 'md', 'bg-white/80 border-slate-200 text-slate-700 shadow-sm hover:bg-white hover:text-slate-900')}
+              >
+                <Calendar className="h-3.5 w-3.5 text-slate-500" /> {t('home.actionSchedule')}
               </Link>
             </div>
           </div>
@@ -286,46 +313,111 @@ export default function HomePage() {
         <section className="animate-fade-rise stagger-4 glass-card flex flex-col p-5">
           <div className="flex items-center justify-between">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Clock3 className="h-4 w-4 text-primary" /> {t('home.automations')}
+              <Clock3 className="h-4 w-4 text-primary" /> {t('home.automationWidget')}
             </h3>
             <Link to="/automations/tasks" className="text-[11px] font-semibold text-primary hover:underline">
               {t('home.open')}
             </Link>
           </div>
-          <div className="mt-4 flex-1">
-            {runs === null ? (
-              <p className="text-xs text-slate-400">{t('home.checkingRuns')}</p>
-            ) : runs.length === 0 ? (
-              <div className="space-y-2">
-                <p className="text-xs text-slate-500">{t('home.nothingRunning')}</p>
-                <Link
-                  to="/automations/tasks"
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-                >
-                  {t('home.runTask')} <ArrowRight className="h-3 w-3" />
-                </Link>
+
+          <div className="mt-4 flex-1 space-y-4">
+            {/* 活跃状态 Active Runs */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <span>{t('home.activeTasks')}</span>
+                {runs && runs.length > 0 && (
+                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-emerald-800">
+                    {runs.length}
+                  </span>
+                )}
               </div>
-            ) : (
-              <ul className="space-y-2">
-                {runs.map(run => (
-                  <li
-                    key={run.taskId}
-                    className="flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs"
-                  >
-                    <span className="relative flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              {runs === null ? (
+                <p className="text-xs text-slate-400">{t('home.checkingRuns')}</p>
+              ) : runs.length === 0 ? (
+                <div className="space-y-1 rounded-xl border border-slate-100 bg-slate-50/60 p-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-slate-600">{t('home.noActiveTasks')}</span>
+                    <Link
+                      to="/automations/tasks"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                    >
+                      {t('home.runTask')} <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+                  <p className="text-[11px] text-slate-400">{t('home.nothingRunning')}</p>
+                </div>
+              ) : (
+                <ul className="space-y-1.5">
+                  {runs.map(run => (
+                    <li
+                      key={run.taskId}
+                      className="flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 px-2.5 py-2 text-xs"
+                    >
+                      <span className="relative flex h-2 w-2 shrink-0">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate font-mono font-semibold text-emerald-900">
+                        {run.taskId}
+                      </span>
+                      <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-emerald-700">
+                        {run.engine}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* 下次调度 Next Schedule */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                {t('home.nextScheduled')}
+              </div>
+              {schedules === null ? (
+                <p className="text-xs text-slate-400">{t('common.loading')}</p>
+              ) : upcomingSchedule ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 text-xs">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="truncate font-semibold text-slate-700">
+                        {upcomingSchedule.taskName}
+                      </span>
+                      <span className="shrink-0 rounded bg-slate-200/70 px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase text-slate-600">
+                        {upcomingSchedule.engine}
+                      </span>
+                    </div>
+                  </div>
+                  {countdown ? (
+                    <span className="shrink-0 font-mono text-[11px] font-medium text-primary">
+                      {countdown}
                     </span>
-                    <span className="min-w-0 flex-1 truncate font-mono font-semibold text-emerald-800">
-                      {run.taskId}
-                    </span>
-                    <span className="shrink-0 text-[10px] font-semibold uppercase text-emerald-600">
-                      {run.engine}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  {t('home.noUpcomingSchedule')}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* 底部导航 */}
+          <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs">
+            <Link
+              to="/automations/tasks"
+              className="inline-flex items-center gap-1 font-medium text-slate-600 transition-colors hover:text-primary"
+            >
+              <Clock3 className="h-3.5 w-3.5 text-slate-400" />
+              <span>{t('home.automations')}</span>
+            </Link>
+            <Link
+              to="/automations/schedules"
+              className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+            >
+              <span>{t('home.allAutomations')}</span>
+              <ArrowRight className="h-3 w-3" />
+            </Link>
           </div>
         </section>
       </div>
@@ -431,10 +523,33 @@ function useRunningTasks(): RunningTask[] | null {
   useEffect(() => {
     let cancelled = false;
     request<RunningTask[]>('/api/tasks/runs')
-      .then(list => { if (!cancelled) setRuns((list || []).filter(run => run.status === 'running')); })
+      .then(list => {
+        if (!cancelled) {
+          setRuns(Array.isArray(list) ? list.filter(run => run.status === 'running') : []);
+        }
+      })
       .catch(() => { if (!cancelled) setRuns([]); });
     return () => { cancelled = true; };
   }, []);
 
   return runs;
 }
+
+function useSchedules(): Schedule[] | null {
+  const [schedules, setSchedules] = useState<Schedule[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSchedules()
+      .then(list => {
+        if (!cancelled) {
+          setSchedules(Array.isArray(list) ? list : []);
+        }
+      })
+      .catch(() => { if (!cancelled) setSchedules([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  return schedules;
+}
+
