@@ -17,12 +17,20 @@ router only manages the persisted schedule records themselves.
 
 from __future__ import annotations
 
+import asyncio
+import json
+import re
+import time
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
 
+from core.constants import ENGINES
 from core.services.config_service import ConfigService
 from core.services.runner_service import TaskAlreadyRunningError
 from core.services.schedule_service import ScheduleService
 from core.web.case_convert import ProtocolModel, wire
+from core.web.resource_paths import ROOT_DIR
 from core.web.routers import tasks as tasks_router
 from core.web.routers.config import get_config_path
 
@@ -31,6 +39,34 @@ router = APIRouter(prefix="/api", tags=["schedules"])
 
 def _service() -> ScheduleService:
     return ScheduleService(ConfigService(get_config_path()))
+
+
+class ParseScheduleRequest(ProtocolModel):
+    """Request body for parsing natural language into schedule and task."""
+
+    input: str
+    engine: str = "claude"
+
+
+class ParsedTask(ProtocolModel):
+    """Structured task fields returned from natural language parsing."""
+
+    name: str
+    title: str
+    objective: str
+    context: str
+    instructions: str
+    verification: str
+
+
+class ParseScheduleResponse(ProtocolModel):
+    """Response returned from natural language parsing."""
+
+    cron_expr: str
+    cron_description: str
+    next_runs: list[float]
+    task: ParsedTask
+    raw_output: str | None = None
 
 
 class CreateScheduleRequest(ProtocolModel):
@@ -94,6 +130,220 @@ class ScheduleRecord(ProtocolModel):
 def list_schedules() -> list[dict]:
     """Lists all cron schedules."""
     return [wire(ScheduleRecord(**record)) for record in _service().list_schedules()]
+
+
+PARSE_TIMEOUT_SECONDS = 120
+
+_PARSE_SCHEDULE_PROMPT = """你是 CodeAgent 的定时任务编排专家。把用户一句自然语言描述转换成结构化 JSON，只输出 JSON，不要多余文字。
+
+输出严格符合以下 JSON（不要 markdown 代码围栏，不要其他文字）：
+{{
+  "cron_expr": "0 9 * * *",
+  "name": "英文 slug",
+  "title": "中文标题",
+  "objective": "目标",
+  "context": "背景",
+  "instructions": "指令",
+  "verification": "验证"
+}}
+
+自然语言：{input}
+
+要求：
+- cron_expr 必须是标准 5 段 cron 表达式（分 时 日 月 周），能用 croniter 解析
+- name 只允许 [a-z][a-z0-9-]*，全小写
+- objective/context/instructions/verification 任一不可为空
+- 如果用户意图无法转成合法的 cron_expr，把 cron_expr 设为 "" 并在错误信息里说明原因"""
+
+_JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
+_SANITIZE_RE = re.compile(r"[^a-z0-9-]")
+
+
+def _sanitize_name(name: str) -> str:
+    s = name.strip().lower().replace(" ", "-").replace("_", "-")
+    s = _SANITIZE_RE.sub("-", s)
+    s = re.sub(r"-+", "-", s).strip("-")
+    if not s or not s[0].isalpha():
+        s = f"task-{s}" if s else "nl-schedule"
+    return s[:40]
+
+
+def _cron_description(expr: str) -> str:
+    parts = expr.strip().split()
+    if len(parts) == 5:
+        minute, hour, dom, month, dow = parts
+        if dom == "*" and month == "*" and dow == "*":
+            if minute.isdigit() and hour.isdigit():
+                return f"每天 {int(hour):02d}:{int(minute):02d}"
+        if dom == "*" and month == "*" and dow in ("1-5", "1,2,3,4,5"):
+            if minute.isdigit() and hour.isdigit():
+                return f"工作日 {int(hour):02d}:{int(minute):02d}"
+    return expr
+
+
+def _extract_json_from_text(text: str) -> dict | None:
+    for m in _JSON_BLOCK_RE.finditer(text):
+        try:
+            val = json.loads(m.group(1).strip())
+            if isinstance(val, dict):
+                return val
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    try:
+        val = json.loads(text.strip())
+        if isinstance(val, dict):
+            if "cron_expr" in val or "cronExpr" in val:
+                return val
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    collected_lines: list[str] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+            if isinstance(obj, dict):
+                if "cron_expr" in obj:
+                    return obj
+                for field in ("content", "text", "message", "delta"):
+                    if field in obj and isinstance(obj[field], str):
+                        collected_lines.append(obj[field])
+        except (json.JSONDecodeError, ValueError):
+            collected_lines.append(line)
+
+    combined = "\n".join(collected_lines)
+    for m in _JSON_BLOCK_RE.finditer(combined):
+        try:
+            val = json.loads(m.group(1).strip())
+            if isinstance(val, dict):
+                return val
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    start = text.find("{")
+    while start != -1:
+        end = text.rfind("}")
+        if end > start:
+            snippet = text[start : end + 1]
+            try:
+                val = json.loads(snippet)
+                if isinstance(val, dict) and ("cron_expr" in val or "name" in val):
+                    return val
+            except (json.JSONDecodeError, ValueError):
+                pass
+        start = text.find("{", start + 1)
+
+    return None
+
+
+@router.post("/schedules/parse")
+async def parse_schedule(req: ParseScheduleRequest) -> dict:
+    """Parses a natural language schedule description into structured task and cron."""
+    if req.engine not in ENGINES:
+        raise HTTPException(status_code=400, detail=f"Invalid engine: {req.engine!r}")
+    if not req.input or not req.input.strip():
+        raise HTTPException(status_code=400, detail="Input must not be empty")
+
+    message = _PARSE_SCHEDULE_PROMPT.format(input=req.input.strip())
+
+    try:
+        status = await asyncio.to_thread(
+            tasks_router._runner.run_chat_turn,
+            req.engine,
+            message,
+            group="common",
+            project_path=str(ROOT_DIR),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    deadline = time.time() + PARSE_TIMEOUT_SECONDS
+    while time.time() < deadline:
+        st = await asyncio.to_thread(tasks_router._runner.get_status, status.task_id)
+        if st is None or st.status != "running":
+            break
+        await asyncio.sleep(0.2)
+
+    log_path = Path(status.log_path)
+    raw = ""
+    if log_path.exists():
+        try:
+            raw = log_path.read_text(encoding="utf-8")
+        except OSError:
+            raw = ""
+
+    parsed_json = _extract_json_from_text(raw)
+    if parsed_json is None:
+        return wire(
+            ParseScheduleResponse(
+                cron_expr="",
+                cron_description="",
+                next_runs=[],
+                task=ParsedTask(
+                    name=_sanitize_name(req.input),
+                    title=req.input.strip()[:30],
+                    objective="",
+                    context="",
+                    instructions="",
+                    verification="",
+                ),
+                raw_output=raw[:2000] if raw else "No output produced",
+            )
+        )
+
+    cron_expr = str(parsed_json.get("cron_expr", "")).strip()
+    if not cron_expr:
+        return wire(
+            ParseScheduleResponse(
+                cron_expr="",
+                cron_description="",
+                next_runs=[],
+                task=ParsedTask(
+                    name=_sanitize_name(str(parsed_json.get("name") or req.input)),
+                    title=str(parsed_json.get("title") or req.input.strip()[:30]),
+                    objective=str(parsed_json.get("objective", "")),
+                    context=str(parsed_json.get("context", "")),
+                    instructions=str(parsed_json.get("instructions", "")),
+                    verification=str(parsed_json.get("verification", "")),
+                ),
+                raw_output=raw[:2000],
+            )
+        )
+
+    try:
+        next_runs = _service().preview_next_runs(cron_expr)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail=f"Invalid cron expression: {cron_expr!r}"
+        ) from exc
+
+    name = _sanitize_name(str(parsed_json.get("name") or "nl-schedule"))
+    task = ParsedTask(
+        name=name,
+        title=str(parsed_json.get("title") or name),
+        objective=str(parsed_json.get("objective", "")),
+        context=str(parsed_json.get("context", "")),
+        instructions=str(parsed_json.get("instructions", "")),
+        verification=str(parsed_json.get("verification", "")),
+    )
+
+    if not all([task.objective, task.context, task.instructions, task.verification]):
+        raise HTTPException(
+            status_code=422, detail="Missing required task fields in parsed result"
+        )
+
+    return wire(
+        ParseScheduleResponse(
+            cron_expr=cron_expr,
+            cron_description=_cron_description(cron_expr),
+            next_runs=next_runs[:3],
+            task=task,
+            raw_output=None,
+        )
+    )
 
 
 @router.get("/schedules/preview")

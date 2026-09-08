@@ -44,6 +44,48 @@ class _FakeRunner:
             session_id=None,
         )
 
+    def run_chat_turn(
+        self,
+        engine,
+        message,
+        session_id=None,
+        group="common",
+        project_path=None,
+    ):
+        if engine == "shell":
+            raise ValueError("Invalid engine: 'shell'")
+        import tempfile
+        log_file = Path(tempfile.gettempdir()) / f"fake_chat_{engine}.jsonl"
+        chat_content = getattr(self, "chat_output", None)
+        if chat_content is not None:
+            log_file.write_text(chat_content, encoding="utf-8")
+        else:
+            default_json = {
+                "cron_expr": "0 9 * * *",
+                "name": "daily-pr-summary",
+                "title": "总结 PR",
+                "objective": "每天定时汇总前一日 PR",
+                "context": "CI 巡检",
+                "instructions": "使用 gh pr list 并生成报告",
+                "verification": "检查 output.md 是否生成",
+            }
+            log_file.write_text(json.dumps(default_json), encoding="utf-8")
+        return SimpleNamespace(
+            task_id=f"chat_{engine}_1",
+            engine=engine,
+            pid=1234,
+            status="completed",
+            log_path=str(log_file),
+            start_time=0.0,
+        )
+
+    def get_status(self, task_id):
+        return SimpleNamespace(
+            task_id=task_id,
+            status="completed",
+            log_path="/tmp/fake.log",
+        )
+
 
 @pytest.fixture
 def fake_runner(monkeypatch):
@@ -354,3 +396,58 @@ async def test_create_and_update_schedule_notify_on():
         )
         assert updated.status_code == 200
         assert updated.json()["notifyOn"] == "always"
+
+
+@pytest.mark.asyncio
+async def test_parse_schedule_ok(fake_runner):
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        r = await ac.post(
+            "/api/schedules/parse",
+            json={"input": "每天早上 9 点总结 PR", "engine": "claude"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["cronExpr"] == "0 9 * * *"
+        assert body["cronDescription"]
+        assert "task" in body
+        assert body["task"]["name"] == "daily-pr-summary"
+        assert isinstance(body["nextRuns"], list)
+
+
+@pytest.mark.asyncio
+async def test_parse_schedule_invalid_cron(fake_runner):
+    fake_runner.chat_output = json.dumps({
+        "cron_expr": "invalid-cron-expr",
+        "name": "invalid-task",
+        "title": "Invalid",
+        "objective": "obj",
+        "context": "ctx",
+        "instructions": "inst",
+        "verification": "ver",
+    })
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        r = await ac.post(
+            "/api/schedules/parse",
+            json={"input": "无厘头描述", "engine": "claude"},
+        )
+        assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_parse_schedule_bad_output(fake_runner):
+    fake_runner.chat_output = "抱歉我无法按 JSON 输出这些内容，这是一段普通文本..."
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        r = await ac.post(
+            "/api/schedules/parse",
+            json={"input": "非标准描述", "engine": "claude"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["cronExpr"] == ""
+        assert body["rawOutput"] is not None
