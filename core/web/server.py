@@ -24,6 +24,7 @@ from core.web.routers import (
     instances,
     logs,
     mcp,
+    notifications,
     plugins,
     prompts,
     pty,
@@ -263,9 +264,15 @@ async def lifespan(app: FastAPI):
     app.state.agent_gateway = agent_gateway
     if agent_gateway is not None:
         await agent_gateway.start()
+    app.state.run_store = _task_runner._run_store
     schedule_service = ScheduleService(ConfigService(get_config_path()))
     scheduler_task = asyncio.create_task(
-        scheduler_tick_loop(schedule_service, _task_runner, get_tasks_root)
+        scheduler_tick_loop(
+            schedule_service,
+            _task_runner,
+            get_tasks_root,
+            run_store=_task_runner._run_store,
+        )
     )
     prewarm_task = asyncio.create_task(_prewarm_session_history())
     yield
@@ -329,6 +336,7 @@ app.include_router(hooks.router, dependencies=_authenticated)
 app.include_router(instances.router, dependencies=_authenticated)
 app.include_router(logs.router, dependencies=_authenticated)
 app.include_router(mcp.router, dependencies=_authenticated)
+app.include_router(notifications.router, dependencies=_authenticated)
 app.include_router(plugins.router, dependencies=_authenticated)
 app.include_router(prompts.router, dependencies=_authenticated)
 app.include_router(pty.router, dependencies=_authenticated)
