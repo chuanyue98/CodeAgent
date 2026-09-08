@@ -344,3 +344,32 @@ def test_log_paths_lists_what_the_table_still_points_at(store):
     store.upsert(_record("two"))
 
     assert sorted(store.log_paths()) == ["/tmp/one.log", "/tmp/two.log"]
+
+
+def test_notifications_crud(store: RunStore) -> None:
+    nid = store.add_notification("s1", "t1", "hello", "claude", "completed", "test", "ok")
+    assert nid is not None
+    recs = store.list_notifications(limit=10, unread_only=False)
+    assert len(recs) == 1
+    assert recs[0]["task_name"] == "hello"
+    assert store.count_unread() == 1
+    store.mark_read(nid)
+    assert store.count_unread() == 0
+    store.add_notification("s2", "t2", "h2", "codex", "failed", "h2", "err")
+    store.mark_all_read()
+    assert store.count_unread() == 0
+
+
+def test_notifications_prune(store: RunStore) -> None:
+    import time
+    old = time.time() - 40 * 86400
+    store.add_notification("s1", "t1", "old", "claude", "completed", "old", "x")
+    with store._lock:
+        with store._conn:
+            store._conn.execute(
+                "UPDATE notifications SET created_at = ? WHERE task_name = ?",
+                (old, "old"),
+            )
+    store.prune_notifications(retention_days=30)
+    assert store.count_unread() == 0
+    assert len(store.list_notifications(limit=10)) == 0

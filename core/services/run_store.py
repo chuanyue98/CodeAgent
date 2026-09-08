@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,6 +46,23 @@ _COLUMNS = (
 )
 _COLUMN_LIST = ", ".join(_COLUMNS)
 _PLACEHOLDERS = ", ".join("?" for _ in _COLUMNS)
+
+_NOTIFICATION_COLUMNS = (
+    "id",
+    "created_at",
+    "schedule_id",
+    "task_id",
+    "task_name",
+    "engine",
+    "status",
+    "title",
+    "summary",
+    "read_at",
+)
+_NOTIFICATION_COLUMN_LIST = ", ".join(_NOTIFICATION_COLUMNS)
+_NOTIFICATION_INSERT_COLUMNS = _NOTIFICATION_COLUMNS[1:]
+_NOTIFICATION_INSERT_COLUMN_LIST = ", ".join(_NOTIFICATION_INSERT_COLUMNS)
+_NOTIFICATION_INSERT_PLACEHOLDERS = ", ".join("?" for _ in _NOTIFICATION_INSERT_COLUMNS)
 
 
 class RunStore:
@@ -107,6 +125,30 @@ class RunStore:
                 self._conn.execute(
                     "CREATE INDEX IF NOT EXISTS idx_runs_schedule_start "
                     "ON runs(schedule_id, start_time DESC)"
+                )
+                self._conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS notifications (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        created_at REAL,
+                        schedule_id TEXT,
+                        task_id TEXT,
+                        task_name TEXT,
+                        engine TEXT,
+                        status TEXT,
+                        title TEXT,
+                        summary TEXT,
+                        read_at REAL
+                    )
+                    """
+                )
+                self._conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_notifications_created "
+                    "ON notifications(created_at DESC)"
+                )
+                self._conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_notifications_read "
+                    "ON notifications(read_at)"
                 )
                 self._backfill_task_names()
 
@@ -276,6 +318,95 @@ class RunStore:
         with self._lock:
             with self._conn:
                 self._conn.execute("DELETE FROM runs")
+
+    def add_notification(
+        self,
+        schedule_id: str,
+        task_id: str,
+        task_name: str,
+        engine: str,
+        status: str,
+        title: str,
+        summary: str,
+    ) -> int:
+        with self._lock:
+            with self._conn:
+                cur = self._conn.execute(
+                    f"INSERT INTO notifications ({_NOTIFICATION_INSERT_COLUMN_LIST}) "
+                    f"VALUES ({_NOTIFICATION_INSERT_PLACEHOLDERS})",
+                    (
+                        time.time(),
+                        schedule_id,
+                        task_id,
+                        task_name,
+                        engine,
+                        status,
+                        title,
+                        summary,
+                        None,
+                    ),
+                )
+                return int(cur.lastrowid or 0)
+
+    def list_notifications(
+        self, *, limit: int = 50, unread_only: bool = False
+    ) -> list[dict[str, object]]:
+        with self._lock:
+            clauses = ["1=1"]
+            params: list[object] = []
+            if unread_only:
+                clauses.append("read_at IS NULL")
+            params.append(limit)
+            rows = self._conn.execute(
+                f"SELECT {_NOTIFICATION_COLUMN_LIST} FROM notifications "
+                f"WHERE {' AND '.join(clauses)} ORDER BY created_at DESC LIMIT ?",
+                params,
+            ).fetchall()
+        return [dict(zip(_NOTIFICATION_COLUMNS, r, strict=False)) for r in rows]
+
+    def count_unread(self) -> int:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COUNT(*) FROM notifications WHERE read_at IS NULL"
+            ).fetchone()
+        return int(row[0]) if row else 0
+
+    def mark_read(self, notification_id: int) -> None:
+        with self._lock:
+            with self._conn:
+                self._conn.execute(
+                    "UPDATE notifications SET read_at = ? WHERE id = ?",
+                    (time.time(), notification_id),
+                )
+
+    def mark_all_read(self) -> None:
+        with self._lock:
+            with self._conn:
+                self._conn.execute(
+                    "UPDATE notifications SET read_at = ? WHERE read_at IS NULL",
+                    (time.time(),),
+                )
+
+    def prune_notifications(self, retention_days: float, keep_latest: int = 0) -> None:
+        with self._lock:
+            with self._conn:
+                cutoff = time.time() - retention_days * 86400
+                if keep_latest > 0:
+                    rows = self._conn.execute(
+                        "SELECT id FROM notifications WHERE COALESCE(read_at, created_at) < ?"
+                        " AND id NOT IN (SELECT id FROM notifications ORDER BY created_at DESC LIMIT ?)",
+                        (cutoff, keep_latest),
+                    ).fetchall()
+                else:
+                    rows = self._conn.execute(
+                        "SELECT id FROM notifications WHERE COALESCE(read_at, created_at) < ?",
+                        (cutoff,),
+                    ).fetchall()
+                if rows:
+                    self._conn.executemany(
+                        "DELETE FROM notifications WHERE id = ?",
+                        [(r[0],) for r in rows],
+                    )
 
     def close(self) -> None:
         """Closes the persistent database connection and releases the lock.
