@@ -36,7 +36,7 @@ function runStartedAt(run: RunStatus): string {
 }
 
 /**
- * One task row. Memoized so the surrounding 5s list poll re-renders only the
+ * One task card. Memoized so the surrounding 5s list poll re-renders only the
  * cards whose task or running-state actually changed, not the whole grid.
  */
 const TaskCard = memo(function TaskCard({
@@ -52,37 +52,58 @@ const TaskCard = memo(function TaskCard({
 }) {
   const t = useT();
   const language = useLanguageCode();
+  const lastRunDuration = lastRun?.endTime
+    ? formatDuration((lastRun.endTime - lastRun.startTime) * 1000)
+    : null;
+
   return (
     <button
+      type="button"
       onClick={() => onSelect(task.name)}
-      className="glass-card glass-card-interactive p-5 text-left group flex items-start gap-4"
+      className="glass-card glass-card-interactive p-4 sm:p-5 text-left group flex flex-col justify-between h-full transition-all border border-slate-100 hover:border-primary/30 hover:shadow-md"
     >
-      <div className="p-2.5 bg-slate-100 rounded-xl group-hover:bg-primary/10 transition-colors flex-shrink-0 mt-0.5">
-        {task.hasStages
-          ? <Layers className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
-          : <FileText className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-3 min-w-0">
-            <h2 className="font-semibold text-slate-900 truncate">{task.title}</h2>
-            {activeRun && (
-              <span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider border border-emerald-100">
-                <StatusDot tone="running" pulse />
-                {t('tasks.runningOn', { engine: activeRun.engine })}</span>
-            )}
+      <div className="w-full">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            <div className="p-2.5 bg-slate-100 rounded-xl group-hover:bg-primary/10 transition-colors flex-shrink-0 mt-0.5">
+              {task.hasStages
+                ? <Layers className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
+                : <FileText className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="font-semibold text-slate-900 truncate">{task.title}</h2>
+                {task.hasStages && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-medium border border-slate-200/60">
+                    <Layers className="w-2.5 h-2.5 text-slate-400" />
+                    <span>{task.stages.length > 0 ? `${task.stages.length} ${t('taskDetail.stages')}` : t('taskDetail.stages')}</span>
+                  </span>
+                )}
+                {activeRun && (
+                  <span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider border border-emerald-100">
+                    <StatusDot tone="running" pulse />
+                    {t('tasks.runningOn', { engine: activeRun.engine })}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-primary flex-shrink-0 transition-colors" />
+          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-primary flex-shrink-0 transition-colors mt-1" />
         </div>
+
         {task.description && (
-          <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">{task.description}</p>
+          <p className="text-sm text-slate-500 mt-2.5 line-clamp-2 leading-relaxed">{task.description}</p>
         )}
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-slate-100/80 w-full">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
           {lastRun ? (
             <>
               <StatusDot tone={runTone(lastRun.status)} pulse={lastRun.status === 'running'} />
-              <span>{t('tasks.lastRun', { time: relativeTime(runStartedAt(lastRun), language) })}</span>
               <Badge variant="engine" size="sm" engine={lastRun.engine}>{lastRun.engine}</Badge>
+              {lastRunDuration && <span>· {lastRunDuration}</span>}
+              <span>{t('tasks.lastRun', { time: relativeTime(runStartedAt(lastRun), language) })}</span>
             </>
           ) : (
             <>
@@ -251,19 +272,21 @@ export default memo(function TaskList({
         )}
 
         {tasks.length > 0 && (
-          <div className="custom-scrollbar flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
+          <div className="custom-scrollbar flex-1 min-h-0 overflow-y-auto pr-1">
             {tasks.length > 5 && filteredTasks.length === 0 && (
               <EmptyState compact title={t('tasks.noSearchMatch')} />
             )}
-            {filteredTasks.map(task => (
-              <TaskCard
-                key={task.name}
-                task={task}
-                activeRun={activeRunByTask.get(task.name)}
-                lastRun={lastRunByTask.get(task.name)}
-                onSelect={onSelect}
-              />
-            ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3.5">
+              {filteredTasks.map(task => (
+                <TaskCard
+                  key={task.name}
+                  task={task}
+                  activeRun={activeRunByTask.get(task.name)}
+                  lastRun={lastRunByTask.get(task.name)}
+                  onSelect={onSelect}
+                />
+              ))}
+            </div>
           </div>
         )}
       </section>
