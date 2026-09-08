@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   ArrowLeft,
@@ -183,16 +183,23 @@ export default function TaskDetail({
     }
   };
 
-  const initiateDelete = async () => {
-    try {
-      const schedules = await fetchSchedules();
-      const linked = schedules.filter(s => s.taskName === task.name && s.enabled);
-      setLinkedScheduleCount(linked.length);
-    } catch {
+  useEffect(() => {
+    if (!confirmDelete) {
       setLinkedScheduleCount(0);
+      return;
     }
-    setConfirmDelete(true);
-  };
+    let active = true;
+    fetchSchedules()
+      .then(schedules => {
+        if (!active) return;
+        const linked = schedules.filter(s => s.taskName === task.name && s.enabled);
+        setLinkedScheduleCount(linked.length);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [confirmDelete, task.name]);
 
   return (
     <div className="p-6 lg:p-8 w-full space-y-6 pb-16">
@@ -295,7 +302,7 @@ export default function TaskDetail({
             </button>
 
             <button
-              onClick={() => void initiateDelete()}
+              onClick={() => setConfirmDelete(true)}
               disabled={!!activeRun}
               title={activeRun ? t('taskDetail.deleteBlocked') : undefined}
               className="flex items-center gap-1.5 px-3 py-2 border border-red-100 text-red-500 rounded-xl text-sm font-medium hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
