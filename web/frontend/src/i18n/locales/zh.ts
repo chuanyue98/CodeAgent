@@ -356,6 +356,7 @@ export const zh: Record<TranslationKey, string> = {
   'cron.save': '保存定时计划',
   'cron.create': '创建定时计划',
   'cron.cancelEditing': '取消编辑',
+  'cron.editing': '编辑中',
   'cron.listTitle': '定时计划',
   'cron.searchLabel': '搜索定时计划',
   'cron.searchPlaceholder': '搜索定时计划…',

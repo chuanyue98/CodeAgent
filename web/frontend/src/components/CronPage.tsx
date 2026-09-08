@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useIsMounted } from '../hooks/useAsyncGuards';
 import { Clock, Plus, Trash2, Play, PauseCircle, PlayCircle, Pencil, X, Sparkles, CheckCircle2 } from 'lucide-react';
 import cronstrue from 'cronstrue';
@@ -82,6 +82,7 @@ export default function CronPage() {
   const [nlRawOutput, setNlRawOutput] = useState<string | null>(null);
 
   const isMounted = useIsMounted();
+  const formRef = useRef<HTMLElement>(null);
 
   // Debounced live preview: translates the raw cron syntax into plain
   // English and the next few actual fire times, so the user isn't expected
@@ -305,6 +306,10 @@ export default function CronPage() {
   };
 
   const handleEdit = (schedule: Schedule) => {
+    if (editingScheduleId === schedule.id) {
+      setEditingScheduleId(null);
+      return;
+    }
     const availableWorkspaces = projects.filter(project => project.available !== false);
     const scheduleWorkspace = availableWorkspaces.some(
       project => project.path === schedule.workspace,
@@ -317,6 +322,7 @@ export default function CronPage() {
     setNotifyOn(schedule.notifyOn || 'always');
     setCreatedFromInput(schedule.createdFromInput || null);
     setError(null);
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   };
 
   const toggleEnabled = async (schedule: Schedule) => {
@@ -367,7 +373,12 @@ export default function CronPage() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 min-h-full lg:h-full">
-      <section className="w-full lg:w-80 shrink-0 glass-card p-5 space-y-4">
+      <section
+        ref={formRef}
+        className={`w-full lg:w-80 shrink-0 glass-card p-5 space-y-4 transition-all ${
+          editingScheduleId ? 'ring-2 ring-primary/40 border-primary/40' : ''
+        }`}
+      >
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
           <Clock className="w-4 h-4" /> {editingScheduleId ? t('cron.editTitle') : t('cron.newTitle')}
         </div>
@@ -580,57 +591,70 @@ export default function CronPage() {
           {schedules.length > 0 && filteredSchedules.length === 0 && (
             <EmptyState compact title={t('cron.noSearchMatch')} />
           )}
-          {filteredSchedules.map(schedule => (
-            <div
-              key={schedule.id}
-              className={`glass-card p-4 border-slate-100 flex flex-wrap items-center gap-3 ${
-                !schedule.enabled ? 'opacity-50' : ''
-              }`}
-            >
-              <button
-                onClick={() => void toggleEnabled(schedule)}
-                title={schedule.enabled ? t('cron.disable') : t('cron.enable')}
-                className="shrink-0 text-slate-400 hover:text-primary transition-colors"
+          {filteredSchedules.map(schedule => {
+            const isEditing = editingScheduleId === schedule.id;
+            return (
+              <div
+                key={schedule.id}
+                className={`glass-card p-4 transition-all flex flex-wrap items-center gap-3 ${
+                  isEditing
+                    ? 'border-primary ring-2 ring-primary/30 bg-primary/[0.02]'
+                    : 'border-slate-100'
+                } ${!schedule.enabled ? 'opacity-50' : ''}`}
               >
-                {schedule.enabled ? (
-                  <PlayCircle className="w-5 h-5" />
-                ) : (
-                  <PauseCircle className="w-5 h-5" />
-                )}
-              </button>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-sm text-slate-800 truncate">
-                    {schedule.taskName}
-                  </span>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-mono">
-                    {schedule.engine}
-                  </span>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-mono">
-                    {schedule.cronExpr}
-                  </span>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-primary/5 text-primary rounded truncate max-w-56">
-                    {schedule.workspace || t('cron.workspaceRequired')}
-                  </span>
-                </div>
-                <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-3">
-                  <span>{t('cron.next', { time: formatTimestamp(schedule.nextRunAt) })}</span>
-                  {schedule.lastRunStatus && (
-                    <span>
-                      {t('cron.last', { status: schedule.lastRunStatus, time: formatTimestamp(schedule.lastRunAt) })}
-                    </span>
+                <button
+                  onClick={() => void toggleEnabled(schedule)}
+                  title={schedule.enabled ? t('cron.disable') : t('cron.enable')}
+                  className="shrink-0 text-slate-400 hover:text-primary transition-colors"
+                >
+                  {schedule.enabled ? (
+                    <PlayCircle className="w-5 h-5" />
+                  ) : (
+                    <PauseCircle className="w-5 h-5" />
                   )}
-                </div>
-              </div>
+                </button>
 
-              <button
-                onClick={() => handleEdit(schedule)}
-                title={t('common.edit')}
-                className="shrink-0 p-1.5 text-slate-400 hover:text-primary transition-colors"
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-sm text-slate-800 truncate">
+                      {schedule.taskName}
+                    </span>
+                    {isEditing && (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-primary text-white rounded font-medium">
+                        {t('cron.editing')}
+                      </span>
+                    )}
+                    <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-mono">
+                      {schedule.engine}
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-mono">
+                      {schedule.cronExpr}
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 bg-primary/5 text-primary rounded truncate max-w-56">
+                      {schedule.workspace || t('cron.workspaceRequired')}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-3">
+                    <span>{t('cron.next', { time: formatTimestamp(schedule.nextRunAt) })}</span>
+                    {schedule.lastRunStatus && (
+                      <span>
+                        {t('cron.last', { status: schedule.lastRunStatus, time: formatTimestamp(schedule.lastRunAt) })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleEdit(schedule)}
+                  title={isEditing ? t('cron.cancelEditing') : t('common.edit')}
+                  className={`shrink-0 p-1.5 transition-colors rounded ${
+                    isEditing
+                      ? 'text-primary bg-primary/10'
+                      : 'text-slate-400 hover:text-primary'
+                  }`}
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
               <button
                 onClick={() => void handleRunNow(schedule.id)}
                 title={t('cron.runNow')}
@@ -646,7 +670,8 @@ export default function CronPage() {
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

@@ -364,6 +364,7 @@ export const en = {
   'cron.save': 'Save Schedule',
   'cron.create': 'Create Schedule',
   'cron.cancelEditing': 'Cancel Editing',
+  'cron.editing': 'Editing',
   'cron.listTitle': 'Schedules',
   'cron.searchLabel': 'Search schedules',
   'cron.searchPlaceholder': 'Search schedules...',
