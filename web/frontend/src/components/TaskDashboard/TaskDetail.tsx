@@ -1,12 +1,30 @@
 import { useState } from 'react';
-import { ArrowLeft, BookOpen, CheckCircle2, Circle, Clock, Code, GitBranch, History, Pencil, Play, StopCircle, Terminal, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import {
+  ArrowLeft,
+  BookOpen,
+  CheckCircle2,
+  Circle,
+  Clock,
+  Code,
+  GitBranch,
+  History,
+  Layers,
+  Pencil,
+  Play,
+  StopCircle,
+  Terminal,
+  Trash2,
+} from 'lucide-react';
 import LogViewer from '../LogViewer';
 import ConfirmDialog from '../shared/ConfirmDialog';
 import StatusDot from '../shared/StatusDot';
 import EditTaskModal from './EditTaskModal';
 import RunChanges from './RunChanges';
+import TaskBlueprintView from './TaskBlueprintView';
+import { formatWorkspaceLabel } from '../../utils/workspaceFormat';
 import { classifyStageStatus, type Engine, type RunStatus, type Task } from './types';
-import { useT } from '../../i18n/context';
+import { useLanguageCode, useT } from '../../i18n/context';
 import request from '../../utils/request';
 
 function stageIcon(status: string) {
@@ -55,6 +73,20 @@ function runBadgeClass(status: RunStatus['status']): string {
   }
 }
 
+function useSafeNavigate() {
+  try {
+    return useNavigate();
+  } catch {
+    return (path: string) => {
+      if (typeof window !== 'undefined') {
+        window.location.href = path;
+      }
+    };
+  }
+}
+
+type StudioTab = 'blueprint' | 'logs' | 'changes' | 'history';
+
 export default function TaskDetail({
   task,
   engines,
@@ -83,24 +115,36 @@ export default function TaskDetail({
   onWorkspaceChange: (workspace: string) => void;
 }) {
   const t = useT();
+  const lang = useLanguageCode();
+  const navigate = useSafeNavigate();
+
   const [selectedEngine, setSelectedEngine] = useState(engines[0]?.id || 'opencode');
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<StudioTab>(() => (activeRun ? 'logs' : 'blueprint'));
+
   // Which run's log to display in the LogViewer. Defaults to the active run;
   // clicking a history entry swaps it to inspect that run's log.
   const [viewedLogId, setViewedLogId] = useState<string | null>(null);
-  const [logTab, setLogTab] = useState<'logs' | 'changes'>('logs');
 
-  // Reset the viewed log whenever the selected task changes so a stale id
-  // from a previous task doesn't leak into the LogViewer. Adjusting state
-  // during render (rather than in an effect) avoids the cascading render the
-  // react-hooks/set-state-in-effect rule guards against.
+  // Automatically activate the logs tab when a new run begins
+  const [prevActiveRunId, setPrevActiveRunId] = useState<string | undefined>(activeRun?.taskId);
+  if (activeRun?.taskId !== prevActiveRunId) {
+    setPrevActiveRunId(activeRun?.taskId);
+    if (activeRun) {
+      setActiveTab('logs');
+    }
+  }
+
+  // Reset the viewed log and active tab whenever the selected task changes
   const [trackedName, setTrackedName] = useState(task.name);
   if (task.name !== trackedName) {
     setTrackedName(task.name);
     setViewedLogId(null);
-    setLogTab('logs');
+    setActiveTab(activeRun ? 'logs' : 'blueprint');
   }
 
   // While a run is active, always show its live log regardless of what the
@@ -111,7 +155,7 @@ export default function TaskDetail({
   const pct = task.stages.length > 0 ? Math.round((done / task.stages.length) * 100) : 0;
 
   // The most recent run (active first, otherwise the first history entry) is
-  // what the metadata row summarizes.
+  // what the metadata card summarizes.
   const metaRun = activeRun ?? runHistory[0];
   const hasPriorRuns = runHistory.length > 0;
   const runLabel = hasPriorRuns ? t('common.retry') : t('taskDetail.run');
@@ -130,35 +174,46 @@ export default function TaskDetail({
   };
 
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center justify-between">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm text-slate-500 hover:text-primary transition-colors">
-          <ArrowLeft className="w-4 h-4" />
-          {t('common.back')}
-        </button>
+    <div className="p-6 lg:p-8 w-full space-y-6 pb-16">
+      {/* Studio Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200/70 pb-6">
+        {/* Left: Breadcrumbs, Title, Active Badge, Description */}
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-1.5 text-slate-500 hover:text-primary transition-colors py-0.5 px-1.5 -ml-1.5 rounded-lg hover:bg-slate-100"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>{t('common.back')}</span>
+            </button>
+            <span className="text-slate-300">/</span>
+            <span className="font-mono text-slate-400 truncate">{task.name}</span>
+          </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setEditing(true)}
-            className="flex items-center gap-2 px-3 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors"
-          >
-            <Pencil className="w-4 h-4" />
-            {t('common.edit')}
-          </button>
-          <button
-            onClick={() => setConfirmDelete(true)}
-            disabled={!!activeRun}
-            title={activeRun ? t('taskDetail.deleteBlocked') : undefined}
-            className="flex items-center gap-2 px-3 py-2 border border-red-100 text-red-500 rounded-xl text-sm font-medium hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-            {t('common.delete')}
-          </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-900 flex items-center gap-3">
+              {task.title}
+            </h2>
+            {activeRun && (
+              <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-bold uppercase tracking-wider border border-emerald-100">
+                <StatusDot tone="running" pulse />
+                {t('taskDetail.running')}
+              </span>
+            )}
+          </div>
 
+          {task.description && (
+            <p className="text-sm text-slate-500 max-w-2xl">{task.description}</p>
+          )}
+        </div>
+
+        {/* Right: Controls & Secondary Action Toolbar */}
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           {activeRun ? (
             <button
               onClick={() => onStop(activeRun.taskId)}
-              className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-sm font-bold border border-red-100 hover:bg-red-100 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-sm font-bold border border-red-200 hover:bg-red-100 transition-colors"
             >
               <StopCircle className="w-4 h-4" />
               {t('taskDetail.stopExecution')}
@@ -168,23 +223,28 @@ export default function TaskDetail({
               <select
                 aria-label={t('filters.workspace')}
                 value={workspace}
+                title={workspace}
                 onChange={e => onWorkspaceChange(e.target.value)}
-                className="max-w-56 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="min-w-44 max-w-xs bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 truncate"
               >
                 <option value="" disabled>{t('taskDetail.selectWorkspace')}</option>
                 {projects.filter(project => project.available !== false).map(project => (
-                  <option key={project.path} value={project.path}>{project.path}</option>
+                  <option key={project.path} value={project.path}>
+                    {formatWorkspaceLabel(project.path, project.group)}
+                  </option>
                 ))}
               </select>
+
               <select
                 value={selectedEngine}
-                onChange={(e) => setSelectedEngine(e.target.value)}
+                onChange={e => setSelectedEngine(e.target.value)}
                 className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 {engines.map(e => (
                   <option key={e.id} value={e.id}>{e.name}</option>
                 ))}
               </select>
+
               <button
                 onClick={() => onRun(selectedEngine)}
                 className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
@@ -194,6 +254,35 @@ export default function TaskDetail({
               </button>
             </>
           )}
+
+          {/* Secondary Action Toolset */}
+          <div className="flex items-center border-l border-slate-200 pl-2.5 gap-2">
+            <button
+              onClick={() => setEditing(true)}
+              className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors"
+            >
+              <Pencil className="w-4 h-4" />
+              <span>{t('common.edit')}</span>
+            </button>
+
+            <button
+              onClick={() => navigate('/automations/schedules')}
+              className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors"
+            >
+              <Clock className="w-4 h-4" />
+              <span>{t('taskDetail.scheduleThisTask')}</span>
+            </button>
+
+            <button
+              onClick={() => setConfirmDelete(true)}
+              disabled={!!activeRun}
+              title={activeRun ? t('taskDetail.deleteBlocked') : undefined}
+              className="flex items-center gap-1.5 px-3 py-2 border border-red-100 text-red-500 rounded-xl text-sm font-medium hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>{t('common.delete')}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -203,133 +292,365 @@ export default function TaskDetail({
         </div>
       )}
 
-      <div className="flex justify-between items-start">
-        <div className="flex-1">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-900 flex items-center gap-3">
-            {task.title}
-            {activeRun && (
-              <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-bold uppercase tracking-wider border border-emerald-100">
-                <StatusDot tone="running" pulse />
-                {t('taskDetail.running')}
-              </span>
-            )}
-          </h2>
-          {task.description && <p className="text-sm text-slate-500 mt-1">{task.description}</p>}
-        </div>
-      </div>
+      {/* Main Studio 2-Column Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left: Primary Workspace (8 cols) */}
+        <div className="lg:col-span-8 space-y-4">
+          {/* Tab Navigation Bar */}
+          <div className="flex items-center gap-1 border-b border-slate-200 pb-px mb-6 overflow-x-auto">
+            <button
+              role="button"
+              aria-label={t('taskDetail.tabBlueprint')}
+              onClick={() => setActiveTab('blueprint')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+                activeTab === 'blueprint'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              <Layers className="w-4 h-4" />
+              <span>{t('taskDetail.tabBlueprint')}</span>
+            </button>
 
-      {/* Run metadata: summarizes the active or most-recent run. */}
-      {metaRun && (
-        <div className="glass-card p-4 border-slate-100 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-          <span className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('filters.engine')}</span>
-            <span className="font-medium text-slate-700">{metaRun.engine}</span>
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('taskDetail.duration')}</span>
-            <span className="font-medium text-slate-700">{formatDuration(runDuration(metaRun))}</span>
-          </span>
-          {metaRun.exitCode !== undefined && metaRun.exitCode !== null && (
-            <span className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('taskDetail.exitCode')}</span>
-              <span className="font-mono font-medium text-slate-700">{metaRun.exitCode}</span>
-            </span>
-          )}
-          <span className={`inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider border ${runBadgeClass(metaRun.status)}`}>
-            {metaRun.status === 'running' && <StatusDot tone="running" pulse />}
-            {metaRun.status}
-          </span>
-        </div>
-      )}
+            <button
+              role="button"
+              aria-label={t('taskDetail.tabLogs')}
+              onClick={() => setActiveTab('logs')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+                activeTab === 'logs'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              <Terminal className="w-4 h-4" />
+              <span>{t('taskDetail.tabLogs')}</span>
+              {activeRun && <StatusDot tone="running" pulse />}
+            </button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          {task.hasStages && (
-            <>
-              <section className="glass-card p-6 space-y-4 border-slate-100">
-                <div className="flex justify-between items-end">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('taskDetail.progress')}</span>
-                  <span className="text-3xl font-semibold text-primary tracking-tighter">{pct}%</span>
-                </div>
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
-                </div>
-                <p className="text-xs text-slate-400">{t('taskDetail.stagesDone', { done, total: task.stages.length })}</p>
-              </section>
+            <button
+              role="button"
+              aria-label={t('taskDetail.tabChanges')}
+              onClick={() => setActiveTab('changes')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+                activeTab === 'changes'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              <GitBranch className="w-4 h-4" />
+              <span>{t('taskDetail.tabChanges')}</span>
+            </button>
 
-              <section className="space-y-3">
-                <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">{t('taskDetail.stages')}</h2>
-                {task.stages.map((stage, i) => (
-                  <div
-                    key={i}
-                    className={`glass-card p-5 flex items-start gap-4 border transition-all ${
-                      classifyStageStatus(stage.status) === 'wip'
-                        ? 'border-amber-200/60 bg-amber-50/30'
-                        : 'border-slate-100'
-                    }`}
-                  >
-                    <div className="flex-shrink-0 mt-0.5">{stageIcon(stage.status)}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start gap-2">
-                        <h3 className="font-medium text-slate-900 text-sm">{stage.name}</h3>
-                        {stage.status && (
-                          <span className={`text-[10px] px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider border flex-shrink-0 ${stageBadge(stage.status)}`}>
-                            {stage.status}
-                          </span>
-                        )}
+            <button
+              role="button"
+              aria-label={t('taskDetail.tabHistory')}
+              onClick={() => setActiveTab('history')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+                activeTab === 'history'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              <History className="w-4 h-4" />
+              <span>{t('taskDetail.tabHistory')}</span>
+              {runHistory.length > 0 && (
+                <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded-full text-xs font-mono">
+                  {runHistory.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Tab 1: Blueprint View */}
+          {activeTab === 'blueprint' && (
+            <div className="space-y-6">
+              {task.hasStages && (
+                <>
+                  <section className="glass-card p-6 space-y-4 border-slate-100">
+                    <div className="flex justify-between items-end">
+                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('taskDetail.progress')}</span>
+                      <span className="text-3xl font-semibold text-primary tracking-tighter">{pct}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
+                    </div>
+                    <p className="text-xs text-slate-400">{t('taskDetail.stagesDone', { done, total: task.stages.length })}</p>
+                  </section>
+
+                  <section className="space-y-3">
+                    <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">{t('taskDetail.stages')}</h2>
+                    {task.stages.map((stage, i) => (
+                      <div
+                        key={i}
+                        className={`glass-card p-5 flex items-start gap-4 border transition-all ${
+                          classifyStageStatus(stage.status) === 'wip'
+                            ? 'border-amber-200/60 bg-amber-50/30'
+                            : 'border-slate-100'
+                        }`}
+                      >
+                        <div className="flex-shrink-0 mt-0.5">{stageIcon(stage.status)}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start gap-2">
+                            <h3 className="font-medium text-slate-900 text-sm">{stage.name}</h3>
+                            {stage.status && (
+                              <span className={`text-[10px] px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider border flex-shrink-0 ${stageBadge(stage.status)}`}>
+                                {stage.status}
+                              </span>
+                            )}
+                          </div>
+                          {stage.goal && <p className="text-xs text-slate-500 mt-1">{stage.goal}</p>}
+                        </div>
                       </div>
-                      {stage.goal && <p className="text-xs text-slate-500 mt-1">{stage.goal}</p>}
+                    ))}
+                  </section>
+                </>
+              )}
+
+              {/* Full blueprint markdown / structured view */}
+              <TaskBlueprintView content={task.content} title={task.title} />
+            </div>
+          )}
+
+          {/* Tab 2: Terminal Logs */}
+          {activeTab === 'logs' && (
+            <div>
+              {logTaskId ? (
+                <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
+                  <LogViewer taskId={logTaskId} />
+                </div>
+              ) : (
+                <div className="glass-card p-12 border-dashed border-slate-200 text-center space-y-3">
+                  <div className="p-3 bg-slate-100 text-slate-400 rounded-2xl w-fit mx-auto">
+                    <Terminal className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-slate-700">
+                    {lang === 'zh' ? '暂无执行日志' : 'No execution logs yet'}
+                  </h3>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    {lang === 'zh'
+                      ? '运行此任务或从历史记录中选择一次执行以查看终端日志。'
+                      : 'Run this task or select a past run from history to view terminal logs.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab 3: Code Changes */}
+          {activeTab === 'changes' && (
+            <div>
+              {logTaskId ? (
+                <RunChanges taskId={logTaskId} />
+              ) : (
+                <div className="glass-card p-12 border-dashed border-slate-200 text-center space-y-3">
+                  <div className="p-3 bg-slate-100 text-slate-400 rounded-2xl w-fit mx-auto">
+                    <GitBranch className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-slate-700">
+                    {lang === 'zh' ? '暂无变更记录' : 'No changes recorded'}
+                  </h3>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    {lang === 'zh'
+                      ? '执行任务后可在此检查文件修改与 Git diff。'
+                      : 'Run this task to inspect file modifications and git diffs.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab 4: Execution History */}
+          {activeTab === 'history' && (
+            <div className="space-y-4">
+              {runHistory.length > 0 ? (
+                <div className="space-y-3">
+                  {runHistory.map(run => {
+                    const isActive = activeRun?.taskId === run.taskId;
+                    const isViewed = viewedLogId === run.taskId;
+                    return (
+                      <div
+                        key={run.taskId}
+                        className={`glass-card p-4 border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                          isActive || isViewed ? 'border-primary/30 bg-primary/[0.02]' : 'border-slate-100 hover:bg-slate-50/50'
+                        }`}
+                      >
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-slate-900">{run.engine}</span>
+                            <span className={`inline-flex items-center gap-1.5 text-[10px] px-2.5 py-0.5 rounded-lg font-bold uppercase tracking-wider border ${runBadgeClass(run.status)}`}>
+                              {run.status === 'running' && <StatusDot tone="running" pulse />}
+                              {run.status}
+                            </span>
+                            {run.exitCode !== undefined && run.exitCode !== null && (
+                              <span className="text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                {t('taskDetail.exitCode')}: {run.exitCode}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400">
+                            {new Date(run.startTime * 1000).toLocaleString()} · {t('taskDetail.duration')}: {formatDuration(runDuration(run))}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setViewedLogId(run.taskId);
+                              setActiveTab('logs');
+                            }}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                              isViewed && activeTab === 'logs'
+                                ? 'bg-primary/10 text-primary border-primary/20'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            <Terminal className="w-3.5 h-3.5" />
+                            <span>{t('taskDetail.tabLogs')}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setViewedLogId(run.taskId);
+                              setActiveTab('changes');
+                            }}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                              isViewed && activeTab === 'changes'
+                                ? 'bg-primary/10 text-primary border-primary/20'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            <GitBranch className="w-3.5 h-3.5" />
+                            <span>{t('taskDetail.tabChanges')}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400 italic p-12 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-center">
+                  {t('taskDetail.noRuns')}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Right: Inspector Panel (4 cols) */}
+        <div className="lg:col-span-4 space-y-6">
+          {/* 1. Recent Run Overview Card */}
+          <section className="space-y-3">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <History className="w-3.5 h-3.5" />
+              {t('taskDetail.runHistory')}
+            </h2>
+
+            {metaRun ? (
+              <div className="glass-card p-4 border-slate-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700 truncate">
+                    {lang === 'zh' ? '最新执行概览' : 'Latest Run Overview'}
+                  </span>
+                  <span className={`inline-flex items-center gap-1.5 text-[10px] px-2.5 py-0.5 rounded-lg font-bold uppercase tracking-wider border ${runBadgeClass(metaRun.status)}`}>
+                    {metaRun.status === 'running' && <StatusDot tone="running" pulse />}
+                    {metaRun.status}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">{t('filters.engine')}</span>
+                    <span className="font-semibold text-slate-800 truncate block">{metaRun.engine}</span>
+                  </div>
+                  <div className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">{t('taskDetail.duration')}</span>
+                    <span className="font-semibold text-slate-800 block">{formatDuration(runDuration(metaRun))}</span>
+                  </div>
+                  {metaRun.exitCode !== undefined && metaRun.exitCode !== null && (
+                    <div className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-100 col-span-2">
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">{t('taskDetail.exitCode')}</span>
+                      <span className="font-mono font-semibold text-slate-800">{metaRun.exitCode}</span>
+                    </div>
+                  )}
+                </div>
+
+                {runHistory.length > 0 && (
+                  <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400">
+                      <span>{t('taskDetail.runsCount', { count: runHistory.length })}</span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('history')}
+                        className="text-primary font-semibold hover:underline"
+                      >
+                        {t('taskDetail.tabHistory')} &rarr;
+                      </button>
+                    </div>
+                    <div className="space-y-1 max-h-44 overflow-y-auto">
+                      {runHistory.map(run => {
+                        const isViewed = (logTaskId ?? metaRun?.taskId) === run.taskId;
+                        return (
+                          <button
+                            key={run.taskId}
+                            type="button"
+                            onClick={() => {
+                              setViewedLogId(run.taskId);
+                              setActiveTab('logs');
+                            }}
+                            className={`w-full text-left p-2 rounded-lg border transition-all flex items-center justify-between gap-2 ${
+                              isViewed ? 'border-primary/30 bg-primary/5' : 'border-slate-100 bg-slate-50/50 hover:bg-slate-100/60'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-medium text-slate-800 truncate">{run.engine}</span>
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border ${runBadgeClass(run.status)}`}>
+                                  {run.status}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                {formatDuration(runDuration(run))}
+                                {run.exitCode !== undefined && run.exitCode !== null && ` · ${t('taskDetail.exitCode')} ${run.exitCode}`}
+                              </p>
+                            </div>
+                            {isViewed && <Terminal className="w-3 h-3 text-primary shrink-0" />}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
-                ))}
-              </section>
-            </>
-          )}
-
-          {logTaskId && (
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                  {logTab === 'logs' ? <Terminal className="w-4 h-4" /> : <GitBranch className="w-4 h-4" />}
-                  {logTab === 'logs' ? t('taskDetail.logs') : t('taskDetail.changes')}
-                </h2>
-                <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
-                  <button
-                    onClick={() => setLogTab('logs')}
-                    className={`px-3 py-1.5 transition-colors ${
-                      logTab === 'logs' ? 'bg-primary/10 text-primary' : 'bg-white text-slate-500 hover:bg-slate-50'
-                    }`}
-                  >
-                    {t('taskDetail.tabLogs')}
-                  </button>
-                  <button
-                    onClick={() => setLogTab('changes')}
-                    className={`px-3 py-1.5 transition-colors ${
-                      logTab === 'changes' ? 'bg-primary/10 text-primary' : 'bg-white text-slate-500 hover:bg-slate-50'
-                    }`}
-                  >
-                    {t('taskDetail.tabChanges')}
-                  </button>
-                </div>
-              </div>
-              <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 400 }}>
-                {logTab === 'logs' ? (
-                  <LogViewer taskId={logTaskId} />
-                ) : (
-                  <RunChanges taskId={logTaskId} />
                 )}
               </div>
-            </section>
-          )}
+            ) : (
+              <div className="text-xs text-slate-400 italic p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                {t('taskDetail.noRuns')}
+              </div>
+            )}
+          </section>
 
-          {!task.hasStages && task.content && !logTaskId && (
-            <section className="glass-card p-6 border-slate-100">
-              <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{task.content}</pre>
-            </section>
-          )}
-        </div>
+          {/* 2. Quick Schedule Automation Card */}
+          <section className="glass-card p-5 border-slate-100 space-y-3 bg-gradient-to-br from-primary/[0.03] to-transparent">
+            <div className="flex items-center gap-2 text-slate-800 font-semibold text-sm">
+              <Clock className="w-4 h-4 text-primary" />
+              <span>{t('taskDetail.scheduleThisTask')}</span>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              {lang === 'zh'
+                ? '将此任务配置为定时自动化计划，按周期自动触发执行。'
+                : 'Configure this task to run automatically on a recurring schedule.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/automations/schedules')}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors shadow-sm"
+            >
+              <Clock className="w-3.5 h-3.5 text-primary" />
+              <span>{lang === 'zh' ? '前往定时计划' : 'Go to Schedules'}</span>
+            </button>
+          </section>
 
-        <div className="space-y-6">
+          {/* 3. Mounted Skills */}
           <section className="space-y-3">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
               <Terminal className="w-3.5 h-3.5" />
@@ -338,16 +659,18 @@ export default function TaskDetail({
             <div className="space-y-2">
               {task.resolvedSkills && task.resolvedSkills.length > 0 ? (
                 task.resolvedSkills.map(skill => (
-                  <div key={skill.id} className="glass-card p-4 border-slate-100 space-y-2">
+                  <div key={skill.id} className="glass-card p-3.5 border-slate-100 space-y-1.5">
                     <div className="flex items-center gap-2">
-                      <Code className="w-4 h-4 text-primary" />
-                      <span className="text-sm font-semibold text-slate-900">{skill.name}</span>
+                      <Code className="w-4 h-4 text-primary shrink-0" />
+                      <span className="text-sm font-semibold text-slate-900 truncate">{skill.name}</span>
                     </div>
-                    {skill.description && <p className="text-xs text-slate-500 line-clamp-2">{skill.description}</p>}
+                    {skill.description && (
+                      <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{skill.description}</p>
+                    )}
                     {skill.scripts && skill.scripts.length > 0 && (
-                      <div className="pt-2 flex flex-wrap gap-1.5">
+                      <div className="pt-1 flex flex-wrap gap-1">
                         {skill.scripts.map(s => (
-                          <span key={s} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-mono">
+                          <span key={s} className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-mono">
                             {s}
                           </span>
                         ))}
@@ -363,12 +686,13 @@ export default function TaskDetail({
             </div>
           </section>
 
+          {/* 4. Injected Prompts */}
           <section className="space-y-3">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
               <BookOpen className="w-3.5 h-3.5" />
               {t('taskDetail.injectedPrompts')}
             </h2>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {task.resolvedPrompts && task.resolvedPrompts.length > 0 ? (
                 task.resolvedPrompts.map(prompt => (
                   <span key={prompt} className="px-2 py-1 bg-primary/5 text-primary border border-primary/10 rounded-lg text-xs font-medium">
@@ -381,50 +705,6 @@ export default function TaskDetail({
                 </div>
               )}
             </div>
-          </section>
-
-          {/* Run history: every run for this task in the current server session. */}
-          <section className="space-y-3">
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-              <History className="w-3.5 h-3.5" />
-              {t('taskDetail.runHistory')}
-            </h2>
-            {runHistory.length > 0 ? (
-              <div className="space-y-2">
-                {runHistory.map(run => {
-                  const isActive = activeRun?.taskId === run.taskId;
-                  const isViewed = viewedLogId === run.taskId;
-                  return (
-                    <button
-                      key={run.taskId}
-                      onClick={() => setViewedLogId(run.taskId)}
-                      className={`w-full text-left glass-card p-3 border transition-all flex items-center justify-between gap-3 ${
-                        isActive || isViewed ? 'border-primary/30 bg-primary/5' : 'border-slate-100 hover:bg-slate-50/50'
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-slate-800 truncate">{run.engine}</span>
-                          <span className={`inline-flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-lg font-bold uppercase tracking-wider border ${runBadgeClass(run.status)}`}>
-                            {run.status === 'running' && <StatusDot tone="running" pulse />}
-                            {run.status}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          {new Date(run.startTime * 1000).toLocaleString()} · {formatDuration(runDuration(run))}
-                          {run.exitCode !== undefined && run.exitCode !== null && ` · ${t('taskDetail.exitCode')} ${run.exitCode}`}
-                        </p>
-                      </div>
-                      {(isActive || isViewed) && <Terminal className="w-3.5 h-3.5 text-primary shrink-0" />}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-xs text-slate-400 italic p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                {t('taskDetail.noRuns')}
-              </div>
-            )}
           </section>
         </div>
       </div>
