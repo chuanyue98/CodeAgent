@@ -42,6 +42,8 @@ class CreateScheduleRequest(ProtocolModel):
     workspace: str
     cron_expr: str
     enabled: bool = True
+    notify_on: str = "always"
+    created_from_input: str | None = None
 
 
 class UpdateScheduleRequest(ProtocolModel):
@@ -53,6 +55,8 @@ class UpdateScheduleRequest(ProtocolModel):
     workspace: str | None = None
     cron_expr: str | None = None
     enabled: bool | None = None
+    notify_on: str | None = None
+    created_from_input: str | None = None
 
 
 class TaskRunStatusResponse(ProtocolModel):
@@ -82,6 +86,8 @@ class ScheduleRecord(ProtocolModel):
     last_run_at: float | None = None
     last_run_status: str | None = None
     next_run_at: float | None = None
+    notify_on: str = "always"
+    created_from_input: str | None = None
 
 
 @router.get("/schedules")
@@ -118,6 +124,8 @@ def create_schedule(req: CreateScheduleRequest) -> dict:
             req.cron_expr,
             req.enabled,
             workspace.path,
+            notify_on=req.notify_on,
+            created_from_input=req.created_from_input,
         )
         return wire(ScheduleRecord(**record))
     except ValueError as exc:

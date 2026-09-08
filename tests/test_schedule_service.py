@@ -122,3 +122,20 @@ def test_preview_next_runs_returns_requested_count(service):
 def test_preview_next_runs_rejects_invalid_cron_expr(service):
     with pytest.raises(ValueError, match="Invalid cron expression"):
         service.preview_next_runs("not a cron")
+
+
+def test_create_schedule_notify_on_default(service):
+    rec = service.create_schedule("t", "claude", "common", "0 9 * * *")
+    assert rec["notify_on"] == "always"
+    assert rec["created_from_input"] is None
+
+
+def test_create_schedule_notify_on_invalid(service):
+    with pytest.raises(ValueError, match="Invalid notify_on"):
+        service.create_schedule("t", "claude", "common", "0 9 * * *", notify_on="bogus")
+
+
+def test_update_schedule_notify_on(service):
+    rec = service.create_schedule("t", "claude", "common", "0 9 * * *")
+    updated = service.update_schedule(rec["id"], notify_on="failure")
+    assert updated["notify_on"] == "failure"

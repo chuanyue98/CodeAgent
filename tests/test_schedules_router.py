@@ -313,3 +313,44 @@ async def test_run_now_returns_conflict_for_atomic_overlap(fake_runner):
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Task is already running"
+
+
+@pytest.mark.asyncio
+async def test_create_and_update_schedule_notify_on():
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        create = await ac.post(
+            "/api/schedules",
+            json={
+                "task_name": "notify-task",
+                "engine": "claude",
+                "workspace": os.environ["CA_TEST_WORKSPACE"],
+                "cron_expr": "0 9 * * *",
+                "notify_on": "failure",
+                "created_from_input": "每天 9 点巡检",
+            },
+        )
+        assert create.status_code == 200
+        data = create.json()
+        assert data["notifyOn"] == "failure"
+        assert data["createdFromInput"] == "每天 9 点巡检"
+
+        bad = await ac.post(
+            "/api/schedules",
+            json={
+                "task_name": "bad-notify",
+                "engine": "claude",
+                "workspace": os.environ["CA_TEST_WORKSPACE"],
+                "cron_expr": "0 9 * * *",
+                "notify_on": "invalid_mode",
+            },
+        )
+        assert bad.status_code == 400
+
+        updated = await ac.patch(
+            f"/api/schedules/{data['id']}",
+            json={"notify_on": "always"},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["notifyOn"] == "always"

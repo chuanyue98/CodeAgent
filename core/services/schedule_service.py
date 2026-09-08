@@ -18,6 +18,9 @@ def _compute_next_run(cron_expr: str, base_time: float | None = None) -> float:
     ).get_next(float)
 
 
+_VALID_NOTIFY_ON = {"always", "success", "failure", "never"}
+
+
 class ScheduleService:
     """CRUD for cron-triggered task schedules, persisted in config.json.
 
@@ -61,11 +64,15 @@ class ScheduleService:
         cron_expr: str,
         enabled: bool = True,
         workspace: str | None = None,
+        notify_on: str = "always",
+        created_from_input: str | None = None,
     ) -> dict:
         if engine not in ENGINES:
             raise ValueError(f"Invalid engine: {engine!r}")
         if not croniter.is_valid(cron_expr):
             raise ValueError(f"Invalid cron expression: {cron_expr!r}")
+        if notify_on not in _VALID_NOTIFY_ON:
+            raise ValueError(f"Invalid notify_on: {notify_on!r}")
 
         record = {
             "id": uuid.uuid4().hex,
@@ -75,6 +82,8 @@ class ScheduleService:
             "workspace": workspace,
             "cron_expr": cron_expr,
             "enabled": enabled,
+            "notify_on": notify_on,
+            "created_from_input": created_from_input,
             "created_at": time.time(),
             "last_run_at": None,
             "last_run_status": None,
@@ -95,6 +104,11 @@ class ScheduleService:
         new_cron_expr = fields.get("cron_expr")
         if new_cron_expr is not None and not croniter.is_valid(new_cron_expr):
             raise ValueError(f"Invalid cron expression: {new_cron_expr!r}")
+        if (
+            fields.get("notify_on") is not None
+            and fields["notify_on"] not in _VALID_NOTIFY_ON
+        ):
+            raise ValueError(f"Invalid notify_on: {fields['notify_on']!r}")
 
         found: dict | None = None
 
@@ -114,6 +128,8 @@ class ScheduleService:
                     "engine",
                     "group",
                     "workspace",
+                    "notify_on",
+                    "created_from_input",
                 ):
                     if fields.get(key) is not None:
                         record[key] = fields[key]
