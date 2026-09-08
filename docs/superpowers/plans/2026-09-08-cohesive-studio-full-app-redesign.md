@@ -37,12 +37,12 @@
   ```
 - Consumes: 新增 i18n 键（会话消息过滤、首页自动化微件、设置分组直达）。
 
-- [ ] **Step 1: 在 `workspaceFormat.test.ts` 中添加 `formatRelativeCountdown` 单元测试**
-- [ ] **Step 2: 运行测试并验证失败**
-- [ ] **Step 3: 实现 `formatRelativeCountdown` 函数**
-- [ ] **Step 4: 扩充 `en.ts` 与 `zh.ts` 对应双语词条**
-- [ ] **Step 5: 验证测试通过**
-- [ ] **Step 6: Commit**
+- [x] **Step 1: 在 `workspaceFormat.test.ts` 中添加 `formatRelativeCountdown` 单元测试**
+- [x] **Step 2: 运行测试并验证失败**
+- [x] **Step 3: 实现 `formatRelativeCountdown` 函数**
+- [x] **Step 4: 扩充 `en.ts` 与 `zh.ts` 对应双语词条**
+- [x] **Step 5: 验证测试通过**
+- [x] **Step 6: Commit**
 
 ```bash
 git add web/frontend/src/utils/workspaceFormat.ts web/frontend/src/__tests__/workspaceFormat.test.ts web/frontend/src/i18n/locales/en.ts web/frontend/src/i18n/locales/zh.ts
@@ -61,11 +61,11 @@ git commit -m "feat(i18n): add cohesive studio full app translation keys and cou
 - Filter types: `'all' | 'user' | 'assistant' | 'tool' | 'thinking'`
 - Filters messages rendered in the panel list without altering original session events.
 
-- [ ] **Step 1: 编写/扩充 `SessionDetailPanel.test.tsx` 测试消息类型过滤**
-- [ ] **Step 2: 运行测试验证失败**
-- [ ] **Step 3: 在 `SessionDetailPanel.tsx` 中实现过滤器状态与过滤逻辑**
-- [ ] **Step 4: 运行测试验证通过**
-- [ ] **Step 5: Commit**
+- [x] **Step 1: 编写/扩充 `SessionDetailPanel.test.tsx` 测试消息类型过滤**
+- [x] **Step 2: 运行测试验证失败**
+- [x] **Step 3: 在 `SessionDetailPanel.tsx` 中实现过滤器状态与过滤逻辑**
+- [x] **Step 4: 运行测试验证通过**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/frontend/src/components/SessionDetailPanel.tsx web/frontend/src/__tests__/SessionDetailPanel.test.tsx
@@ -87,11 +87,11 @@ git commit -m "feat(activity): add message type filter bar to SessionDetailPanel
   - Quick action workflow buttons (Agent Terminal, New Task, New Schedule).
   - Refined system metrics tone.
 
-- [ ] **Step 1: 编写 `HomePage.test.tsx` 针对自动化微件与快捷入口的测试**
-- [ ] **Step 2: 运行测试验证失败**
-- [ ] **Step 3: 在 `HomePage.tsx` 中集成自动化微件与操作条**
-- [ ] **Step 4: 运行测试验证通过**
-- [ ] **Step 5: Commit**
+- [x] **Step 1: 编写 `HomePage.test.tsx` 针对自动化微件与快捷入口的测试**
+- [x] **Step 2: 运行测试验证失败**
+- [x] **Step 3: 在 `HomePage.tsx` 中集成自动化微件与操作条**
+- [x] **Step 4: 运行测试验证通过**
+- [x] **Step 5: Commit**
 
 ```bash
 git add web/frontend/src/pages/HomePage.tsx web/frontend/src/__tests__/HomePage.test.tsx
@@ -110,10 +110,10 @@ git commit -m "feat(home): add automation monitor widget and quick actions to Ho
 - Layout upgrade: `grid grid-cols-1 xl:grid-cols-12 gap-6` (Form 5 cols, Schedules 7 cols).
 - Schedule card displays `notify_on` badge and relative countdown for next run.
 
-- [ ] **Step 1: 检查现有 `CronPage.test.tsx`**
-- [ ] **Step 2: 修改 `CronPage.tsx` 布局与卡片元信息**
-- [ ] **Step 3: 运行测试验证通过**
-- [ ] **Step 4: Commit**
+- [x] **Step 1: 检查现有 `CronPage.test.tsx`**
+- [x] **Step 2: 修改 `CronPage.tsx` 布局与卡片元信息**
+- [x] **Step 3: 运行测试验证通过**
+- [x] **Step 4: Commit**
 
 ```bash
 git add web/frontend/src/components/CronPage.tsx web/frontend/src/__tests__/CronPage.test.tsx
@@ -132,10 +132,10 @@ git commit -m "feat(schedules): improve CronPage desktop grid and add notificati
 - Workspace input: modern bordered card with folder icon and check/warning indicator.
 - Group definition cards: "View Resources" button linking to `/settings/resources?group=${name}`.
 
-- [ ] **Step 1: 编写/更新 `ConfigHub.test.tsx` 验证资源跳转与工作区输入**
-- [ ] **Step 2: 修改 `ConfigHub.tsx`**
-- [ ] **Step 3: 运行测试验证通过**
-- [ ] **Step 4: Commit**
+- [x] **Step 1: 编写/更新 `ConfigHub.test.tsx` 验证资源跳转与工作区输入**
+- [x] **Step 2: 修改 `ConfigHub.tsx`**
+- [x] **Step 3: 运行测试验证通过**
+- [x] **Step 4: Commit**
 
 ```bash
 git add web/frontend/src/components/ConfigHub.tsx web/frontend/src/__tests__/ConfigHub.test.tsx
@@ -146,9 +146,9 @@ git commit -m "feat(config): modernize workspace input and add direct resource n
 
 ### Task 6: 全量质量回归与生产构建
 
-- [ ] **Step 1: 前端 Lint 检查** (`bun run --cwd web/frontend lint`)
-- [ ] **Step 2: 前端全量单测** (`bun run --cwd web/frontend test`)
-- [ ] **Step 3: 前端生产构建** (`bun run --cwd web/frontend build`)
-- [ ] **Step 4: Python 后端 Lint 与类型检查** (`uv run ruff check .` && `uv run mypy core`)
-- [ ] **Step 5: Python 后端全量测试** (`uv run pytest`)
-- [ ] **Step 6: 重启后台 UI 服务并验证实机效果**
+- [x] **Step 1: 前端 Lint 检查** (`bun run --cwd web/frontend lint`)
+- [x] **Step 2: 前端全量单测** (`bun run --cwd web/frontend test`)
+- [x] **Step 3: 前端生产构建** (`bun run --cwd web/frontend build`)
+- [x] **Step 4: Python 后端 Lint 与类型检查** (`uv run ruff check .` && `uv run mypy core`)
+- [x] **Step 5: Python 后端全量测试** (`uv run pytest`)
+- [x] **Step 6: 重启后台 UI 服务并验证实机效果**
