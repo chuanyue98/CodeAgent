@@ -26,7 +26,50 @@ interface TerminalTab {
   attachId?: string;
 }
 
+const TABS_STORAGE_KEY = 'codeagent.terminalTabs';
+const ACTIVE_TAB_STORAGE_KEY = 'codeagent.activeTabId';
+
 let nextTabId = 0;
+
+function loadPersistedTabs(): { tabs: TerminalTab[]; activeTabId: string | null } {
+  if (typeof window === 'undefined') {
+    return { tabs: [], activeTabId: null };
+  }
+  const search = window.location.search;
+  if (search.includes('engine=') && search.includes('cwd=')) {
+    return { tabs: [], activeTabId: null };
+  }
+  try {
+    const raw = localStorage.getItem(TABS_STORAGE_KEY);
+    if (!raw) return { tabs: [], activeTabId: null };
+    const saved: TerminalTab[] = JSON.parse(raw);
+    if (!Array.isArray(saved) || saved.length === 0) {
+      return { tabs: [], activeTabId: null };
+    }
+
+    let maxId = 0;
+    const restoredTabs: TerminalTab[] = saved.map(tab => {
+      const match = tab.id.match(/^tab-(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num >= maxId) maxId = num + 1;
+      }
+      return { ...tab };
+    });
+    nextTabId = Math.max(nextTabId, maxId);
+
+    const savedActive = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
+    const active = savedActive && restoredTabs.some(t => t.id === savedActive)
+      ? savedActive
+      : (restoredTabs[0]?.id ?? null);
+
+    return { tabs: restoredTabs, activeTabId: active };
+  } catch {
+    localStorage.removeItem(TABS_STORAGE_KEY);
+    localStorage.removeItem(ACTIVE_TAB_STORAGE_KEY);
+    return { tabs: [], activeTabId: null };
+  }
+}
 
 export default function LaunchPad() {
   const t = useT();
@@ -38,15 +81,46 @@ export default function LaunchPad() {
   // Unmounting a tab to switch away would close its socket, and the PTY
   // endpoint spawns a process per connection -- the session would be gone,
   // not backgrounded.
-  const [tabs, setTabs] = useState<TerminalTab[]>([]);
+  const [initialTabs] = useState(() => loadPersistedTabs());
+  const [tabs, setTabs] = useState<TerminalTab[]>(initialTabs.tabs);
   // null means the launcher is showing while the open terminals sit hidden.
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [activeTabId, setActiveTabId] = useState<string | null>(initialTabs.activeTabId);
   const [searchParams] = useSearchParams();
 
   const tabsRef = useRef<TerminalTab[]>([]);
   useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
+
+  // Persist open tabs to localStorage so page refresh doesn't lose active terminals
+  useEffect(() => {
+    try {
+      if (tabs.length > 0) {
+        localStorage.setItem(
+          TABS_STORAGE_KEY,
+          JSON.stringify(
+            tabs.map(({ id, engine, cwd, sessionId, attachId }) => ({
+              id,
+              engine,
+              cwd,
+              sessionId,
+              attachId,
+            })),
+          ),
+        );
+        if (activeTabId) {
+          localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTabId);
+        } else {
+          localStorage.removeItem(ACTIVE_TAB_STORAGE_KEY);
+        }
+      } else {
+        localStorage.removeItem(TABS_STORAGE_KEY);
+        localStorage.removeItem(ACTIVE_TAB_STORAGE_KEY);
+      }
+    } catch {
+      // Ignore storage quota or disabled errors
+    }
+  }, [tabs, activeTabId]);
 
   const openTab = useCallback(
     (engine: string, cwd: string, sessionId?: string, attachId?: string) => {

@@ -274,4 +274,20 @@ describe('LaunchPad terminal tabs', () => {
     await waitFor(() => expect(screen.getAllByRole('tab')).toHaveLength(1));
     expect(screen.getAllByTestId('term-opencode:ses_abc')).toHaveLength(1);
   });
+
+  test('restores persisted tabs from localStorage on mount', async () => {
+    localStorage.setItem(
+      'codeagent.terminalTabs',
+      JSON.stringify([
+        { id: 'tab-0', engine: 'claude', cwd: '/workspace/proj' },
+        { id: 'tab-1', engine: 'opencode', cwd: '/workspace/proj', sessionId: 'ses_abc' },
+      ]),
+    );
+    localStorage.setItem('codeagent.activeTabId', 'tab-1');
+
+    renderLaunchPad();
+
+    await waitFor(() => expect(screen.getAllByRole('tab')).toHaveLength(2));
+    expect(await screen.findByTestId('term-opencode:ses_abc')).toBeVisible();
+  });
 });
