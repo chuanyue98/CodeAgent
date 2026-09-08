@@ -29,3 +29,17 @@ export function formatWorkspaceLabel(path: string, group?: string): string {
   return basename;
 }
 
+export function formatRelativeCountdown(targetTimestampSec: number, language: string = 'en'): string {
+  if (!targetTimestampSec || targetTimestampSec <= 0) return '';
+  const diffSec = Math.floor(targetTimestampSec - Date.now() / 1000);
+  if (diffSec <= 0) return '';
+  const isZh = language.toLowerCase().startsWith('zh');
+  if (diffSec < 60) return isZh ? '即将执行' : '< 1m';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return isZh ? `${diffMin}分钟后` : `in ${diffMin}m`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return isZh ? `${diffHr}小时后` : `in ${diffHr}h`;
+  const diffDay = Math.floor(diffHr / 24);
+  return isZh ? `${diffDay}天后` : `in ${diffDay}d`;
+}
+

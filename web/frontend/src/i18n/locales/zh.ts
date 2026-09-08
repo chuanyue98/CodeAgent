@@ -186,6 +186,12 @@ export const zh: Record<TranslationKey, string> = {
   'sessions.deleting': '删除中…',
   'sessions.deleteFailedOne': '{total} 个会话中有 {failed} 个删除失败。',
   'sessions.deleteFailed': '{total} 个会话中有 {failed} 个删除失败。',
+  'sessions.filterAll': '全部',
+  'sessions.filterUser': '用户指令',
+  'sessions.filterAssistant': '模型回复',
+  'sessions.filterTools': '工具调用',
+  'sessions.filterThinking': '思考过程',
+  'sessions.noMatchingMessages': '没有符合该筛选条件的消息。',
 
 
   // ── Usage / analytics ─────────────────────────────────────────────────────
@@ -288,6 +294,7 @@ export const zh: Record<TranslationKey, string> = {
   'config.newGroup': '新建资源组',
   'config.groupCounts': '{skills} 技能 · {prompts} 提示词 · {hooks} 钩子 · {plugins} 插件',
   'config.manageMembers': '管理成员',
+  'config.viewResources': '查看挂载资源',
   'config.removeGroup': '移除资源组 {name}',
   'config.proxyTitle': '代理网关',
   'config.proxySubtitle': '网络设置',
@@ -526,6 +533,16 @@ export const zh: Record<TranslationKey, string> = {
   'home.checkingRuns': '检查运行状态中…',
   'home.nothingRunning': '当前没有运行中的任务。',
   'home.runTask': '运行任务',
+  'home.automationWidget': '自动化调度',
+  'home.activeTasks': '活跃运行',
+  'home.nextScheduled': '下次调度',
+  'home.noActiveTasks': '无活跃任务',
+  'home.noUpcomingSchedule': '暂无待触发计划',
+  'home.quickActions': '快捷操作',
+  'home.actionAgent': '启动 Agent 终端',
+  'home.actionTask': '新建自动化任务',
+  'home.actionSchedule': '新建定时计划',
+  'home.allAutomations': '查看所有任务与计划',
 
   // ── Session detail ────────────────────────────────────────────────────────
   'sessionDetail.loadFailed': '无法加载此对话记录。',

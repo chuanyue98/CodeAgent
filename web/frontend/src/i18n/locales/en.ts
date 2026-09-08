@@ -191,6 +191,12 @@ export const en = {
   'sessions.deleting': 'Deleting…',
   'sessions.deleteFailedOne': '{failed} of {total} session could not be deleted.',
   'sessions.deleteFailed': '{failed} of {total} sessions could not be deleted.',
+  'sessions.filterAll': 'All',
+  'sessions.filterUser': 'User',
+  'sessions.filterAssistant': 'Assistant',
+  'sessions.filterTools': 'Tools',
+  'sessions.filterThinking': 'Thinking',
+  'sessions.noMatchingMessages': 'No messages matching this filter.',
 
 
   // ── Usage / analytics ─────────────────────────────────────────────────────
@@ -294,6 +300,7 @@ export const en = {
   'config.newGroup': 'New Group',
   'config.groupCounts': '{skills} skills · {prompts} prompts · {hooks} hooks · {plugins} plugins',
   'config.manageMembers': 'Manage members',
+  'config.viewResources': 'View Resources',
   'config.removeGroup': 'Remove group {name}',
   'config.proxyTitle': 'Proxy Gateways',
   'config.proxySubtitle': 'Network settings',
@@ -539,6 +546,16 @@ export const en = {
   'home.checkingRuns': 'Checking runs…',
   'home.nothingRunning': 'Nothing running right now.',
   'home.runTask': 'Run a task',
+  'home.automationWidget': 'Automations',
+  'home.activeTasks': 'Active Runs',
+  'home.nextScheduled': 'Next Schedule',
+  'home.noActiveTasks': 'No active tasks',
+  'home.noUpcomingSchedule': 'No upcoming schedules',
+  'home.quickActions': 'Quick Actions',
+  'home.actionAgent': 'Open Terminal',
+  'home.actionTask': 'New Automation Task',
+  'home.actionSchedule': 'New Schedule',
+  'home.allAutomations': 'All Tasks & Schedules',
 
   // ── Session detail ────────────────────────────────────────────────────────
   'sessionDetail.loadFailed': 'Could not load this conversation.',
