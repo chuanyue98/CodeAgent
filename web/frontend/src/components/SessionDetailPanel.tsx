@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowDownToLine,
@@ -21,6 +21,7 @@ import {
   fetchSessionDetail,
   type ResumeTarget,
   type SessionDetail,
+  type SessionMessage,
 } from '../api/audit';
 import { type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
 import { ALL_ENGINES, READ_ONLY_ENGINES, engineLabel } from '../utils/engines';
@@ -31,6 +32,37 @@ import SectionLabel from './shared/SectionLabel';
 import { useT } from '../i18n/context';
 import MarkdownMessage from './MarkdownMessage';
 import SessionProgress from './SessionProgress';
+
+export type MessageFilter = 'all' | 'user' | 'assistant' | 'tool' | 'thinking';
+
+const FILTER_OPTIONS: { key: MessageFilter; labelKey: string }[] = [
+  { key: 'all', labelKey: 'sessions.filterAll' },
+  { key: 'user', labelKey: 'sessions.filterUser' },
+  { key: 'assistant', labelKey: 'sessions.filterAssistant' },
+  { key: 'tool', labelKey: 'sessions.filterTools' },
+  { key: 'thinking', labelKey: 'sessions.filterThinking' },
+];
+
+function matchesFilter(msg: SessionMessage, filter: MessageFilter): boolean {
+  switch (filter) {
+    case 'all':
+      return true;
+    case 'user':
+      return msg.role === 'user';
+    case 'assistant':
+      return msg.role === 'assistant' && (!msg.toolCalls || msg.toolCalls.length === 0);
+    case 'tool':
+      return Boolean((msg.toolCalls && msg.toolCalls.length > 0) || msg.role === 'tool');
+    case 'thinking': {
+      const thinking = (msg as SessionMessage & { thinking?: unknown }).thinking;
+      return Boolean(
+        thinking ||
+          (typeof msg.content === 'string' &&
+            (msg.content.includes('<thought') || msg.content.includes('<thinking>'))),
+      );
+    }
+  }
+}
 
 /**
  * Transcript messages rendered at once. A long session is ~1,700 messages
@@ -102,13 +134,42 @@ export default function SessionDetailPanel({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [openSubtask, setOpenSubtask] = useState<SessionUsage | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [filter, setFilter] = useState<MessageFilter>('all');
   const [visibleCount, setVisibleCount] = useState(TRANSCRIPT_PAGE);
   /** Distance from the bottom to restore after prepending older messages. */
   const anchorFromBottomRef = useRef<number | null>(null);
 
-  const messages = detail?.messages ?? [];
-  const hiddenCount = Math.max(0, messages.length - visibleCount);
-  const visibleMessages = hiddenCount > 0 ? messages.slice(hiddenCount) : messages;
+  const allMessages = useMemo(() => detail?.messages ?? [], [detail?.messages]);
+
+  const filterCounts = useMemo(() => {
+    const counts: Record<MessageFilter, number> = {
+      all: allMessages.length,
+      user: 0,
+      assistant: 0,
+      tool: 0,
+      thinking: 0,
+    };
+    for (const msg of allMessages) {
+      if (matchesFilter(msg, 'user')) counts.user++;
+      if (matchesFilter(msg, 'assistant')) counts.assistant++;
+      if (matchesFilter(msg, 'tool')) counts.tool++;
+      if (matchesFilter(msg, 'thinking')) counts.thinking++;
+    }
+    return counts;
+  }, [allMessages]);
+
+  const filteredMessages = useMemo(() => {
+    if (filter === 'all') return allMessages;
+    return allMessages.filter(msg => matchesFilter(msg, filter));
+  }, [allMessages, filter]);
+
+  const hiddenCount = Math.max(0, filteredMessages.length - visibleCount);
+  const visibleMessages = hiddenCount > 0 ? filteredMessages.slice(hiddenCount) : filteredMessages;
+
+  const handleFilterChange = (newFilter: MessageFilter) => {
+    setFilter(newFilter);
+    setVisibleCount(TRANSCRIPT_PAGE);
+  };
 
   const scrollTo = useCallback((edge: 'top' | 'bottom') => {
     const element = scrollRef.current;
@@ -171,6 +232,7 @@ export default function SessionDetailPanel({
     setDetail(null);
     setConvertState({ status: 'idle' });
     setDeleteError(null);
+    setFilter('all');
     setVisibleCount(TRANSCRIPT_PAGE);
 
     fetchSessionDetail(engine, sessionId, projectPath)
@@ -411,54 +473,84 @@ export default function SessionDetailPanel({
               </p>
             )}
             {!loading && loadError && <p className="text-xs text-slate-400">{loadError}</p>}
-            {!loading && !loadError && detail && messages.length === 0 && (
+            {!loading && !loadError && detail && allMessages.length === 0 && (
               <p className="text-xs text-slate-400">{t('sessionDetail.noMessages')}</p>
             )}
-            {!loading && !loadError && detail && messages.length > 0 && (
-              <div className="space-y-3">
-                {hiddenCount > 0 && (
-                  <button
-                    onClick={loadEarlier}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-200 py-2 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
-                  >
-                    <ChevronUp className="h-3.5 w-3.5" />
-                    {t('sessionDetail.loadEarlier', {
-                      shown: String(visibleMessages.length),
-                      total: String(messages.length),
-                    })}
-                  </button>
-                )}
-                {visibleMessages.map((msg, i) => (
-                  <div
-                    key={`${msg.timestamp}-${msg.role}-${hiddenCount + i}`}
-                    className="rounded-lg border border-slate-100 p-3"
-                  >
-                    <div className="mb-1 flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase text-slate-600">{msg.role}</span>
-                      <span className="text-[10px] text-slate-400">
-                        {msg.timestamp ? new Date(msg.timestamp).toLocaleString() : ''}
-                      </span>
-                    </div>
-                    {/* Same rendering the Agent page gives these messages: they
-                        are the transcript of a session an engine wrote in
-                        markdown, so showing them raw meant a wall of ** and
-                        backticks in the one place you go to read them back. */}
-                    <div className="prose prose-sm prose-slate max-w-none break-words">
-                      <MarkdownMessage text={msg.content} />
-                    </div>
-                    {msg.toolCalls?.length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        {msg.toolCalls.map((tc, j) => (
-                          <div key={`${tc.name}-${j}`} className="rounded bg-slate-50 p-1.5 text-[11px]">
-                            <span className="font-mono font-semibold">{tc.name}</span>
-                            {tc.argsPreview && <span className="text-slate-500"> — {tc.argsPreview}</span>}
-                          </div>
-                        ))}
-                      </div>
+            {!loading && !loadError && detail && allMessages.length > 0 && (
+              <>
+                <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                  {FILTER_OPTIONS.map(({ key, labelKey }) => {
+                    const active = filter === key;
+                    const count = filterCounts[key];
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => handleFilterChange(key)}
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors ${
+                          active
+                            ? 'bg-primary/10 font-semibold text-primary'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200/80 hover:text-slate-700'
+                        }`}
+                      >
+                        <span>{t(labelKey)}</span>{' '}
+                        <span className={active ? 'text-primary/70' : 'text-slate-400'}>({count})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {filteredMessages.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-slate-400">
+                    {t('sessions.noMatchingMessages')}
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {hiddenCount > 0 && (
+                      <button
+                        onClick={loadEarlier}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-200 py-2 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                      >
+                        <ChevronUp className="h-3.5 w-3.5" />
+                        {t('sessionDetail.loadEarlier', {
+                          shown: String(visibleMessages.length),
+                          total: String(filteredMessages.length),
+                        })}
+                      </button>
                     )}
+                    {visibleMessages.map((msg, i) => (
+                      <div
+                        key={`${msg.timestamp}-${msg.role}-${hiddenCount + i}`}
+                        className="rounded-lg border border-slate-100 p-3"
+                      >
+                        <div className="mb-1 flex items-center justify-between">
+                          <span className="text-xs font-semibold uppercase text-slate-600">{msg.role}</span>
+                          <span className="text-[10px] text-slate-400">
+                            {msg.timestamp ? new Date(msg.timestamp).toLocaleString() : ''}
+                          </span>
+                        </div>
+                        {/* Same rendering the Agent page gives these messages: they
+                            are the transcript of a session an engine wrote in
+                            markdown, so showing them raw meant a wall of ** and
+                            backticks in the one place you go to read them back. */}
+                        <div className="prose prose-sm prose-slate max-w-none break-words">
+                          <MarkdownMessage text={msg.content} />
+                        </div>
+                        {msg.toolCalls?.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            {msg.toolCalls.map((tc, j) => (
+                              <div key={`${tc.name}-${j}`} className="rounded bg-slate-50 p-1.5 text-[11px]">
+                                <span className="font-mono font-semibold">{tc.name}</span>
+                                {tc.argsPreview && <span className="text-slate-500"> — {tc.argsPreview}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </section>
         </div>

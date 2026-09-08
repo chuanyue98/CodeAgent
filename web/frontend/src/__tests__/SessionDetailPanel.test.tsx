@@ -251,3 +251,140 @@ describe('SessionDetailPanel progress', () => {
     expect(screen.queryByTestId('session-progress')).not.toBeInTheDocument();
   });
 });
+
+describe('SessionDetailPanel message filter', () => {
+  const mixedMessages = [
+    {
+      role: 'user',
+      content: 'hello world from user',
+      timestamp: '2026-07-20T10:00:00Z',
+      model: 'claude-opus',
+      toolCalls: [],
+    },
+    {
+      role: 'assistant',
+      content: 'plain assistant answer',
+      timestamp: '2026-07-20T10:01:00Z',
+      model: 'claude-opus',
+      toolCalls: [],
+    },
+    {
+      role: 'assistant',
+      content: 'assistant calling tool',
+      timestamp: '2026-07-20T10:02:00Z',
+      model: 'claude-opus',
+      toolCalls: [{ name: 'Bash', argsPreview: 'ls', resultPreview: '' }],
+    },
+    {
+      role: 'tool',
+      content: 'tool execution output',
+      timestamp: '2026-07-20T10:03:00Z',
+      model: 'claude-opus',
+      toolCalls: [],
+    },
+    {
+      role: 'assistant',
+      content: 'thoughtful answer',
+      timestamp: '2026-07-20T10:04:00Z',
+      model: 'claude-opus',
+      toolCalls: [],
+      thinking: 'pondering options',
+    },
+    {
+      role: 'assistant',
+      content: '<thought>deep contemplation</thought>thought answer',
+      timestamp: '2026-07-20T10:05:00Z',
+      model: 'claude-opus',
+      toolCalls: [],
+    },
+  ];
+
+  test('renders filter chips with counts and filters messages on click', async () => {
+    const detail = {
+      sessionId: 'session-a',
+      engine: 'claude',
+      projectPath: '/workspace/project-a',
+      title: 'A session',
+      messages: mixedMessages,
+    };
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/history/')) {
+        const text = JSON.stringify(detail);
+        return Promise.resolve({ ok: true, status: 200, text: async () => text, json: async () => detail });
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    }) as typeof fetch;
+
+    renderPanel();
+
+    const allChip = await screen.findByRole('button', { name: /All \(6\)/ });
+    const userChip = screen.getByRole('button', { name: /User \(1\)/ });
+    const assistantChip = screen.getByRole('button', { name: /Assistant \(3\)/ });
+    const toolChip = screen.getByRole('button', { name: /Tools \(2\)/ });
+    const thinkingChip = screen.getByRole('button', { name: /Thinking \(2\)/ });
+
+    expect(allChip).toBeInTheDocument();
+    expect(userChip).toBeInTheDocument();
+    expect(assistantChip).toBeInTheDocument();
+    expect(toolChip).toBeInTheDocument();
+    expect(thinkingChip).toBeInTheDocument();
+
+    expect(screen.getByText('hello world from user')).toBeInTheDocument();
+    expect(screen.getByText('plain assistant answer')).toBeInTheDocument();
+
+    fireEvent.click(userChip);
+    expect(screen.getByText('hello world from user')).toBeInTheDocument();
+    expect(screen.queryByText('plain assistant answer')).not.toBeInTheDocument();
+    expect(screen.queryByText('assistant calling tool')).not.toBeInTheDocument();
+
+    fireEvent.click(assistantChip);
+    expect(screen.queryByText('hello world from user')).not.toBeInTheDocument();
+    expect(screen.getByText('plain assistant answer')).toBeInTheDocument();
+    expect(screen.queryByText('assistant calling tool')).not.toBeInTheDocument();
+
+    fireEvent.click(toolChip);
+    expect(screen.queryByText('hello world from user')).not.toBeInTheDocument();
+    expect(screen.queryByText('plain assistant answer')).not.toBeInTheDocument();
+    expect(screen.getByText('assistant calling tool')).toBeInTheDocument();
+    expect(screen.getByText('tool execution output')).toBeInTheDocument();
+
+    fireEvent.click(thinkingChip);
+    expect(screen.queryByText('hello world from user')).not.toBeInTheDocument();
+    expect(screen.getByText('thoughtful answer')).toBeInTheDocument();
+    expect(screen.getByText('<thought>deep contemplation</thought>thought answer')).toBeInTheDocument();
+  });
+
+  test('displays no matching messages when filtered results are empty', async () => {
+    const detail = {
+      sessionId: 'session-a',
+      engine: 'claude',
+      projectPath: '/workspace/project-a',
+      title: 'A session',
+      messages: [
+        {
+          role: 'user',
+          content: 'only user message',
+          timestamp: '2026-07-20T10:00:00Z',
+          model: 'claude-opus',
+          toolCalls: [],
+        },
+      ],
+    };
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/history/')) {
+        const text = JSON.stringify(detail);
+        return Promise.resolve({ ok: true, status: 200, text: async () => text, json: async () => detail });
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    }) as typeof fetch;
+
+    renderPanel();
+
+    const toolChip = await screen.findByRole('button', { name: /Tools \(0\)/ });
+    fireEvent.click(toolChip);
+
+    expect(await screen.findByText('No messages matching this filter.')).toBeInTheDocument();
+    expect(screen.queryByText('only user message')).not.toBeInTheDocument();
+  });
+});
+
