@@ -499,11 +499,7 @@ export default function TaskDetail({
                               setViewedLogId(run.taskId);
                               setActiveTab('logs');
                             }}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                              isViewed && activeTab === 'logs'
-                                ? 'bg-primary/10 text-primary border-primary/20'
-                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                            }`}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-primary"
                           >
                             <Terminal className="w-3.5 h-3.5" />
                             <span>{t('taskDetail.tabLogs')}</span>
@@ -514,11 +510,7 @@ export default function TaskDetail({
                               setViewedLogId(run.taskId);
                               setActiveTab('changes');
                             }}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                              isViewed && activeTab === 'changes'
-                                ? 'bg-primary/10 text-primary border-primary/20'
-                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                            }`}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-primary"
                           >
                             <GitBranch className="w-3.5 h-3.5" />
                             <span>{t('taskDetail.tabChanges')}</span>
