@@ -19,6 +19,7 @@ import {
   updateSchedule,
   deleteSchedule,
   runScheduleNow,
+  parseSchedule,
   type Schedule,
 } from '../api/schedules';
 
@@ -73,6 +74,12 @@ export default function CronPage() {
   const [templateBusyId, setTemplateBusyId] = useState<string | null>(null);
   const [templateNotice, setTemplateNotice] = useState<string | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [notifyOn, setNotifyOn] = useState<'always' | 'success' | 'failure' | 'never'>('always');
+  const [createdFromInput, setCreatedFromInput] = useState<string | null>(null);
+  const [nlInput, setNlInput] = useState('');
+  const [nlParsing, setNlParsing] = useState(false);
+  const [nlError, setNlError] = useState<string | null>(null);
+  const [nlRawOutput, setNlRawOutput] = useState<string | null>(null);
 
   const isMounted = useIsMounted();
 
@@ -214,6 +221,52 @@ export default function CronPage() {
     }
   };
 
+  const handleParseNl = async () => {
+    if (!nlInput.trim()) return;
+    setNlParsing(true);
+    setNlError(null);
+    setNlRawOutput(null);
+    try {
+      const targetEngine = engine || engines[0]?.id || 'claude';
+      const res = await parseSchedule(nlInput.trim(), targetEngine);
+      if (res.rawOutput && !res.cronExpr) {
+        setNlRawOutput(res.rawOutput);
+        setNlError(t('cron.parseError'));
+        return;
+      }
+      if (res.task && res.task.name) {
+        if (!tasks.some(task => task.name === res.task.name)) {
+          const body: TaskBlueprint = {
+            name: res.task.name,
+            title: res.task.title || res.task.name,
+            objective: res.task.objective || '',
+            context: res.task.context || '',
+            instructions: res.task.instructions || '',
+            verification: res.task.verification || '',
+          };
+          try {
+            await request('/api/tasks', { method: 'POST', body: JSON.stringify(body) });
+            await loadTasks();
+          } catch {
+            await loadTasks().catch(() => []);
+          }
+        }
+        setTaskName(res.task.name);
+      }
+      if (res.cronExpr) {
+        setCronExpr(res.cronExpr);
+      }
+      setCreatedFromInput(nlInput.trim());
+      if (res.task?.title || res.task?.name) {
+        setTemplateNotice(t('template.created', { name: res.task.title || res.task.name }));
+      }
+    } catch (e) {
+      setNlError(e instanceof Error ? e.message : t('cron.parseError'));
+    } finally {
+      if (isMounted()) setNlParsing(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!taskName || !engine || !workspace || !cronExpr.trim()) return;
     setSubmitting(true);
@@ -226,6 +279,8 @@ export default function CronPage() {
         group: project?.group || 'common',
         workspace,
         cronExpr: cronExpr.trim(),
+        notifyOn,
+        createdFromInput,
       };
       if (editingScheduleId) {
         await updateSchedule(editingScheduleId, values);
@@ -233,6 +288,8 @@ export default function CronPage() {
         await createSchedule(values);
       }
       setEditingScheduleId(null);
+      setCreatedFromInput(null);
+      setNotifyOn('always');
       loadSchedules();
     } catch (e) {
       setError(
@@ -257,6 +314,8 @@ export default function CronPage() {
     setEngine(schedule.engine);
     setCronExpr(schedule.cronExpr);
     setWorkspace(scheduleWorkspace || '');
+    setNotifyOn(schedule.notifyOn || 'always');
+    setCreatedFromInput(schedule.createdFromInput || null);
     setError(null);
   };
 
@@ -380,6 +439,19 @@ export default function CronPage() {
           )}
         </Field>
 
+        <Field label={t('cron.notifyLabel')}>
+          <Select
+            aria-label={t('cron.notifyLabel')}
+            value={notifyOn}
+            onChange={e => setNotifyOn(e.target.value as 'always' | 'success' | 'failure' | 'never')}
+          >
+            <option value="always">{t('cron.notifyAlways')}</option>
+            <option value="success">{t('cron.notifySuccess')}</option>
+            <option value="failure">{t('cron.notifyFailure')}</option>
+            <option value="never">{t('cron.notifyNever')}</option>
+          </Select>
+        </Field>
+
         <Button
           className="w-full"
           icon={editingScheduleId ? Pencil : Plus}
@@ -397,6 +469,49 @@ export default function CronPage() {
       </section>
 
       <div className="flex-1 min-w-0 glass-card p-5 flex flex-col">
+        {/* Natural Language Cron parse area */}
+        <div className="mb-3.5 rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{t('cron.nlPromptLabel')}</span>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input
+              aria-label={t('cron.nlPromptLabel')}
+              value={nlInput}
+              onChange={e => setNlInput(e.target.value)}
+              placeholder={t('cron.parseHint')}
+              className="flex-1 text-xs"
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void handleParseNl();
+                }
+              }}
+            />
+            <Button
+              size="sm"
+              icon={Sparkles}
+              disabled={nlParsing || !nlInput.trim()}
+              onClick={() => void handleParseNl()}
+              className="shrink-0"
+            >
+              {nlParsing ? t('cron.parseLoading') : t('cron.parse')}
+            </Button>
+          </div>
+          {nlError && (
+            <p className="text-xs text-destructive">{nlError}</p>
+          )}
+          {nlRawOutput && (
+            <details className="mt-1 rounded bg-slate-900/5 p-2 text-xs text-slate-600">
+              <summary className="cursor-pointer font-medium text-slate-700">{t('cron.rawOutput')}</summary>
+              <pre className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap font-mono text-[11px]">
+                {nlRawOutput}
+              </pre>
+            </details>
+          )}
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
             <Clock className="w-4 h-4" /> {t('cron.listTitle')}

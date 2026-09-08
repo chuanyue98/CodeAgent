@@ -146,3 +146,65 @@ describe('CronPage task templates', () => {
     expect(createdTasks).toHaveLength(0);
   });
 });
+
+describe('CronPage natural language parsing', () => {
+  test('parses natural language input, creates blueprint and prefills form', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/schedules/parse' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { input: string };
+        return jsonResponse({
+          cronExpr: '0 9 * * 1',
+          task: {
+            name: 'weekly-check',
+            title: 'Weekly Check',
+            objective: 'Check code weekly',
+            context: 'In repo',
+            instructions: 'Run checks',
+            verification: 'Confirm all pass',
+          },
+          explanation: 'Every Monday at 9am',
+          rawOutput: null,
+        });
+      }
+      return Reflect.apply(originalFetch, globalThis, [url, init]);
+    }) as unknown as typeof fetch;
+
+    renderCronPage();
+
+    const input = await screen.findByLabelText('Describe your schedule in plain language');
+    fireEvent.change(input, { target: { value: '每周一早上9点检查代码' } });
+
+    const parseBtn = screen.getByRole('button', { name: /Parse/i });
+    fireEvent.click(parseBtn);
+
+    await waitFor(() => expect(createdTasks).toHaveLength(1));
+    expect(createdTasks[0]).toMatchObject({
+      name: 'weekly-check',
+      title: 'Weekly Check',
+    });
+
+    const cronField = await screen.findByDisplayValue('0 9 * * 1');
+    expect(cronField).toBeVisible();
+  });
+
+  test('displays error message when parsing fails', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/schedules/parse' && init?.method === 'POST') {
+        return Promise.reject(new Error('LLM service unavailable'));
+      }
+      return Reflect.apply(originalFetch, globalThis, [url, init]);
+    }) as unknown as typeof fetch;
+
+    renderCronPage();
+
+    const input = await screen.findByLabelText('Describe your schedule in plain language');
+    fireEvent.change(input, { target: { value: '每晚8点' } });
+
+    const parseBtn = screen.getByRole('button', { name: /Parse/i });
+    fireEvent.click(parseBtn);
+
+    expect(await screen.findByText('LLM service unavailable')).toBeVisible();
+  });
+});

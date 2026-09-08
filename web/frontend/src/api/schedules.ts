@@ -10,6 +10,8 @@ export interface Schedule {
   lastRunAt: number | null;
   lastRunStatus: string | null;
   nextRunAt: number | null;
+  notifyOn?: 'always' | 'success' | 'failure' | 'never';
+  createdFromInput?: string | null;
 }
 
 export interface CreateScheduleParams {
@@ -19,6 +21,8 @@ export interface CreateScheduleParams {
   workspace: string;
   cronExpr: string;
   enabled?: boolean;
+  notifyOn?: 'always' | 'success' | 'failure' | 'never';
+  createdFromInput?: string | null;
 }
 
 import request from '../utils/request';
@@ -30,6 +34,35 @@ export interface UpdateScheduleParams {
   workspace?: string;
   cronExpr?: string;
   enabled?: boolean;
+  notifyOn?: 'always' | 'success' | 'failure' | 'never';
+  createdFromInput?: string | null;
+}
+
+export interface ParsedTask {
+  name: string;
+  title: string;
+  objective: string;
+  context: string;
+  instructions: string;
+  verification: string;
+}
+
+export interface ParsedScheduleResult {
+  cronExpr: string;
+  cronDescription: string;
+  nextRuns: number[];
+  task: ParsedTask;
+  rawOutput?: string | null;
+}
+
+export async function parseSchedule(
+  input: string,
+  engine: string,
+): Promise<ParsedScheduleResult> {
+  return request('/api/schedules/parse', {
+    method: 'POST',
+    body: JSON.stringify({ input, engine }),
+  });
 }
 
 export async function fetchSchedules(): Promise<Schedule[]> {
