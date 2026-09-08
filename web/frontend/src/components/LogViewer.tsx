@@ -1,5 +1,16 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Terminal, AlertCircle, CheckCircle2, Wifi, WifiOff } from 'lucide-react';
+import {
+  Terminal,
+  AlertCircle,
+  CheckCircle2,
+  Wifi,
+  WifiOff,
+  Search,
+  Copy,
+  Check,
+  Maximize2,
+  Minimize2,
+} from 'lucide-react';
 import { fetchLogFiles, fetchLogFile, useLogStream, type LogFile } from '../api/logs';
 import usePolling from '../hooks/usePolling';
 import { useT } from '../i18n/context';
@@ -21,6 +32,10 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
   const [autoScroll, setAutoScroll] = useState(true);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [showAllLines, setShowAllLines] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { lines: streamLines, error, connected, finished } = useLogStream(selectedTaskId);
 
@@ -60,6 +75,27 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
     }
   }, [streamLines, autoScroll, initialContent]);
 
+  useEffect(() => {
+    if (!fullscreen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [fullscreen]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const allLines = useMemo(
     () => [
       ...(initialContent ?? '').split('\n'),
@@ -68,11 +104,37 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
     [initialContent, selectedTaskId, streamLines],
   );
 
-  const truncated = !showAllLines && allLines.length > DEFAULT_VISIBLE_LINES;
-  const visibleLines = truncated ? allLines.slice(-DEFAULT_VISIBLE_LINES) : allLines;
+  const filteredLines = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return allLines;
+    return allLines.filter((l: string) => l.toLowerCase().includes(q));
+  }, [allLines, searchQuery]);
+
+  const truncated = !showAllLines && filteredLines.length > DEFAULT_VISIBLE_LINES;
+  const visibleLines = truncated ? filteredLines.slice(-DEFAULT_VISIBLE_LINES) : filteredLines;
+
+  const handleCopy = useCallback(async () => {
+    try {
+      const textToCopy = filteredLines.join('\n');
+      await navigator.clipboard.writeText(textToCopy);
+      setCopied(true);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch {
+      // ignore clipboard errors
+    }
+  }, [filteredLines]);
 
   return (
-    <div className="glass-card flex flex-col h-full">
+    <div
+      className={`glass-card flex flex-col h-full ${
+        fullscreen ? 'fixed inset-0 z-50 p-4 bg-white/95 backdrop-blur-md' : ''
+      }`}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-b border-slate-100">
         <div className="flex flex-wrap items-center gap-2">
           <Terminal className="w-4 h-4 text-slate-500" />
@@ -100,12 +162,68 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
             </span>
           )}
         </div>
-        <button
-          onClick={() => setAutoScroll(!autoScroll)}
-          className="text-xs text-slate-500 hover:text-slate-800"
-        >
-          {autoScroll ? t('logs.autoScrollOn') : t('logs.autoScrollOff')}
-        </button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Keyword Search Filter */}
+          <div className="relative flex items-center">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder={t('logs.searchPlaceholder')}
+              className="pl-8 pr-2 py-1 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white w-32 sm:w-44 transition-all"
+            />
+          </div>
+
+          {/* Copy All */}
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="flex items-center gap-1 px-2.5 py-1 rounded text-xs text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors"
+            title={copied ? t('logs.copied') : t('logs.copyAll')}
+          >
+            {copied ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-emerald-600 font-medium">{t('logs.copied')}</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5" />
+                <span>{t('logs.copyAll')}</span>
+              </>
+            )}
+          </button>
+
+          {/* Auto-scroll toggle */}
+          <button
+            type="button"
+            onClick={() => setAutoScroll(!autoScroll)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs transition-colors ${
+              autoScroll
+                ? 'border-emerald-200 bg-emerald-50/50 text-emerald-700 font-medium'
+                : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+            }`}
+            title={autoScroll ? t('logs.autoScrollOn') : t('logs.autoScrollOff')}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${autoScroll ? 'bg-emerald-500' : 'bg-slate-300'}`}
+            />
+            <span>{autoScroll ? t('logs.autoScrollOn') : t('logs.autoScrollOff')}</span>
+          </button>
+
+          {/* Fullscreen toggle */}
+          <button
+            type="button"
+            onClick={() => setFullscreen(!fullscreen)}
+            className="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 border border-slate-200 transition-colors"
+            title={fullscreen ? t('logs.exitFullscreen') : t('logs.fullscreen')}
+            aria-label={fullscreen ? t('logs.exitFullscreen') : t('logs.fullscreen')}
+          >
+            {fullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row flex-1 min-h-0">
@@ -147,9 +265,9 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
             <div className="sticky top-0 z-10 mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
               <span>
                 {t('logs.truncated', {
-            visible: DEFAULT_VISIBLE_LINES.toLocaleString(),
-            total: allLines.length.toLocaleString(),
-          })}
+                  visible: DEFAULT_VISIBLE_LINES.toLocaleString(),
+                  total: filteredLines.length.toLocaleString(),
+                })}
               </span>
               <button
                 onClick={() => setShowAllLines(true)}
@@ -157,6 +275,11 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
               >
                 {t('logs.showAll')}
               </button>
+            </div>
+          )}
+          {searchQuery.trim() && filteredLines.length === 0 && !loading && (
+            <div className="py-8 text-center text-xs text-slate-400">
+              匹配 0 行
             </div>
           )}
           {visibleLines.map((line, i) => (
