@@ -395,7 +395,9 @@ def test_safe_remove_link_windows_dir(mock_engine, tmp_path):
     target.mkdir()
 
     with patch("os.name", "nt"):
-        with patch.object(mock_engine, "_is_windows_link", return_value=True):
+        # _safe_remove_link delegates to LinkManager.safe_remove_link, so the
+        # link check is the module-level function, not the engine method.
+        with patch("core.link_manager.is_windows_link", return_value=True):
             with patch("subprocess.run") as mock_run:
                 mock_engine._safe_remove_link(target)
                 # On Windows, directories should be removed via rmdir if they are links/junctions

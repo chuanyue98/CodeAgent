@@ -52,6 +52,32 @@ def web_security_test_env(monkeypatch):
     reset_token_cache()
 
 
+@pytest.fixture(autouse=True)
+def isolated_runner_state():
+    """Clears the shared web runner singleton before each test.
+
+    core.web.routers.tasks builds a module-level ``TaskRunner(ROOT_DIR)``
+    whose constructor reloads any still-"running" rows from the repo's
+    ``.ca_task_logs/runs.db``. A stale row left by a crashed or manual
+    session leaks into every test that aggregates runner state -- e.g.
+    test_instances_router's "empty without gateway" assertion goes red.
+    Only in-memory state is cleared; the SQLite store is left untouched so
+    tests exercising run history keep working.
+    """
+    from core.web.routers import tasks as tasks_router
+
+    runner = tasks_router._runner
+    with runner._run_lock:
+        runner.active_runs.clear()
+        runner._processes.clear()
+        runner._stopping_tasks.clear()
+    yield
+    with runner._run_lock:
+        runner.active_runs.clear()
+        runner._processes.clear()
+        runner._stopping_tasks.clear()
+
+
 @pytest.fixture
 def fake_bin(tmp_path, monkeypatch):
     bin_dir = tmp_path / "bin"
