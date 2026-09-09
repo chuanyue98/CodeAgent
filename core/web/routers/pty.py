@@ -514,7 +514,9 @@ class _PosixSession:
         self._signal_process_group(signal.SIGTERM)
 
     async def kill(self) -> None:
-        self._signal_process_group(signal.SIGKILL)
+        # SIGKILL 只存在于 POSIX；本类和上面的 ioctl 一样只在 POSIX 下实例化，
+        # 但 mypy 在 Windows 上跑时看不到 spawn 处的平台守卫。
+        self._signal_process_group(signal.SIGKILL)  # type: ignore[attr-defined]
 
     async def shutdown(self) -> None:
         if self.tmux_name:
