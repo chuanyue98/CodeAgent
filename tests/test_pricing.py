@@ -10,7 +10,14 @@ from __future__ import annotations
 
 import pytest
 
-from core.analytics.pricing import _PRICING, _UNKNOWN, calculate_cost, get_rates
+from core.analytics.pricing import (
+    _DATA,
+    _PRICING,
+    _UNKNOWN,
+    calculate_cost,
+    get_rates,
+    is_known_model,
+)
 
 
 def test_a_known_model_gets_its_own_rates():
@@ -57,6 +64,31 @@ def test_the_suffix_scan_can_match_a_longer_unrelated_id():
     # endorsed: it is why an unknown id can quietly get real rates.
     known = next(iter(_PRICING))
     assert get_rates(f"some-vendor-{known}") == _PRICING[known]
+
+
+def test_the_suffix_scan_prefers_the_longest_key():
+    # "some-vendor-glm-4.5-air" ends in both glm-4.5-air and glm-4.5; it must
+    # resolve to the longer (more specific) key rather than whichever the dict
+    # happens to list first.
+    assert get_rates("some-vendor-glm-4.5-air") == _PRICING["glm-4.5-air"]
+
+
+def test_is_known_model_separates_real_rates_from_the_fallback():
+    assert is_known_model("deepseek-chat")
+    assert is_known_model("qwen3-coder")  # alias
+    assert is_known_model("  Claude-3-5-Haiku-20241022 ")  # 大小写与空白同 get_rates
+    assert not is_known_model("no-such-model-anywhere")
+
+
+def test_the_data_file_has_only_well_formed_rows():
+    # 价目表现在住在 model_pricing.json 里：每行必须恰好四个非负数，别名
+    # 必须指向正表里存在的 key —— 数据文件被手工编辑后仍要不炸。
+    assert _PRICING
+    for name, rates in _PRICING.items():
+        assert len(rates) == 4, name
+        assert all(isinstance(r, (int, float)) and r >= 0 for r in rates), name
+    for alias, target in _DATA["aliases"].items():
+        assert target in _PRICING, alias
 
 
 # ── the arithmetic ───────────────────────────────────────────────────────────

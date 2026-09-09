@@ -68,6 +68,9 @@ async def _record_and_notify(
             schedule_service.config_service.get_config
         )
     except Exception:
+        logger.warning(
+            "读取配置失败，跳过 schedule.failed 的 webhook 通知", exc_info=True
+        )
         return
     await asyncio.to_thread(
         notify,
@@ -144,7 +147,9 @@ async def _maybe_record_notification(
             summary=summary,
         )
     except Exception:
-        logger.exception("Failed to record notification for schedule %s", record.get("id"))
+        logger.exception(
+            "Failed to record notification for schedule %s", record.get("id")
+        )
 
 
 async def _settle_finished_runs(

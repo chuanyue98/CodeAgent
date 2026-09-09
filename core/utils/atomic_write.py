@@ -14,7 +14,12 @@ from pathlib import Path
 from core.utils.long_paths import long_path
 
 
-def atomic_write(path: Path | str, content: str, encoding: str = "utf-8") -> None:
+def atomic_write(
+    path: Path | str,
+    content: str,
+    encoding: str = "utf-8",
+    fsync: bool = False,
+) -> None:
     """Writes *content* to *path* atomically.
 
     Creates parent directories if needed, writes to a temporary file in the
@@ -31,6 +36,9 @@ def atomic_write(path: Path | str, content: str, encoding: str = "utf-8") -> Non
         path: Destination file path.
         content: Text content to write.
         encoding: Text encoding (default ``"utf-8"``).
+        fsync: Flush the file to disk before the rename. Config and manifest
+            writers that must survive a crash turn this on; high-frequency
+            writers leave it off.
     """
     path = Path(path)
     parent_target = long_path(path.parent)
@@ -40,6 +48,9 @@ def atomic_write(path: Path | str, content: str, encoding: str = "utf-8") -> Non
     try:
         with os.fdopen(fd, "w", encoding=encoding) as f:
             f.write(content)
+            if fsync:
+                f.flush()
+                os.fsync(f.fileno())
         os.replace(tmp_path, long_path(path))
     except BaseException:
         try:

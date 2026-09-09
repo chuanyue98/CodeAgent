@@ -1,180 +1,84 @@
+# 模型单价（美元 / 每百万 token）。数据外置在包内 model_pricing.json，
+# 调价只改数据文件，代码只负责查找与回退。数据来源：Anthropic / Google /
+# OpenAI 官方定价页 + CCS model-pricing.ts。
+
 from __future__ import annotations
 
-# USD per million tokens
-# Format: { model_name: (input_rate, output_rate, cache_write_rate, cache_read_rate) }
-# Sources: Anthropic / Google / OpenAI official pages + CCS model-pricing.ts
-# Rates marked (0.0, 0.0, ...) = free/experimental tier
+import json
+import re
+from pathlib import Path
 
+_DATA_PATH = Path(__file__).with_name("model_pricing.json")
+_DATA = json.loads(_DATA_PATH.read_text(encoding="utf-8"))
+
+# { model_name: (input, output, cache_write, cache_read) }
 _PRICING: dict[str, tuple[float, float, float, float]] = {
-    # ── Claude 3.x ────────────────────────────────────────────────────────────
-    "claude-3-haiku-20240307": (0.25, 1.25, 0.3, 0.03),
-    "claude-3-5-haiku-20241022": (0.8, 4.0, 1.0, 0.08),
-    "claude-3-5-haiku-latest": (0.8, 4.0, 1.0, 0.08),
-    "claude-3-5-sonnet-20240620": (3.0, 15.0, 3.75, 0.3),
-    "claude-3-5-sonnet-20241022": (3.0, 15.0, 3.75, 0.3),
-    "claude-3-5-sonnet-latest": (3.0, 15.0, 3.75, 0.3),
-    "claude-3-7-sonnet-20250219": (3.0, 15.0, 3.75, 0.3),
-    "claude-3-7-sonnet-latest": (3.0, 15.0, 3.75, 0.3),
-    "claude-3-opus-20240229": (15.0, 75.0, 18.75, 1.5),
-    "claude-3-opus-latest": (15.0, 75.0, 18.75, 1.5),
-    # ── Claude 4.x Haiku ──────────────────────────────────────────────────────
-    "claude-haiku-4-5-20251001": (1.0, 5.0, 1.25, 0.1),
-    "claude-haiku-4-5": (1.0, 5.0, 1.25, 0.1),
-    # ── Claude 4.x Sonnet ─────────────────────────────────────────────────────
-    "claude-4-sonnet-20250514": (3.0, 15.0, 3.75, 0.3),
-    "claude-sonnet-4-20250514": (3.0, 15.0, 3.75, 0.3),
-    "claude-sonnet-4": (3.0, 15.0, 3.75, 0.3),
-    "claude-sonnet-4-5-20250929": (3.0, 15.0, 3.75, 0.3),
-    "claude-sonnet-4-5": (3.0, 15.0, 3.75, 0.3),
-    "claude-sonnet-4-5-thinking": (3.0, 15.0, 3.75, 0.3),
-    "claude-sonnet-4-6": (3.0, 15.0, 3.75, 0.3),
-    "claude-sonnet-4-6-thinking": (3.0, 15.0, 3.75, 0.3),
-    # ── Claude 4.x Opus ──────────────────────────────────────────────────────
-    "claude-4-opus-20250514": (15.0, 75.0, 18.75, 1.5),
-    "claude-opus-4-20250514": (15.0, 75.0, 18.75, 1.5),
-    "claude-opus-4": (15.0, 75.0, 18.75, 1.5),
-    "claude-opus-4-1": (15.0, 75.0, 18.75, 1.5),
-    "claude-opus-4-1-20250805": (15.0, 75.0, 18.75, 1.5),
-    "claude-opus-4-5-20251101": (5.0, 25.0, 6.25, 0.5),  # new pricing tier
-    "claude-opus-4-5": (5.0, 25.0, 6.25, 0.5),
-    "claude-opus-4-5-thinking": (5.0, 25.0, 6.25, 0.5),
-    "claude-opus-4-6": (5.0, 25.0, 6.25, 0.5),
-    "claude-opus-4-6-thinking": (5.0, 25.0, 6.25, 0.5),
-    "claude-opus-4-7": (5.0, 25.0, 6.25, 0.5),
-    # ── Google / Antigravity ──────────────────────────────────────────────────
-    "gemini-3.8-flash": (0.3, 2.5, 0.0, 0.075),
-    "gemini-3.6-flash": (0.3, 2.5, 0.0, 0.075),
-    "gemini-3-flash-preview": (0.3, 2.5, 0.0, 0.075),
-    "gemini-3-pro": (2.0, 12.0, 0.0, 0.0),
-    "gemini-3-pro-preview": (2.0, 12.0, 0.0, 0.0),
-    "gemini-2.5-pro": (1.25, 10.0, 0.0, 0.3125),
-    "gemini-2.5-flash": (0.3, 2.5, 0.0, 0.075),
-    "gemini-2.0-flash": (0.1, 0.4, 0.0, 0.025),
-    "gemini-2.0-flash-exp": (0.0, 0.0, 0.0, 0.0),
-    # ── OpenAI / Codex ────────────────────────────────────────────────────────
-    "gpt-4o": (2.5, 10.0, 0.0, 1.25),
-    "gpt-4o-2024-08-06": (2.5, 10.0, 0.0, 1.25),
-    "gpt-4o-2024-11-20": (2.5, 10.0, 0.0, 1.25),
-    "gpt-4o-mini": (0.15, 0.6, 0.0, 0.075),
-    "gpt-4.1": (2.0, 8.0, 0.0, 0.5),
-    "gpt-4.1-mini": (0.4, 1.6, 0.0, 0.1),
-    "gpt-4.1-nano": (0.1, 0.4, 0.0, 0.025),
-    "gpt-4.5-preview": (75.0, 150.0, 0.0, 37.5),
-    "gpt-3.5-turbo": (1.5, 2.0, 0.0, 0.0),
-    "gpt-3.5-turbo-0125": (0.5, 1.5, 0.0, 0.0),
-    "o1": (15.0, 60.0, 0.0, 7.5),
-    "o1-preview": (15.0, 60.0, 0.0, 7.5),
-    "o1-mini": (3.0, 12.0, 0.0, 1.5),
-    "o3-mini": (1.1, 4.4, 0.0, 0.55),
-    "gpt-5": (1.25, 10.0, 0.0, 0.125),
-    "gpt-5-chat": (1.25, 10.0, 0.0, 0.125),
-    "gpt-5-codex": (1.25, 10.0, 0.0, 0.125),
-    "gpt-5-mini": (0.25, 2.0, 0.0, 0.025),
-    "gpt-5-nano": (0.05, 0.4, 0.0, 0.005),
-    # GPT-5.x Codex CLI variants (internal versioning used by openai/codex)
-    "gpt-5.1-codex-mini": (1.5, 6.0, 0.0, 0.375),
-    "gpt-5.4": (1.25, 10.0, 0.0, 0.125),
-    "gpt-5.4-mini": (0.25, 2.0, 0.0, 0.025),
-    "gpt-5.5": (1.25, 10.0, 0.0, 0.125),
-    "codex-mini-latest": (1.5, 6.0, 0.0, 0.375),
-    # ── GLM / Zhipu AI ────────────────────────────────────────────────────────
-    "glm-5": (1.0, 3.2, 0.0, 0.2),
-    "glm-4.7": (0.4, 1.5, 0.0, 0.2),
-    "glm-4.7-flashx": (0.4, 1.5, 0.0, 0.2),
-    "glm-4.6": (0.35, 1.5, 0.0, 0.175),
-    "glm-4.6-cc-max": (0.35, 1.5, 0.0, 0.175),
-    "glm-4.5": (0.35, 1.55, 0.0, 0.175),
-    "glm-4.5-air": (0.13, 0.85, 0.0, 0.025),
-    # ── Kimi / Moonshot AI ────────────────────────────────────────────────────
-    "kimi-k2.5": (0.6, 3.0, 0.0, 0.1),
-    "kimi-k2.5-free": (0.0, 0.0, 0.0, 0.0),
-    "kimi-for-coding": (0.6, 2.5, 0.0, 0.15),
-    "kimi-k2-0905-preview": (0.6, 2.5, 0.0, 0.15),
-    "kimi-k2-turbo-preview": (1.15, 8.0, 0.0, 0.15),
-    "kimi-k2-thinking": (0.6, 2.5, 0.0, 0.15),
-    "kimi-k2": (0.6, 2.5, 0.0, 0.15),
-    "moonshot-v1-8k": (0.2, 2.0, 0.0, 0.0),
-    "moonshot-v1-32k": (1.0, 3.0, 0.0, 0.0),
-    "moonshot-v1-128k": (2.0, 5.0, 0.0, 0.0),
-    # ── MiniMax ───────────────────────────────────────────────────────────────
-    "minimax-m2.5": (0.3, 1.2, 0.375, 0.03),
-    "minimax-m2.5-free": (0.0, 0.0, 0.0, 0.0),
-    "minimax-m2.5-lightning": (0.6, 2.4, 0.375, 0.03),
-    "minimax-m2.1": (0.3, 1.2, 0.375, 0.03),
-    "minimax-m2": (0.3, 1.2, 0.375, 0.03),
-    # ── Qwen / Alibaba ────────────────────────────────────────────────────────
-    "qwen3-max": (1.2, 6.0, 1.2, 0.24),
-    "qwen3-max-preview": (1.2, 6.0, 1.2, 0.24),
-    "qwen3.5-plus": (0.4, 2.4, 0.4, 0.08),
-    "qwen3.6-plus": (0.4, 2.4, 0.4, 0.08),
-    "qwen3.6-plus-free": (0.0, 0.0, 0.0, 0.0),
-    "qwen3.5-flash": (0.1, 0.4, 0.1, 0.02),
-    "qwen3-coder-plus": (1.0, 5.0, 1.0, 0.2),
-    "qwen3-coder-flash": (0.3, 1.5, 0.3, 0.06),
-    # ── DeepSeek ─────────────────────────────────────────────────────────────
-    "deepseek-chat": (0.27, 1.1, 0.0, 0.07),
-    "deepseek-v3": (0.27, 1.1, 0.0, 0.07),
-    "deepseek-v3.2": (0.27, 1.1, 0.0, 0.07),
-    "deepseek-reasoner": (0.55, 2.19, 0.0, 0.14),
-    "deepseek-coder": (0.14, 0.28, 0.0, 0.0),
-    # ── Mistral ───────────────────────────────────────────────────────────────
-    "mistral-large-latest": (2.0, 6.0, 0.0, 0.0),
-    "mistral-medium-latest": (2.7, 8.1, 0.0, 0.0),
-    "mistral-small-latest": (0.2, 0.6, 0.0, 0.0),
-    "codestral-latest": (0.3, 0.9, 0.0, 0.0),
-    # ── Nemotron ─────────────────────────────────────────────────────────────
-    "nemotron-3-super-free": (0.0, 0.0, 0.0, 0.0),
-    # ── MiMo ─────────────────────────────────────────────────────────────────
-    "mimo-v2-omni-free": (0.0, 0.0, 0.0, 0.0),
-    "mimo-v2-pro-free": (0.0, 0.0, 0.0, 0.0),
+    name: (rates[0], rates[1], rates[2], rates[3])
+    for name, rates in _DATA["rates"].items()
 }
 
-# Aliases: model name → canonical key in _PRICING (from CCS MODEL_PRICING_ALIASES)
-_ALIASES: dict[str, str] = {
-    "gemini-3-flash": "gemini-3-flash-preview",
-    "gemini-3.1-pro-preview": "gemini-3-pro-preview",
-    "gemini-3.1-flash-preview": "gemini-3-flash-preview",
-    "qwen3-coder": "qwen3-coder-plus",
-    "qwen3-235b": "qwen3-max",
-    "deepseek-v3.2": "deepseek-chat",
-}
+# 别名：model name → _PRICING 里的规范 key
+_ALIASES: dict[str, str] = _DATA["aliases"]
 
-# Unknown model fallback — CCS uses Claude Sonnet pricing
-_UNKNOWN: tuple[float, float, float, float] = (3.0, 15.0, 3.75, 0.3)
+# 未知模型的兜底价 —— 沿用 CCS 的做法，按 Claude Sonnet 计
+_FALLBACK_RATES = _DATA["unknown_fallback"]
+_UNKNOWN: tuple[float, float, float, float] = (
+    _FALLBACK_RATES[0],
+    _FALLBACK_RATES[1],
+    _FALLBACK_RATES[2],
+    _FALLBACK_RATES[3],
+)
+
+# Claude 模型的日期后缀：claude-sonnet-4-6-20260101 → claude-sonnet-4-6
+_DATE_SUFFIX_RE = re.compile(r"-\d{8}$")
 
 
 def _strip_provider_prefix(model: str) -> str:
-    """Remove provider prefix like 'deepseek-ai/' or 'minimaxai/'."""
+    """去掉 'deepseek-ai/' 之类的 provider 前缀。"""
     idx = model.find("/")
     return model[idx + 1 :] if idx > 0 else model
 
 
-def get_rates(model: str) -> tuple[float, float, float, float]:
-    """Return (input, output, cache_write, cache_read) USD per million tokens."""
-    key = _strip_provider_prefix(model).lower().strip()
-
-    # Direct lookup
+def _resolve(key: str) -> tuple[float, float, float, float] | None:
+    """按 精确命中 → 别名 → 去日期后缀 → 最长后缀匹配 的顺序查价。"""
     if key in _PRICING:
         return _PRICING[key]
 
-    # Alias lookup
     alias = _ALIASES.get(key)
     if alias and alias in _PRICING:
         return _PRICING[alias]
 
-    # Strip date suffix for Claude models: claude-sonnet-4-6-20260101 → claude-sonnet-4-6
-    import re
-
-    stripped = re.sub(r"-\d{8}$", "", key)
+    stripped = _DATE_SUFFIX_RE.sub("", key)
     if stripped != key and stripped in _PRICING:
         return _PRICING[stripped]
 
-    # Partial prefix scan (narrow: only exact-suffix match to avoid false positives)
-    for known_key, rates in _PRICING.items():
-        if key.endswith(known_key):
-            return rates
+    # 兜底：id 以已知 key 结尾仍可命中（非 "/" 分隔的 vendor 前缀）。
+    # 取最长命中，避免 "some-vendor-glm-4.5-air" 错拿 glm-4.5 的价。
+    best_key: str | None = None
+    for known_key in _PRICING:
+        if key.endswith(known_key) and (
+            best_key is None or len(known_key) > len(best_key)
+        ):
+            best_key = known_key
+    if best_key is not None:
+        return _PRICING[best_key]
 
-    return _UNKNOWN
+    return None
+
+
+def get_rates(model: str) -> tuple[float, float, float, float]:
+    """返回 (input, output, cache_write, cache_read) 美元/百万 token。"""
+    rates = _resolve(_strip_provider_prefix(model).lower().strip())
+    return rates if rates is not None else _UNKNOWN
+
+
+def is_known_model(model: str) -> bool:
+    """模型能否在价目表中精确找到（不含未知兜底）。
+
+    未知模型会被 get_rates 按兜底价计出"看起来很确定"的金额；调用方可用
+    本函数区分真实价与估算价，在 UI 上标注 estimated。
+    """
+    return _resolve(_strip_provider_prefix(model).lower().strip()) is not None
 
 
 def calculate_cost(

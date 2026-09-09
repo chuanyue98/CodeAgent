@@ -16,7 +16,10 @@ from pathlib import Path
 
 from core.engine_registry import ENGINES, get_spec
 from core.host_env import child_environ
+from core.logging_config import get_logger
 from core.services.run_store import RunStore, TaskRunRecord
+
+logger = get_logger(__name__)
 
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
 
@@ -606,7 +609,10 @@ class TaskRunner:
                     process.kill()
                     process.wait()
                 except Exception:
-                    pass
+                    # 杀不动只能记录：留着僵尸进程比无痕失败好。
+                    logger.warning(
+                        "强制终止任务 %s 的进程失败", _task_id, exc_info=True
+                    )
 
     def _is_process_running(self, pid: int) -> bool:
         try:

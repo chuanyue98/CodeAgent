@@ -160,4 +160,6 @@ class SettingsManager:
                     settings_path.unlink()
                     logger.info("Removed injected %s", settings_path.name)
             except Exception:
-                pass
+                logger.warning(
+                    "检查 %s 的注入标记失败，文件保持原样", settings_path, exc_info=True
+                )

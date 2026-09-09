@@ -30,15 +30,17 @@ its own native format and no config file is ever copied across.
 from __future__ import annotations
 
 import json
-import os
 import re
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import Any
 
 from core.constants import ENGINES
+from core.logging_config import get_logger
+from core.utils.atomic_write import atomic_write
+
+logger = get_logger(__name__)
 
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
 
@@ -162,20 +164,7 @@ def _read_json(path: Path) -> dict:
 
 
 def _atomic_write_json(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(
-        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", text=True
-    )
-    tmp_path = Path(tmp_name)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_path, path)
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
-        raise
+    atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False), fsync=True)
 
 
 def _has_jsonc_comments(path: Path) -> bool:
@@ -269,6 +258,9 @@ def _list_codex() -> list[dict]:
     try:
         doc = tomlkit.parse(path.read_text(encoding="utf-8"))
     except Exception:
+        # 配置损坏时静默返回空列表会让 drift 检测把"有"报成"无"，
+        # 至少要把原因留在日志里。
+        logger.warning("解析 %s 失败，MCP 列表按空处理", path, exc_info=True)
         return []
     servers = doc.get("mcp_servers", {})
     return [

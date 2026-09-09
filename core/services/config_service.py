@@ -1,9 +1,10 @@
 import json
 import os
-import tempfile
 import threading
 import traceback
 from pathlib import Path
+
+from core.utils.atomic_write import atomic_write
 
 
 class ConfigService:
@@ -36,23 +37,11 @@ class ConfigService:
 
     def _atomic_write(self, config: dict) -> None:
         """Atomic write via temp+fsync+replace (caller must hold ``_lock``)."""
-        self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        fd, temp_name = tempfile.mkstemp(
-            dir=self.config_path.parent,
-            prefix=f".{self.config_path.name}.",
-            suffix=".tmp",
-            text=True,
+        atomic_write(
+            self.config_path,
+            json.dumps(config, indent=2, ensure_ascii=False),
+            fsync=True,
         )
-        temp_path = Path(temp_name)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(temp_path, self.config_path)
-        except Exception:
-            temp_path.unlink(missing_ok=True)
-            raise
 
     def _cached_read(self) -> tuple[dict, list[str]]:
         """Return cached config if the file mtime hasn't changed."""
