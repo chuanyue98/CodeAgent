@@ -1,16 +1,16 @@
 import { Link } from 'react-router';
 import { ArrowUpRight as LinkArrow, Clock, Terminal } from 'lucide-react';
-import { fmtCost, fmtCostLabel, fmtTokens, type EngineSummary, type SessionUsage } from '../../api/analytics';
+import { fmtTokens, type EngineSummary, type SessionUsage } from '../../api/analytics';
 import { useT } from '../../i18n/context';
 import { eb, ec, timeAgo } from './present';
-import { SectionTitle } from './ChartCards';
-import { CostDistributionCard, type PieDatum } from './ChartCards';
+import { SectionTitle, TokenDistributionCard, type PieDatum } from './ChartCards';
+import { ioTokens } from './rangeStats';
 
 export interface EnginePanelProps {
   rangeEngines: EngineSummary[];
   pieData: PieDatum[];
   sessionCount: number;
-  avgCostPerSession: number;
+  avgTokensPerSession: number;
   totalLabel: string;
   recentSessions: SessionUsage[];
 }
@@ -20,7 +20,7 @@ export default function EnginePanel({
   rangeEngines,
   pieData,
   sessionCount,
-  avgCostPerSession,
+  avgTokensPerSession,
   totalLabel,
   recentSessions,
 }: EnginePanelProps) {
@@ -51,9 +51,11 @@ export default function EnginePanel({
                 </div>
               ))}
               <div className="flex justify-between pt-1.5 border-t border-slate-100">
-                <span className="text-slate-500 font-medium">{t('engine.estCost')}</span>
+                <span className="text-slate-500 font-medium">{t('analytics.total')}</span>
                 <span className="font-bold" style={{ color: ec(eng.target) }}>
-                  {fmtCostLabel(eng.cost, eng.unpricedTokens, t('cost.unpriced'))}
+                  {fmtTokens(
+                    eng.inputTokens + eng.outputTokens + eng.cacheCreationTokens + eng.cacheReadTokens,
+                  )}
                 </span>
               </div>
             </div>
@@ -68,7 +70,7 @@ export default function EnginePanel({
       </div>
 
       <div className="animate-fade-rise stagger-5 flex flex-col gap-3">
-        <CostDistributionCard pieData={pieData} />
+        <TokenDistributionCard pieData={pieData} />
 
         <div className="glass-card p-4 flex-1">
           <SectionTitle
@@ -91,7 +93,7 @@ export default function EnginePanel({
               </p>
             </div>
             <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-center">
-              <p className="text-lg font-bold text-green-700">{fmtCost(avgCostPerSession)}</p>
+              <p className="text-lg font-bold text-green-700">{fmtTokens(Math.round(avgTokensPerSession))}</p>
               <p className="text-[9px] text-slate-600 uppercase tracking-wide">{t('engine.avgPerSession')}</p>
             </div>
           </div>
@@ -115,13 +117,8 @@ export default function EnginePanel({
                   </div>
                   <span className="text-[10px] text-slate-400">{timeAgo(s.lastActivity, t)}</span>
                 </div>
-                <div className="text-right shrink-0 ml-2">
-                  <div className="font-mono text-[11px] font-semibold text-slate-700">
-                    {fmtCostLabel(s.cost, s.unpricedTokens, t('cost.unpriced'))}
-                  </div>
-                  <div className="text-[9px] text-slate-400">
-                    {fmtTokens(s.inputTokens + s.outputTokens)}
-                  </div>
+                <div className="shrink-0 ml-2 text-right font-mono text-[11px] font-semibold text-slate-700">
+                  {fmtTokens(ioTokens(s))}
                 </div>
               </div>
             ))}

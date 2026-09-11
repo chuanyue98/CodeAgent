@@ -16,8 +16,7 @@ test('every section renders on one page instead of behind sub-tabs', async ({ pa
   await page.goto('/analytics');
   await waitForPage(page, 'Usage');
   const main = page.locator('main');
-  await expect(main).toContainText('Total Cost');
-  await expect(main).toContainText('Cost by engine');
+  await expect(main).toContainText('Total Tokens');
   await expect(main).toContainText('Tokens by engine');
   await expect(main).toContainText('Model Breakdown');
   await expect(page.locator('svg.recharts-surface').first()).toBeVisible();

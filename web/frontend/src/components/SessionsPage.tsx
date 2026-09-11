@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useIsMounted, useLatestRequest } from '../hooks/useAsyncGuards';
 import { useSearchParams } from 'react-router';
-import { ChevronRight, Clock, DollarSign, FileText, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
-import { fetchSessionPage, type SessionUsage, fmtCostLabel, fmtTokens } from '../api/analytics';
+import { ChevronRight, Clock, FileText, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
+import { fetchSessionPage, type SessionUsage, fmtTokens } from '../api/analytics';
 import { deleteHistorySession } from '../api/audit';
 import useActivityFilters from '../hooks/useActivityFilters';
 import { useT } from '../i18n/context';
@@ -15,7 +15,7 @@ import EmptyState from './shared/EmptyState';
 import ErrorState from './shared/ErrorState';
 import FilterListSkeleton from './shared/FilterListSkeleton';
 
-type SortKey = 'lastActivity' | 'cost' | 'tokens';
+type SortKey = 'lastActivity' | 'tokens';
 type SortDir = 'asc' | 'desc';
 
 /**
@@ -176,7 +176,6 @@ export default function SessionsPage() {
         const tb = new Date(b.lastActivity).getTime() || 0;
         cmp = ta - tb;
       }
-      else if (sortKey === 'cost') cmp = a.cost - b.cost;
       else if (sortKey === 'tokens') cmp = (a.inputTokens + a.outputTokens) - (b.inputTokens + b.outputTokens);
       return sortDir === 'asc' ? cmp : -cmp;
     });
@@ -320,7 +319,7 @@ export default function SessionsPage() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {(['lastActivity', 'cost', 'tokens'] as SortKey[]).map(key => (
+            {(['lastActivity', 'tokens'] as SortKey[]).map(key => (
               <button
                 key={key}
                 onClick={() => toggleSort(key)}
@@ -330,7 +329,7 @@ export default function SessionsPage() {
                     : 'border-slate-200 text-slate-500 hover:bg-slate-50'
                 }`}
               >
-                {key === 'lastActivity' ? t('sessions.sortDate') : key === 'cost' ? t('sessions.sortCost') : t('sessions.sortTokens')}
+                {key === 'lastActivity' ? t('sessions.sortDate') : t('sessions.sortTokens')}
                 {sortKey === key && (sortDir === 'asc' ? ' ↑' : ' ↓')}
               </button>
             ))}
@@ -409,8 +408,8 @@ export default function SessionsPage() {
                           {session.target}
                         </span>
                         {/* Subagent runs are folded into the session that spawned
-                            them; the count is what tells you the row's tokens and
-                            cost cover more than one transcript. */}
+                            them; the count is what tells you the row's tokens cover
+                            more than one transcript. */}
                         {subtaskCount > 0 && (
                           <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
                             {t('sessions.subtaskCount', { count: subtaskCount })}
@@ -438,7 +437,7 @@ export default function SessionsPage() {
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
                     {/* A subagent run only reaches top level when its parent is
                         gone -- say the engine pruned that transcript. Marked
-                        rather than hidden, so its cost stays visible. */}
+                        rather than hidden, so its usage stays visible. */}
                     {session.parentSessionId && (
                       <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
                         {t('sessions.orphanSubtask')}
@@ -446,9 +445,6 @@ export default function SessionsPage() {
                     )}
                     <span className="text-xs text-slate-500 flex items-center gap-1">
                       <FileText className="w-3 h-3" />{fmtTokens(totalTokens)}
-                    </span>
-                    <span className="text-xs text-slate-500 flex items-center gap-1">
-                      <DollarSign className="w-3 h-3" />{fmtCostLabel(session.cost, session.unpricedTokens, t('cost.unpriced'))}
                     </span>
                     <span className="text-xs text-slate-400 flex items-center gap-1">
                       <Clock className="w-3 h-3" />

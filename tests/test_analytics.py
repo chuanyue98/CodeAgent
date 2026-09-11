@@ -79,68 +79,37 @@ def test_aggregation_logic():
     assert len(result["sessions"]) == 2
 
 
-def _unpriced_entry(**overrides) -> RawUsageEntry:
-    fields = {
-        "timestamp": "2026-05-01T11:00:00Z",
-        "session_id": "s1",
-        "model": "no-such-model",
-        "input_tokens": 300,
-        "output_tokens": 200,
-        "cache_read_tokens": 500,
-        "target": "claude",
-    }
-    fields.update(overrides)
-    return RawUsageEntry(**fields)
+def test_summaries_report_tokens_ranked_by_input_and_output():
+    from core.analytics.service import _build_engine_summary, _build_model_summary
 
-
-def test_tokens_without_a_price_are_counted_apart_from_cost():
     entries = [
         RawUsageEntry(
             timestamp="2026-05-01T10:00:00Z",
             session_id="s1",
-            model="claude-haiku-4-5",
-            input_tokens=1_000_000,
-            output_tokens=0,
+            model="long-context",
+            input_tokens=10,
+            output_tokens=5,
+            cache_read_tokens=10_000,
             target="claude",
         ),
-        _unpriced_entry(),
+        RawUsageEntry(
+            timestamp="2026-05-01T11:00:00Z",
+            session_id="s2",
+            model="busy",
+            input_tokens=300,
+            output_tokens=200,
+            target="claude",
+        ),
     ]
-
-    result = aggregate(entries)
-
-    (session,) = result["sessions"]
-    assert session["cost"] == 1.0
-    assert session["unpricedTokens"] == 1000
-    assert result["daily"][0]["unpricedTokens"] == 1000
-    by_model = {bd["modelName"]: bd for bd in session["modelBreakdowns"]}
-    assert by_model["no-such-model"]["cost"] == 0
-    assert by_model["no-such-model"]["unpricedTokens"] == 1000
-    assert by_model["claude-haiku-4-5"]["unpricedTokens"] == 0
-
-
-def test_unpriced_tokens_roll_up_from_subtasks():
-    entries = [
-        _unpriced_entry(session_id="parent"),
-        _unpriced_entry(session_id="child", parent_session_id="parent"),
-    ]
-
-    (session,) = aggregate(entries)["sessions"]
-
-    assert session["unpricedTokens"] == 2000
-    assert session["own"]["unpricedTokens"] == 1000
-
-
-def test_engine_and_model_summaries_keep_unpriced_tokens_out_of_cost():
-    from core.analytics.service import _build_engine_summary, _build_model_summary
-
-    entries = [_unpriced_entry(target="codebuddy")]
 
     (engine,) = _build_engine_summary(entries)
-    assert engine["cost"] == 0
-    assert engine["unpricedTokens"] == 1000
-    (model,) = _build_model_summary(entries)
-    assert model["inputCost"] == 0
-    assert model["unpricedTokens"] == 1000
+    assert engine["inputTokens"] == 310
+    assert "cost" not in engine
+    models = _build_model_summary(entries)
+    # The cache reads that dwarf "long-context" must not rank it above "busy".
+    assert [m["model"] for m in models] == ["busy", "long-context"]
+    assert all("cost" not in m for m in models)
+    assert "cost" not in aggregate(entries)["sessions"][0]
 
 
 def test_incremental_history(mock_history_file):

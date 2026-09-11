@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from core.analytics import history as _history
-from core.analytics.pricing import pricing_fingerprint
 from core.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -15,7 +14,7 @@ logger = get_logger(__name__)
 # Bumped when the cached aggregate's shape changes. Also part of the
 # invalidation key below, so an upgrade drops the previous cache instead of
 # serving it with fields the current code no longer writes.
-CACHE_SCHEMA_VERSION = 6
+CACHE_SCHEMA_VERSION = 7
 
 #: 缓存的最长存活时间。它不只是"怕陈旧"：归档文件只会被采集本身写入，所以只
 #: 按输入失效的话，第一次采集之后输入永远不会再变，新用量就再也进不来了。
@@ -39,10 +38,9 @@ def _source_key() -> str:
     This used to be a 5-minute TTL, so a restart after any idle spell re-ran
     the whole collection (~3.3 s) even when nothing had changed. Keying on the
     inputs instead keeps the cache valid for exactly as long as they are: the
-    archive's ``(mtime, size)`` moves whenever a collector appends, and the
-    pricing fingerprint moves when a rate is edited.
+    archive's ``(mtime, size)`` moves whenever a collector appends.
     """
-    parts = [f"schema={CACHE_SCHEMA_VERSION}", f"pricing={pricing_fingerprint()}"]
+    parts = [f"schema={CACHE_SCHEMA_VERSION}"]
     try:
         stat = os.stat(_history._history_path())
     except OSError:

@@ -11,7 +11,6 @@ from core.analytics.models import (
     RawUsageEntry,
     SessionUsage,
 )
-from core.analytics.pricing import calculate_cost
 
 
 def _parse_ts(ts: str) -> datetime:
@@ -55,62 +54,14 @@ def _month(ts: str) -> str:
     return ts[:7] if ts else "unknown"
 
 
-def _entry_tokens(entry: RawUsageEntry) -> int:
-    """Every token class of *entry* combined."""
-    return (
-        entry.input_tokens
-        + entry.output_tokens
-        + entry.cache_creation_tokens
-        + entry.cache_read_tokens
-    )
-
-
-def _entry_cost(entry: RawUsageEntry) -> float | None:
-    """Calculates or retrieves the cost for a single usage entry.
-
-    Args:
-        entry: The RawUsageEntry to calculate cost for.
-
-    Returns:
-        The engine's pre-computed cost when it recorded one, the cost from the
-        rate table otherwise, or None when the model has no known price.
-    """
-    if entry.cost > 0:
-        return entry.cost
-    return calculate_cost(
-        entry.model,
-        entry.input_tokens,
-        entry.output_tokens,
-        entry.cache_creation_tokens,
-        entry.cache_read_tokens,
-    )
-
-
-def _add_cost(
-    usage: DailyUsage | MonthlyUsage | SessionUsage | ModelBreakdown,
-    entry: RawUsageEntry,
-    cost: float | None,
-) -> None:
-    """Adds *cost* to *usage*, or counts the entry's tokens as unpriced.
-
-    Unpriced tokens are kept apart rather than priced at zero, so a total can
-    say what it leaves out instead of silently understating.
-    """
-    if cost is None:
-        usage.unpriced_tokens += _entry_tokens(entry)
-    else:
-        usage.cost += cost
-
-
 def _merge_breakdown(
-    breakdowns: dict[str, ModelBreakdown], entry: RawUsageEntry, cost: float | None
+    breakdowns: dict[str, ModelBreakdown], entry: RawUsageEntry
 ) -> None:
     """Merges a usage entry into a model-specific breakdown dictionary.
 
     Args:
         breakdowns: Dictionary of model names to ModelBreakdown objects.
         entry: The usage entry to merge.
-        cost: The cost associated with this entry, None when unpriced.
     """
     bd = breakdowns.setdefault(
         entry.model,
@@ -120,7 +71,6 @@ def _merge_breakdown(
     bd.output_tokens += entry.output_tokens
     bd.cache_creation_tokens += entry.cache_creation_tokens
     bd.cache_read_tokens += entry.cache_read_tokens
-    _add_cost(bd, entry, cost)
 
 
 def aggregate(entries: list[RawUsageEntry]) -> dict[str, Any]:
@@ -145,29 +95,26 @@ def aggregate(entries: list[RawUsageEntry]) -> dict[str, Any]:
     sessions: dict[tuple, SessionUsage] = {}
     session_bds: dict[tuple, dict[str, ModelBreakdown]] = defaultdict(dict)
 
-    def update_usage(usage_obj, entry: RawUsageEntry, cost: float | None):
+    def update_usage(usage_obj, entry: RawUsageEntry):
         usage_obj.input_tokens += entry.input_tokens
         usage_obj.output_tokens += entry.output_tokens
         usage_obj.cache_creation_tokens += entry.cache_creation_tokens
         usage_obj.cache_read_tokens += entry.cache_read_tokens
-        _add_cost(usage_obj, entry, cost)
 
     for e in entries:
-        cost = _entry_cost(e)
-
         # Daily
         d_key = (_date(e.timestamp), e.target)
         if d_key not in daily:
             daily[d_key] = DailyUsage(date=d_key[0], target=e.target)
-        update_usage(daily[d_key], e, cost)
-        _merge_breakdown(daily_bds[d_key], e, cost)
+        update_usage(daily[d_key], e)
+        _merge_breakdown(daily_bds[d_key], e)
 
         # Monthly
         m_key = (_month(e.timestamp), e.target)
         if m_key not in monthly:
             monthly[m_key] = MonthlyUsage(month=m_key[0], target=e.target)
-        update_usage(monthly[m_key], e, cost)
-        _merge_breakdown(monthly_bds[m_key], e, cost)
+        update_usage(monthly[m_key], e)
+        _merge_breakdown(monthly_bds[m_key], e)
 
         # Session
         s_key = (e.session_id, e.target)
@@ -180,10 +127,10 @@ def aggregate(entries: list[RawUsageEntry]) -> dict[str, Any]:
                 agent=e.agent,
             )
         su = sessions[s_key]
-        update_usage(su, e, cost)
+        update_usage(su, e)
         if _parse_ts(e.timestamp) > _parse_ts(su.last_activity):
             su.last_activity = e.timestamp
-        _merge_breakdown(session_bds[s_key], e, cost)
+        _merge_breakdown(session_bds[s_key], e)
 
     # Attach model breakdowns and unique models
     def finalize(usage_map, breakdown_map):
@@ -255,7 +202,7 @@ def _nest_subtasks(sessions: dict[tuple, SessionUsage]) -> list[SessionUsage]:
     buries the ones that were: on a machine with a `@explore`-heavy workflow
     they outnumber real sessions two to one. A child whose parent is absent --
     the engine pruned that transcript, say -- stays at top level, because
-    dropping it would take its cost out of the list entirely.
+    dropping it would take its usage out of the list entirely.
     """
     top: list[SessionUsage] = []
     for su in sessions.values():
@@ -270,30 +217,19 @@ def _nest_subtasks(sessions: dict[tuple, SessionUsage]) -> list[SessionUsage]:
     return top
 
 
-def _rolled_totals(su: SessionUsage) -> tuple[int, int, int, int, float, int]:
-    """(input, output, cache write, cache read, cost, unpriced) including subtasks."""
+def _rolled_totals(su: SessionUsage) -> tuple[int, int, int, int]:
+    """(input, output, cache write, cache read) including every subtask."""
     input_t = su.input_tokens
     output_t = su.output_tokens
     cache_write = su.cache_creation_tokens
     cache_read = su.cache_read_tokens
-    cost = su.cost
-    unpriced = su.unpriced_tokens
     for child in su.subtasks:
-        (
-            child_in,
-            child_out,
-            child_write,
-            child_read,
-            child_cost,
-            child_unpriced,
-        ) = _rolled_totals(child)
+        child_in, child_out, child_write, child_read = _rolled_totals(child)
         input_t += child_in
         output_t += child_out
         cache_write += child_write
         cache_read += child_read
-        cost += child_cost
-        unpriced += child_unpriced
-    return input_t, output_t, cache_write, cache_read, cost, unpriced
+    return input_t, output_t, cache_write, cache_read
 
 
 def _rolled_last_activity(su: SessionUsage) -> str:
@@ -323,8 +259,6 @@ def _rolled_breakdowns(su: SessionUsage) -> list[ModelBreakdown]:
             target.output_tokens += bd.output_tokens
             target.cache_creation_tokens += bd.cache_creation_tokens
             target.cache_read_tokens += bd.cache_read_tokens
-            target.cost += bd.cost
-            target.unpriced_tokens += bd.unpriced_tokens
         for child in node.subtasks:
             visit(child)
 
@@ -348,8 +282,6 @@ def _daily_to_dict(du: DailyUsage) -> dict:
         "outputTokens": du.output_tokens,
         "cacheCreationTokens": du.cache_creation_tokens,
         "cacheReadTokens": du.cache_read_tokens,
-        "cost": du.cost,
-        "unpricedTokens": du.unpriced_tokens,
         "modelsUsed": du.models_used,
         "modelBreakdowns": [_bd_to_dict(b) for b in du.model_breakdowns],
     }
@@ -371,8 +303,6 @@ def _monthly_to_dict(mu: MonthlyUsage) -> dict:
         "outputTokens": mu.output_tokens,
         "cacheCreationTokens": mu.cache_creation_tokens,
         "cacheReadTokens": mu.cache_read_tokens,
-        "cost": mu.cost,
-        "unpricedTokens": mu.unpriced_tokens,
         "modelsUsed": mu.models_used,
         "modelBreakdowns": [_bd_to_dict(b) for b in mu.model_breakdowns],
     }
@@ -381,8 +311,8 @@ def _monthly_to_dict(mu: MonthlyUsage) -> dict:
 def _session_to_dict(su: SessionUsage) -> dict:
     """Converts a SessionUsage object to a dictionary.
 
-    Token counts, cost and ``lastActivity`` are rolled up over the session's
-    subtasks, so a row reads as "what this piece of work cost". ``own`` keeps
+    Token counts and ``lastActivity`` are rolled up over the session's
+    subtasks, so a row reads as "what this piece of work used". ``own`` keeps
     the main thread's share addressable, and ``subtasks`` carries the children
     in the same shape.
 
@@ -392,7 +322,7 @@ def _session_to_dict(su: SessionUsage) -> dict:
     Returns:
         A dictionary representation of the SessionUsage object.
     """
-    input_t, output_t, cache_write, cache_read, cost, unpriced = _rolled_totals(su)
+    input_t, output_t, cache_write, cache_read = _rolled_totals(su)
     breakdowns = _rolled_breakdowns(su)
     return {
         "sessionId": su.session_id,
@@ -402,8 +332,6 @@ def _session_to_dict(su: SessionUsage) -> dict:
         "outputTokens": output_t,
         "cacheCreationTokens": cache_write,
         "cacheReadTokens": cache_read,
-        "cost": cost,
-        "unpricedTokens": unpriced,
         "lastActivity": _rolled_last_activity(su),
         "modelsUsed": sorted({bd.model_name for bd in breakdowns}),
         "modelBreakdowns": [_bd_to_dict(b) for b in breakdowns],
@@ -414,8 +342,6 @@ def _session_to_dict(su: SessionUsage) -> dict:
             "outputTokens": su.output_tokens,
             "cacheCreationTokens": su.cache_creation_tokens,
             "cacheReadTokens": su.cache_read_tokens,
-            "cost": su.cost,
-            "unpricedTokens": su.unpriced_tokens,
             "lastActivity": su.last_activity,
         },
         "subtasks": [_session_to_dict(child) for child in su.subtasks],
@@ -437,6 +363,4 @@ def _bd_to_dict(bd: ModelBreakdown) -> dict:
         "outputTokens": bd.output_tokens,
         "cacheCreationTokens": bd.cache_creation_tokens,
         "cacheReadTokens": bd.cache_read_tokens,
-        "cost": bd.cost,
-        "unpricedTokens": bd.unpriced_tokens,
     }

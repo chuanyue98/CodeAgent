@@ -18,7 +18,6 @@ function day(date: string, overrides: Partial<DailyUsage> = {}): DailyUsage {
     outputTokens: 50,
     cacheCreationTokens: 10,
     cacheReadTokens: 5,
-    cost: 1,
     modelsUsed: ['sonnet'],
     modelBreakdowns: [
       {
@@ -27,7 +26,6 @@ function day(date: string, overrides: Partial<DailyUsage> = {}): DailyUsage {
         outputTokens: 50,
         cacheCreationTokens: 10,
         cacheReadTokens: 5,
-        cost: 1,
       },
     ],
     ...overrides,
@@ -59,42 +57,21 @@ describe('filterDailyByRange', () => {
 });
 
 describe('computeTotals', () => {
-  test('sums token classes and cost across days', () => {
-    const totals = computeTotals([day('2024-01-01'), day('2024-01-02')]);
-    expect(totals.inputTokens).toBe(200);
-    expect(totals.outputTokens).toBe(100);
-    expect(totals.cacheTokens).toBe(30);
-    expect(totals.cost).toBe(2);
-  });
-});
-
-describe('unpriced tokens', () => {
-  const unpricedBreakdown = {
-    modelName: 'mystery', inputTokens: 10, outputTokens: 10,
-    cacheCreationTokens: 0, cacheReadTokens: 20, cost: 0, unpricedTokens: 40,
-  };
-
-  test('totals keep them apart from cost', () => {
-    const totals = computeTotals([day('2024-01-01', { unpricedTokens: 40 }), day('2024-01-02')]);
-    expect(totals.cost).toBe(2);
-    expect(totals.unpricedTokens).toBe(40);
-  });
-
-  test('a narrowed range carries them per engine and per model', () => {
-    const daily = [
-      day(localDayOffset(0), { unpricedTokens: 40, modelBreakdowns: [unpricedBreakdown] }),
-      day(localDayOffset(1), { unpricedTokens: 40, modelBreakdowns: [unpricedBreakdown] }),
-    ];
-    expect(buildRangeEngines([], daily, [], 7)[0].unpricedTokens).toBe(80);
-    expect(buildRangeModels([], daily, 7)[0].unpricedTokens).toBe(80);
+  test('sums each token class across days', () => {
+    expect(computeTotals([day('2024-01-01'), day('2024-01-02')])).toEqual({
+      inputTokens: 200,
+      outputTokens: 100,
+      cacheCreationTokens: 20,
+      cacheReadTokens: 10,
+    });
   });
 });
 
 describe('buildRangeEngines', () => {
-  test('aggregates daily rows per engine and counts sessions', () => {
+  test('aggregates daily rows per engine, busiest first, and counts sessions', () => {
     const daily = [
-      day('2024-01-01', { target: 'claude', cost: 2 }),
-      day('2024-01-01', { target: 'codex', cost: 1, inputTokens: 10 }),
+      day('2024-01-01', { target: 'codex', inputTokens: 10 }),
+      day('2024-01-01', { target: 'claude', inputTokens: 500 }),
     ];
     const sessions: SessionUsage[] = [
       { sessionId: 'a', target: 'claude' } as SessionUsage,
@@ -104,7 +81,7 @@ describe('buildRangeEngines', () => {
     expect(engines.map(e => e.target)).toEqual(['claude', 'codex']);
     const claude = engines[0];
     expect(claude.sessionCount).toBe(2);
-    expect(claude.cost).toBe(2);
+    expect(claude.inputTokens).toBe(500);
     expect(claude.models).toEqual(['sonnet']);
   });
 
@@ -122,75 +99,80 @@ describe('buildRangeModels', () => {
       outputTokens: 1000,
       cacheCreationTokens: 0,
       cacheReadTokens: 0,
-      inputCost: 3,
-      outputCost: 15,
-      cacheWriteCost: 0,
-      cacheReadCost: 0,
-      cost: 18,
       sessionCount: 1,
       targets: ['claude'],
     },
   ];
 
   test('all-time maps the API model stats one-to-one', () => {
-    const models = buildRangeModels(modelStats, [], null);
-    expect(models).toHaveLength(1);
-    expect(models[0].inputCost).toBe(3);
-    expect(models[0].outputCost).toBe(15);
+    expect(buildRangeModels(modelStats, [], null)).toEqual([
+      {
+        model: 'sonnet',
+        targets: ['claude'],
+        inputTokens: 1000,
+        outputTokens: 1000,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+      },
+    ]);
   });
 
-  test('a narrowed range derives cost categories from all-time rates', () => {
-    // sonnet all-time: $3 per 1000 input tokens, $15 per 1000 output tokens.
-    const models = buildRangeModels(modelStats, [day('2024-01-01')], 7);
-    expect(models).toHaveLength(1);
-    const sonnet = models[0];
-    expect(sonnet.inputTokens).toBe(100);
-    expect(sonnet.inputCost).toBeCloseTo(0.3);
-    expect(sonnet.outputCost).toBeCloseTo(0.75);
-    expect(sonnet.targets).toEqual(['claude']);
+  test('a narrowed range sums the daily breakdowns, ranked by input + output', () => {
+    // haiku's cache reads dwarf sonnet's whole day, but it did far less work.
+    const haiku = {
+      modelName: 'haiku', inputTokens: 1, outputTokens: 1,
+      cacheCreationTokens: 0, cacheReadTokens: 900,
+    };
+    const models = buildRangeModels(
+      modelStats,
+      [day('2024-01-01'), day('2024-01-02', { modelBreakdowns: [haiku] })],
+      7,
+    );
+    expect(models.map(m => m.model)).toEqual(['sonnet', 'haiku']);
+    expect(models[0].inputTokens).toBe(100);
+    expect(models[0].targets).toEqual(['claude']);
   });
 });
 
 describe('buildSeries', () => {
-  test('pivots daily rows into per-key cost/tokens columns per engine', () => {
+  test('pivots daily rows into per-key token columns per engine', () => {
     const daily = [
-      day('2024-01-01', { target: 'claude', cost: 1 }),
-      day('2024-01-01', { target: 'codex', cost: 2, inputTokens: 0, outputTokens: 10 }),
-      day('2024-01-02', { target: 'claude', cost: 4 }),
+      day('2024-01-01', { target: 'claude' }),
+      day('2024-01-01', { target: 'codex', inputTokens: 0, outputTokens: 10 }),
+      day('2024-01-02', { target: 'claude', inputTokens: 400 }),
     ];
     const series = buildSeries('day', [], daily, null);
     expect(series.engines).toEqual(['claude', 'codex']);
     // codex is 0 on Jan 2, not absent: recharts draws an absent key as a break
     // in the line, which reads as missing data rather than as a quiet day.
-    expect(series.cost).toEqual([
-      { _key: '2024-01-01', claude: 1, codex: 2 },
-      { _key: '2024-01-02', claude: 4, codex: 0 },
-    ]);
     // tokens = input + output per row, accumulated per engine+key.
-    expect(series.tokens[0]).toEqual({ _key: '2024-01-01', claude: 150, codex: 10 });
+    expect(series.tokens).toEqual([
+      { _key: '2024-01-01', claude: 150, codex: 10 },
+      { _key: '2024-01-02', claude: 450, codex: 0 },
+    ]);
   });
 
   test('a day with no work at all still gets a row', () => {
     const twoDaysAgo = localDayOffset(2);
 
-    const series = buildSeries('day', [], [day(twoDaysAgo, { cost: 3 })], 3);
+    const series = buildSeries('day', [], [day(twoDaysAgo)], 3);
 
     // Three days requested, three plotted -- the two idle ones as zeroes.
-    expect(series.cost.map(r => r._key)).toEqual([
+    expect(series.tokens.map(r => r._key)).toEqual([
       twoDaysAgo,
       localDayOffset(1),
       localDayOffset(0),
     ]);
-    expect(series.cost.map(r => r.claude)).toEqual([3, 0, 0]);
+    expect(series.tokens.map(r => r.claude)).toEqual([150, 0, 0]);
   });
 
   test('month granularity pivots the monthly rows instead', () => {
     const series = buildSeries(
       'month',
-      [{ month: '2024-01', target: 'claude', inputTokens: 1, outputTokens: 1, cost: 5 } as never],
+      [{ month: '2024-01', target: 'claude', inputTokens: 1, outputTokens: 1 } as never],
       [day('2024-01-01')],
       null,
     );
-    expect(series.cost).toEqual([{ _key: '2024-01', claude: 5 }]);
+    expect(series.tokens).toEqual([{ _key: '2024-01', claude: 2 }]);
   });
 });

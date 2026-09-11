@@ -154,11 +154,10 @@ describe('SessionsPage session detail', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open session session-a' }));
     const panel = await screen.findByTestId('session-detail');
 
-    // Scoped to the Usage section: the progress strip above it repeats the
-    // headline cost, so an unscoped query matches twice.
     const usage = within(panel).getByTestId('session-usage');
     expect(within(usage).getByText('Usage')).toBeVisible();
-    expect(within(usage).getByText('$0.12')).toBeVisible();
+    expect(within(usage).getByText('Token')).toBeVisible();
+    expect(within(usage).getByText('Cache')).toBeVisible();
     // Convert lives here now instead of only in Events…
     expect(within(panel).getByRole('button', { name: /CodeBuddy/ })).toBeVisible();
     // …and so does deleting this one session.

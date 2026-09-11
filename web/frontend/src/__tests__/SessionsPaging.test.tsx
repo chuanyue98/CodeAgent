@@ -14,7 +14,6 @@ function session(sessionId: string): SessionUsage {
     outputTokens: 50,
     cacheCreationTokens: 0,
     cacheReadTokens: 0,
-    cost: 0.12,
     lastActivity: '2026-07-20T10:00:00Z',
     modelsUsed: ['claude-opus'],
     modelBreakdowns: [],

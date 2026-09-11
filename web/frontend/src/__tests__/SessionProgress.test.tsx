@@ -21,7 +21,6 @@ function usage(overrides: Partial<SessionUsage> = {}): SessionUsage {
   return baseSession({
     inputTokens: 1000,
     outputTokens: 500,
-    cost: 0.42,
     lastActivity: '2026-07-20T10:30:00Z',
     ...overrides,
   });
@@ -74,18 +73,10 @@ test('duration spans the first and last timestamp', () => {
 
 test('usage totals join the strip only when the caller has them', () => {
   const { rerender } = render(<SessionProgress detail={{ messages: [message()] }} />);
-  expect(screen.queryByText('$0.42')).not.toBeInTheDocument();
+  expect(screen.queryByText('1.5K')).not.toBeInTheDocument();
 
   rerender(<SessionProgress detail={{ messages: [message()] }} usage={usage()} />);
-  expect(screen.getByText('$0.42')).toBeInTheDocument();
-});
-
-test('a free session does not advertise a zero cost', () => {
-  render(
-    <SessionProgress detail={{ messages: [message()] }} usage={usage({ cost: 0 })} />,
-  );
-
-  expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
+  expect(screen.getByText('1.5K')).toBeInTheDocument();
 });
 
 test('the last actions read newest first', () => {

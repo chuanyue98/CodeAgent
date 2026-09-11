@@ -1,4 +1,4 @@
-"""Data models for tracking and aggregating LLM usage and costs."""
+"""Data models for tracking and aggregating LLM token usage."""
 
 from __future__ import annotations
 
@@ -17,7 +17,9 @@ class RawUsageEntry:
         output_tokens: Number of completion/output tokens.
         cache_creation_tokens: Tokens used to create a new cache entry.
         cache_read_tokens: Tokens read from an existing cache.
-        cost: Pre-computed cost (primarily for OpenCode); 0.0 means derive from pricing.
+        cost: Cost the engine recorded itself (OpenCode). Not aggregated; the
+            field stays because archived history rows carry it and are loaded
+            with ``RawUsageEntry(**row)``.
         project_path: Local filesystem path of the project.
         target: The engine target (e.g., 'claude', 'codex', 'opencode').
         parent_session_id: Owning session when this entry belongs to a subagent
@@ -33,7 +35,7 @@ class RawUsageEntry:
     output_tokens: int
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
-    cost: float = 0.0  # pre-computed cost (OpenCode); 0 = derive from pricing
+    cost: float = 0.0
     project_path: str = ""
     target: str = ""  # claude | codex | opencode | codebuddy | antigravity
     parent_session_id: str = ""
@@ -42,7 +44,7 @@ class RawUsageEntry:
 
 @dataclass
 class ModelBreakdown:
-    """Aggregated usage and cost metrics for a specific model.
+    """Aggregated token usage for a specific model.
 
     Attributes:
         model_name: Name of the LLM model.
@@ -50,8 +52,6 @@ class ModelBreakdown:
         output_tokens: Total output tokens for this model.
         cache_creation_tokens: Total tokens used for cache creation.
         cache_read_tokens: Total tokens read from cache.
-        cost: Total calculated cost in USD.
-        unpriced_tokens: Tokens with no known price, left out of ``cost``.
     """
 
     model_name: str
@@ -59,8 +59,6 @@ class ModelBreakdown:
     output_tokens: int = 0
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
-    cost: float = 0.0
-    unpriced_tokens: int = 0
 
 
 @dataclass
@@ -74,8 +72,6 @@ class DailyUsage:
         output_tokens: Total output tokens for the day/target.
         cache_creation_tokens: Total cache creation tokens.
         cache_read_tokens: Total cache read tokens.
-        cost: Total cost for the day/target in USD.
-        unpriced_tokens: Tokens with no known price, left out of ``cost``.
         models_used: List of unique model names used.
         model_breakdowns: Detailed breakdown per model.
     """
@@ -86,8 +82,6 @@ class DailyUsage:
     output_tokens: int = 0
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
-    cost: float = 0.0
-    unpriced_tokens: int = 0
     models_used: list[str] = field(default_factory=list)
     model_breakdowns: list[ModelBreakdown] = field(default_factory=list)
 
@@ -103,8 +97,6 @@ class MonthlyUsage:
         output_tokens: Total output tokens for the month/target.
         cache_creation_tokens: Total cache creation tokens.
         cache_read_tokens: Total cache read tokens.
-        cost: Total cost for the month/target in USD.
-        unpriced_tokens: Tokens with no known price, left out of ``cost``.
         models_used: List of unique model names used.
         model_breakdowns: Detailed breakdown per model.
     """
@@ -115,8 +107,6 @@ class MonthlyUsage:
     output_tokens: int = 0
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
-    cost: float = 0.0
-    unpriced_tokens: int = 0
     models_used: list[str] = field(default_factory=list)
     model_breakdowns: list[ModelBreakdown] = field(default_factory=list)
 
@@ -133,17 +123,15 @@ class SessionUsage:
         output_tokens: Total output tokens for the session/target.
         cache_creation_tokens: Total cache creation tokens.
         cache_read_tokens: Total cache read tokens.
-        cost: Total cost for the session/target in USD.
-        unpriced_tokens: Tokens with no known price, left out of ``cost``.
         last_activity: ISO 8601 timestamp of the last activity in the session.
         models_used: List of unique model names used.
         model_breakdowns: Detailed breakdown per model.
         parent_session_id: Owning session for a subagent run; empty at top level.
         agent: Subagent name, when the engine records one.
-        subtasks: Subagent sessions this one spawned. Their tokens and cost are
-            NOT included in this object's own totals -- callers that want the
+        subtasks: Subagent sessions this one spawned. Their tokens are NOT
+            included in this object's own totals -- callers that want the
             rolled-up figure add them explicitly, so "what did the main thread
-            cost" stays answerable.
+            use" stays answerable.
     """
 
     session_id: str
@@ -153,8 +141,6 @@ class SessionUsage:
     output_tokens: int = 0
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
-    cost: float = 0.0
-    unpriced_tokens: int = 0
     last_activity: str = ""
     models_used: list[str] = field(default_factory=list)
     model_breakdowns: list[ModelBreakdown] = field(default_factory=list)

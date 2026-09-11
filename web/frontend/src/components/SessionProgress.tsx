@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { FileText } from 'lucide-react';
-import { type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
+import { type SessionUsage, fmtTokens } from '../api/analytics';
 import type { SessionDetail } from '../api/audit';
 import { formatDuration, summarizeSession } from '../utils/sessionProgress';
 import { useT } from '../i18n/context';
@@ -30,7 +30,6 @@ export default function SessionProgress({ detail, usage }: SessionProgressProps)
     progress.turns > 0 ? t('sessionProgress.turns', { count: String(progress.turns) }) : null,
     duration,
     usage && totalTokens > 0 ? fmtTokens(totalTokens) : null,
-    usage && usage.cost > 0 ? fmtCost(usage.cost) : null,
     progress.files.length > 0
       ? t('sessionProgress.files', { count: String(progress.files.length) })
       : null,

@@ -37,9 +37,6 @@ py-modules = ["ca_launcher"]
 include = ["core*", "engines*"]
 namespaces = true
 
-[tool.setuptools.package-data]
-"core.analytics" = ["model_pricing.json"]
-
 [tool.uv]
 package = true
 

@@ -4,9 +4,6 @@ export interface ModelBreakdown {
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
-  cost: number;
-  /** Tokens from models with no known price, left out of `cost`. */
-  unpricedTokens?: number;
 }
 
 export interface DailyUsage {
@@ -16,8 +13,6 @@ export interface DailyUsage {
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
-  cost: number;
-  unpricedTokens?: number;
   modelsUsed: string[];
   modelBreakdowns: ModelBreakdown[];
 }
@@ -29,8 +24,6 @@ export interface MonthlyUsage {
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
-  cost: number;
-  unpricedTokens?: number;
   modelsUsed: string[];
   modelBreakdowns: ModelBreakdown[];
 }
@@ -41,8 +34,6 @@ export interface SessionOwnUsage {
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
-  cost: number;
-  unpricedTokens?: number;
   lastActivity: string;
 }
 
@@ -52,13 +43,11 @@ export interface SessionUsage {
   projectPath: string;
   /** Session title joined from native history (may be empty). */
   title?: string;
-  /** Tokens and cost including every subtask below. */
+  /** Tokens including every subtask below. */
   inputTokens: number;
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
-  cost: number;
-  unpricedTokens?: number;
   lastActivity: string;
   modelsUsed: string[];
   modelBreakdowns: ModelBreakdown[];
@@ -78,8 +67,6 @@ export interface EngineSummary {
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
-  cost: number;
-  unpricedTokens?: number;
   sessionCount: number;
   models: string[];
 }
@@ -158,12 +145,6 @@ export interface ModelStat {
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
-  inputCost: number;
-  outputCost: number;
-  cacheWriteCost: number;
-  cacheReadCost: number;
-  cost: number;
-  unpricedTokens?: number;
   sessionCount: number;
   targets: string[];
 }
@@ -181,25 +162,4 @@ export function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
-}
-
-export function fmtCost(n: number): string {
-  if (n === 0) return '$0';
-  if (n < 0.01) return `$${n.toFixed(4)}`;
-  return `$${n.toFixed(2)}`;
-}
-
-/**
- * A cost for display next to usage that may include unpriced tokens. A figure
- * that leaves some out is a lower bound and is marked `+`; one that covers
- * none of its tokens is labelled rather than shown as `$0`, which would read
- * as "free".
- */
-export function fmtCostLabel(
-  cost: number,
-  unpricedTokens: number | undefined,
-  unpricedLabel: string,
-): string {
-  if (!unpricedTokens) return fmtCost(cost);
-  return cost > 0 ? `${fmtCost(cost)}+` : unpricedLabel;
 }

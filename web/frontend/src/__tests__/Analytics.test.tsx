@@ -19,24 +19,23 @@ function dayAgo(days: number): string {
   return toLocalDayString(date);
 }
 
-function daily(date: string, target: string, cost: number, model = 'claude-opus') {
+function daily(date: string, target: string, inputTokens: number, model = 'claude-opus') {
+  const outputTokens = inputTokens / 2;
   return {
     date,
     target,
-    inputTokens: 1000,
-    outputTokens: 500,
+    inputTokens,
+    outputTokens,
     cacheCreationTokens: 0,
     cacheReadTokens: 0,
-    cost,
     modelsUsed: [model],
     modelBreakdowns: [
       {
         modelName: model,
-        inputTokens: 1000,
-        outputTokens: 500,
+        inputTokens,
+        outputTokens,
         cacheCreationTokens: 0,
         cacheReadTokens: 0,
-        cost,
       },
     ],
   };
@@ -44,22 +43,17 @@ function daily(date: string, target: string, cost: number, model = 'claude-opus'
 
 // 2 days ago is inside every range; 45 days ago is inside 90d/all only.
 const DAILY = [
-  daily(dayAgo(2), 'claude', 10),
-  daily(dayAgo(45), 'claude', 100),
+  daily(dayAgo(2), 'claude', 1000),
+  daily(dayAgo(45), 'claude', 10000),
 ];
 
 const MODELS = [
   {
     model: 'claude-opus',
-    inputTokens: 2000,
-    outputTokens: 1000,
+    inputTokens: 11000,
+    outputTokens: 5500,
     cacheCreationTokens: 0,
     cacheReadTokens: 0,
-    inputCost: 44,
-    outputCost: 66,
-    cacheWriteCost: 0,
-    cacheReadCost: 0,
-    cost: 110,
     sessionCount: 2,
     targets: ['claude'],
   },
@@ -85,9 +79,9 @@ beforeEach(() => {
       return jsonResponse([
         {
           target: 'claude',
-          inputTokens: 2000, outputTokens: 1000,
+          inputTokens: 11000, outputTokens: 5500,
           cacheCreationTokens: 0, cacheReadTokens: 0,
-          cost: 110, sessionCount: 2, models: ['claude-opus'],
+          sessionCount: 2, models: ['claude-opus'],
         },
       ]);
     }
@@ -127,10 +121,9 @@ function pickRange(label: string) {
 describe('Analytics is one page, not four tabs', () => {
   test('shows every section at once instead of a tab bar', async () => {
     renderAnalytics();
-    await screen.findByText('Total Cost');
+    await screen.findByText('Total Tokens');
 
     expect(screen.getByText('Model Breakdown')).toBeVisible();
-    expect(screen.getByText(/Cost by engine/)).toBeVisible();
     expect(screen.getByText(/Tokens by engine/)).toBeVisible();
 
     // The old Overview/Daily/Monthly/Sessions sub-tabs are gone.
@@ -139,9 +132,17 @@ describe('Analytics is one page, not four tabs', () => {
     }
   });
 
+  test('reports tokens only, with no money anywhere', async () => {
+    renderAnalytics();
+    await screen.findByText('Total Tokens');
+
+    expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Cost/)).not.toBeInTheDocument();
+  });
+
   test('offers the four time ranges', async () => {
     renderAnalytics();
-    await screen.findByText('Total Cost');
+    await screen.findByText('Total Tokens');
 
     const group = screen.getByRole('group', { name: 'Time range' });
     for (const label of ['7 days', '30 days', '90 days', 'All time']) {
@@ -153,51 +154,49 @@ describe('Analytics is one page, not four tabs', () => {
 describe('Analytics time range scoping', () => {
   test('defaults to 30 days and counts only rows inside it', async () => {
     renderAnalytics();
-    await screen.findByText('Total Cost');
+    await screen.findByText('Total Tokens');
 
-    // Only the 2-days-ago row ($10) is inside 30 days; the 45-day-old $100 is not.
-    expect(within(statCard('Total Cost')).getByText('$10.00')).toBeVisible();
+    // Only the 2-days-ago row (1.5K) is inside 30 days; the 45-day-old 15K is not.
+    expect(within(statCard('Total Tokens')).getByText('1.5K')).toBeVisible();
   });
 
   test('widening the range pulls in older rows', async () => {
     renderAnalytics();
-    await screen.findByText('Total Cost');
+    await screen.findByText('Total Tokens');
 
     pickRange('90 days');
-    expect(within(statCard('Total Cost')).getByText('$110.00')).toBeVisible();
+    expect(within(statCard('Total Tokens')).getByText('16.5K')).toBeVisible();
 
     pickRange('7 days');
-    expect(within(statCard('Total Cost')).getByText('$10.00')).toBeVisible();
+    expect(within(statCard('Total Tokens')).getByText('1.5K')).toBeVisible();
   });
 
   test('scopes the engine card to the range, not all-time', async () => {
     renderAnalytics();
-    await screen.findByText('Total Cost');
+    await screen.findByText('Total Tokens');
 
-    // The all-time engine summary says $110; the 30-day view must not.
-    // "Est. Cost" is unique to the engine card (unlike the engine name, which
-    // also appears in the pie legend).
-    const engineCard = screen.getByText('Est. Cost').closest('div.glass-card') as HTMLElement;
-    expect(within(engineCard).getByText('$10.00')).toBeVisible();
-    expect(within(engineCard).queryByText('$110.00')).not.toBeInTheDocument();
+    // The all-time engine summary says 16.5K; the 30-day view must not. The
+    // card's "Total" row is its own; the session sidebar reads "Last 30 days".
+    const engineCard = screen.getByText('Total').closest('div.glass-card') as HTMLElement;
+    expect(within(engineCard).getByText('1.5K')).toBeVisible();
+    expect(within(engineCard).queryByText('16.5K')).not.toBeInTheDocument();
   });
 
-  test('scopes the model breakdown and derives its cost split', async () => {
+  test('scopes the model breakdown to the range', async () => {
     renderAnalytics();
     await screen.findByText('Model Breakdown');
 
     fireEvent.click(screen.getByRole('button', { name: /claude-opus/ }));
 
     const panel = screen.getByText('Token Breakdown').closest('div') as HTMLElement;
-    // Half the all-time tokens sit in range, so half the all-time input cost
-    // ($44 over 2000 tokens → $22 over the 1000 in range).
-    expect(within(panel).getByText('$22.00')).toBeVisible();
-    expect(within(panel).getByText('$33.00')).toBeVisible();
+    // 1.0K input is the in-range share; the all-time figure is 11.0K.
+    expect(within(panel).getByText('1.0K')).toBeVisible();
+    expect(within(panel).queryByText('11.0K')).not.toBeInTheDocument();
   });
 
   test('says so when the range is empty rather than showing bare zeros', async () => {
     renderAnalytics();
-    await screen.findByText('Total Cost');
+    await screen.findByText('Total Tokens');
 
     pickRange('7 days');
     expect(screen.queryByText(/No usage in the last/)).not.toBeInTheDocument();

@@ -38,7 +38,6 @@ const SIDEBAR_SESSIONS = [
     outputTokens: 0,
     cacheCreationTokens: 0,
     cacheReadTokens: 0,
-    cost: 0,
     modelsUsed: [],
     modelBreakdowns: [],
   },

@@ -1,8 +1,8 @@
 """分析磁盘缓存的失效策略：按输入指纹，而不是按时间。
 
 缓存过期曾是一个 5 分钟计时器，于是任何一次闲置后的重启都会触发整轮采集
-（~3.3s），哪怕输入一个字都没变。这里锁定替代它的三条规则：输入没变就是
-命中，历史归档变了就失效，schema/费率变了也失效。
+（~3.3s），哪怕输入一个字都没变。这里锁定替代它的规则：输入没变就是命中，
+历史归档变了就失效，schema 变了也失效。
 """
 
 from __future__ import annotations
@@ -59,14 +59,6 @@ def test_schema_bump_drops_cache(redirected):
     doc["version"] = disk_cache.CACHE_SCHEMA_VERSION - 1
     cache_file.write_text(json.dumps(doc), encoding="utf-8")
     assert disk_cache.load_cache() is None
-
-
-def test_pricing_change_drops_cache(redirected):
-    disk_cache.save_cache({"v": 1})
-    with patch(
-        "core.analytics.disk_cache.pricing_fingerprint", return_value="different"
-    ):
-        assert disk_cache.load_cache() is None
 
 
 def test_expired_cache_is_rejected_but_still_servable(redirected, monkeypatch):

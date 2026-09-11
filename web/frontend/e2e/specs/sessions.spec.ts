@@ -53,11 +53,11 @@ test('an old Timeline link still opens the session it pointed at', async ({ page
 
 test('sort buttons toggle their direction', async ({ page }) => {
   await gotoSessions(page);
-  const costBtn = page.getByRole('button', { name: 'Cost' });
-  await costBtn.click();
-  await expect(costBtn).toContainText('↓');
-  await costBtn.click();
-  await expect(costBtn).toContainText('↑');
+  const tokensBtn = page.getByRole('button', { name: 'Tokens' });
+  await tokensBtn.click();
+  await expect(tokensBtn).toContainText('↓');
+  await tokensBtn.click();
+  await expect(tokensBtn).toContainText('↑');
 });
 
 test('opening a session row shows its detail panel', async ({ page }) => {

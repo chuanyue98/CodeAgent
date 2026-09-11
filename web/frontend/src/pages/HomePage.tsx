@@ -453,9 +453,6 @@ function MetricRow({ icon, label, value, extra }: {
 /**
  * Tokens per day for the last `days` days, scaled to 0..1 against the busiest.
  *
- * Tokens rather than cost: a model with no known price contributes no cost, so
- * a cost strip would draw a day spent on one as idle.
- *
  * The strip above the activity card used to be twelve hardcoded heights.
  * Sitting directly over a panel of real numbers, a bar chart is read as one,
  * so it now plots the days it appears to plot. Days with no work stay in the

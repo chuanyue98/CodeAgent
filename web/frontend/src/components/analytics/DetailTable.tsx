@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fmtCostLabel, fmtTokens, type DailyUsage, type MonthlyUsage } from '../../api/analytics';
+import { fmtTokens, type DailyUsage, type MonthlyUsage } from '../../api/analytics';
 import { useT } from '../../i18n/context';
 import { eb } from './present';
 import { SectionTitle } from './ChartCards';
@@ -28,17 +28,17 @@ export default function DetailTable({
   const [expanded, setExpanded] = useState(false);
   if (!hasRows) return null;
 
-  const rows = granularity === 'month'
-    ? [...monthly].reverse().map(m => ({
-        key: `${m.month}-${m.target}`, label: m.month, target: m.target,
-        inputTokens: m.inputTokens, outputTokens: m.outputTokens, cost: m.cost,
-        unpricedTokens: m.unpricedTokens,
-      }))
-    : [...rangeDaily].reverse().map(d => ({
-        key: `${d.date}-${d.target}`, label: d.date, target: d.target,
-        inputTokens: d.inputTokens, outputTokens: d.outputTokens, cost: d.cost,
-        unpricedTokens: d.unpricedTokens,
-      }));
+  const source = granularity === 'month'
+    ? [...monthly].reverse().map(m => ({ usage: m, label: m.month }))
+    : [...rangeDaily].reverse().map(d => ({ usage: d, label: d.date }));
+  const rows = source.map(({ usage, label }) => ({
+    key: `${label}-${usage.target}`,
+    label,
+    target: usage.target,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheTokens: usage.cacheCreationTokens + usage.cacheReadTokens,
+  }));
   const shown = expanded ? rows : rows.slice(0, VISIBLE_ROWS);
 
   return (
@@ -56,7 +56,7 @@ export default function DetailTable({
               <th className="text-left py-2 pr-4 font-medium">{t('detail.engine')}</th>
               <th className="text-right py-2 pr-4 font-medium">{t('analytics.input')}</th>
               <th className="text-right py-2 pr-4 font-medium">{t('analytics.output')}</th>
-              <th className="text-right py-2 font-medium">{t('detail.cost')}</th>
+              <th className="text-right py-2 font-medium">{t('analytics.cache')}</th>
             </tr>
           </thead>
           <tbody>
@@ -70,9 +70,7 @@ export default function DetailTable({
                 </td>
                 <td className="py-1.5 pr-4 text-right text-slate-600">{fmtTokens(row.inputTokens)}</td>
                 <td className="py-1.5 pr-4 text-right text-slate-600">{fmtTokens(row.outputTokens)}</td>
-                <td className="py-1.5 text-right font-semibold text-slate-700">
-                  {fmtCostLabel(row.cost, row.unpricedTokens, t('cost.unpriced'))}
-                </td>
+                <td className="py-1.5 text-right text-slate-600">{fmtTokens(row.cacheTokens)}</td>
               </tr>
             ))}
           </tbody>

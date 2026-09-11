@@ -14,13 +14,11 @@ function parentWithSubtasks(): SessionUsage {
     title: 'Review 两个修复提交',
     inputTokens: 300,
     outputTokens: 100,
-    cost: 6.85,
     own: {
       inputTokens: 100,
       outputTokens: 30,
       cacheCreationTokens: 0,
       cacheReadTokens: 0,
-      cost: 0.85,
       lastActivity: '2026-07-20T10:00:00Z',
     },
     subtasks: [
@@ -30,7 +28,6 @@ function parentWithSubtasks(): SessionUsage {
         agent: 'explore',
         inputTokens: 120,
         outputTokens: 40,
-        cost: 3.0,
       }),
       session({
         sessionId: 'agent-backend',
@@ -38,7 +35,6 @@ function parentWithSubtasks(): SessionUsage {
         agent: 'explore',
         inputTokens: 80,
         outputTokens: 30,
-        cost: 3.0,
       }),
     ],
   });
@@ -174,11 +170,11 @@ describe('subagent runs in the detail panel', () => {
     expect(await screen.findByText('前端代码质量检查')).toBeVisible();
   });
 
-  test('usage splits the main thread from what the subagents spent', async () => {
+  test('usage splits the main thread from what the subagents used', async () => {
     renderPanel(parentWithSubtasks());
 
-    expect(await screen.findByText(/Main thread 130 · \$0.85/)).toBeVisible();
-    expect(screen.getByText(/Subtasks 270 · \$6.00/)).toBeVisible();
+    expect(await screen.findByText('Main thread 130')).toBeVisible();
+    expect(screen.getByText('Subtasks 270')).toBeVisible();
   });
 
   test('opening a subtask swaps the panel and offers a way back', async () => {

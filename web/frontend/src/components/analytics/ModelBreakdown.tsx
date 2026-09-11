@@ -1,17 +1,18 @@
 import { useState } from 'react';
-import { fmtCost, fmtCostLabel, fmtTokens } from '../../api/analytics';
+import { fmtTokens } from '../../api/analytics';
 import { useT } from '../../i18n/context';
 import { eb, ec } from './present';
 import { SectionTitle } from './ChartCards';
 import SectionLabel from '../shared/SectionLabel';
-import type { RangeModelStat } from './rangeStats';
+import { ioTokens, type RangeModelStat } from './rangeStats';
 import ShowMoreToggle from './ShowMoreToggle';
 
 export interface ModelBreakdownProps {
   rangeModels: RangeModelStat[];
   selectedModel: string | null;
   onSelectModel: (model: string | null) => void;
-  totalCost: number;
+  /** Input + output tokens across the range; each model's share is of this. */
+  totalTokens: number;
 }
 
 /** Models listed before the tail is folded away. */
@@ -21,14 +22,15 @@ export default function ModelBreakdown({
   rangeModels,
   selectedModel,
   onSelectModel,
-  totalCost,
+  totalTokens,
 }: ModelBreakdownProps) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
   if (rangeModels.length === 0) return null;
   const activeModel = rangeModels.find(m => m.model === selectedModel) ?? null;
-  // Ranked by cost, so the tail is the part nobody scrolls to on purpose.
+  // Ranked by tokens, so the tail is the part nobody scrolls to on purpose.
   const shownModels = expanded ? rangeModels : rangeModels.slice(0, VISIBLE_MODELS);
+  const shareOf = (m: RangeModelStat) => (totalTokens > 0 ? (ioTokens(m) / totalTokens) * 100 : 0);
 
   return (
     <div className="animate-fade-rise stagger-6 glass-card-flat p-5">
@@ -36,7 +38,7 @@ export default function ModelBreakdown({
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 space-y-1.5 min-w-0">
           {shownModels.map(m => {
-            const pct = totalCost > 0 ? (m.cost / totalCost) * 100 : 0;
+            const pct = shareOf(m);
             const isSelected = selectedModel === m.model;
             return (
               <button
@@ -55,9 +57,7 @@ export default function ModelBreakdown({
                     {m.targets.map(t => (
                       <span key={t} className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full ${eb(t)}`}>{t}</span>
                     ))}
-                    <span className="text-xs font-bold text-slate-600">
-                      {fmtCostLabel(m.cost, m.unpricedTokens, t('cost.unpriced'))}
-                    </span>
+                    <span className="text-xs font-bold text-slate-600">{fmtTokens(ioTokens(m))}</span>
                     <span className="text-[10px] text-slate-400">{pct.toFixed(1)}%</span>
                   </div>
                 </div>
@@ -84,7 +84,7 @@ export default function ModelBreakdown({
 
         {activeModel && (() => {
           const m = activeModel;
-          const pct = totalCost > 0 ? (m.cost / totalCost) * 100 : 0;
+          const pct = shareOf(m);
           const totalTok = m.inputTokens + m.outputTokens + m.cacheCreationTokens + m.cacheReadTokens;
           const ioRatio = m.outputTokens > 0 ? m.inputTokens / m.outputTokens : 0;
           const ioLabel = ioRatio < 0.1 ? '0:1' : ioRatio > 10 ? '1:0' : `${ioRatio.toFixed(1)}:1`;
@@ -93,12 +93,11 @@ export default function ModelBreakdown({
             : ioRatio > 3
             ? t('model.contextHeavy')
             : t('model.balanced');
-          const unpriced = m.unpricedTokens > 0 && m.cost === 0;
           const rows = [
-            { label: t('analytics.input'), cost: m.inputCost, tokens: m.inputTokens },
-            { label: t('analytics.output'), cost: m.outputCost, tokens: m.outputTokens },
-            { label: t('model.cacheWrite'), cost: m.cacheWriteCost, tokens: m.cacheCreationTokens },
-            { label: t('model.cacheRead'), cost: m.cacheReadCost, tokens: m.cacheReadTokens },
+            { label: t('analytics.input'), tokens: m.inputTokens },
+            { label: t('analytics.output'), tokens: m.outputTokens },
+            { label: t('model.cacheWrite'), tokens: m.cacheCreationTokens },
+            { label: t('model.cacheRead'), tokens: m.cacheReadTokens },
           ];
           return (
             <div className="w-full lg:w-72 shrink-0 rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-4">
@@ -115,10 +114,8 @@ export default function ModelBreakdown({
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-lg bg-white border border-slate-200 p-2.5">
-                  <p className="text-base font-bold text-slate-800">
-                    {fmtCostLabel(m.cost, m.unpricedTokens, t('cost.unpriced'))}
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{t('model.totalCost')}</p>
+                  <p className="text-base font-bold text-slate-800">{fmtTokens(ioTokens(m))}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{t('model.ioTokens')}</p>
                 </div>
                 <div className="rounded-lg bg-white border border-slate-200 p-2.5">
                   <p className="text-base font-bold text-slate-800">{fmtTokens(totalTok)}</p>
@@ -129,13 +126,10 @@ export default function ModelBreakdown({
               <div>
                 <SectionLabel className="mb-1.5">{t('model.tokenBreakdown')}</SectionLabel>
                 <div className="space-y-1">
-                  {rows.map(({ label, cost, tokens }) => (
+                  {rows.map(({ label, tokens }) => (
                     <div key={label} className="flex items-center justify-between text-xs">
-                      <span className="text-slate-500 w-20">{label}</span>
-                      <span className="font-semibold text-slate-700 w-16 text-right">
-                        {unpriced ? '—' : fmtCost(cost)}
-                      </span>
-                      <span className="text-slate-400 text-right">{fmtTokens(tokens)}</span>
+                      <span className="text-slate-500">{label}</span>
+                      <span className="font-semibold text-slate-700">{fmtTokens(tokens)}</span>
                     </div>
                   ))}
                 </div>

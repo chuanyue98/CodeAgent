@@ -7,7 +7,6 @@ import { jsonResponse, session as baseSession } from './factories';
 /** Recent-session rows are shown by recency and title, so both are fixed here. */
 function session(overrides: Partial<SessionUsage> = {}): SessionUsage {
   return baseSession({
-    cost: 0.1,
     lastActivity: new Date().toISOString(),
     title: 'Refactor the launcher',
     ...overrides,

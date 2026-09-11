@@ -46,6 +46,14 @@ export const RANGE_LABEL_KEYS: Record<RangeId, TranslationKey> = Object.fromEntr
   RANGES.map(r => [r.id, r.labelKey]),
 ) as Record<RangeId, TranslationKey>;
 
+/**
+ * Input + output tokens: the work a model did. Cache reads run to billions on
+ * long sessions, so rankings and shares that counted them would bury it.
+ */
+export function ioTokens(usage: { inputTokens: number; outputTokens: number }): number {
+  return usage.inputTokens + usage.outputTokens;
+}
+
 /** Per-model totals for the selected range, rebuilt from daily breakdowns. */
 export interface RangeModelStat {
   model: string;
@@ -54,12 +62,6 @@ export interface RangeModelStat {
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
-  cost: number;
-  unpricedTokens: number;
-  inputCost: number;
-  outputCost: number;
-  cacheWriteCost: number;
-  cacheReadCost: number;
 }
 
 // A row in the time-series recharts dataset: one string category key (`_key`,
@@ -72,13 +74,11 @@ export type ChartRow = { _key: string; [engine: string]: number | string };
 export interface RangeTotals {
   inputTokens: number;
   outputTokens: number;
-  cacheTokens: number;
-  cost: number;
-  unpricedTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
 }
 
 export interface TimeSeries {
-  cost: ChartRow[];
   tokens: ChartRow[];
   engines: string[];
 }
@@ -102,15 +102,14 @@ export function filterSessionsByRange(
 // control can't leave a stat card describing a different window than the
 // chart beside it.
 export function computeTotals(rangeDaily: DailyUsage[]): RangeTotals {
-  let inputTokens = 0, outputTokens = 0, cacheTokens = 0, cost = 0, unpricedTokens = 0;
+  let inputTokens = 0, outputTokens = 0, cacheCreationTokens = 0, cacheReadTokens = 0;
   for (const d of rangeDaily) {
     inputTokens += d.inputTokens;
     outputTokens += d.outputTokens;
-    cacheTokens += d.cacheCreationTokens + d.cacheReadTokens;
-    cost += d.cost;
-    unpricedTokens += d.unpricedTokens ?? 0;
+    cacheCreationTokens += d.cacheCreationTokens;
+    cacheReadTokens += d.cacheReadTokens;
   }
-  return { inputTokens, outputTokens, cacheTokens, cost, unpricedTokens };
+  return { inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens };
 }
 
 /** Per-engine totals for the range, rebuilt from daily rows. */
@@ -126,14 +125,12 @@ export function buildRangeEngines(
     const current = byTarget.get(d.target) ?? {
       target: d.target,
       inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0,
-      cost: 0, unpricedTokens: 0, sessionCount: 0, models: [],
+      sessionCount: 0, models: [],
     };
     current.inputTokens += d.inputTokens;
     current.outputTokens += d.outputTokens;
     current.cacheCreationTokens += d.cacheCreationTokens;
     current.cacheReadTokens += d.cacheReadTokens;
-    current.cost += d.cost;
-    current.unpricedTokens = (current.unpricedTokens ?? 0) + (d.unpricedTokens ?? 0);
     current.models = [...new Set([...current.models, ...d.modelsUsed])];
     byTarget.set(d.target, current);
   }
@@ -141,15 +138,10 @@ export function buildRangeEngines(
     const entry = byTarget.get(session.target);
     if (entry) entry.sessionCount += 1;
   }
-  return [...byTarget.values()].sort((a, b) => b.cost - a.cost);
+  return [...byTarget.values()].sort((a, b) => ioTokens(b) - ioTokens(a));
 }
 
-/**
- * Per-model totals for the range. Token counts come straight from the daily
- * breakdowns; the four cost categories aren't carried there, so they're
- * derived from each model's all-time cost-per-token, which is constant for
- * a given model and already the assumption behind the all-time figures.
- */
+/** Per-model totals for the range, summed from the daily breakdowns. */
 export function buildRangeModels(
   modelStats: ModelStat[],
   rangeDaily: DailyUsage[],
@@ -163,25 +155,8 @@ export function buildRangeModels(
       outputTokens: m.outputTokens,
       cacheCreationTokens: m.cacheCreationTokens,
       cacheReadTokens: m.cacheReadTokens,
-      cost: m.cost,
-      unpricedTokens: m.unpricedTokens ?? 0,
-      inputCost: m.inputCost,
-      outputCost: m.outputCost,
-      cacheWriteCost: m.cacheWriteCost,
-      cacheReadCost: m.cacheReadCost,
     }));
   }
-
-  const rateOf = (model: string) => {
-    const all = modelStats.find(m => m.model === model);
-    const per = (cost: number, tokens: number) => (tokens > 0 ? cost / tokens : 0);
-    return {
-      input: per(all?.inputCost ?? 0, all?.inputTokens ?? 0),
-      output: per(all?.outputCost ?? 0, all?.outputTokens ?? 0),
-      cacheWrite: per(all?.cacheWriteCost ?? 0, all?.cacheCreationTokens ?? 0),
-      cacheRead: per(all?.cacheReadCost ?? 0, all?.cacheReadTokens ?? 0),
-    };
-  };
 
   const byModel = new Map<string, RangeModelStat>();
   for (const d of rangeDaily) {
@@ -189,32 +164,17 @@ export function buildRangeModels(
       const current = byModel.get(bd.modelName) ?? {
         model: bd.modelName, targets: [],
         inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0,
-        cost: 0, unpricedTokens: 0,
-        inputCost: 0, outputCost: 0, cacheWriteCost: 0, cacheReadCost: 0,
       };
       current.inputTokens += bd.inputTokens;
       current.outputTokens += bd.outputTokens;
       current.cacheCreationTokens += bd.cacheCreationTokens;
       current.cacheReadTokens += bd.cacheReadTokens;
-      current.cost += bd.cost;
-      current.unpricedTokens += bd.unpricedTokens ?? 0;
       if (!current.targets.includes(d.target)) current.targets.push(d.target);
       byModel.set(bd.modelName, current);
     }
   }
 
-  return [...byModel.values()]
-    .map(m => {
-      const rate = rateOf(m.model);
-      return {
-        ...m,
-        inputCost: m.inputTokens * rate.input,
-        outputCost: m.outputTokens * rate.output,
-        cacheWriteCost: m.cacheCreationTokens * rate.cacheWrite,
-        cacheReadCost: m.cacheReadTokens * rate.cacheRead,
-      };
-    })
-    .sort((a, b) => b.cost - a.cost);
+  return [...byModel.values()].sort((a, b) => ioTokens(b) - ioTokens(a));
 }
 
 /** Day rows in a narrow range, month rows for all time. */
@@ -225,21 +185,12 @@ export function buildSeries(
   days: number | null,
 ): TimeSeries {
   const rows = granularity === 'month'
-    ? monthly.map(m => ({
-        key: m.month, target: m.target, cost: m.cost,
-        tokens: m.inputTokens + m.outputTokens,
-      }))
-    : rangeDaily.map(d => ({
-        key: d.date, target: d.target, cost: d.cost,
-        tokens: d.inputTokens + d.outputTokens,
-      }));
+    ? monthly.map(m => ({ key: m.month, target: m.target, tokens: ioTokens(m) }))
+    : rangeDaily.map(d => ({ key: d.date, target: d.target, tokens: ioTokens(d) }));
 
-  const cost: Record<string, ChartRow> = {};
   const tokens: Record<string, ChartRow> = {};
   for (const row of rows) {
-    cost[row.key] ??= { _key: row.key };
     tokens[row.key] ??= { _key: row.key };
-    cost[row.key][row.target] = Number(cost[row.key][row.target] ?? 0) + row.cost;
     tokens[row.key][row.target] = Number(tokens[row.key][row.target] ?? 0) + row.tokens;
   }
   const engines = [...new Set(rows.map(r => r.target))];
@@ -251,18 +202,15 @@ export function buildSeries(
   // every engine on it, so a quiet day is plotted as the zero it was.
   if (granularity === 'day' && days !== null) {
     for (const key of calendarKeys(days)) {
-      cost[key] ??= { _key: key };
       tokens[key] ??= { _key: key };
     }
   }
-  for (const row of [...Object.values(cost), ...Object.values(tokens)]) {
+  for (const row of Object.values(tokens)) {
     for (const engine of engines) row[engine] ??= 0;
   }
 
-  const byKey = (a: ChartRow, b: ChartRow) => a._key.localeCompare(b._key);
   return {
-    cost: Object.values(cost).sort(byKey),
-    tokens: Object.values(tokens).sort(byKey),
+    tokens: Object.values(tokens).sort((a, b) => a._key.localeCompare(b._key)),
     engines,
   };
 }

@@ -19,7 +19,6 @@ def _session(session_id: str, project_path: str) -> dict:
         "outputTokens": 5,
         "cacheCreationTokens": 0,
         "cacheReadTokens": 0,
-        "cost": 0.01,
         "lastActivity": "2026-08-21T10:00:00Z",
         "modelsUsed": ["claude-opus"],
         "modelBreakdowns": [],

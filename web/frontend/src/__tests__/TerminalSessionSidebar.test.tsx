@@ -11,7 +11,6 @@ function session(overrides: Partial<SessionUsage> = {}): SessionUsage {
   return baseSession({
     inputTokens: 0,
     outputTokens: 0,
-    cost: 0,
     lastActivity: new Date().toISOString(),
     modelsUsed: [],
     title: 'Session A',

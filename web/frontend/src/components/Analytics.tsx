@@ -1,20 +1,19 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Activity,
   ArrowDownRight,
   ArrowUpRight,
   Database,
-  DollarSign,
   FileText,
   RefreshCw,
   TrendingUp,
 } from 'lucide-react';
 import ErrorState from './shared/ErrorState';
 import LoadingState from './shared/LoadingState';
-import { fmtCost, fmtCostLabel, fmtTokens } from '../api/analytics';
+import { fmtTokens } from '../api/analytics';
 import { useT } from '../i18n/context';
 import useAnalyticsData from './analytics/useAnalyticsData';
-import { StatCard } from './analytics/ChartCards';
-import { CostTrendCard, TokensTrendCard } from './analytics/ChartCards';
+import { StatCard, TokensTrendCard } from './analytics/ChartCards';
 import EnginePanel from './analytics/EnginePanel';
 import ModelBreakdown from './analytics/ModelBreakdown';
 import DetailTable from './analytics/DetailTable';
@@ -28,6 +27,7 @@ import {
   computeTotals,
   filterDailyByRange,
   filterSessionsByRange,
+  ioTokens,
   type RangeId,
 } from './analytics/rangeStats';
 import ToolRanking from './analytics/ToolRanking';
@@ -66,9 +66,10 @@ const Analytics: React.FC = () => {
   // `summary.sessionCount` is authoritative but all-time only; a narrowed
   // range has to count the fetched window instead.
   const sessionCount = rangeDays === null ? totalSessions : rangeSessions.length;
-  const avgCostPerSession = sessionCount > 0 ? totals.cost / sessionCount : 0;
-  const allTokens = totals.inputTokens + totals.outputTokens + totals.cacheTokens;
-  const pctCache = allTokens > 0 ? (totals.cacheTokens / allTokens) * 100 : 0;
+  const avgTokensPerSession = sessionCount > 0 ? ioTokens(totals) / sessionCount : 0;
+  const cacheTokens = totals.cacheCreationTokens + totals.cacheReadTokens;
+  const allTokens = totals.inputTokens + totals.outputTokens + cacheTokens;
+  const pctCache = allTokens > 0 ? (cacheTokens / allTokens) * 100 : 0;
 
   const rangeEngines = useMemo(
     () => buildRangeEngines(engines, rangeDaily, rangeSessions, rangeDays),
@@ -88,7 +89,9 @@ const Analytics: React.FC = () => {
   );
 
   const pieData = useMemo(
-    () => rangeEngines.filter(e => e.cost > 0).map(e => ({ name: e.target, value: e.cost })),
+    () => rangeEngines
+      .map(e => ({ name: e.target, value: ioTokens(e) }))
+      .filter(d => d.value > 0),
     [rangeEngines],
   );
 
@@ -183,43 +186,38 @@ const Analytics: React.FC = () => {
           // a number with no relation to its own caption.
           sub={t('analytics.cacheShare', {
             pct: pctCache.toFixed(0),
-            io: fmtTokens(totals.inputTokens + totals.outputTokens),
+            io: fmtTokens(ioTokens(totals)),
           })}
           Icon={FileText} iconColor="text-blue-600" iconBg="bg-blue-100" stagger="stagger-2"
         />
         <StatCard
-          label={t('analytics.totalCost')}
-          value={fmtCostLabel(totals.cost, totals.unpricedTokens, t('cost.unpriced'))}
-          sub={totals.unpricedTokens > 0
-            ? t('analytics.unpricedNote', { tokens: fmtTokens(totals.unpricedTokens) })
-            : t('analytics.perSession', { cost: fmtCost(avgCostPerSession) })}
-          Icon={DollarSign} iconColor="text-green-600" iconBg="bg-green-100" stagger="stagger-3"
+          label={t('analytics.input')}
+          value={fmtTokens(totals.inputTokens)}
+          Icon={ArrowDownRight} iconColor="text-purple-600" iconBg="bg-purple-100" stagger="stagger-3"
         />
         <StatCard
-          label={t('analytics.inputCost')}
-          value={fmtCost(rangeModels.reduce((s, m) => s + m.inputCost, 0))}
-          sub={`${fmtTokens(totals.inputTokens)} Token`}
-          Icon={ArrowDownRight} iconColor="text-purple-600" iconBg="bg-purple-100" stagger="stagger-4"
+          label={t('analytics.output')}
+          value={fmtTokens(totals.outputTokens)}
+          Icon={ArrowUpRight} iconColor="text-orange-600" iconBg="bg-orange-100" stagger="stagger-4"
         />
         <StatCard
-          label={t('analytics.outputCost')}
-          value={fmtCost(rangeModels.reduce((s, m) => s + m.outputCost, 0))}
-          sub={`${fmtTokens(totals.outputTokens)} Token`}
-          Icon={ArrowUpRight} iconColor="text-orange-600" iconBg="bg-orange-100" stagger="stagger-5"
+          label={t('analytics.cache')}
+          value={fmtTokens(cacheTokens)}
+          sub={t('analytics.cacheSplit', {
+            write: fmtTokens(totals.cacheCreationTokens),
+            read: fmtTokens(totals.cacheReadTokens),
+          })}
+          Icon={Database} iconColor="text-cyan-600" iconBg="bg-cyan-100" stagger="stagger-5"
         />
-        {/* Cache is what the other two cost cards were missing: on a real
-            history it is ~85% of the bill, so without it the breakdown adds
-            up to a small fraction of the total sitting right beside it. */}
         <StatCard
-          label={t('analytics.cacheCost')}
-          value={fmtCost(rangeModels.reduce((s, m) => s + m.cacheWriteCost + m.cacheReadCost, 0))}
-          sub={`${fmtTokens(totals.cacheTokens)} Token`}
-          Icon={Database} iconColor="text-cyan-600" iconBg="bg-cyan-100" stagger="stagger-6"
+          label={t('engine.sessions')}
+          value={String(sessionCount)}
+          sub={t('analytics.perSession', { tokens: fmtTokens(Math.round(avgTokensPerSession)) })}
+          Icon={Activity} iconColor="text-green-600" iconBg="bg-green-100" stagger="stagger-6"
         />
       </div>
 
       {/* ── Usage over time ────────────────────────────────────────────────── */}
-      <CostTrendCard series={series} granularity={granularity} rangeLabel={rangeLabel} />
       <TokensTrendCard series={series} granularity={granularity} rangeLabel={rangeLabel} />
 
       {/* ── Engines + distribution ─────────────────────────────────────────── */}
@@ -227,7 +225,7 @@ const Analytics: React.FC = () => {
         rangeEngines={rangeEngines}
         pieData={pieData}
         sessionCount={sessionCount}
-        avgCostPerSession={avgCostPerSession}
+        avgTokensPerSession={avgTokensPerSession}
         totalLabel={rangeDays === null ? t('analytics.total') : t('analytics.lastRange', { range: rangeLabel })}
         recentSessions={recentSessions}
       />
@@ -237,7 +235,7 @@ const Analytics: React.FC = () => {
         rangeModels={rangeModels}
         selectedModel={selectedModel}
         onSelectModel={setSelectedModel}
-        totalCost={totals.cost}
+        totalTokens={ioTokens(totals)}
       />
 
       {/* ── Tool usage ─────────────────────────────────────────────────────── */}
@@ -249,7 +247,7 @@ const Analytics: React.FC = () => {
         monthly={monthly}
         rangeDaily={rangeDaily}
         rangeLabel={rangeLabel}
-        hasRows={series.cost.length > 0}
+        hasRows={series.tokens.length > 0}
       />
     </div>
   );

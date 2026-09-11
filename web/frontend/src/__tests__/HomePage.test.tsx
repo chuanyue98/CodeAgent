@@ -77,7 +77,6 @@ function sessionRow(overrides: Partial<SessionUsage> = {}): SessionUsage {
   return baseSession({
     inputTokens: 0,
     outputTokens: 0,
-    cost: 0,
     lastActivity: new Date().toISOString(),
     modelsUsed: [],
     title: 'Refactor the launcher',
@@ -227,8 +226,8 @@ test('the activity strip plots the days it claims to plot', async () => {
   };
   mockBackend({
     daily: [
-      { date: key(0), cost: 0, inputTokens: 300, outputTokens: 100 },
-      { date: key(3), cost: 0, inputTokens: 50, outputTokens: 50 },
+      { date: key(0), inputTokens: 300, outputTokens: 100 },
+      { date: key(3), inputTokens: 50, outputTokens: 50 },
     ],
   });
   renderHome();

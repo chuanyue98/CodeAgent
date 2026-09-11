@@ -27,7 +27,7 @@ export function buildSessionLink(engine: string, sessionId: string, projectPath:
  * Opens the session in a terminal tab, handed back to its own engine CLI.
  *
  * The counterpart to buildSessionLink: that one goes to the object view --
- * what this session is, what it cost, convert it, delete it. This one is the
+ * what this session is, what it used, convert it, delete it. This one is the
  * verb. Home's "continue where you left off" used to point at the object
  * view, which is a reasonable place to arrive but not what the label said,
  * and left two more clicks between the user and the conversation.
