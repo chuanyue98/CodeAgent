@@ -568,7 +568,11 @@ async def test_delete_session_invalid_source_file(two_project_history, monkeypat
             found = dummy_session_invalid
         if found is None:
             return original_get_summary(engine, session_id, project)
-        return {"source_file": found.source_file, "session_id": session_id, "engine": engine}
+        return {
+            "source_file": found.source_file,
+            "session_id": session_id,
+            "engine": engine,
+        }
 
     monkeypatch.setattr(repo, "get_summary", mock_get_summary)
 

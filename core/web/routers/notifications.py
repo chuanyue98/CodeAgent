@@ -10,7 +10,10 @@ router = APIRouter(prefix="/api", tags=["notifications"])
 
 
 def _get_run_store(request: Request) -> RunStore:
-    if hasattr(request.app.state, "run_store") and request.app.state.run_store is not None:
+    if (
+        hasattr(request.app.state, "run_store")
+        and request.app.state.run_store is not None
+    ):
         return request.app.state.run_store
     return tasks_router._runner._run_store
 

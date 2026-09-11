@@ -18,9 +18,7 @@ def run_store(tmp_path):
 
 @pytest.mark.asyncio
 async def test_list_notifications(run_store: RunStore) -> None:
-    run_store.add_notification(
-        "s1", "t1", "hello", "claude", "completed", "hi", "ok"
-    )
+    run_store.add_notification("s1", "t1", "hello", "claude", "completed", "hi", "ok")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
@@ -34,9 +32,7 @@ async def test_list_notifications(run_store: RunStore) -> None:
 
 @pytest.mark.asyncio
 async def test_unread_count(run_store: RunStore) -> None:
-    run_store.add_notification(
-        "s1", "t1", "hello", "claude", "completed", "hi", "ok"
-    )
+    run_store.add_notification("s1", "t1", "hello", "claude", "completed", "hi", "ok")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
@@ -47,9 +43,7 @@ async def test_unread_count(run_store: RunStore) -> None:
 
 @pytest.mark.asyncio
 async def test_mark_read(run_store: RunStore) -> None:
-    run_store.add_notification(
-        "s1", "t1", "hello", "claude", "completed", "hi", "ok"
-    )
+    run_store.add_notification("s1", "t1", "hello", "claude", "completed", "hi", "ok")
     nid = run_store.list_notifications(limit=10)[0]["id"]
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -61,12 +55,8 @@ async def test_mark_read(run_store: RunStore) -> None:
 
 @pytest.mark.asyncio
 async def test_mark_all_read(run_store: RunStore) -> None:
-    run_store.add_notification(
-        "s1", "t1", "h1", "claude", "completed", "hi", "ok"
-    )
-    run_store.add_notification(
-        "s2", "t2", "h2", "codex", "failed", "h2", "err"
-    )
+    run_store.add_notification("s1", "t1", "h1", "claude", "completed", "hi", "ok")
+    run_store.add_notification("s2", "t2", "h2", "codex", "failed", "h2", "err")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:

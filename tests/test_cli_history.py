@@ -66,9 +66,7 @@ def test_bare_history_lists_sessions(monkeypatch, capsys):
 
 
 def test_history_empty_project(monkeypatch, capsys):
-    with patch(
-        "core.session_history.repository.find_all_sessions", return_value=[]
-    ):
+    with patch("core.session_history.repository.find_all_sessions", return_value=[]):
         _run(monkeypatch, "history", "list")
     assert "No sessions found for this project." in capsys.readouterr().out
 
@@ -85,9 +83,7 @@ def test_history_engine_filter_reaches_the_finder(monkeypatch):
 
 
 def test_show_unknown_session_reports_not_found(monkeypatch, capsys):
-    with patch(
-        "core.session_history.repository.find_session_by_id", return_value=None
-    ):
+    with patch("core.session_history.repository.find_session_by_id", return_value=None):
         _run(monkeypatch, "history", "show", "claude", "ghost")
     assert "[X] Session not found: claude/ghost" in capsys.readouterr().out
 
@@ -121,9 +117,7 @@ def test_show_missing_model_falls_back_to_unknown(monkeypatch, capsys):
 
 
 def test_convert_unknown_session_reports_not_found(monkeypatch, capsys):
-    with patch(
-        "core.session_history.repository.find_session_by_id", return_value=None
-    ):
+    with patch("core.session_history.repository.find_session_by_id", return_value=None):
         _run(monkeypatch, "history", "convert", "claude", "ghost", "codex")
     assert "[X] Session not found: claude/ghost" in capsys.readouterr().out
 

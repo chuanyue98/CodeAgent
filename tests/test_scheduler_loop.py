@@ -401,12 +401,23 @@ async def test_settle_success_notify_always(schedule_service, tasks_root, tmp_pa
     run_store = RunStore(tmp_path / "notif_runs.db")
     try:
         record = schedule_service.create_schedule(
-            "nightly-review", "claude", "common", "* * * * *", workspace=str(tasks_root), notify_on="always"
+            "nightly-review",
+            "claude",
+            "common",
+            "* * * * *",
+            workspace=str(tasks_root),
+            notify_on="always",
         )
         schedule_service.record_run(record["id"], "started", run_id="run-1")
         schedules = schedule_service.list_schedules()
         runner = _FakeTaskRunner(finished_runs={"run-1": "completed"})
-        await _settle_finished_runs(schedule_service, runner, schedules, run_store=run_store, tasks_root=tasks_root)
+        await _settle_finished_runs(
+            schedule_service,
+            runner,
+            schedules,
+            run_store=run_store,
+            tasks_root=tasks_root,
+        )
         assert run_store.count_unread() == 1
     finally:
         run_store.close()
@@ -420,12 +431,23 @@ async def test_settle_success_notify_never(schedule_service, tasks_root, tmp_pat
     run_store = RunStore(tmp_path / "notif_runs.db")
     try:
         record = schedule_service.create_schedule(
-            "nightly-review", "claude", "common", "* * * * *", workspace=str(tasks_root), notify_on="never"
+            "nightly-review",
+            "claude",
+            "common",
+            "* * * * *",
+            workspace=str(tasks_root),
+            notify_on="never",
         )
         schedule_service.record_run(record["id"], "started", run_id="run-1")
         schedules = schedule_service.list_schedules()
         runner = _FakeTaskRunner(finished_runs={"run-1": "completed"})
-        await _settle_finished_runs(schedule_service, runner, schedules, run_store=run_store, tasks_root=tasks_root)
+        await _settle_finished_runs(
+            schedule_service,
+            runner,
+            schedules,
+            run_store=run_store,
+            tasks_root=tasks_root,
+        )
         assert run_store.count_unread() == 0
     finally:
         run_store.close()
@@ -439,12 +461,23 @@ async def test_settle_failure_notify_failure(schedule_service, tasks_root, tmp_p
     run_store = RunStore(tmp_path / "notif_runs.db")
     try:
         record = schedule_service.create_schedule(
-            "nightly-review", "claude", "common", "* * * * *", workspace=str(tasks_root), notify_on="failure"
+            "nightly-review",
+            "claude",
+            "common",
+            "* * * * *",
+            workspace=str(tasks_root),
+            notify_on="failure",
         )
         schedule_service.record_run(record["id"], "started", run_id="run-1")
         schedules = schedule_service.list_schedules()
         runner = _FakeTaskRunner(finished_runs={"run-1": "failed"})
-        await _settle_finished_runs(schedule_service, runner, schedules, run_store=run_store, tasks_root=tasks_root)
+        await _settle_finished_runs(
+            schedule_service,
+            runner,
+            schedules,
+            run_store=run_store,
+            tasks_root=tasks_root,
+        )
         assert run_store.count_unread() == 1
     finally:
         run_store.close()
@@ -458,12 +491,23 @@ async def test_settle_stopped_notify_always(schedule_service, tasks_root, tmp_pa
     run_store = RunStore(tmp_path / "notif_runs.db")
     try:
         record = schedule_service.create_schedule(
-            "nightly-review", "claude", "common", "* * * * *", workspace=str(tasks_root), notify_on="always"
+            "nightly-review",
+            "claude",
+            "common",
+            "* * * * *",
+            workspace=str(tasks_root),
+            notify_on="always",
         )
         schedule_service.record_run(record["id"], "started", run_id="run-1")
         schedules = schedule_service.list_schedules()
         runner = _FakeTaskRunner(finished_runs={"run-1": "stopped"})
-        await _settle_finished_runs(schedule_service, runner, schedules, run_store=run_store, tasks_root=tasks_root)
+        await _settle_finished_runs(
+            schedule_service,
+            runner,
+            schedules,
+            run_store=run_store,
+            tasks_root=tasks_root,
+        )
         assert run_store.count_unread() == 1
     finally:
         run_store.close()

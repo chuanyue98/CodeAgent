@@ -131,7 +131,6 @@ class CodexEngine(BaseEngine):
     ) -> list[str]:
         return self.build_command(message, non_interactive=False, yolo=yolo)
 
-
     def build_chat_command(
         self, message: str, session_id: str | None = None
     ) -> list[str]:
@@ -564,8 +563,7 @@ def run_prelaunch_commands(
             resolved = _resolve_shell(env)
             if resolved is None:
                 print(
-                    "No suitable shell (pwsh/powershell/bash/sh) found for "
-                    "shell:first",
+                    "No suitable shell (pwsh/powershell/bash/sh) found for shell:first",
                     file=sys.stderr,
                 )
                 sys.exit(1)

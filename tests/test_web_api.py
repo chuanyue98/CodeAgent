@@ -243,7 +243,11 @@ async def test_delete_task_route(mock_env):
     ) as ac:
         resp = await ac.delete("/api/tasks/review")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "deleted", "name": "review", "disabledSchedules": 0}
+    assert resp.json() == {
+        "status": "deleted",
+        "name": "review",
+        "disabledSchedules": 0,
+    }
     assert not (mock_env / "tasks" / "review.md").exists()
 
 

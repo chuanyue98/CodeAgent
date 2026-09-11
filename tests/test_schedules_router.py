@@ -58,6 +58,7 @@ class _FakeRunner:
         if engine == "shell":
             raise ValueError("Invalid engine: 'shell'")
         import tempfile
+
         log_file = Path(tempfile.gettempdir()) / f"fake_chat_{engine}.jsonl"
         chat_content = getattr(self, "chat_output", None)
         if chat_content is not None:
@@ -421,15 +422,17 @@ async def test_parse_schedule_ok(fake_runner):
 
 @pytest.mark.asyncio
 async def test_parse_schedule_invalid_cron(fake_runner):
-    fake_runner.chat_output = json.dumps({
-        "cron_expr": "invalid-cron-expr",
-        "name": "invalid-task",
-        "title": "Invalid",
-        "objective": "obj",
-        "context": "ctx",
-        "instructions": "inst",
-        "verification": "ver",
-    })
+    fake_runner.chat_output = json.dumps(
+        {
+            "cron_expr": "invalid-cron-expr",
+            "name": "invalid-task",
+            "title": "Invalid",
+            "objective": "obj",
+            "context": "ctx",
+            "instructions": "inst",
+            "verification": "ver",
+        }
+    )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
@@ -457,10 +460,14 @@ async def test_parse_schedule_bad_output(fake_runner):
 
 
 @pytest.mark.asyncio
-async def test_delete_task_disables_linked_schedules(tmp_path, monkeypatch, fake_runner):
+async def test_delete_task_disables_linked_schedules(
+    tmp_path, monkeypatch, fake_runner
+):
     tasks_dir = tmp_path / "tasks"
     tasks_dir.mkdir()
-    (tasks_dir / "my_task.md").write_text("# My Task\n\nObjective: do something", encoding="utf-8")
+    (tasks_dir / "my_task.md").write_text(
+        "# My Task\n\nObjective: do something", encoding="utf-8"
+    )
     monkeypatch.setenv("CA_TASKS_ROOT", str(tasks_dir))
 
     async with AsyncClient(

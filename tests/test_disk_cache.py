@@ -22,9 +22,7 @@ def redirected(tmp_path):
     cache_file = tmp_path / ".ca_analytics_cache.json"
     with (
         patch("core.analytics.history._history_path", return_value=history_file),
-        patch(
-            "core.analytics.disk_cache._default_cache_path", return_value=cache_file
-        ),
+        patch("core.analytics.disk_cache._default_cache_path", return_value=cache_file),
     ):
         history_file.write_text("", encoding="utf-8")
         yield history_file, cache_file

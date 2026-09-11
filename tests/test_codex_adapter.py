@@ -264,4 +264,3 @@ def test_codex_build_command_non_interactive_bypasses():
     assert "--dangerously-bypass-approvals-and-sandbox" in cmd
     assert "exec" in cmd
     assert "test prompt" in cmd
-

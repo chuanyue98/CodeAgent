@@ -79,9 +79,7 @@ def resolve_session(
     if chosen is None:
         raise SessionSelectorError("select.not_found", selector=selector)
 
-    session = repository.get_full(
-        chosen["engine"], chosen["session_id"], project_path
-    )
+    session = repository.get_full(chosen["engine"], chosen["session_id"], project_path)
     if session is None:
         raise SessionSelectorError("select.not_found", selector=selector)
     return session

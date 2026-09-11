@@ -148,9 +148,7 @@ def test_list_summaries_orders_by_started_at(index):
 def test_reconstruct_round_trips_the_full_session(index):
     original = _session(
         messages=[
-            UnifiedMessage(
-                role="user", content="q", timestamp="2026-07-11T10:00:00Z"
-            ),
+            UnifiedMessage(role="user", content="q", timestamp="2026-07-11T10:00:00Z"),
             UnifiedMessage(
                 role="assistant",
                 content="a",

@@ -88,9 +88,7 @@ def test_first_sync_indexes_every_session(store_and_indexer, home_path):
     assert store.is_ready() is True
 
 
-def test_unchanged_file_is_not_reparsed(
-    store_and_indexer, home_path, call_counter
-):
+def test_unchanged_file_is_not_reparsed(store_and_indexer, home_path, call_counter):
     store, indexer = store_and_indexer
     _write_session(home_path, "s1", _row("s1", "hello"))
     indexer.sync()
@@ -108,7 +106,10 @@ def test_changed_file_is_reparsed(store_and_indexer, home_path, call_counter):
     assert store.get_summary("claude", "s1").message_count == 1
 
     path.write_text(
-        _row("s1", "hello") + "\n" + _row("s1", "again", timestamp="2026-07-11T10:01:00.000Z") + "\n",
+        _row("s1", "hello")
+        + "\n"
+        + _row("s1", "again", timestamp="2026-07-11T10:01:00.000Z")
+        + "\n",
         encoding="utf-8",
     )
     indexer.sync()
@@ -169,7 +170,9 @@ def test_subagent_titles_come_from_the_parent(store_and_indexer, home_path):
     )
     _write_session(home_path, "parent", _row("parent", "go"), launch)
 
-    child_dir = home_path / ".claude" / "projects" / "E--demo-app" / "parent" / "subagents"
+    child_dir = (
+        home_path / ".claude" / "projects" / "E--demo-app" / "parent" / "subagents"
+    )
     child_dir.mkdir(parents=True, exist_ok=True)
     (child_dir / "agent-abc123.jsonl").write_text(
         _row("agent-abc123", "整个 prompt 都在这里") + "\n", encoding="utf-8"
@@ -208,11 +211,15 @@ def test_index_matches_the_finder(store_and_indexer, home_path):
         home_path,
         "s2",
         _row("s2", "second question", timestamp="2026-07-11T11:00:00.000Z"),
-        _row("s2", "the answer", timestamp="2026-07-11T11:01:00.000Z", role="assistant"),
+        _row(
+            "s2", "the answer", timestamp="2026-07-11T11:01:00.000Z", role="assistant"
+        ),
     )
     indexer.sync()
 
-    found = {(s.engine.value, s.session_id): s for s in find_all_sessions(home=home_path)}
+    found = {
+        (s.engine.value, s.session_id): s for s in find_all_sessions(home=home_path)
+    }
     rows = {
         (r.engine, r.session_id): r
         for r in store.list_summaries(include_subagents=True, limit=1000)
@@ -247,7 +254,9 @@ def test_audit_limit_is_pushed_down(store_and_indexer, home_path):
 
 def test_engine_filter_and_project_filter_are_pushed_down(store_and_indexer, home_path):
     store, indexer = store_and_indexer
-    _write_session(home_path, "s1", _row("s1", "hello", timestamp="2026-07-11T10:00:00.000Z"))
+    _write_session(
+        home_path, "s1", _row("s1", "hello", timestamp="2026-07-11T10:00:00.000Z")
+    )
     indexer.sync()
 
     assert store.audit_events(engine="claude", limit=100)

@@ -15,9 +15,7 @@ def isolated_session_index(tmp_path, monkeypatch):
     就会：一是读写开发者真实的库，二是被后续用例复用（引擎 HOME 已被别的
     fixture 改掉），于是断言莫名失败。这里默认重定向 + 每例重置。
     """
-    monkeypatch.setenv(
-        "CA_SESSION_INDEX_DB", str(tmp_path / "session-index.sqlite3")
-    )
+    monkeypatch.setenv("CA_SESSION_INDEX_DB", str(tmp_path / "session-index.sqlite3"))
     yield
     from core.session_history.index_ingest import reset_indexer_for_tests
     from core.session_history.index_store import reset_index_for_tests

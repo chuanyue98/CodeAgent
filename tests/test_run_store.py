@@ -347,7 +347,9 @@ def test_log_paths_lists_what_the_table_still_points_at(store):
 
 
 def test_notifications_crud(store: RunStore) -> None:
-    nid = store.add_notification("s1", "t1", "hello", "claude", "completed", "test", "ok")
+    nid = store.add_notification(
+        "s1", "t1", "hello", "claude", "completed", "test", "ok"
+    )
     assert nid is not None
     recs = store.list_notifications(limit=10, unread_only=False)
     assert len(recs) == 1
@@ -362,6 +364,7 @@ def test_notifications_crud(store: RunStore) -> None:
 
 def test_notifications_prune(store: RunStore) -> None:
     import time
+
     old = time.time() - 40 * 86400
     store.add_notification("s1", "t1", "old", "claude", "completed", "old", "x")
     with store._lock:

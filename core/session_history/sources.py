@@ -45,9 +45,7 @@ def file_version(path: Path) -> str | None:
     return f"{stat.st_mtime_ns}:{stat.st_size}"
 
 
-def _file_engine_sources(
-    engine: str, projects_dir: Path
-) -> Iterator[SourceRef]:
+def _file_engine_sources(engine: str, projects_dir: Path) -> Iterator[SourceRef]:
     """``<root>/<project>/<session>.jsonl`` + 其 ``subagents/**`` 的通用枚举。
 
     Claude Code 与 CodeBuddy 的目录结构一致，父子关系由路径直接决定。
@@ -202,7 +200,9 @@ def enumerate_antigravity_sources(home: Path | None = None) -> Iterator[SourceRe
 
 def _antigravity_ref(transcript: Path, meta_version: str) -> SourceRef:
     version = file_version(transcript)
-    token = f"{version}|meta={meta_version}" if version else f"absent|meta={meta_version}"
+    token = (
+        f"{version}|meta={meta_version}" if version else f"absent|meta={meta_version}"
+    )
     return SourceRef(
         source_key=f"antigravity:{transcript}",
         engine="antigravity",

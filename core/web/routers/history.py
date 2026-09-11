@@ -442,7 +442,9 @@ async def delete_session(
             },
         )
 
-    validated_path = _validate_source_file_path(summary.get("source_file") or "", engine)
+    validated_path = _validate_source_file_path(
+        summary.get("source_file") or "", engine
+    )
 
     if engine == "opencode":
         con = None

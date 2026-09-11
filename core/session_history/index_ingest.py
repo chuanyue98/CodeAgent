@@ -126,7 +126,9 @@ class SessionIndexer:
                 self._sync_engine(engine, enumerator, parser)
             except Exception:
                 # 一个引擎的坏文件/坏库不该拖住其余引擎，更不该让整轮同步白跑。
-                logger.exception("Failed to sync engine %s into the session index", engine)
+                logger.exception(
+                    "Failed to sync engine %s into the session index", engine
+                )
 
         if self._index.closed:
             return
@@ -239,9 +241,13 @@ class SessionIndexer:
 
     def _reconcile_subagent_titles(self) -> None:
         """用父会话记录的启动描述给子代理命名。"""
-        for key, engine, session_id, parent_id, _fallback in (
-            self._index.unresolved_subagents()
-        ):
+        for (
+            key,
+            engine,
+            session_id,
+            parent_id,
+            _fallback,
+        ) in self._index.unresolved_subagents():
             raw = self._index.get_subagent_titles_json(session_key(engine, parent_id))
             if not raw:
                 continue

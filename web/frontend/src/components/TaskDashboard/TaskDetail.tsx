@@ -184,10 +184,7 @@ export default function TaskDetail({
   };
 
   useEffect(() => {
-    if (!confirmDelete) {
-      setLinkedScheduleCount(0);
-      return;
-    }
+    if (!confirmDelete) return;
     let active = true;
     fetchSchedules()
       .then(schedules => {
@@ -302,7 +299,10 @@ export default function TaskDetail({
             </button>
 
             <button
-              onClick={() => setConfirmDelete(true)}
+              onClick={() => {
+                setLinkedScheduleCount(0);
+                setConfirmDelete(true);
+              }}
               disabled={!!activeRun}
               title={activeRun ? t('taskDetail.deleteBlocked') : undefined}
               className="flex items-center gap-1.5 px-3 py-2 border border-red-100 text-red-500 rounded-xl text-sm font-medium hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"

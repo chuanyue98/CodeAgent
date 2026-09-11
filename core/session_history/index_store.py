@@ -675,7 +675,9 @@ class SessionIndex:
             for r in message_rows
         ]
         try:
-            subagent_titles = json.loads(titles_row["subagent_titles_json"]) if titles_row else {}
+            subagent_titles = (
+                json.loads(titles_row["subagent_titles_json"]) if titles_row else {}
+            )
         except (TypeError, ValueError):
             subagent_titles = {}
         return UnifiedSession(

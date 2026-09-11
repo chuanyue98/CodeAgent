@@ -178,7 +178,9 @@ def clear_parse_cache() -> None:
         try:
             path.unlink(missing_ok=True)
         except OSError:
-            logger.debug("Failed to remove session parse cache at %s", path, exc_info=True)
+            logger.debug(
+                "Failed to remove session parse cache at %s", path, exc_info=True
+            )
 
 
 def parse_cache_size() -> int:
@@ -288,7 +290,9 @@ def _load_persisted() -> None:
     except Exception:
         # 副本可能被旧版本写过、写到一半或根本不是本模块的文件。它不是真相
         # 来源，读不出来就重建，不能因此让服务起不来。
-        logger.debug("Ignoring unreadable session parse cache at %s", path, exc_info=True)
+        logger.debug(
+            "Ignoring unreadable session parse cache at %s", path, exc_info=True
+        )
         return
     if not isinstance(doc, dict) or doc.get("schema") != _PERSIST_SCHEMA_VERSION:
         return
