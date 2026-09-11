@@ -1,5 +1,3 @@
-import os
-import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, BinaryIO
 
@@ -178,38 +176,7 @@ class _LinksMixin:
         self.link_manager.create_skill_link(source, target)
 
     def _safe_remove_link(self, path: Path):
-        if not path.exists() and not path.is_symlink():
-            return
-
-        if not (self._is_windows_link(path) or path.is_symlink()):
-            logger.warning("Refusing to remove unmanaged path: %s", path)
-            return
-
-        try:
-            if os.name == "nt":
-                if path.is_dir():
-                    result = subprocess.run(
-                        ["cmd", "/c", "rmdir", str(path)],
-                        capture_output=True,
-                        check=False,
-                    )
-                    if result.returncode != 0:
-                        detail = (
-                            result.stderr.decode(errors="replace").strip()
-                            or result.stdout.decode(errors="replace").strip()
-                            or f"rmdir exited with code {result.returncode}"
-                        )
-                        logger.warning(
-                            "Security: Failed to remove link %s: %s", path, detail
-                        )
-                else:
-                    path.unlink(missing_ok=True)
-            else:
-                path.unlink(missing_ok=True)
-        except Exception as e:
-            logger.warning("Security: Failed to remove link %s: %s", path, e)
-
-    _LINK_MANIFEST = ".codeagent-links.json"
+        self.link_manager.safe_remove_link(path)
 
     def _load_link_manifest(self, link_path: Path) -> dict[str, str]:
         return self.link_manager.load_manifest(link_path)

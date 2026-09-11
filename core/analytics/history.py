@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
 from core.analytics.models import RawUsageEntry
+from core.logging_config import get_logger
+from core.utils.atomic_write import atomic_write
+
+logger = get_logger(__name__)
 
 
 def _history_path() -> Path:
@@ -111,23 +113,14 @@ def append_history(new_entries: list[RawUsageEntry]) -> None:
 def save_history(entries: list[RawUsageEntry]) -> None:
     """Atomically replaces the history file with the supplied entries."""
     path = _history_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(
-        dir=path.parent,
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        text=True,
+    payload = "".join(
+        json.dumps(asdict(entry), ensure_ascii=False) + "\n" for entry in entries
     )
-    temp_path = Path(temp_name)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            for entry in entries:
-                f.write(json.dumps(asdict(entry), ensure_ascii=False) + "\n")
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(temp_path, path)
+        atomic_write(path, payload, fsync=True)
     except OSError:
-        temp_path.unlink(missing_ok=True)
+        # 历史写失败不该打断采集流程，但也不能无痕：下次 backfill 依赖它。
+        logger.warning("写入用量历史 %s 失败", path, exc_info=True)
 
 
 def get_last_timestamps() -> dict[str, str]:

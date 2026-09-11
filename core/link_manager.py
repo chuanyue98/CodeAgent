@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 
 from core.logging_config import get_logger
+from core.utils.atomic_write import atomic_write
 
 LINK_MANIFEST = ".codeagent-links.json"
 
@@ -65,20 +65,11 @@ class LinkManager:
         if not manifest:
             manifest_path.unlink(missing_ok=True)
             return
-        link_path.mkdir(parents=True, exist_ok=True)
-        fd, temp_name = tempfile.mkstemp(
-            dir=link_path, prefix=".codeagent-links.", suffix=".tmp", text=True
+        atomic_write(
+            manifest_path,
+            json.dumps(manifest, indent=2, ensure_ascii=False),
+            fsync=True,
         )
-        temp_path = Path(temp_name)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(manifest, f, indent=2, ensure_ascii=False)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(temp_path, manifest_path)
-        except Exception:
-            temp_path.unlink(missing_ok=True)
-            raise
 
     def managed_link_matches(self, path: Path, source: Path) -> bool:
         try:
@@ -115,11 +106,23 @@ class LinkManager:
         try:
             if os.name == "nt":
                 if path.is_dir():
-                    subprocess.run(
+                    result = subprocess.run(
                         ["cmd", "/c", "rmdir", str(path)],
                         capture_output=True,
                         check=False,
                     )
+                    if result.returncode != 0:
+                        # rmdir fails without raising when the directory is
+                        # in use or access is denied; surface the actual
+                        # reason instead of silently succeeding.
+                        detail = (
+                            result.stderr.decode(errors="replace").strip()
+                            or result.stdout.decode(errors="replace").strip()
+                            or f"rmdir exited with code {result.returncode}"
+                        )
+                        logger.warning(
+                            "Security: failed to remove link %s: %s", path, detail
+                        )
                 else:
                     path.unlink(missing_ok=True)
             else:

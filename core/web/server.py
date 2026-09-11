@@ -306,14 +306,11 @@ async def lifespan(app: FastAPI):
     from core.web.routers.chat import _runner as chat_runner
     from core.web.routers.tasks import _runner as tasks_runner
 
-    try:
-        chat_runner.kill_all()
-    except Exception:
-        pass
-    try:
-        tasks_runner.kill_all()
-    except Exception:
-        pass
+    for name, runner in (("chat", chat_runner), ("tasks", tasks_runner)):
+        try:
+            runner.kill_all()
+        except Exception:
+            logger.warning("关停 %s runner 的残留进程失败", name, exc_info=True)
 
 
 app = FastAPI(title="CodeAgent Web UI", lifespan=lifespan)

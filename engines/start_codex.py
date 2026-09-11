@@ -453,6 +453,30 @@ def _shell_first_allowed_via_override() -> bool:
     )
 
 
+def _resolve_shell(env: dict) -> tuple[str, list[str]] | None:
+    """Finds the shell for one shell:first command; ``None`` if none exists.
+
+    参数风格跟着解析到的二进制走，而不是跟着操作系统走：Windows 上虽然优先
+    找 pwsh/powershell，但 which 完全可能解析出 Git Bash 的 bash —— 给
+    bash 塞 PowerShell 参数是必然失败的，反之亦然。
+    """
+    path = env.get("PATH")
+    candidates = (
+        ("pwsh", "powershell", "bash", "sh") if os.name == "nt" else ("bash", "sh")
+    )
+    for name in candidates:
+        found = shutil.which(name, path=path)
+        if not found:
+            continue
+        binary = Path(found).stem.lower()
+        if binary in ("pwsh", "powershell"):
+            return found, [found, "-NoProfile", "-Command"]
+        if binary == "bash":
+            return found, [found, "-lc"]
+        return found, [found, "-c"]
+    return None
+
+
 def run_prelaunch_commands(
     commands: list[str],
     env: dict,
@@ -537,38 +561,20 @@ def run_prelaunch_commands(
         print(f"Running prelaunch command: {preview}{suffix}")
 
         try:
-            if os.name == "nt":
-                shell = shutil.which("pwsh", path=env.get("PATH")) or shutil.which(
-                    "powershell", path=env.get("PATH")
+            resolved = _resolve_shell(env)
+            if resolved is None:
+                print(
+                    "No suitable shell (pwsh/powershell/bash/sh) found for "
+                    "shell:first",
+                    file=sys.stderr,
                 )
-                if not shell:
-                    print(
-                        "No PowerShell executable found for shell:first",
-                        file=sys.stderr,
-                    )
-                    sys.exit(1)
-                subprocess.run(
-                    [shell, "-NoProfile", "-Command", command],
-                    check=True,
-                    env=env,
-                )
-            else:
-                shell = shutil.which("bash", path=env.get("PATH")) or shutil.which(
-                    "sh", path=env.get("PATH")
-                )
-                if not shell:
-                    print("No POSIX shell found for shell:first", file=sys.stderr)
-                    sys.exit(1)
-                shell_args = (
-                    [shell, "-lc", command]
-                    if Path(shell).name == "bash"
-                    else [shell, "-c", command]
-                )
-                subprocess.run(
-                    shell_args,
-                    check=True,
-                    env=env,
-                )
+                sys.exit(1)
+            _shell, shell_args = resolved
+            subprocess.run(
+                [*shell_args, command],
+                check=True,
+                env=env,
+            )
         except subprocess.CalledProcessError as exc:
             print(f"Prelaunch command failed: {exc}", file=sys.stderr)
             sys.exit(1)

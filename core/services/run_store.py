@@ -81,6 +81,10 @@ class RunStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        # CLI 与 web 是两个进程写同一个 runs.db：WAL + busy_timeout 让并发
+        # 写互相退让，而不是直接抛 database is locked（与 agent_store 对齐）。
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._init_db()
 
     def _init_db(self):
