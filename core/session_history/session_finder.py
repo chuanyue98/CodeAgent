@@ -132,7 +132,7 @@ def find_all_sessions(
 def find_session_by_id(
     session_id: str,
     engine: str,
-    project_path: str,
+    project_path: str | None,
     home: Path | None = None,
 ) -> UnifiedSession | None:
     """Finds a specific session by its ID and engine.
@@ -151,26 +151,3 @@ def find_session_by_id(
         if session.session_id == session_id:
             return session
     return None
-
-
-def get_session_summaries(
-    project_path: str | None = None,
-    home: Path | None = None,
-    engine: str | None = None,
-) -> list[dict]:
-    """Returns lightweight session summaries for list views.
-
-    This is a convenience wrapper that calls ``find_all_sessions`` and
-    converts each result to a summary dict (without full messages).
-
-    Args:
-        project_path: The project directory to search for. If None,
-            sessions from every project are returned unfiltered.
-        home: Optional home directory override.
-        engine: Optional engine filter.
-
-    Returns:
-        list[dict]: List of session summary dicts.
-    """
-    sessions = find_all_sessions(project_path, home, engine)
-    return [s.to_summary_dict() for s in sessions]

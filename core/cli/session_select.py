@@ -8,8 +8,8 @@ list that had just offered them ``[1]``.
 
 from __future__ import annotations
 
+from core.session_history import repository
 from core.session_history.models import UnifiedSession
-from core.session_history.session_finder import find_all_sessions
 
 
 class SessionSelectorError(Exception):
@@ -46,27 +46,42 @@ def resolve_session(
         SessionSelectorError: When the project has no sessions, or the
             selector matches none of them.
     """
-    sessions = find_all_sessions(project_path, engine=engine)
-    if not sessions:
+    # 与 ``ca history`` 同一套排序：先拿摘要选，再按需取完整会话，避免为选一个
+    # 会话就把整个项目的消息都解析一遍。
+    summaries = repository.list_summaries(
+        project=project_path, engine=engine, include_subagents=True, limit=100000
+    )
+    if not summaries:
         raise SessionSelectorError("select.no_sessions", path=project_path)
 
+    chosen: dict | None = None
     if selector is None:
-        return sessions[0]
-
-    # A bare integer is the printed index. Session ids are UUIDs and
-    # ``ses_``-style strings, so none of them parse as one.
-    try:
-        index = int(selector)
-    except ValueError:
-        pass
+        chosen = summaries[0]
     else:
-        if not 1 <= index <= len(sessions):
-            raise SessionSelectorError(
-                "select.index_out_of_range", index=index, count=len(sessions)
-            )
-        return sessions[index - 1]
+        # A bare integer is the printed index. Session ids are UUIDs and
+        # ``ses_``-style strings, so none of them parse as one.
+        try:
+            index = int(selector)
+        except ValueError:
+            pass
+        else:
+            if not 1 <= index <= len(summaries):
+                raise SessionSelectorError(
+                    "select.index_out_of_range", index=index, count=len(summaries)
+                )
+            chosen = summaries[index - 1]
 
-    for session in sessions:
-        if session.session_id == selector:
-            return session
-    raise SessionSelectorError("select.not_found", selector=selector)
+    if chosen is None:
+        for summary in summaries:
+            if summary["session_id"] == selector:
+                chosen = summary
+                break
+    if chosen is None:
+        raise SessionSelectorError("select.not_found", selector=selector)
+
+    session = repository.get_full(
+        chosen["engine"], chosen["session_id"], project_path
+    )
+    if session is None:
+        raise SessionSelectorError("select.not_found", selector=selector)
+    return session

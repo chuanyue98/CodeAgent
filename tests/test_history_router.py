@@ -556,18 +556,21 @@ async def test_delete_session_invalid_source_file(two_project_history, monkeypat
         source_file="/nonexistent/path/to/file.jsonl",
     )
 
-    import core.web.routers.history as history_router
+    import core.session_history.repository as repo
 
-    original_find = history_router.find_session_by_id
+    original_get_summary = repo.get_summary
 
-    def mock_find(session_id, engine, project):
+    def mock_get_summary(engine, session_id, project=None):
+        found = None
         if session_id == "sess-empty":
-            return dummy_session_empty
-        if session_id == "sess-invalid":
-            return dummy_session_invalid
-        return original_find(session_id, engine, project)
+            found = dummy_session_empty
+        elif session_id == "sess-invalid":
+            found = dummy_session_invalid
+        if found is None:
+            return original_get_summary(engine, session_id, project)
+        return {"source_file": found.source_file, "session_id": session_id, "engine": engine}
 
-    monkeypatch.setattr(history_router, "find_session_by_id", mock_find)
+    monkeypatch.setattr(repo, "get_summary", mock_get_summary)
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"

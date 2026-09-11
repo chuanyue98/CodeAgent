@@ -189,19 +189,30 @@ def initialize_default_groups() -> None:
 async def _prewarm_session_history() -> None:
     """Pays the first full history scan before anyone asks for it.
 
-    The sessions list joins analytics usage against the parsed engine history.
-    Both are memoized, but the first caller to touch them walks every engine's
-    history -- seconds on a machine with a real backlog. Doing it here makes
-    that caller startup rather than whoever opens the terminal or Activity
-    first.
+    The memoization used to die with the process, so *every* restart repaid the
+    whole scan. Session history now lives in a persisted SQLite index that is
+    built incrementally, so this builds/refresh it at startup instead of making
+    whoever opens the terminal or Activity first wait.
+
+    When the index is unavailable (disabled or unopenable) it falls back to the
+    old behaviour -- warm the in-process parse cache and keep its on-disk copy
+    so a restart at least starts warm.
     """
 
     def _scan() -> None:
         from core.analytics.service import get_analytics_data
-        from core.session_history.session_finder import find_all_sessions
+        from core.session_history import index_ingest, parse_cache
 
+        indexer = index_ingest.get_indexer()
+        if indexer is None:
+            from core.session_history.session_finder import find_all_sessions
+
+            parse_cache.enable_persistence()
+            find_all_sessions()
+            parse_cache.flush_parse_cache()
+        else:
+            indexer.sync()
         get_analytics_data()
-        find_all_sessions()
 
     try:
         await asyncio.to_thread(_scan)

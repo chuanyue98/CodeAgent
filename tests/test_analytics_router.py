@@ -6,6 +6,7 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from core.session_history import repository as _repo
 from core.web.routers import analytics
 
 
@@ -260,12 +261,12 @@ def test_subtasks_are_titled_like_their_parent():
             return_value={"sessions": [_with_subtask(parent, child)]},
         ),
         patch.object(
-            analytics,
-            "find_all_sessions",
-            return_value=[
-                _stub_session("parent", "重构任务看板"),
-                _stub_session("child", "前端代码质量检查"),
-            ],
+            _repo,
+            "get_title_map",
+            return_value={
+                ("claude", "parent"): "重构任务看板",
+                ("claude", "child"): "前端代码质量检查",
+            },
         ),
     ):
         response = TestClient(app).get("/api/analytics/sessions")
@@ -289,12 +290,12 @@ def test_search_matches_a_subtask_title():
             return_value={"sessions": [_with_subtask(parent, child)]},
         ),
         patch.object(
-            analytics,
-            "find_all_sessions",
-            return_value=[
-                _stub_session("parent", "重构任务看板"),
-                _stub_session("child", "前端代码质量检查"),
-            ],
+            _repo,
+            "get_title_map",
+            return_value={
+                ("claude", "parent"): "重构任务看板",
+                ("claude", "child"): "前端代码质量检查",
+            },
         ),
     ):
         response = TestClient(app).get(

@@ -14,6 +14,7 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from core.session_history import repository as _repo
 from core.session_history.models import (
     EngineType,
     ToolCallSummary,
@@ -48,7 +49,8 @@ def _session(
 def _get(sessions: list[UnifiedSession], **params):
     app = FastAPI()
     app.include_router(analytics.router)
-    with patch.object(analytics, "find_all_sessions", return_value=sessions):
+    # 打在仓储层：统计逻辑（回退实现）仍在被覆盖，索引在测试里本来就没就绪。
+    with patch.object(_repo, "find_all_sessions", return_value=sessions):
         return TestClient(app).get("/api/analytics/tools", params=params)
 
 

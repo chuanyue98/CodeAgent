@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from core.services.agent_adapters.fake import FakeAgentAdapter
 from core.services.agent_gateway import AgentGateway
 from core.services.agent_store import AgentStore
+from core.session_history import repository as _repo
 from core.session_history.models import EngineType, UnifiedMessage, UnifiedSession
 from core.web.routers import agent
 
@@ -149,7 +150,7 @@ def test_agent_imports_native_history_into_replay_events(tmp_path, monkeypatch):
             UnifiedMessage(role="assistant", content="old answer"),
         ],
     )
-    monkeypatch.setattr(agent, "find_session_by_id", lambda *_args: native)
+    monkeypatch.setattr(_repo, "get_full", lambda *_args: native)
 
     with TestClient(app) as client:
         response = client.post(

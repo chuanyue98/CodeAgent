@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 import ca_launcher
 from core.session_history.models import (
     EngineType,
@@ -42,12 +44,17 @@ def _session(session_id="s1", engine=EngineType.CLAUDE, **overrides):
     return UnifiedSession(**defaults)
 
 
+@pytest.fixture(autouse=True)
+def _fallback_path(no_session_index):
+    """本文件打桩的是回退实现，索引必须关掉。"""
+
+
 # ── ca history (list) ────────────────────────────────────────────────────────
 
 
 def test_bare_history_lists_sessions(monkeypatch, capsys):
     with patch(
-        "core.session_history.session_finder.find_all_sessions",
+        "core.session_history.repository.find_all_sessions",
         return_value=[_session()],
     ):
         _run(monkeypatch, "history")
@@ -60,7 +67,7 @@ def test_bare_history_lists_sessions(monkeypatch, capsys):
 
 def test_history_empty_project(monkeypatch, capsys):
     with patch(
-        "core.session_history.session_finder.find_all_sessions", return_value=[]
+        "core.session_history.repository.find_all_sessions", return_value=[]
     ):
         _run(monkeypatch, "history", "list")
     assert "No sessions found for this project." in capsys.readouterr().out
@@ -68,7 +75,7 @@ def test_history_empty_project(monkeypatch, capsys):
 
 def test_history_engine_filter_reaches_the_finder(monkeypatch):
     with patch(
-        "core.session_history.session_finder.find_all_sessions", return_value=[]
+        "core.session_history.repository.find_all_sessions", return_value=[]
     ) as find_all:
         _run(monkeypatch, "history", "list", "--engine", "codex")
     assert find_all.call_args.kwargs["engine"] == "codex"
@@ -79,7 +86,7 @@ def test_history_engine_filter_reaches_the_finder(monkeypatch):
 
 def test_show_unknown_session_reports_not_found(monkeypatch, capsys):
     with patch(
-        "core.session_history.session_finder.find_session_by_id", return_value=None
+        "core.session_history.repository.find_session_by_id", return_value=None
     ):
         _run(monkeypatch, "history", "show", "claude", "ghost")
     assert "[X] Session not found: claude/ghost" in capsys.readouterr().out
@@ -87,7 +94,7 @@ def test_show_unknown_session_reports_not_found(monkeypatch, capsys):
 
 def test_show_prints_metadata_messages_and_tool_calls(monkeypatch, capsys):
     with patch(
-        "core.session_history.session_finder.find_session_by_id",
+        "core.session_history.repository.find_session_by_id",
         return_value=_session(),
     ):
         _run(monkeypatch, "history", "show", "claude", "s1")
@@ -103,7 +110,7 @@ def test_show_prints_metadata_messages_and_tool_calls(monkeypatch, capsys):
 
 def test_show_missing_model_falls_back_to_unknown(monkeypatch, capsys):
     with patch(
-        "core.session_history.session_finder.find_session_by_id",
+        "core.session_history.repository.find_session_by_id",
         return_value=_session(model=""),
     ):
         _run(monkeypatch, "history", "show", "claude", "s1")
@@ -115,7 +122,7 @@ def test_show_missing_model_falls_back_to_unknown(monkeypatch, capsys):
 
 def test_convert_unknown_session_reports_not_found(monkeypatch, capsys):
     with patch(
-        "core.session_history.session_finder.find_session_by_id", return_value=None
+        "core.session_history.repository.find_session_by_id", return_value=None
     ):
         _run(monkeypatch, "history", "convert", "claude", "ghost", "codex")
     assert "[X] Session not found: claude/ghost" in capsys.readouterr().out
@@ -123,7 +130,7 @@ def test_convert_unknown_session_reports_not_found(monkeypatch, capsys):
 
 def test_convert_refuses_without_confirmation_when_not_interactive(monkeypatch, capsys):
     with patch(
-        "core.session_history.session_finder.find_session_by_id",
+        "core.session_history.repository.find_session_by_id",
         return_value=_session(),
     ):
         with patch("core.session_history.writers.write_session") as write:
@@ -137,7 +144,7 @@ def test_convert_refuses_without_confirmation_when_not_interactive(monkeypatch, 
 def test_convert_with_yes_writes_and_shows_the_resume_hint(monkeypatch, capsys):
     source = _session()
     with patch(
-        "core.session_history.session_finder.find_session_by_id", return_value=source
+        "core.session_history.repository.find_session_by_id", return_value=source
     ):
         with patch(
             "core.session_history.writers.write_session", return_value="new-id"
@@ -153,7 +160,7 @@ def test_convert_with_yes_writes_and_shows_the_resume_hint(monkeypatch, capsys):
 
 def test_convert_writer_failure_is_reported(monkeypatch, capsys):
     with patch(
-        "core.session_history.session_finder.find_session_by_id",
+        "core.session_history.repository.find_session_by_id",
         return_value=_session(),
     ):
         with patch(

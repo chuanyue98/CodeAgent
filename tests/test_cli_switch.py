@@ -21,7 +21,7 @@ def _session(session_id: str, engine: EngineType, started_at: str) -> UnifiedSes
 
 @pytest.fixture
 def sessions():
-    """Newest first, matching what find_all_sessions returns."""
+    """Newest first, matching what ``ca history`` prints."""
     return [
         _session("newest", EngineType.CLAUDE, "2026-08-27T10:00:00"),
         _session("middle", EngineType.OPENCODE, "2026-08-26T10:00:00"),
@@ -31,10 +31,17 @@ def sessions():
 
 @pytest.fixture
 def find_all(sessions):
+    """打在仓储层：先给摘要列表供选择，再按 id 取完整会话。"""
+    summaries = [s.to_summary_dict() for s in sessions]
+    by_id = {s.session_id: s for s in sessions}
     with patch(
-        "core.cli.session_select.find_all_sessions", return_value=sessions
-    ) as mock:
-        yield mock
+        "core.session_history.repository.list_summaries", return_value=summaries
+    ) as list_mock:
+        with patch(
+            "core.session_history.repository.get_full",
+            side_effect=lambda engine, session_id, project=None: by_id.get(session_id),
+        ):
+            yield list_mock
 
 
 def test_no_selector_takes_the_most_recent_session(find_all):
@@ -63,7 +70,7 @@ def test_unmatched_selector_reports_not_found(find_all):
 
 
 def test_empty_project_points_at_starting_a_session():
-    with patch("core.cli.session_select.find_all_sessions", return_value=[]):
+    with patch("core.session_history.repository.list_summaries", return_value=[]):
         with pytest.raises(SessionSelectorError) as excinfo:
             resolve_session(None, "/proj")
     assert excinfo.value.message_key == "select.no_sessions"

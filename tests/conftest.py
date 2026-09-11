@@ -8,6 +8,36 @@ from core.web.security import reset_token_cache
 
 
 @pytest.fixture(autouse=True)
+def isolated_session_index(tmp_path, monkeypatch):
+    """把会话索引指到 tmp，并在每个用例后丢掉进程级单例。
+
+    索引单例是 ``~/.codeagent/session-index.sqlite3``，一旦被某个用例意外创建
+    就会：一是读写开发者真实的库，二是被后续用例复用（引擎 HOME 已被别的
+    fixture 改掉），于是断言莫名失败。这里默认重定向 + 每例重置。
+    """
+    monkeypatch.setenv(
+        "CA_SESSION_INDEX_DB", str(tmp_path / "session-index.sqlite3")
+    )
+    yield
+    from core.session_history.index_ingest import reset_indexer_for_tests
+    from core.session_history.index_store import reset_index_for_tests
+
+    reset_indexer_for_tests()
+    reset_index_for_tests()
+
+
+@pytest.fixture
+def no_session_index(monkeypatch):
+    """关掉会话索引，让读路径确定地走回退实现。
+
+    凡是要给 ``repository.find_all_sessions`` / ``find_session_by_id`` 打桩的
+    用例都需要它：否则后台同步可能抢先把索引建好，读路径就不走回退了，测试会
+    随机失败。
+    """
+    monkeypatch.setenv("CA_SESSION_INDEX", "0")
+
+
+@pytest.fixture(autouse=True)
 def pinned_language(monkeypatch):
     """Pins CLI output to English for the whole suite.
 

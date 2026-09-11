@@ -15,29 +15,33 @@ from .. import helpers as _helpers
 
 def _history_list(ctx, engine, include_subagents=False):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
-    from core.session_history.session_finder import find_all_sessions
+    from core.session_history import repository
 
     if engine:
         engine = normalize_engine_name(engine)
     project_path = str(Path.cwd())
-    sessions = find_all_sessions(project_path, engine=engine)
+    # 一律取全量再过滤：隐藏了多少子代理要在输出里报出来，而摘要行很轻。
+    rows = repository.list_summaries(
+        project=project_path, engine=engine, include_subagents=True, limit=100000
+    )
     hidden = 0
     if not include_subagents:
-        kept = [s for s in sessions if not s.parent_session_id]
-        hidden = len(sessions) - len(kept)
-        sessions = kept
-    if not sessions:
+        kept = [s for s in rows if not s["parent_session_id"]]
+        hidden = len(rows) - len(kept)
+        rows = kept
+    if not rows:
         print(t("history.none"))
         return
-    print(t("history.found", count=len(sessions), path=project_path))
+    print(t("history.found", count=len(rows), path=project_path))
     if hidden:
         print(t("history.subagents_hidden", count=hidden))
-    for i, s in enumerate(sessions):
-        title = s.title or s.first_user_message[:60] or t("history.no_title")
+    for i, s in enumerate(rows):
+        title = s["title"][:60] or t("history.no_title")
         print(
-            f"  [{i + 1}] {s.engine.value:8s} | {s.started_at[:19]:19s} | {s.message_count:3d} msgs | {title}"
+            f"  [{i + 1}] {s['engine']:8s} | {s['started_at'][:19]:19s} | "
+            f"{s['message_count']:3d} msgs | {title}"
         )
-        print(f"       ID: {s.session_id}")
+        print(f"       ID: {s['session_id']}")
     print(t("history.show_hint"))
 
 
@@ -69,11 +73,11 @@ def history_list(ctx, engine, include_subagents):  # type: ignore[no-untyped-def
 def show(ctx, engine_name, session_id):  # type: ignore[no-untyped-def]
     """Show full session content."""
     _helpers._ensure_project_on_path(ctx.obj["root"])
-    from core.session_history.session_finder import find_session_by_id
+    from core.session_history import repository
 
     engine_name = normalize_engine_name(engine_name)
     project_path = str(Path.cwd())
-    session = find_session_by_id(session_id, engine_name, project_path)
+    session = repository.get_full(engine_name, session_id, project_path)
     if not session:
         print(t("history.not_found", engine=engine_name, session_id=session_id))
         return
@@ -112,13 +116,13 @@ def show(ctx, engine_name, session_id):  # type: ignore[no-untyped-def]
 def convert(ctx, source_engine, session_id, target_engine, yes):  # type: ignore[no-untyped-def]
     """Convert session to another engine format."""
     _helpers._ensure_project_on_path(ctx.obj["root"])
-    from core.session_history.session_finder import find_session_by_id
+    from core.session_history import repository
     from core.session_history.writers import write_session
 
     source_engine = normalize_engine_name(source_engine)
     target_engine = normalize_engine_name(target_engine)
     project_path = str(Path.cwd())
-    session = find_session_by_id(session_id, source_engine, project_path)
+    session = repository.get_full(source_engine, session_id, project_path)
     if not session:
         print(t("history.not_found", engine=source_engine, session_id=session_id))
         return

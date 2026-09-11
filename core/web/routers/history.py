@@ -22,7 +22,6 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
@@ -36,11 +35,7 @@ from core.services.workspace_service import (
     WorkspaceResolutionError,
     resolve_registered_workspace,
 )
-from core.session_history.audit import build_audit_events
-from core.session_history.session_finder import (
-    find_all_sessions,
-    find_session_by_id,
-)
+from core.session_history import repository
 from core.web.case_convert import ProtocolModel, camelize, wire
 from core.web.routers.config import get_config_path
 
@@ -93,18 +88,6 @@ def _validate_source_file_path(source_file: str, engine: str) -> Path:
             "error": "Source file path is outside allowed engine history directories",
         },
     )
-
-
-def _parse_ts(ts: str) -> datetime:
-    """Parse ISO 8601 timestamp string to a UTC-aware datetime for comparison."""
-    try:
-        normalized = ts.replace("Z", "+00:00") if ts else ""
-        dt = datetime.fromisoformat(normalized) if normalized else datetime.min
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=UTC)
-        return dt
-    except (ValueError, TypeError):
-        return datetime.min.replace(tzinfo=UTC)
 
 
 class ConvertRequest(ProtocolModel):
@@ -188,12 +171,15 @@ async def list_sessions(
     Returns:
         dict: {"sessions": [...], "count": N}
     """
-    found = await asyncio.to_thread(find_all_sessions, project, engine=engine)
-    if not include_subagents:
-        found = [s for s in found if not s.parent_session_id]
-    sessions = found[:limit]
+    sessions = await asyncio.to_thread(
+        repository.list_summaries,
+        project=project,
+        engine=engine,
+        include_subagents=include_subagents,
+        limit=limit,
+    )
     return {
-        "sessions": [camelize(s.to_summary_dict()) for s in sessions],
+        "sessions": [camelize(s) for s in sessions],
         "count": len(sessions),
     }
 
@@ -228,18 +214,14 @@ async def get_audit_events(
     Returns:
         dict: {"events": [...], "count": N}
     """
-    sessions = await asyncio.to_thread(find_all_sessions, project, engine=engine)
-    events = build_audit_events(sessions)
-
-    if since:
-        since_dt = _parse_ts(since)
-        events = [e for e in events if _parse_ts(e["timestamp"]) >= since_dt]
-    if until:
-        until_dt = _parse_ts(until)
-        events = [e for e in events if _parse_ts(e["timestamp"]) <= until_dt]
-
-    events = events[:limit]
-
+    events = await asyncio.to_thread(
+        repository.audit_events,
+        engine=engine,
+        project=project,
+        since=since,
+        until=until,
+        limit=limit,
+    )
     return {
         "events": [camelize(event) for event in events],
         "count": len(events),
@@ -262,7 +244,7 @@ async def get_session_detail(
     Returns:
         dict: Full session data with messages, or 404 if not found.
     """
-    session = await asyncio.to_thread(find_session_by_id, session_id, engine, project)
+    session = await asyncio.to_thread(repository.get_full, engine, session_id, project)
     if not session:
         raise HTTPException(
             status_code=404,
@@ -293,7 +275,7 @@ async def convert_session(req: ConvertRequest) -> dict:
     from core.session_history.writers import write_session
 
     session = await asyncio.to_thread(
-        find_session_by_id, req.session_id, req.source_engine, validated_project
+        repository.get_full, req.source_engine, req.session_id, validated_project
     )
     if not session:
         raise HTTPException(
@@ -347,7 +329,7 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
     from core.session_history.writers import write_session
 
     session = await asyncio.to_thread(
-        find_session_by_id, req.session_id, req.source_engine, validated_project
+        repository.get_full, req.source_engine, req.session_id, validated_project
     )
     if not session:
         raise HTTPException(
@@ -410,10 +392,10 @@ async def continue_session(
     if engine not in ENGINES:
         raise HTTPException(status_code=400, detail=f"Unknown engine: {engine}")
 
-    session = await asyncio.to_thread(
-        find_session_by_id, session_id, engine, validated_project
+    summary = await asyncio.to_thread(
+        repository.get_summary, engine, session_id, validated_project
     )
-    if not session:
+    if not summary:
         raise HTTPException(
             status_code=404,
             detail={
@@ -447,8 +429,10 @@ async def delete_session(
     """Deletes a specific session from local history storage."""
     import sqlite3
 
-    session = await asyncio.to_thread(find_session_by_id, session_id, engine, project)
-    if not session:
+    summary = await asyncio.to_thread(
+        repository.get_summary, engine, session_id, project
+    )
+    if not summary:
         raise HTTPException(
             status_code=404,
             detail={
@@ -458,7 +442,7 @@ async def delete_session(
             },
         )
 
-    validated_path = _validate_source_file_path(session.source_file or "", engine)
+    validated_path = _validate_source_file_path(summary.get("source_file") or "", engine)
 
     if engine == "opencode":
         con = None
@@ -503,4 +487,6 @@ async def delete_session(
                 status_code=500, detail={"error": f"Failed to delete session file: {e}"}
             ) from e
 
+    # 立刻把索引行摘掉，不必等下一次同步才发现文件没了。
+    await asyncio.to_thread(repository.forget_session, engine, session_id)
     return wire(DeleteSessionResponse(status="deleted", session_id=session_id))

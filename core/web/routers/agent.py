@@ -24,7 +24,7 @@ from core.services.agent_protocol import (
     ImportAgentSessionRequest,
     wire,
 )
-from core.session_history.session_finder import find_session_by_id
+from core.session_history import repository
 from core.web.security import verify_websocket
 
 logger = get_logger(__name__)
@@ -132,9 +132,9 @@ async def import_agent_session(
     payload: ImportAgentSessionRequest, request: Request
 ) -> dict:
     native = await asyncio.to_thread(
-        find_session_by_id,
-        payload.provider_session_id,
+        repository.get_full,
         payload.provider,
+        payload.provider_session_id,
         payload.project_id,
     )
     if native is None:
