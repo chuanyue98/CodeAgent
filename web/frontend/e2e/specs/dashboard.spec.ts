@@ -28,13 +28,14 @@ test('clicking a task opens its detail view, back returns to list', async ({
   await expect(page.getByText(/tasks available/i)).toBeVisible();
 });
 
-test('running a task shows execution logs and a Stop control', async ({
+test('running a task shows a Stop control', async ({
   page,
 }) => {
   await gotoDashboard(page);
   await page.locator('main button', { hasText: /DB Migrate/i }).first().click();
   await page.getByRole('button', { name: 'Run Task' }).click();
-  await expect(page.getByText('Execution Logs')).toBeVisible({ timeout: 15000 });
+  // The fake engine's run lasts ~4s. Wait on the Stop control itself: any
+  // other signal risks passing only after the run has already ended.
   await expect(page.locator('button').filter({ hasText: 'Stop Execution' })).toBeVisible();
   await page.locator('button').filter({ hasText: 'Stop Execution' }).click();
   // Once a task has runs in its history, the detail's primary action reads

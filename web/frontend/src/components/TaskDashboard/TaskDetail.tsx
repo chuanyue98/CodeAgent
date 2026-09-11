@@ -138,6 +138,10 @@ export default function TaskDetail({
     setPrevActiveRunId(activeRun?.taskId);
     if (activeRun) {
       setActiveTab('logs');
+    } else if (prevActiveRunId) {
+      // The run just ended: keep its log on screen rather than dropping to
+      // the empty state the moment it finishes.
+      setViewedLogId(prevActiveRunId);
     }
   }
 

@@ -160,6 +160,39 @@ describe('TaskDetail actions', () => {
     expect(onStop).toHaveBeenCalledWith('code_review-live');
   });
 
+  test('when a run ends, its log stays on screen instead of the empty state', () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '',
+      json: async () => ({}),
+    }) as Response);
+    const live = makeRun({ taskId: 'code_review-live', status: 'running', endTime: undefined });
+    const props = {
+      task: makeTask(),
+      engines,
+      onBack: vi.fn(),
+      onRun: vi.fn(),
+      onStop: vi.fn(),
+      onDeleted: vi.fn(),
+      onTaskUpdated: vi.fn(),
+      workspace: '/work/demo',
+      projects,
+      onWorkspaceChange: vi.fn(),
+    };
+    const { rerender } = render(<TaskDetail {...props} activeRun={live} runHistory={[]} />);
+
+    rerender(
+      <TaskDetail
+        {...props}
+        activeRun={undefined}
+        runHistory={[{ ...live, status: 'completed', endTime: Date.now() / 1000 }]}
+      />,
+    );
+
+    expect(screen.queryByText('No execution logs yet')).not.toBeInTheDocument();
+  });
+
   test('delete asks for confirmation, then reports deletion', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => ({
       ok: true,
