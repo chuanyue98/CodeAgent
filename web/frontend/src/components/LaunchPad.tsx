@@ -32,7 +32,27 @@ export default function LaunchPad() {
   const effectiveProject = (validProjects.some(project => project.path === selectedWorkspace) ? selectedWorkspace : (selectedWorkspace.trim() || validProjects[0]?.path || "")).trim();
   const activeTab = tabs.find(tab => tab.id === activeTabId);
 
+  useEffect(() => {
+    fetchPtyStatus()
+      .then(res => {
+        setAvailable(res.available);
+        setReason(res.reason || null);
+      })
+      .catch(err => {
+        setAvailable(false);
+        setReason(String(err));
+      });
+  }, []);
 
+  useEffect(() => {
+    const engineParam = searchParams.get('engine');
+    const cwdParam = searchParams.get('cwd');
+    const sessionParam = searchParams.get('session') || undefined;
+    const attachParam = searchParams.get('attach') || undefined;
+    if (engineParam && cwdParam && (sessionParam || attachParam)) {
+      openTab(engineParam, cwdParam, sessionParam, attachParam);
+    }
+  }, [searchParams, openTab]);
 
   const engineCard = (engine: Engine) => {
     const name = engine.nameKey ? t(engine.nameKey) : engine.name;
@@ -150,7 +170,7 @@ export default function LaunchPad() {
   );
 
   return (
-    <div className="flex h-full min-h-0 gap-3">
+    <div className="flex h-full min-h-0 gap-3 pb-12">
       <TerminalSessionSidebar
         currentWorkspace={effectiveProject}
         activeSessionId={activeTab?.sessionId}

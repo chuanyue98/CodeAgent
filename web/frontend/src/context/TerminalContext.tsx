@@ -36,38 +36,75 @@ export const useTerminal = () => {
 };
 
 export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [tabs, setTabs] = useState<TerminalTab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [tabs, setTabs] = useState<TerminalTab[]>(() => {
+    try {
+      const saved = localStorage.getItem('codeagent.terminalTabs');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [activeTabId, setActiveTabId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('codeagent.activeTabId');
+    } catch {
+      return null;
+    }
+  });
   const [rateLimitedTabIds, setRateLimitedTabIds] = useState<Set<string>>(new Set());
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
 
+  useEffect(() => {
+    localStorage.setItem('codeagent.terminalTabs', JSON.stringify(tabs));
+  }, [tabs]);
+
+  useEffect(() => {
+    if (activeTabId) {
+      localStorage.setItem('codeagent.activeTabId', activeTabId);
+    } else {
+      localStorage.removeItem('codeagent.activeTabId');
+    }
+  }, [activeTabId]);
+
   const openTab = useCallback((engine: string, cwd: string, sessionId?: string, attachId?: string) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    setTabs(prev => [...prev, { id, engine, cwd, sessionId, attachId }]);
+    const identity = attachId ?? sessionId;
+    if (identity) {
+      const existing = tabs.find(
+        t => (attachId ? t.attachId === attachId : t.sessionId === identity) && t.engine === engine
+      );
+      if (existing) {
+        setActiveTabId(existing.id);
+        setIsDrawerOpen(true);
+        return;
+      }
+    }
+    const id = Math.random().toString(36).slice(2, 11);
+    console.log("OPENTAB", engine, sessionId); setTabs(prev => [...prev, { id, engine, cwd, sessionId, attachId }]);
     setActiveTabId(id);
     setIsDrawerOpen(true);
-  }, []);
+  }, [tabs]);
 
   const closeTab = useCallback((id: string) => {
-    setTabs(prev => {
-      const newTabs = prev.filter(tab => tab.id !== id);
-      if (activeTabId === id) {
-        if (newTabs.length > 0) {
-          setActiveTabId(newTabs[newTabs.length - 1].id);
-        } else {
-          setActiveTabId(null);
-          setIsDrawerOpen(false); // Optionally close drawer if no tabs left
-        }
-      }
-      return newTabs;
-    });
+    setTabs(prev => prev.filter(tab => tab.id !== id));
     setRateLimitedTabIds(prev => {
       const newSet = new Set(prev);
       newSet.delete(id);
       return newSet;
     });
-  }, [activeTabId]);
+    setActiveTabId(currentActive => {
+      if (currentActive === id) {
+        const idx = tabs.findIndex(t => t.id === id);
+        if (tabs.length > 1) {
+          return tabs[idx > 0 ? idx - 1 : 1].id;
+        } else {
+          setIsDrawerOpen(false);
+          return null;
+        }
+      }
+      return currentActive;
+    });
+  }, [tabs]);
 
   const toggleDrawer = useCallback(() => setIsDrawerOpen(prev => !prev), []);
   const openDrawer = useCallback(() => setIsDrawerOpen(true), []);

@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, act } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import GlobalTerminalDrawer from '../components/GlobalTerminalDrawer';
 import { TerminalProvider, useTerminal } from '../context/TerminalContext';
 
@@ -21,6 +21,14 @@ const TestWrapper = ({ children, openDrawer, addTab }: any) => {
 };
 
 describe('GlobalTerminalDrawer', () => {
+  vi.mock('../context/TerminalContext', async (importOriginal) => {
+    const mod = await importOriginal<typeof import('../context/TerminalContext')>();
+    return mod;
+  });
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
   it('returns null when no tabs', () => {
     const { container } = render(
       <TerminalProvider>
