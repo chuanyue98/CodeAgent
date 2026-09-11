@@ -55,6 +55,13 @@ describe('terminalDetector', () => {
         const colored = '\u001b[1m\u001b[33mDo you want to proceed? [y/n]\u001b[0m ';
         expect(detectTerminalEvent(colored)).toBe('waiting_input');
       });
+      it('detects [n/y] and [N/y] confirmations', () => {
+        expect(detectTerminalEvent('Continue? [n/y]')).toBe('waiting_input');
+        expect(detectTerminalEvent('Proceed? [N/y]')).toBe('waiting_input');
+        expect(detectTerminalEvent('Retry? [n/Y]')).toBe('waiting_input');
+        expect(detectTerminalEvent('Confirm? (n/y)')).toBe('waiting_input');
+        expect(detectTerminalEvent('[N/y]')).toBe('waiting_input');
+      });
     });
 
     describe('rate_limit', () => {
@@ -83,6 +90,16 @@ describe('terminalDetector', () => {
         const colored = '\u001b[31m[ERROR] 429 Rate limit reached for model\u001b[0m';
         expect(detectTerminalEvent(colored)).toBe('rate_limit');
       });
+
+      it('does not trigger rate_limit for bare 429 in file paths or line numbers', () => {
+        expect(detectTerminalEvent('Line 429 in file.ts')).not.toBe('rate_limit');
+        expect(detectTerminalEvent('Line 429 in file.ts')).toBeNull();
+        expect(detectTerminalEvent('Line 429 in index.ts')).toBeNull();
+      });
+
+      it('does not trigger rate_limit for test results with 429 passed', () => {
+        expect(detectTerminalEvent('429 passed in 3.2s')).not.toBe('rate_limit');
+      });
     });
 
     describe('completed', () => {
@@ -99,6 +116,16 @@ describe('terminalDetector', () => {
 
       it('detects "Completed in" patterns', () => {
         expect(detectTerminalEvent('Completed in 12.5s')).toBe('completed');
+      });
+
+      it('detects test runner completed counts like "429 passed in 3.2s"', () => {
+        expect(detectTerminalEvent('429 passed in 3.2s')).toBe('completed');
+        expect(detectTerminalEvent('429 passed in 3s')).toBe('completed');
+      });
+
+      it('does not trigger completed for "completed in 3 phases"', () => {
+        expect(detectTerminalEvent('completed in 3 phases')).not.toBe('completed');
+        expect(detectTerminalEvent('completed in 3 phases')).toBeNull();
       });
 
       it('detects task completed and prompt returned', () => {
@@ -120,6 +147,8 @@ describe('terminalDetector', () => {
         expect(detectTerminalEvent('Compiling 14 files...')).toBeNull();
         expect(detectTerminalEvent('Reading /workspace/src/app.ts')).toBeNull();
         expect(detectTerminalEvent('Line 428 in index.ts')).toBeNull();
+        expect(detectTerminalEvent('Line 429 in file.ts')).toBeNull();
+        expect(detectTerminalEvent('completed in 3 phases')).toBeNull();
       });
 
       it('returns null for empty strings or falsy values', () => {

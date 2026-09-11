@@ -47,13 +47,12 @@ export function sendDesktopNotification(
   try {
     const notification = new Notification(title, options);
 
-    if (onClick) {
-      notification.onclick = (event) => {
-        event.preventDefault();
-        window.focus();
-        onClick();
-      };
-    }
+    notification.onclick = (event) => {
+      event.preventDefault();
+      window.focus();
+      onClick?.();
+      notification.close();
+    };
 
     return notification;
   } catch (error) {

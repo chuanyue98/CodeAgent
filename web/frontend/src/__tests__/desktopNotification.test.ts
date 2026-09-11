@@ -9,6 +9,7 @@ interface MockNotificationInstance {
   title: string;
   options?: NotificationOptions;
   onclick: ((this: Notification, ev: Event) => unknown) | null;
+  close: ReturnType<typeof vi.fn>;
 }
 
 function createNotificationMock(permission: NotificationPermission = 'default') {
@@ -19,6 +20,7 @@ function createNotificationMock(permission: NotificationPermission = 'default') 
       title,
       options,
       onclick: null,
+      close: vi.fn(),
     };
     instances.push(instance);
     return instance;
@@ -125,7 +127,7 @@ describe('desktopNotification', () => {
       expect(result).toBe(instances[0]);
     });
 
-    it('handles click callback and focuses window', () => {
+    it('handles click callback, focuses window, and closes notification', () => {
       const { instances } = createNotificationMock('granted');
 
       const focusSpy = vi.spyOn(window, 'focus').mockImplementation(() => {});
@@ -142,6 +144,25 @@ describe('desktopNotification', () => {
       expect(mockEvent.preventDefault).toHaveBeenCalled();
       expect(focusSpy).toHaveBeenCalled();
       expect(onClick).toHaveBeenCalled();
+      expect(created.close).toHaveBeenCalled();
+    });
+
+    it('focuses window and closes notification even if onClick is omitted', () => {
+      const { instances } = createNotificationMock('granted');
+
+      const focusSpy = vi.spyOn(window, 'focus').mockImplementation(() => {});
+      const mockEvent = { preventDefault: vi.fn() };
+
+      sendDesktopNotification('Title');
+
+      expect(instances.length).toBe(1);
+      const created = instances[0];
+      expect(created.onclick).toBeDefined();
+      created.onclick?.call(created as unknown as Notification, mockEvent as unknown as Event);
+
+      expect(mockEvent.preventDefault).toHaveBeenCalled();
+      expect(focusSpy).toHaveBeenCalled();
+      expect(created.close).toHaveBeenCalled();
     });
 
     it('catches and logs errors when new Notification throws', () => {
