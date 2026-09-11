@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 /**
@@ -86,12 +86,56 @@ class FakeSocket {
 }
 
 const originalWebSocket = globalThis.WebSocket;
-
 let BrowserTerminal: typeof import('../components/BrowserTerminal').default;
+
+const mockNotificationInstances: Array<{
+  title: string;
+  options?: NotificationOptions;
+  onclick: ((event: Event) => void) | null;
+  close: ReturnType<typeof vi.fn>;
+}> = [];
+
+const mockNotificationConstructor = vi.fn(function (title: string, options?: NotificationOptions) {
+  const instance = {
+    title,
+    options,
+    onclick: null,
+    close: vi.fn(),
+  };
+  mockNotificationInstances.push(instance);
+  return instance;
+});
+
+const mockNotificationApi = Object.assign(mockNotificationConstructor, {
+  permission: 'granted' as NotificationPermission,
+  requestPermission: vi.fn().mockResolvedValue('granted' as NotificationPermission),
+});
+
+const originalNotification = window.Notification;
+let originalHiddenDescriptor: PropertyDescriptor | undefined;
+
+function setDocumentHidden(hidden: boolean) {
+  Object.defineProperty(document, 'hidden', {
+    value: hidden,
+    configurable: true,
+    writable: true,
+  });
+}
 
 beforeEach(async () => {
   terminals.length = 0;
   sockets.length = 0;
+  mockNotificationInstances.length = 0;
+  mockNotificationConstructor.mockClear();
+  mockNotificationApi.permission = 'granted';
+  window.Notification = mockNotificationApi as unknown as typeof Notification;
+
+  originalHiddenDescriptor =
+    Object.getOwnPropertyDescriptor(Document.prototype, 'hidden') ||
+    Object.getOwnPropertyDescriptor(document, 'hidden');
+  setDocumentHidden(false);
+  document.title = 'CodeAgent Test';
+
   globalThis.WebSocket = FakeSocket as unknown as typeof WebSocket;
   globalThis.ResizeObserver = class {
     observe() {}
@@ -101,10 +145,21 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  cleanup();
   globalThis.WebSocket = originalWebSocket;
+  if (originalNotification) {
+    window.Notification = originalNotification;
+  } else {
+    delete (window as unknown as { Notification?: unknown }).Notification;
+  }
+  if (originalHiddenDescriptor) {
+    Object.defineProperty(document, 'hidden', originalHiddenDescriptor);
+  } else {
+    delete (document as unknown as { hidden?: unknown }).hidden;
+  }
 });
 
-function open(props: Partial<{ engine: string; cwd: string; sessionId?: string; onExit: (code: number | null) => void }> = {}) {
+function open(props: Parameters<typeof BrowserTerminal>[0] extends infer P ? Partial<P> : never = {}) {
   return render(
     <BrowserTerminal engine="claude" cwd="/workspace/project-a" {...props} />,
   );
@@ -244,3 +299,148 @@ test('unmounting closes the socket and disposes the terminal', () => {
   expect(sockets[0].closed).toBe(true);
   expect(terminals[0].disposed).toBe(true);
 });
+
+test('when document.hidden is true and waiting_input received, updates title with 🔴, calls desktop notification and onTerminalEvent', () => {
+  const onTerminalEvent = vi.fn();
+  open({ onTerminalEvent });
+
+  setDocumentHidden(true);
+
+  act(() => {
+    sockets[0].emit({ type: 'output', data: 'Do you want to proceed? [y/N]' });
+  });
+
+  expect(onTerminalEvent).toHaveBeenCalledWith('waiting_input', 'Do you want to proceed? [y/N]');
+  expect(document.title).toContain('🔴');
+  expect(document.title).toContain('[claude] Waiting for input...');
+  expect(mockNotificationConstructor).toHaveBeenCalledWith(
+    expect.stringContaining('🔴 [claude] Waiting for input...'),
+    expect.objectContaining({ body: 'Do you want to proceed? [y/N]' }),
+  );
+});
+
+test('when visibilitychange fires with hidden=false, restores previous document title', () => {
+  open();
+  setDocumentHidden(true);
+
+  act(() => {
+    sockets[0].emit({ type: 'output', data: 'Do you want to proceed? [y/N]' });
+  });
+  expect(document.title).toContain('🔴');
+
+  setDocumentHidden(false);
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+
+  expect(document.title).toBe('CodeAgent Test');
+});
+
+test('when user types into terminal, restores previous document title', () => {
+  open();
+  setDocumentHidden(true);
+
+  act(() => {
+    sockets[0].emit({ type: 'output', data: 'Do you want to proceed? [y/N]' });
+  });
+  expect(document.title).toContain('🔴');
+
+  act(() => {
+    terminals[0].type('y\r');
+  });
+
+  expect(document.title).toBe('CodeAgent Test');
+});
+
+test('when window focus event fires, restores previous document title', () => {
+  open();
+  setDocumentHidden(true);
+
+  act(() => {
+    sockets[0].emit({ type: 'output', data: 'Do you want to proceed? [y/N]' });
+  });
+  expect(document.title).toContain('🔴');
+
+  act(() => {
+    window.dispatchEvent(new Event('focus'));
+  });
+
+  expect(document.title).toBe('CodeAgent Test');
+});
+
+test('clicking desktop notification focuses window and terminal and restores title', () => {
+  const focusSpy = vi.spyOn(window, 'focus').mockImplementation(() => {});
+  open();
+  setDocumentHidden(true);
+
+  act(() => {
+    sockets[0].emit({ type: 'output', data: 'Do you want to proceed? [y/N]' });
+  });
+  expect(mockNotificationInstances.length).toBe(1);
+  const notif = mockNotificationInstances[0];
+
+  const mockEv = { preventDefault: vi.fn() };
+  act(() => {
+    notif.onclick?.(mockEv as unknown as Event);
+  });
+
+  expect(focusSpy).toHaveBeenCalled();
+  expect(terminals[0].focused).toBeGreaterThan(0);
+  expect(document.title).toBe('CodeAgent Test');
+});
+
+test('detects completed event and updates title with 🟢 when hidden', () => {
+  const onTerminalEvent = vi.fn();
+  open({ onTerminalEvent });
+  setDocumentHidden(true);
+
+  act(() => {
+    sockets[0].emit({ type: 'output', data: 'Task completed in 3.5s\r\n' });
+  });
+
+  expect(onTerminalEvent).toHaveBeenCalledWith('completed', 'Task completed in 3.5s\r\n');
+  expect(document.title).toContain('🟢');
+  expect(document.title).toContain('[claude] Task completed');
+});
+
+test('detects rate_limit event and updates title with ⚠️ when hidden', () => {
+  const onTerminalEvent = vi.fn();
+  open({ onTerminalEvent });
+  setDocumentHidden(true);
+
+  act(() => {
+    sockets[0].emit({ type: 'output', data: 'HTTP 429 Too Many Requests\r\n' });
+  });
+
+  expect(onTerminalEvent).toHaveBeenCalledWith('rate_limit', 'HTTP 429 Too Many Requests\r\n');
+  expect(document.title).toContain('⚠️');
+  expect(document.title).toContain('[claude] Rate limit / Quota exceeded');
+});
+
+test('when document is visible, triggers onTerminalEvent but does not change title or send desktop notification', () => {
+  const onTerminalEvent = vi.fn();
+  open({ onTerminalEvent });
+  setDocumentHidden(false);
+
+  act(() => {
+    sockets[0].emit({ type: 'output', data: 'Do you want to proceed? [y/N]' });
+  });
+
+  expect(onTerminalEvent).toHaveBeenCalledWith('waiting_input', 'Do you want to proceed? [y/N]');
+  expect(document.title).toBe('CodeAgent Test');
+  expect(mockNotificationConstructor).not.toHaveBeenCalled();
+});
+
+test('unmounting restores original title if modified', () => {
+  const { unmount } = open();
+  setDocumentHidden(true);
+
+  act(() => {
+    sockets[0].emit({ type: 'output', data: 'Do you want to proceed? [y/N]' });
+  });
+  expect(document.title).toContain('🔴');
+
+  unmount();
+  expect(document.title).toBe('CodeAgent Test');
+});
+

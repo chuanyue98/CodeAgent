@@ -5,10 +5,12 @@ import '@xterm/xterm/css/xterm.css';
 import { ClipboardCopy, Eraser, RotateCw } from 'lucide-react';
 import { ptyWebSocketUrl } from '../api/pty';
 import { useT } from '../i18n/context';
+import { detectTerminalEvent, stripAnsi, TerminalEventType } from '../utils/terminalDetector';
+import { requestNotificationPermission, sendDesktopNotification } from '../utils/desktopNotification';
 
 type ConnectionState = 'connecting' | 'open' | 'closed' | 'error';
 
-interface BrowserTerminalProps {
+export interface BrowserTerminalProps {
   engine: string;
   cwd: string;
   /** Resume this session rather than starting a fresh one. */
@@ -16,6 +18,33 @@ interface BrowserTerminalProps {
   /** Attach to a live browser terminal by its /api/pty/sessions id. */
   attachId?: string;
   onExit?: (code: number | null) => void;
+  onTerminalEvent?: (event: TerminalEventType, chunk: string) => void;
+}
+
+function getAlertTitle(event: TerminalEventType, engine: string): string {
+  switch (event) {
+    case 'waiting_input':
+      return `🔴 [${engine}] Waiting for input...`;
+    case 'completed':
+      return `🟢 [${engine}] Task completed`;
+    case 'rate_limit':
+      return `⚠️ [${engine}] Rate limit / Quota exceeded`;
+  }
+}
+
+function getNotificationBody(event: TerminalEventType, chunk: string): string {
+  const clean = stripAnsi(chunk).trim();
+  if (clean.length > 0 && clean.length <= 120) {
+    return clean;
+  }
+  switch (event) {
+    case 'waiting_input':
+      return 'Terminal process is waiting for user input.';
+    case 'completed':
+      return 'Task completed.';
+    case 'rate_limit':
+      return 'Rate limit or quota exceeded.';
+  }
 }
 
 /** Coalesces the burst of resize events a drag produces into one fit. */
@@ -27,6 +56,7 @@ export default function BrowserTerminal({
   sessionId,
   attachId,
   onExit,
+  onTerminalEvent,
 }: BrowserTerminalProps) {
   const t = useT();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -44,6 +74,31 @@ export default function BrowserTerminal({
   useEffect(() => {
     onExitRef.current = onExit;
   }, [onExit]);
+  const onTerminalEventRef = useRef(onTerminalEvent);
+  useEffect(() => {
+    onTerminalEventRef.current = onTerminalEvent;
+  }, [onTerminalEvent]);
+
+  // Request notification permission non-blockingly on mount
+  useEffect(() => {
+    void requestNotificationPermission();
+  }, []);
+
+  const originalTitleRef = useRef<string | null>(null);
+
+  const restoreTitle = useCallback(() => {
+    if (typeof document !== 'undefined' && originalTitleRef.current !== null) {
+      document.title = originalTitleRef.current;
+      originalTitleRef.current = null;
+    }
+  }, []);
+
+  const requestPermissionOnInteraction = useCallback(() => {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      void requestNotificationPermission();
+    }
+  }, []);
+
   // `t` changes identity when the language does. Held in the effect's deps it
   // tore the socket down and spawned a *new* PTY on every language switch,
   // which with several terminals open would kill all of them at once.
@@ -95,6 +150,22 @@ export default function BrowserTerminal({
     let superseded = false;
     const socket = new WebSocket(ptyWebSocketUrl(engine, cwd, sessionId, attachId));
 
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        restoreTitle();
+      }
+    };
+    const handleWindowFocus = () => {
+      restoreTitle();
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', handleWindowFocus);
+    }
+
     const sendResize = () => {
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
@@ -118,6 +189,30 @@ export default function BrowserTerminal({
       }
       if (payload.type === 'output' && typeof payload.data === 'string') {
         term.write(payload.data);
+
+        const chunk = payload.data;
+        const detected = detectTerminalEvent(chunk);
+        if (detected) {
+          onTerminalEventRef.current?.(detected, chunk);
+          if (typeof document !== 'undefined' && document.hidden) {
+            if (originalTitleRef.current === null) {
+              originalTitleRef.current = document.title;
+            }
+            const alertTitle = getAlertTitle(detected, engine);
+            document.title = alertTitle;
+            sendDesktopNotification(
+              alertTitle,
+              { body: getNotificationBody(detected, chunk) },
+              () => {
+                if (typeof window !== 'undefined') {
+                  window.focus();
+                }
+                termRef.current?.focus();
+                restoreTitle();
+              },
+            );
+          }
+        }
       } else if (payload.type === 'exit') {
         exitHandled = true;
         setState('closed');
@@ -137,6 +232,8 @@ export default function BrowserTerminal({
     };
 
     const dataDisposable = term.onData((data) => {
+      restoreTitle();
+      requestPermissionOnInteraction();
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'input', data }));
       }
@@ -157,6 +254,13 @@ export default function BrowserTerminal({
     resizeObserver.observe(container);
 
     return () => {
+      restoreTitle();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', handleWindowFocus);
+      }
       superseded = true;
       clearTimeout(resizeTimer);
       resizeObserver.disconnect();
@@ -165,7 +269,7 @@ export default function BrowserTerminal({
       termRef.current = null;
       term.dispose();
     };
-  }, [engine, cwd, sessionId, attachId, attempt]);
+  }, [engine, cwd, sessionId, attachId, attempt, restoreTitle, requestPermissionOnInteraction]);
 
   const canRestart = state === 'closed' || state === 'error';
 
@@ -187,7 +291,10 @@ export default function BrowserTerminal({
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col space-y-2">
+    <div
+      className="flex h-full min-h-0 flex-col space-y-2"
+      onClick={requestPermissionOnInteraction}
+    >
       {message && (
         <div
           role="status"
