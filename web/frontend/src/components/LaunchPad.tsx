@@ -8,6 +8,7 @@ import { useT } from '../i18n/context';
 import BrowserTerminal from './BrowserTerminal';
 import RecentSessions from './RecentSessions';
 import SectionLabel from './shared/SectionLabel';
+import SmartHandoffBanner from './SmartHandoffBanner';
 import TerminalSessionSidebar from './TerminalSessionSidebar';
 import {
   AGENT_ENGINES,
@@ -148,6 +149,7 @@ export default function LaunchPad() {
   );
 
   const closeTab = useCallback((id: string) => {
+    setRateLimitTabId(current => (current === id ? null : current));
     setTabs(previous => {
       const index = previous.findIndex(tab => tab.id === id);
       if (index === -1) return previous;
@@ -205,7 +207,12 @@ export default function LaunchPad() {
   const [showHandoffMenu, setShowHandoffMenu] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState<string | null>(null);
   const [handoffError, setHandoffError] = useState<string | null>(null);
+  const [rateLimitTabId, setRateLimitTabId] = useState<string | null>(null);
   const handoffMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setRateLimitTabId(null);
+  }, [activeTabId]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -233,6 +240,7 @@ export default function LaunchPad() {
         projectPath: activeTab.cwd,
       });
       setShowHandoffMenu(false);
+      setRateLimitTabId(null);
       openTab(result.engine, result.project, result.sessionId);
     } catch (err) {
       setHandoffError(err instanceof Error ? err.message : String(err));
@@ -457,6 +465,15 @@ export default function LaunchPad() {
         </div>
       )}
 
+      {activeTab && rateLimitTabId === activeTab.id && (
+        <SmartHandoffBanner
+          activeEngine={activeTab.engine}
+          onHandoff={handleHandoff}
+          onDismiss={() => setRateLimitTabId(null)}
+          loadingEngine={handoffLoading}
+        />
+      )}
+
       <div className="min-h-0 flex-1">
         {activeTabId === null && (
           <div className="custom-scrollbar h-full overflow-y-auto pr-1">{launcher}</div>
@@ -473,6 +490,11 @@ export default function LaunchPad() {
               sessionId={tab.sessionId}
               attachId={tab.attachId}
               onExit={() => {}}
+              onTerminalEvent={event => {
+                if (event === 'rate_limit') {
+                  setRateLimitTabId(tab.id);
+                }
+              }}
             />
           </div>
         ))}

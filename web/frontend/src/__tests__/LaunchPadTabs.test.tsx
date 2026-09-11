@@ -14,7 +14,15 @@ const { mounted, unmounted } = vi.hoisted(() => ({
 
 vi.mock('../components/BrowserTerminal', async () => {
   const { useEffect } = await import('react');
-  const MockTerminal = ({ engine, sessionId }: { engine: string; sessionId?: string }) => {
+  const MockTerminal = ({
+    engine,
+    sessionId,
+    onTerminalEvent,
+  }: {
+    engine: string;
+    sessionId?: string;
+    onTerminalEvent?: (event: string, chunk: string) => void;
+  }) => {
     const key = `${engine}:${sessionId ?? 'new'}`;
     useEffect(() => {
       mounted.push(key);
@@ -22,7 +30,17 @@ vi.mock('../components/BrowserTerminal', async () => {
         unmounted.push(key);
       };
     }, [key]);
-    return <div data-testid={`term-${key}`}>terminal {key}</div>;
+    return (
+      <div data-testid={`term-${key}`}>
+        terminal {key}
+        <button
+          data-testid={`trigger-rate-limit-${key}`}
+          onClick={() => onTerminalEvent?.('rate_limit', '429 quota')}
+        >
+          trigger 429
+        </button>
+      </div>
+    );
   };
   return { default: MockTerminal };
 });
@@ -67,6 +85,13 @@ beforeEach(() => {
     if (url.includes('/api/groups')) return jsonResponse({});
     if (url.includes('/api/analytics/sessions')) {
       return jsonResponse({ sessions: SIDEBAR_SESSIONS, nextCursor: null });
+    }
+    if (url.includes('/api/history/convert-and-launch')) {
+      return jsonResponse({
+        engine: 'codex',
+        project: '/workspace/proj',
+        sessionId: 'ses_handoff_123',
+      });
     }
     return jsonResponse({});
   });
@@ -288,5 +313,59 @@ describe('LaunchPad terminal tabs', () => {
 
     await waitFor(() => expect(screen.getAllByRole('tab')).toHaveLength(2));
     expect(await screen.findByTestId('term-opencode:ses_abc')).toBeVisible();
+  });
+
+  test('terminal rate_limit event shows SmartHandoffBanner and can be dismissed', async () => {
+    renderLaunchPad();
+    await openEngine('Claude');
+    await screen.findByTestId('term-claude:new');
+
+    expect(screen.queryByTestId('smart-handoff-banner')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('trigger-rate-limit-claude:new'));
+    const banner = await screen.findByTestId('smart-handoff-banner');
+    expect(banner).toBeInTheDocument();
+    expect(within(banner).getByText(/claude/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('smart-handoff-dismiss'));
+    expect(screen.queryByTestId('smart-handoff-banner')).toBeNull();
+  });
+
+  test('clicking handoff button in SmartHandoffBanner converts and opens new tab', async () => {
+    renderLaunchPad();
+    await openEngine('Claude');
+    await screen.findByTestId('term-claude:new');
+
+    fireEvent.click(screen.getByTestId('trigger-rate-limit-claude:new'));
+    const banner = await screen.findByTestId('smart-handoff-banner');
+    expect(banner).toBeInTheDocument();
+
+    const codexBtn = within(banner).getByRole('button', { name: /codex/i });
+    fireEvent.click(codexBtn);
+
+    await screen.findByTestId('term-codex:ses_handoff_123');
+    expect(screen.queryByTestId('smart-handoff-banner')).toBeNull();
+    expect(screen.getAllByRole('tab')).toHaveLength(2);
+  });
+
+  test('switching active tab clears the SmartHandoffBanner', async () => {
+    renderLaunchPad();
+    await openEngine('Claude');
+    await screen.findByTestId('term-claude:new');
+
+    fireEvent.click(screen.getByLabelText(/new terminal/i));
+    await openEngine('Codex');
+    await screen.findByTestId('term-codex:new');
+
+    // Switch back to Claude tab
+    fireEvent.click(screen.getAllByRole('tab')[0]);
+
+    // Trigger rate_limit on Claude tab
+    fireEvent.click(screen.getByTestId('trigger-rate-limit-claude:new'));
+    expect(await screen.findByTestId('smart-handoff-banner')).toBeInTheDocument();
+
+    // Switch to Codex tab
+    fireEvent.click(screen.getAllByRole('tab')[1]);
+    expect(screen.queryByTestId('smart-handoff-banner')).toBeNull();
   });
 });
