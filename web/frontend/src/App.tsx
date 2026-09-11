@@ -1,3 +1,5 @@
+import { TerminalProvider } from "./context/TerminalContext";
+import GlobalTerminalDrawer from "./components/GlobalTerminalDrawer";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router';
 import { Menu, X } from 'lucide-react';
@@ -80,6 +82,7 @@ function App() {
   }, [pageLabel]);
 
   return (
+    <TerminalProvider>
     <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-transparent font-sans text-foreground">
       <div data-testid="app-shell" className="flex min-h-0 flex-1 gap-2 p-2 md:gap-4 md:p-4">
         <aside
@@ -255,8 +258,10 @@ function App() {
           </div>
         </main>
 
+        <GlobalTerminalDrawer />
       </div>
     </div>
+    </TerminalProvider>
   );
 }
 
