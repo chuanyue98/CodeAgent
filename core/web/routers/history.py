@@ -94,7 +94,7 @@ class ConvertRequest(ProtocolModel):
     """Request body for cross-engine session conversion."""
 
     source_engine: str
-    session_id: str
+    session_id: str | None = None
     target_engine: str
     project_path: str
 
@@ -274,15 +274,30 @@ async def convert_session(req: ConvertRequest) -> dict:
     # Import here to avoid circular dependencies and only load when needed
     from core.session_history.writers import write_session
 
+    session_id = req.session_id
+    if not session_id or session_id == "latest":
+        from core.cli.session_select import SessionSelectorError, resolve_session
+
+        try:
+            resolved = await asyncio.to_thread(
+                resolve_session, None, validated_project, engine=req.source_engine
+            )
+            session_id = resolved.session_id
+        except SessionSelectorError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": f"No sessions found for engine {req.source_engine}"},
+            ) from exc
+
     session = await asyncio.to_thread(
-        repository.get_full, req.source_engine, req.session_id, validated_project
+        repository.get_full, req.source_engine, session_id, validated_project
     )
     if not session:
         raise HTTPException(
             status_code=404,
             detail={
                 "error": "Source session not found",
-                "sessionId": req.session_id,
+                "sessionId": session_id,
             },
         )
 
@@ -328,8 +343,23 @@ async def convert_and_launch(req: ConvertRequest) -> dict:
     validated_project = _resolve_history_workspace(req.project_path)
     from core.session_history.writers import write_session
 
+    session_id = req.session_id
+    if not session_id or session_id == "latest":
+        from core.cli.session_select import SessionSelectorError, resolve_session
+
+        try:
+            resolved = await asyncio.to_thread(
+                resolve_session, None, validated_project, engine=req.source_engine
+            )
+            session_id = resolved.session_id
+        except SessionSelectorError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": f"No sessions found for engine {req.source_engine}"},
+            ) from exc
+
     session = await asyncio.to_thread(
-        repository.get_full, req.source_engine, req.session_id, validated_project
+        repository.get_full, req.source_engine, session_id, validated_project
     )
     if not session:
         raise HTTPException(

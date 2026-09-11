@@ -510,6 +510,36 @@ async def test_convert_and_launch_success(two_project_history, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_convert_and_launch_resolves_latest_when_session_id_omitted(
+    two_project_history, monkeypatch
+):
+    """When sessionId is omitted, it should resolve the latest session for that engine."""
+    monkeypatch.setattr(
+        "core.web.routers.history._resolve_history_workspace", lambda p: p
+    )
+    monkeypatch.setattr(
+        "core.session_history.writers.write_session", lambda s, e: "auto-latest-id"
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        res = await ac.post(
+            "/api/history/convert-and-launch",
+            json={
+                "sourceEngine": "claude",
+                "targetEngine": "opencode",
+                "projectPath": "E:/demo/project-a",
+            },
+        )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "ready"
+    assert body["newSessionId"] == "auto-latest-id"
+    assert body["engine"] == "opencode"
+
+
+@pytest.mark.asyncio
 async def test_convert_and_launch_rejects_an_unusable_session_id(
     two_project_history, monkeypatch
 ):

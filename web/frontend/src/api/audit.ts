@@ -77,7 +77,7 @@ export async function fetchAuditEvents(
 
 export interface ConvertSessionParams {
   sourceEngine: string;
-  sessionId: string;
+  sessionId?: string;
   targetEngine: string;
   projectPath: string;
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { AlertTriangle, Plus, Terminal, TerminalSquare, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Loader2, Plus, Terminal, TerminalSquare, X, Zap } from 'lucide-react';
+import { convertAndLaunchSession } from '../api/audit';
 import { fetchPtyStatus } from '../api/pty';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
@@ -201,6 +202,45 @@ export default function LaunchPad() {
 
   const activeTab = tabs.find(tab => tab.id === activeTabId);
 
+  const [showHandoffMenu, setShowHandoffMenu] = useState(false);
+  const [handoffLoading, setHandoffLoading] = useState<string | null>(null);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
+  const handoffMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (handoffMenuRef.current && !handoffMenuRef.current.contains(event.target as Node)) {
+        setShowHandoffMenu(false);
+      }
+    }
+    if (showHandoffMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showHandoffMenu]);
+
+  const handleHandoff = async (targetEngine: string) => {
+    if (!activeTab) return;
+    setHandoffLoading(targetEngine);
+    setHandoffError(null);
+    try {
+      const result = await convertAndLaunchSession({
+        sourceEngine: activeTab.engine,
+        sessionId: activeTab.sessionId,
+        targetEngine,
+        projectPath: activeTab.cwd,
+      });
+      setShowHandoffMenu(false);
+      openTab(result.engine, result.project, result.sessionId);
+    } catch (err) {
+      setHandoffError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setHandoffLoading(null);
+    }
+  };
+
   const engineCard = (engine: Engine) => {
     const name = engine.nameKey ? t(engine.nameKey) : engine.name;
     const description = engine.descriptionKey
@@ -233,10 +273,10 @@ export default function LaunchPad() {
     );
   };
 
-  const engineLabel = (id: string) => {
+  const engineLabel = (id: string): string => {
     const engine = findEngine(id);
     if (!engine) return id;
-    return engine.nameKey ? t(engine.nameKey) : engine.name;
+    return (engine.nameKey ? t(engine.nameKey) : engine.name) ?? id;
   };
 
   const launcher = (
@@ -310,61 +350,112 @@ export default function LaunchPad() {
 
   const workspace = (
     <div className="flex min-w-0 flex-1 flex-col gap-2">
-      <div
-        role="tablist"
-        aria-label={t('launch.openTerminals')}
-        className={`shrink-0 items-center gap-1 overflow-x-auto ${tabs.length === 0 ? 'hidden' : 'flex'}`}
-      >
-        {tabs.map(tab => {
-          const active = tab.id === activeTabId;
-          return (
-            <div
-              key={tab.id}
-              className={`group flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-colors ${
-                active
-                  ? 'bg-primary/10 font-semibold text-primary'
-                  : 'text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              <button
-                role="tab"
-                aria-selected={active}
-                onClick={() => setActiveTabId(tab.id)}
-                className="flex items-center gap-1.5"
-                title={tab.cwd}
-              >
-                <TerminalSquare size={13} className="shrink-0" />
-                <span className="max-w-40 truncate">{engineLabel(tab.engine)}</span>
-                {(tab.sessionId || tab.attachId) && (
-                  <span className="rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">
-                    {t('launch.resumed')}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => closeTab(tab.id)}
-                aria-label={t('launch.closeTerminal')}
-                title={t('launch.closeTerminal')}
-                className="rounded p-0.5 text-slate-300 transition-colors hover:bg-slate-200 hover:text-slate-700"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          );
-        })}
-        <button
-          onClick={() => setActiveTabId(null)}
-          aria-label={t('launch.newTerminal')}
-          title={t('launch.newTerminal')}
-          className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors ${
-            activeTabId === null
-              ? 'bg-primary/10 font-semibold text-primary'
-              : 'text-slate-500 hover:bg-slate-50'
-          }`}
+      <div className={`shrink-0 items-center justify-between gap-2 ${tabs.length === 0 ? 'hidden' : 'flex'}`}>
+        <div
+          role="tablist"
+          aria-label={t('launch.openTerminals')}
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
         >
-          <Plus size={13} />
-        </button>
+          {tabs.map(tab => {
+            const active = tab.id === activeTabId;
+            return (
+              <div
+                key={tab.id}
+                className={`group flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-colors ${
+                  active
+                    ? 'bg-primary/10 font-semibold text-primary'
+                    : 'text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                <button
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setActiveTabId(tab.id)}
+                  className="flex items-center gap-1.5"
+                  title={tab.cwd}
+                >
+                  <TerminalSquare size={13} className="shrink-0" />
+                  <span className="max-w-40 truncate">{engineLabel(tab.engine)}</span>
+                  {(tab.sessionId || tab.attachId) && (
+                    <span className="rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">
+                      {t('launch.resumed')}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => closeTab(tab.id)}
+                  aria-label={t('launch.closeTerminal')}
+                  title={t('launch.closeTerminal')}
+                  className="rounded p-0.5 text-slate-300 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            );
+          })}
+          <button
+            onClick={() => setActiveTabId(null)}
+            aria-label={t('launch.newTerminal')}
+            title={t('launch.newTerminal')}
+            className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors ${
+              activeTabId === null
+                ? 'bg-primary/10 font-semibold text-primary'
+                : 'text-slate-500 hover:bg-slate-50'
+            }`}
+          >
+            <Plus size={13} />
+          </button>
+        </div>
+
+        {activeTab && activeTab.engine !== SHELL_ENGINE_ID && (
+          <div ref={handoffMenuRef} className="relative shrink-0">
+            <button
+              onClick={() => setShowHandoffMenu(prev => !prev)}
+              disabled={handoffLoading !== null}
+              className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50/80 px-2.5 py-1 text-xs font-medium text-amber-800 shadow-sm transition-colors hover:bg-amber-100 disabled:opacity-50"
+              title={t('launch.handoffTitle')}
+            >
+              {handoffLoading ? (
+                <Loader2 size={13} className="animate-spin text-amber-600" />
+              ) : (
+                <Zap size={13} className="text-amber-600 fill-amber-500/20" />
+              )}
+              <span className="hidden sm:inline font-semibold">
+                {handoffLoading
+                  ? t('launch.handoffInProgress', { engine: engineLabel(handoffLoading) })
+                  : t('launch.handoff')}
+              </span>
+              <ChevronDown size={12} className={`transition-transform text-amber-600 ${showHandoffMenu ? 'rotate-180' : ''}`} />
+            </button>
+            {showHandoffMenu && (
+              <div className="absolute right-0 top-full z-50 mt-1 min-w-40 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur">
+                <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                  {t('launch.handoffTitle')}
+                </div>
+                {AGENT_ENGINES.filter(e => e.id !== activeTab.engine).map(target => (
+                  <button
+                    key={target.id}
+                    onClick={() => void handleHandoff(target.id)}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-slate-700 transition-colors hover:bg-slate-100"
+                  >
+                    <span className={`h-2 w-2 rounded-full ${target.dot}`} />
+                    <span className="font-medium">{target.nameKey ? t(target.nameKey) : target.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {handoffError && (
+        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+          <span>{t('launch.handoffFailed', { error: handoffError })}</span>
+          <button onClick={() => setHandoffError(null)} className="p-0.5 text-red-500 hover:text-red-700">
+            <X size={12} />
+          </button>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1">
         {activeTabId === null && (

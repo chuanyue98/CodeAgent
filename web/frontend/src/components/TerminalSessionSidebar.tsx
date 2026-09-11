@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, PanelLeftClose, PanelLeftOpen, Plus, Search } from 'lucide-react';
+import { ChevronRight, PanelLeftClose, PanelLeftOpen, Plus, Search, Zap } from 'lucide-react';
+import { convertAndLaunchSession } from '../api/audit';
 import { fetchSessionPage, type SessionUsage } from '../api/analytics';
 import { relativeTime, workspaceLabel } from '../utils/workspaceFormat';
 import { useLanguageCode } from '../i18n/context';
 import { useT } from '../i18n/context';
-import { engineDot, findEngine } from './terminalEngines';
+import { AGENT_ENGINES, engineDot, findEngine } from './terminalEngines';
 import EmptyState from './shared/EmptyState';
 import { ACTIVE_CHIP } from './shared/activeChip';
 
@@ -176,6 +177,42 @@ export default function TerminalSessionSidebar({
     return engine.nameKey ? t(engine.nameKey) : engine.name;
   };
 
+  const [handoffSessionId, setHandoffSessionId] = useState<string | null>(null);
+  const [handoffLoading, setHandoffLoading] = useState(false);
+  const handoffRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (handoffRef.current && !handoffRef.current.contains(event.target as Node)) {
+        setHandoffSessionId(null);
+      }
+    }
+    if (handoffSessionId) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [handoffSessionId]);
+
+  const handleHandoff = async (session: SessionUsage, targetEngine: string) => {
+    setHandoffLoading(true);
+    try {
+      const result = await convertAndLaunchSession({
+        sourceEngine: session.target,
+        sessionId: session.sessionId,
+        targetEngine,
+        projectPath: session.projectPath,
+      });
+      setHandoffSessionId(null);
+      onOpenSession(result.engine, result.project, result.sessionId);
+    } catch (err) {
+      console.error('Failed to handoff session:', err);
+    } finally {
+      setHandoffLoading(false);
+    }
+  };
+
   // "New" and the launcher are the same thing seen from two places; when the
   // launcher is already what you are looking at, the button is a no-op and
   // should read as the state you are in, the way the tab strip's + does.
@@ -321,31 +358,66 @@ export default function TerminalSessionSidebar({
                   {group.sessions.map(session => {
                     const active = session.sessionId === activeSessionId;
                     return (
-                      <li key={`${session.target}:${session.sessionId}`}>
-                        <button
-                          onClick={() =>
-                            onOpenSession(session.target, session.projectPath, session.sessionId)
-                          }
-                          title={session.title || session.sessionId}
-                          className={`w-full rounded-lg px-2 py-1.5 text-left transition-colors ${
-                            active ? 'bg-primary/10' : 'hover:bg-slate-50'
-                          }`}
-                        >
-                          <span className="block truncate text-xs text-slate-700">
-                            {session.title || t('terminalSidebar.untitled')}
-                          </span>
-                          {/* The engine used to be a grey monospace caps chip
-                              that outweighed the title next to it. A coloured
-                              dot names it just as well, in the same palette
-                              the launcher's cards use. */}
-                          <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-slate-400">
-                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${engineDot(session.target)}`} />
-                            <span className="shrink-0 font-medium text-slate-500">
-                              {engineName(session.target)}
+                      <li key={`${session.target}:${session.sessionId}`} className="group/item relative">
+                        <div className="flex items-center">
+                          <button
+                            onClick={() =>
+                              onOpenSession(session.target, session.projectPath, session.sessionId)
+                            }
+                            title={session.title || session.sessionId}
+                            className={`min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left transition-colors ${
+                              active ? 'bg-primary/10' : 'hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className="block truncate text-xs text-slate-700">
+                              {session.title || t('terminalSidebar.untitled')}
                             </span>
-                            <span className="truncate">{relativeTime(session.lastActivity, language)}</span>
-                          </span>
-                        </button>
+                            <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-slate-400">
+                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${engineDot(session.target)}`} />
+                              <span className="shrink-0 font-medium text-slate-500">
+                                {engineName(session.target)}
+                              </span>
+                              <span className="truncate">{relativeTime(session.lastActivity, language)}</span>
+                            </span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setHandoffSessionId(prev => (prev === session.sessionId ? null : session.sessionId));
+                            }}
+                            title={t('launch.handoffTitle')}
+                            aria-label={t('launch.handoffTitle')}
+                            className={`shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-amber-100 hover:text-amber-700 ${
+                              handoffSessionId === session.sessionId
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'opacity-0 group-hover/item:opacity-100'
+                            }`}
+                          >
+                            <Zap size={12} />
+                          </button>
+                        </div>
+
+                        {handoffSessionId === session.sessionId && (
+                          <div
+                            ref={handoffRef}
+                            className="absolute right-0 top-full z-50 mt-1 min-w-36 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur"
+                          >
+                            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                              {t('launch.handoffTitle')}
+                            </div>
+                            {AGENT_ENGINES.filter(e => e.id !== session.target).map(target => (
+                              <button
+                                key={target.id}
+                                disabled={handoffLoading}
+                                onClick={() => void handleHandoff(session, target.id)}
+                                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                              >
+                                <span className={`h-2 w-2 rounded-full ${target.dot}`} />
+                                <span className="font-medium">{target.nameKey ? t(target.nameKey) : target.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </li>
                     );
                   })}
