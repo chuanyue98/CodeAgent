@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import { ArrowUpRight as LinkArrow, Clock, Terminal } from 'lucide-react';
-import { fmtCost, fmtTokens, type EngineSummary, type SessionUsage } from '../../api/analytics';
+import { fmtCost, fmtCostLabel, fmtTokens, type EngineSummary, type SessionUsage } from '../../api/analytics';
 import { useT } from '../../i18n/context';
 import { eb, ec, timeAgo } from './present';
 import { SectionTitle } from './ChartCards';
@@ -53,7 +53,7 @@ export default function EnginePanel({
               <div className="flex justify-between pt-1.5 border-t border-slate-100">
                 <span className="text-slate-500 font-medium">{t('engine.estCost')}</span>
                 <span className="font-bold" style={{ color: ec(eng.target) }}>
-                  {fmtCost(eng.cost)}
+                  {fmtCostLabel(eng.cost, eng.unpricedTokens, t('cost.unpriced'))}
                 </span>
               </div>
             </div>
@@ -117,7 +117,7 @@ export default function EnginePanel({
                 </div>
                 <div className="text-right shrink-0 ml-2">
                   <div className="font-mono text-[11px] font-semibold text-slate-700">
-                    {fmtCost(s.cost)}
+                    {fmtCostLabel(s.cost, s.unpricedTokens, t('cost.unpriced'))}
                   </div>
                   <div className="text-[9px] text-slate-400">
                     {fmtTokens(s.inputTokens + s.outputTokens)}

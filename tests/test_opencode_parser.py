@@ -188,7 +188,7 @@ def _with_one_message(con) -> None:
 
 def test_a_model_column_that_is_not_json_is_used_verbatim(db):
     # Older rows stored a bare string; losing the model entirely would make
-    # every cost for that session fall back to the unknown-model rate.
+    # every token of that session unpriced.
     path, con = db
     _session(con, model="plain-model-id")
     _with_one_message(con)

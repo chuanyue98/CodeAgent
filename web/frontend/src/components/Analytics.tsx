@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import ErrorState from './shared/ErrorState';
 import LoadingState from './shared/LoadingState';
-import { fmtCost, fmtTokens } from '../api/analytics';
+import { fmtCost, fmtCostLabel, fmtTokens } from '../api/analytics';
 import { useT } from '../i18n/context';
 import useAnalyticsData from './analytics/useAnalyticsData';
 import { StatCard } from './analytics/ChartCards';
@@ -188,8 +188,11 @@ const Analytics: React.FC = () => {
           Icon={FileText} iconColor="text-blue-600" iconBg="bg-blue-100" stagger="stagger-2"
         />
         <StatCard
-          label={t('analytics.totalCost')} value={fmtCost(totals.cost)}
-          sub={t('analytics.perSession', { cost: fmtCost(avgCostPerSession) })}
+          label={t('analytics.totalCost')}
+          value={fmtCostLabel(totals.cost, totals.unpricedTokens, t('cost.unpriced'))}
+          sub={totals.unpricedTokens > 0
+            ? t('analytics.unpricedNote', { tokens: fmtTokens(totals.unpricedTokens) })
+            : t('analytics.perSession', { cost: fmtCost(avgCostPerSession) })}
           Icon={DollarSign} iconColor="text-green-600" iconBg="bg-green-100" stagger="stagger-3"
         />
         <StatCard

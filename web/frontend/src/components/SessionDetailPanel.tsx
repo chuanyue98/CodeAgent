@@ -23,7 +23,7 @@ import {
   type SessionDetail,
   type SessionMessage,
 } from '../api/audit';
-import { type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
+import { type SessionUsage, fmtCost, fmtCostLabel, fmtTokens } from '../api/analytics';
 import { ALL_ENGINES, READ_ONLY_ENGINES, engineLabel } from '../utils/engines';
 import ConfirmDialog from './shared/ConfirmDialog';
 import Badge from './shared/Badge';
@@ -398,7 +398,7 @@ export default function SessionDetailPanel({
                   <p className="text-[10px] uppercase tracking-wide text-slate-500">Token</p>
                 </div>
                 <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-2 text-center">
-                  <p className="text-sm font-bold text-slate-800">{fmtCost(usage.cost)}</p>
+                  <p className="text-sm font-bold text-slate-800">{fmtCostLabel(usage.cost, usage.unpricedTokens, t('cost.unpriced'))}</p>
                   <p className="text-[10px] uppercase tracking-wide text-slate-500">{t('sessionDetail.estCost')}</p>
                 </div>
               </div>
@@ -426,7 +426,7 @@ export default function SessionDetailPanel({
                       <div className="flex flex-wrap gap-3 text-slate-500">
                         <span>{t('sessionDetail.in', { tokens: fmtTokens(mb.inputTokens) })}</span>
                         <span>{t('sessionDetail.out', { tokens: fmtTokens(mb.outputTokens) })}</span>
-                        <span className="font-semibold text-slate-700">{fmtCost(mb.cost)}</span>
+                        <span className="font-semibold text-slate-700">{fmtCostLabel(mb.cost, mb.unpricedTokens, t('cost.unpriced'))}</span>
                       </div>
                     </div>
                   ))}
@@ -458,7 +458,7 @@ export default function SessionDetailPanel({
                     <span className="shrink-0 text-slate-500">
                       {fmtTokens(child.inputTokens + child.outputTokens)}
                     </span>
-                    <span className="shrink-0 text-slate-500">{fmtCost(child.cost)}</span>
+                    <span className="shrink-0 text-slate-500">{fmtCostLabel(child.cost, child.unpricedTokens, t('cost.unpriced'))}</span>
                     <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300" />
                   </button>
                 ))}

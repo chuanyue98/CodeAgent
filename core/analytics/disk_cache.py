@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 # Bumped when the cached aggregate's shape changes. Also part of the
 # invalidation key below, so an upgrade drops the previous cache instead of
 # serving it with fields the current code no longer writes.
-CACHE_SCHEMA_VERSION = 5
+CACHE_SCHEMA_VERSION = 6
 
 #: 缓存的最长存活时间。它不只是"怕陈旧"：归档文件只会被采集本身写入，所以只
 #: 按输入失效的话，第一次采集之后输入永远不会再变，新用量就再也进不来了。

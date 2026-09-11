@@ -43,6 +43,12 @@ _PRICING: dict[str, tuple[float, float, float, float]] = {
     "claude-opus-4-6": (5.0, 25.0, 6.25, 0.5),
     "claude-opus-4-6-thinking": (5.0, 25.0, 6.25, 0.5),
     "claude-opus-4-7": (5.0, 25.0, 6.25, 0.5),
+    "claude-opus-4-8": (5.0, 25.0, 6.25, 0.5),
+    # ── Claude 5 ──────────────────────────────────────────────────────────────
+    "claude-opus-5": (5.0, 25.0, 6.25, 0.5),
+    "claude-sonnet-5": (2.0, 10.0, 2.5, 0.2),
+    "claude-fable-5": (10.0, 50.0, 12.5, 1.0),
+    "claude-fable-5-1": (10.0, 50.0, 12.5, 0.25),
     # ── Google / Antigravity ──────────────────────────────────────────────────
     "gemini-3.8-flash": (0.3, 2.5, 0.0, 0.075),
     "gemini-3.6-flash": (0.3, 2.5, 0.0, 0.075),
@@ -141,8 +147,7 @@ _ALIASES: dict[str, str] = {
     "deepseek-v3.2": "deepseek-chat",
 }
 
-# Unknown model fallback — CCS uses Claude Sonnet pricing
-_UNKNOWN: tuple[float, float, float, float] = (3.0, 15.0, 3.75, 0.3)
+_FREE: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
 
 #: 惰性计算的费率表指纹，见 :func:`pricing_fingerprint`。
 _PRICING_FINGERPRINT: str | None = None
@@ -158,9 +163,9 @@ def pricing_fingerprint() -> str:
     """
     global _PRICING_FINGERPRINT
     if _PRICING_FINGERPRINT is None:
-        payload = repr(
-            (sorted(_PRICING.items()), sorted(_ALIASES.items()))
-        ).encode("utf-8")
+        payload = repr((sorted(_PRICING.items()), sorted(_ALIASES.items()))).encode(
+            "utf-8"
+        )
         _PRICING_FINGERPRINT = hashlib.sha1(payload).hexdigest()[:16]
     return _PRICING_FINGERPRINT
 
@@ -171,8 +176,13 @@ def _strip_provider_prefix(model: str) -> str:
     return model[idx + 1 :] if idx > 0 else model
 
 
-def get_rates(model: str) -> tuple[float, float, float, float]:
-    """Return (input, output, cache_write, cache_read) USD per million tokens."""
+def get_rates(model: str) -> tuple[float, float, float, float] | None:
+    """Return (input, output, cache_write, cache_read) USD per million tokens.
+
+    None when the model has no known price. Callers count those tokens as
+    unpriced; substituting another model's rate would present a guess as a
+    figure.
+    """
     key = _strip_provider_prefix(model).lower().strip()
 
     # Direct lookup
@@ -191,12 +201,16 @@ def get_rates(model: str) -> tuple[float, float, float, float]:
     if stripped != key and stripped in _PRICING:
         return _PRICING[stripped]
 
+    # Free-tier ids (OpenCode Zen and others) are marked by the suffix.
+    if key.endswith("-free"):
+        return _FREE
+
     # Partial prefix scan (narrow: only exact-suffix match to avoid false positives)
     for known_key, rates in _PRICING.items():
         if key.endswith(known_key):
             return rates
 
-    return _UNKNOWN
+    return None
 
 
 def calculate_cost(
@@ -205,8 +219,12 @@ def calculate_cost(
     output_tokens: int,
     cache_creation_tokens: int = 0,
     cache_read_tokens: int = 0,
-) -> float:
-    in_r, out_r, cw_r, cr_r = get_rates(model)
+) -> float | None:
+    """Cost in USD, or None when *model* has no known price."""
+    rates = get_rates(model)
+    if rates is None:
+        return None
+    in_r, out_r, cw_r, cr_r = rates
     cost = (
         input_tokens * in_r
         + output_tokens * out_r

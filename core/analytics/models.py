@@ -51,6 +51,7 @@ class ModelBreakdown:
         cache_creation_tokens: Total tokens used for cache creation.
         cache_read_tokens: Total tokens read from cache.
         cost: Total calculated cost in USD.
+        unpriced_tokens: Tokens with no known price, left out of ``cost``.
     """
 
     model_name: str
@@ -59,6 +60,7 @@ class ModelBreakdown:
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
     cost: float = 0.0
+    unpriced_tokens: int = 0
 
 
 @dataclass
@@ -73,6 +75,7 @@ class DailyUsage:
         cache_creation_tokens: Total cache creation tokens.
         cache_read_tokens: Total cache read tokens.
         cost: Total cost for the day/target in USD.
+        unpriced_tokens: Tokens with no known price, left out of ``cost``.
         models_used: List of unique model names used.
         model_breakdowns: Detailed breakdown per model.
     """
@@ -84,6 +87,7 @@ class DailyUsage:
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
     cost: float = 0.0
+    unpriced_tokens: int = 0
     models_used: list[str] = field(default_factory=list)
     model_breakdowns: list[ModelBreakdown] = field(default_factory=list)
 
@@ -100,6 +104,7 @@ class MonthlyUsage:
         cache_creation_tokens: Total cache creation tokens.
         cache_read_tokens: Total cache read tokens.
         cost: Total cost for the month/target in USD.
+        unpriced_tokens: Tokens with no known price, left out of ``cost``.
         models_used: List of unique model names used.
         model_breakdowns: Detailed breakdown per model.
     """
@@ -111,6 +116,7 @@ class MonthlyUsage:
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
     cost: float = 0.0
+    unpriced_tokens: int = 0
     models_used: list[str] = field(default_factory=list)
     model_breakdowns: list[ModelBreakdown] = field(default_factory=list)
 
@@ -128,6 +134,7 @@ class SessionUsage:
         cache_creation_tokens: Total cache creation tokens.
         cache_read_tokens: Total cache read tokens.
         cost: Total cost for the session/target in USD.
+        unpriced_tokens: Tokens with no known price, left out of ``cost``.
         last_activity: ISO 8601 timestamp of the last activity in the session.
         models_used: List of unique model names used.
         model_breakdowns: Detailed breakdown per model.
@@ -147,6 +154,7 @@ class SessionUsage:
     cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
     cost: float = 0.0
+    unpriced_tokens: int = 0
     last_activity: str = ""
     models_used: list[str] = field(default_factory=list)
     model_breakdowns: list[ModelBreakdown] = field(default_factory=list)

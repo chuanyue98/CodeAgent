@@ -2,15 +2,15 @@
 
 These numbers are the ones the Usage page shows as money, so a wrong rate or
 a silently-substituted model is not a cosmetic bug. The behaviours pinned
-here are the ones that decide *which* rate a model gets, including the two
-fallbacks that can quietly price a model as something it is not.
+here are the ones that decide *which* rate a model gets, including the suffix
+fallback that can quietly price a model as something it is not.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from core.analytics.pricing import _PRICING, _UNKNOWN, calculate_cost, get_rates
+from core.analytics.pricing import _PRICING, calculate_cost, get_rates
 
 
 def test_a_known_model_gets_its_own_rates():
@@ -44,11 +44,23 @@ def test_a_dated_claude_id_falls_back_to_the_undated_one():
     assert get_rates(f"{undated}-20260101") == _PRICING[undated]
 
 
-def test_an_unknown_model_is_priced_as_claude_sonnet():
-    # Documented as the intended fallback, and worth pinning because it is
-    # silent: an unrecognised model still produces a confident dollar figure
-    # rather than an obvious zero or an error.
-    assert get_rates("no-such-model-anywhere") == _UNKNOWN
+def test_an_unknown_model_has_no_price():
+    # Borrowing another model's rate would turn a missing price into a
+    # confident dollar figure; callers count these tokens as unpriced instead.
+    assert get_rates("no-such-model-anywhere") is None
+    assert calculate_cost("no-such-model-anywhere", 1_000, 1_000) is None
+
+
+def test_a_free_tier_id_costs_nothing():
+    assert get_rates("deepseek-v4-flash-free") == (0.0, 0.0, 0.0, 0.0)
+    assert calculate_cost("deepseek-v4-flash-free", 1_000, 1_000) == 0.0
+
+
+@pytest.mark.parametrize(
+    "model", ["claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-opus-4-8"]
+)
+def test_current_claude_models_are_priced(model):
+    assert get_rates(model) is not None
 
 
 def test_the_suffix_scan_can_match_a_longer_unrelated_id():
@@ -62,6 +74,7 @@ def test_the_suffix_scan_can_match_a_longer_unrelated_id():
 # ── the arithmetic ───────────────────────────────────────────────────────────
 def test_cost_is_per_million_tokens():
     rates = get_rates("claude-3-5-haiku-20241022")
+    assert rates is not None
     assert calculate_cost("claude-3-5-haiku-20241022", 1_000_000, 0) == pytest.approx(
         rates[0]
     )
@@ -69,7 +82,9 @@ def test_cost_is_per_million_tokens():
 
 def test_every_token_class_is_charged_at_its_own_rate():
     model = "claude-3-5-haiku-20241022"
-    in_r, out_r, cw_r, cr_r = get_rates(model)
+    rates = get_rates(model)
+    assert rates is not None
+    in_r, out_r, cw_r, cr_r = rates
 
     expected = (in_r + out_r + cw_r + cr_r) / 1_000_000
     assert calculate_cost(model, 1, 1, 1, 1) == pytest.approx(expected)
@@ -90,4 +105,5 @@ def test_the_result_is_rounded_rather_than_carrying_float_noise():
     # accumulate representation error into the displayed total.
     value = calculate_cost("claude-3-5-haiku-20241022", 1, 0)
 
+    assert value is not None
     assert value == round(value, 8)
