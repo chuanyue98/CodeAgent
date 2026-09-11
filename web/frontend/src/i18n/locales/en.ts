@@ -265,6 +265,7 @@ export const en = {
   'config.workspaceStatusCol': 'Status',
   'config.addWorkspaceDialog': 'Register New Workspace',
   'config.addWorkspacePrompt': 'Enter the absolute path of the directory and assign a resource group',
+  'config.pathValid': 'Available',
   'config.pathsRequired': 'Workspace path and resource group are required. Complete or remove empty rows.',
   'config.duplicatePath': 'Each workspace path can only be registered once.',
   'config.genericError': 'An error occurred',

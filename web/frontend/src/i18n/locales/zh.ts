@@ -260,6 +260,7 @@ export const zh: Record<TranslationKey, string> = {
   'config.workspaceStatusCol': '状态',
   'config.addWorkspaceDialog': '注册新工作区',
   'config.addWorkspacePrompt': '输入工作区绝对物理路径并分配资源组',
+  'config.pathValid': '有效',
   'config.pathsRequired': '工作区路径和资源组为必填项。请补全或删除空行。',
   'config.duplicatePath': '每个工作区路径只能注册一次。',
   'config.genericError': '发生错误',

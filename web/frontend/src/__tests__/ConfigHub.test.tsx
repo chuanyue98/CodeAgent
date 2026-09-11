@@ -120,6 +120,9 @@ describe('ConfigHub Component', () => {
     renderConfigHub();
     await screen.findByText(/CodeAgent runs locally/, {}, { timeout: 3000 });
 
+    // Switch to groups tab
+    fireEvent.click(screen.getByRole('button', { name: /Resource Groups/i }));
+
     const viewButtons = screen.getAllByRole('button', { name: /View Resources/i });
     expect(viewButtons.length).toBeGreaterThanOrEqual(1);
 
@@ -127,5 +130,25 @@ describe('ConfigHub Component', () => {
     fireEvent.click(viewButtons[0]);
 
     expect(mockNavigate).toHaveBeenCalledWith('/settings/resources?group=codeagent');
+  });
+
+  test('switches between configuration sections via sidebar navigation', async () => {
+    renderConfigHub();
+    await screen.findByText(/CodeAgent runs locally/, {}, { timeout: 3000 });
+
+    // Initially in workspaces tab
+    expect(screen.getByRole('button', { name: 'Add Workspace' })).toBeVisible();
+
+    // Click Proxy tab
+    fireEvent.click(screen.getByRole('button', { name: /Network Proxy/i }));
+    expect(screen.getByRole('button', { name: /Add Gateway/i })).toBeVisible();
+
+    // Click General tab
+    fireEvent.click(screen.getByRole('button', { name: /General & Language/i }));
+    expect(screen.getByLabelText(/Private Resource Root/i)).toBeVisible();
+
+    // Click Workspaces tab again
+    fireEvent.click(screen.getByRole('button', { name: /^Workspaces/i }));
+    expect(screen.getByRole('button', { name: 'Add Workspace' })).toBeVisible();
   });
 });
