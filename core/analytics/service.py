@@ -22,6 +22,9 @@ from core.analytics.history import (
 )
 from core.analytics.models import RawUsageEntry
 from core.analytics.pricing import get_rates
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Bumped when a collector starts reading records earlier versions never saw.
 # The incremental scan below is watermarked per engine, so newly-visible old
@@ -221,9 +224,43 @@ def _collect_and_cache() -> dict[str, Any]:
 # (append_history/save_history are plain file rewrites, not atomic RMWs).
 _collect_lock = threading.Lock()
 
+#: 后台刷新在飞标志：过期时每个请求都会想踢一次，只放行第一个。
+_refreshing = False
+_refresh_lock = threading.Lock()
+
+
+def _refresh_in_background() -> None:
+    """在后台重采一次，让下一次请求读到新鲜数据。
+
+    采集要 ~4s（重读 35MB 归档 + 扫各引擎），让它挡在请求路径上会把首屏拖到
+    好几秒；而归档只会被采集本身写入，不主动回看就永远看不到新用量。
+    """
+    global _refreshing
+    with _refresh_lock:
+        if _refreshing:
+            return
+        _refreshing = True
+
+    def _run() -> None:
+        global _refreshing
+        try:
+            refresh_analytics_data()
+        except Exception:
+            # 派生数据：采集失败就继续用旧值，下次再试。
+            logger.exception("Background analytics refresh failed")
+        finally:
+            with _refresh_lock:
+                _refreshing = False
+
+    threading.Thread(target=_run, daemon=True).start()
+
 
 def get_analytics_data(force_refresh: bool = False) -> dict[str, Any]:
     """Retrieves analytics data, using cache if available and not forced to refresh.
+
+    Stale-while-revalidate: an expired-but-usable cache is served immediately
+    while a refresh runs in the background, so the caller never waits for a
+    collection. Only a cold start (no cache at all) pays it inline.
 
     Args:
         force_refresh: If True, bypasses the cache and re-collects data from
@@ -237,6 +274,11 @@ def get_analytics_data(force_refresh: bool = False) -> dict[str, Any]:
         cached = load_cache()
         if cached is not None:
             return cached
+        # 只是过期（不是输入变了）：先给旧数据，后台去刷新。
+        stale = load_cache(allow_stale=True)
+        if stale is not None:
+            _refresh_in_background()
+            return stale
 
     with _collect_lock:
         # Double-check after acquiring: a concurrent caller may have finished

@@ -225,6 +225,32 @@ def test_claude_usage_prefers_exact_cwd_for_hyphenated_project(tmp_path):
     assert entries[0].project_path == "/home/user/my-project"
 
 
+def test_expired_cache_is_served_without_blocking_the_request(
+    mock_history_file, monkeypatch
+):
+    """过期的缓存先顶上、后台去刷新：请求路径不该为 4s 的采集买单。"""
+    import core.analytics.service as service
+    from core.analytics import disk_cache
+
+    collected = []
+    monkeypatch.setattr(service, "_collect_all", lambda: (collected.append(1), [])[1])
+    monkeypatch.setattr(service, "_build_engine_summary", lambda entries: [])
+    monkeypatch.setattr(service, "_build_model_summary", lambda entries: [])
+
+    # 第一次没有缓存，只能同步采集。
+    service.get_analytics_data()
+    assert collected == [1]
+
+    kicked = []
+    monkeypatch.setattr(service, "_refresh_in_background", lambda: kicked.append(True))
+    monkeypatch.setattr(disk_cache, "CACHE_MAX_AGE_SECONDS", -1)
+
+    data = service.get_analytics_data()
+    assert data is not None
+    assert collected == [1], "过期后仍然同步采集了一次"
+    assert kicked == [True], "没有触发后台刷新"
+
+
 def test_concurrent_cache_misses_collect_once(monkeypatch, tmp_path):
     """Six parallel endpoint hits on a cold cache must not run the collection
     pipeline six times over the same history files — the to_thread analytics

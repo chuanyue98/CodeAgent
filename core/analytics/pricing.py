@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 # USD per million tokens
 # Format: { model_name: (input_rate, output_rate, cache_write_rate, cache_read_rate) }
 # Sources: Anthropic / Google / OpenAI official pages + CCS model-pricing.ts
@@ -141,6 +143,26 @@ _ALIASES: dict[str, str] = {
 
 # Unknown model fallback — CCS uses Claude Sonnet pricing
 _UNKNOWN: tuple[float, float, float, float] = (3.0, 15.0, 3.75, 0.3)
+
+#: 惰性计算的费率表指纹，见 :func:`pricing_fingerprint`。
+_PRICING_FINGERPRINT: str | None = None
+
+
+def pricing_fingerprint() -> str:
+    """Returns a stable fingerprint of the rate table.
+
+    The analytics cache is invalidated on its inputs rather than on a timer,
+    and the rates are one of those inputs -- editing a price must drop the
+    cached costs, not leave them stale until the history happens to change.
+    Memoized because the cache consults this on every request.
+    """
+    global _PRICING_FINGERPRINT
+    if _PRICING_FINGERPRINT is None:
+        payload = repr(
+            (sorted(_PRICING.items()), sorted(_ALIASES.items()))
+        ).encode("utf-8")
+        _PRICING_FINGERPRINT = hashlib.sha1(payload).hexdigest()[:16]
+    return _PRICING_FINGERPRINT
 
 
 def _strip_provider_prefix(model: str) -> str:
