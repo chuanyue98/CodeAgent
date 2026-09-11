@@ -55,6 +55,7 @@ export interface RangeModelStat {
   cacheCreationTokens: number;
   cacheReadTokens: number;
   cost: number;
+  unpricedTokens: number;
   inputCost: number;
   outputCost: number;
   cacheWriteCost: number;
@@ -73,6 +74,7 @@ export interface RangeTotals {
   outputTokens: number;
   cacheTokens: number;
   cost: number;
+  unpricedTokens: number;
 }
 
 export interface TimeSeries {
@@ -100,14 +102,15 @@ export function filterSessionsByRange(
 // control can't leave a stat card describing a different window than the
 // chart beside it.
 export function computeTotals(rangeDaily: DailyUsage[]): RangeTotals {
-  let inputTokens = 0, outputTokens = 0, cacheTokens = 0, cost = 0;
+  let inputTokens = 0, outputTokens = 0, cacheTokens = 0, cost = 0, unpricedTokens = 0;
   for (const d of rangeDaily) {
     inputTokens += d.inputTokens;
     outputTokens += d.outputTokens;
     cacheTokens += d.cacheCreationTokens + d.cacheReadTokens;
     cost += d.cost;
+    unpricedTokens += d.unpricedTokens ?? 0;
   }
-  return { inputTokens, outputTokens, cacheTokens, cost };
+  return { inputTokens, outputTokens, cacheTokens, cost, unpricedTokens };
 }
 
 /** Per-engine totals for the range, rebuilt from daily rows. */
@@ -123,13 +126,14 @@ export function buildRangeEngines(
     const current = byTarget.get(d.target) ?? {
       target: d.target,
       inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0,
-      cost: 0, sessionCount: 0, models: [],
+      cost: 0, unpricedTokens: 0, sessionCount: 0, models: [],
     };
     current.inputTokens += d.inputTokens;
     current.outputTokens += d.outputTokens;
     current.cacheCreationTokens += d.cacheCreationTokens;
     current.cacheReadTokens += d.cacheReadTokens;
     current.cost += d.cost;
+    current.unpricedTokens = (current.unpricedTokens ?? 0) + (d.unpricedTokens ?? 0);
     current.models = [...new Set([...current.models, ...d.modelsUsed])];
     byTarget.set(d.target, current);
   }
@@ -160,6 +164,7 @@ export function buildRangeModels(
       cacheCreationTokens: m.cacheCreationTokens,
       cacheReadTokens: m.cacheReadTokens,
       cost: m.cost,
+      unpricedTokens: m.unpricedTokens ?? 0,
       inputCost: m.inputCost,
       outputCost: m.outputCost,
       cacheWriteCost: m.cacheWriteCost,
@@ -184,13 +189,15 @@ export function buildRangeModels(
       const current = byModel.get(bd.modelName) ?? {
         model: bd.modelName, targets: [],
         inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0,
-        cost: 0, inputCost: 0, outputCost: 0, cacheWriteCost: 0, cacheReadCost: 0,
+        cost: 0, unpricedTokens: 0,
+        inputCost: 0, outputCost: 0, cacheWriteCost: 0, cacheReadCost: 0,
       };
       current.inputTokens += bd.inputTokens;
       current.outputTokens += bd.outputTokens;
       current.cacheCreationTokens += bd.cacheCreationTokens;
       current.cacheReadTokens += bd.cacheReadTokens;
       current.cost += bd.cost;
+      current.unpricedTokens += bd.unpricedTokens ?? 0;
       if (!current.targets.includes(d.target)) current.targets.push(d.target);
       byModel.set(bd.modelName, current);
     }

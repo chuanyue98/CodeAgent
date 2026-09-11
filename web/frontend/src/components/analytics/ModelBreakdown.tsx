@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fmtCost, fmtTokens } from '../../api/analytics';
+import { fmtCost, fmtCostLabel, fmtTokens } from '../../api/analytics';
 import { useT } from '../../i18n/context';
 import { eb, ec } from './present';
 import { SectionTitle } from './ChartCards';
@@ -55,7 +55,9 @@ export default function ModelBreakdown({
                     {m.targets.map(t => (
                       <span key={t} className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full ${eb(t)}`}>{t}</span>
                     ))}
-                    <span className="text-xs font-bold text-slate-600">{fmtCost(m.cost)}</span>
+                    <span className="text-xs font-bold text-slate-600">
+                      {fmtCostLabel(m.cost, m.unpricedTokens, t('cost.unpriced'))}
+                    </span>
                     <span className="text-[10px] text-slate-400">{pct.toFixed(1)}%</span>
                   </div>
                 </div>
@@ -91,6 +93,7 @@ export default function ModelBreakdown({
             : ioRatio > 3
             ? t('model.contextHeavy')
             : t('model.balanced');
+          const unpriced = m.unpricedTokens > 0 && m.cost === 0;
           const rows = [
             { label: t('analytics.input'), cost: m.inputCost, tokens: m.inputTokens },
             { label: t('analytics.output'), cost: m.outputCost, tokens: m.outputTokens },
@@ -112,7 +115,9 @@ export default function ModelBreakdown({
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-lg bg-white border border-slate-200 p-2.5">
-                  <p className="text-base font-bold text-slate-800">{fmtCost(m.cost)}</p>
+                  <p className="text-base font-bold text-slate-800">
+                    {fmtCostLabel(m.cost, m.unpricedTokens, t('cost.unpriced'))}
+                  </p>
                   <p className="text-[10px] text-slate-400 mt-0.5">{t('model.totalCost')}</p>
                 </div>
                 <div className="rounded-lg bg-white border border-slate-200 p-2.5">
@@ -127,7 +132,9 @@ export default function ModelBreakdown({
                   {rows.map(({ label, cost, tokens }) => (
                     <div key={label} className="flex items-center justify-between text-xs">
                       <span className="text-slate-500 w-20">{label}</span>
-                      <span className="font-semibold text-slate-700 w-16 text-right">{fmtCost(cost)}</span>
+                      <span className="font-semibold text-slate-700 w-16 text-right">
+                        {unpriced ? '—' : fmtCost(cost)}
+                      </span>
                       <span className="text-slate-400 text-right">{fmtTokens(tokens)}</span>
                     </div>
                   ))}

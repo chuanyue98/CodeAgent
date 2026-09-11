@@ -227,13 +227,13 @@ test('the activity strip plots the days it claims to plot', async () => {
   };
   mockBackend({
     daily: [
-      { date: key(0), cost: 4, inputTokens: 0, outputTokens: 0 },
-      { date: key(3), cost: 1, inputTokens: 0, outputTokens: 0 },
+      { date: key(0), cost: 0, inputTokens: 300, outputTokens: 100 },
+      { date: key(3), cost: 0, inputTokens: 50, outputTokens: 50 },
     ],
   });
   renderHome();
 
-  const strip = await screen.findByTitle('Cost per day, last 12 days');
+  const strip = await screen.findByTitle('Tokens per day, last 12 days');
   const bars = Array.from(strip.children) as HTMLElement[];
   const height = (bar: HTMLElement) => parseFloat(bar.style.height);
   expect(bars).toHaveLength(12);

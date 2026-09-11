@@ -68,6 +68,28 @@ describe('computeTotals', () => {
   });
 });
 
+describe('unpriced tokens', () => {
+  const unpricedBreakdown = {
+    modelName: 'mystery', inputTokens: 10, outputTokens: 10,
+    cacheCreationTokens: 0, cacheReadTokens: 20, cost: 0, unpricedTokens: 40,
+  };
+
+  test('totals keep them apart from cost', () => {
+    const totals = computeTotals([day('2024-01-01', { unpricedTokens: 40 }), day('2024-01-02')]);
+    expect(totals.cost).toBe(2);
+    expect(totals.unpricedTokens).toBe(40);
+  });
+
+  test('a narrowed range carries them per engine and per model', () => {
+    const daily = [
+      day(localDayOffset(0), { unpricedTokens: 40, modelBreakdowns: [unpricedBreakdown] }),
+      day(localDayOffset(1), { unpricedTokens: 40, modelBreakdowns: [unpricedBreakdown] }),
+    ];
+    expect(buildRangeEngines([], daily, [], 7)[0].unpricedTokens).toBe(80);
+    expect(buildRangeModels([], daily, 7)[0].unpricedTokens).toBe(80);
+  });
+});
+
 describe('buildRangeEngines', () => {
   test('aggregates daily rows per engine and counts sessions', () => {
     const daily = [

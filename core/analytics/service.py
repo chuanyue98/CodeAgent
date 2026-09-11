@@ -4,7 +4,7 @@ import threading
 from collections import defaultdict
 from typing import Any
 
-from core.analytics.aggregator import _entry_cost, aggregate
+from core.analytics.aggregator import _entry_cost, _entry_tokens, aggregate
 from core.analytics.collectors.antigravity_collector import scan_antigravity_usage
 from core.analytics.collectors.claude_collector import scan_claude_usage
 from core.analytics.collectors.codebuddy_collector import scan_codebuddy_usage
@@ -124,6 +124,7 @@ def _build_engine_summary(entries: list[RawUsageEntry]) -> list[dict[str, Any]]:
             "cacheCreationTokens": 0,
             "cacheReadTokens": 0,
             "cost": 0.0,
+            "unpricedTokens": 0,
             "sessionIds": set(),
             "models": set(),
         }
@@ -134,7 +135,11 @@ def _build_engine_summary(entries: list[RawUsageEntry]) -> list[dict[str, Any]]:
         s["outputTokens"] += e.output_tokens
         s["cacheCreationTokens"] += e.cache_creation_tokens
         s["cacheReadTokens"] += e.cache_read_tokens
-        s["cost"] += _entry_cost(e)
+        cost = _entry_cost(e)
+        if cost is None:
+            s["unpricedTokens"] += _entry_tokens(e)
+        else:
+            s["cost"] += cost
         s["sessionIds"].add(e.session_id)
         s["models"].add(e.model)
 
@@ -149,6 +154,7 @@ def _build_engine_summary(entries: list[RawUsageEntry]) -> list[dict[str, Any]]:
                 "cacheCreationTokens": s["cacheCreationTokens"],
                 "cacheReadTokens": s["cacheReadTokens"],
                 "cost": round(s["cost"], 6),
+                "unpricedTokens": s["unpricedTokens"],
                 "sessionCount": len(s["sessionIds"]),
                 "models": sorted(s["models"]),
             }
@@ -168,22 +174,29 @@ def _build_model_summary(entries: list[RawUsageEntry]) -> list[dict[str, Any]]:
             "cacheWriteCost": 0.0,
             "cacheReadCost": 0.0,
             "cost": 0.0,
+            "unpricedTokens": 0,
             "sessionIds": set(),
             "targets": set(),
         }
     )
     for e in entries:
         s = stats[e.model]
-        in_r, out_r, cw_r, cr_r = get_rates(e.model)
         s["inputTokens"] += e.input_tokens
         s["outputTokens"] += e.output_tokens
         s["cacheCreationTokens"] += e.cache_creation_tokens
         s["cacheReadTokens"] += e.cache_read_tokens
-        s["inputCost"] += e.input_tokens * in_r / 1_000_000
-        s["outputCost"] += e.output_tokens * out_r / 1_000_000
-        s["cacheWriteCost"] += e.cache_creation_tokens * cw_r / 1_000_000
-        s["cacheReadCost"] += e.cache_read_tokens * cr_r / 1_000_000
-        s["cost"] += _entry_cost(e)
+        rates = get_rates(e.model)
+        if rates is not None:
+            in_r, out_r, cw_r, cr_r = rates
+            s["inputCost"] += e.input_tokens * in_r / 1_000_000
+            s["outputCost"] += e.output_tokens * out_r / 1_000_000
+            s["cacheWriteCost"] += e.cache_creation_tokens * cw_r / 1_000_000
+            s["cacheReadCost"] += e.cache_read_tokens * cr_r / 1_000_000
+        cost = _entry_cost(e)
+        if cost is None:
+            s["unpricedTokens"] += _entry_tokens(e)
+        else:
+            s["cost"] += cost
         s["sessionIds"].add(e.session_id)
         s["targets"].add(e.target)
 
@@ -201,6 +214,7 @@ def _build_model_summary(entries: list[RawUsageEntry]) -> list[dict[str, Any]]:
                 "cacheWriteCost": round(s["cacheWriteCost"], 6),
                 "cacheReadCost": round(s["cacheReadCost"], 6),
                 "cost": round(s["cost"], 6),
+                "unpricedTokens": s["unpricedTokens"],
                 "sessionCount": len(s["sessionIds"]),
                 "targets": sorted(s["targets"]),
             }

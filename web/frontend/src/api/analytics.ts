@@ -5,6 +5,8 @@ export interface ModelBreakdown {
   cacheCreationTokens: number;
   cacheReadTokens: number;
   cost: number;
+  /** Tokens from models with no known price, left out of `cost`. */
+  unpricedTokens?: number;
 }
 
 export interface DailyUsage {
@@ -15,6 +17,7 @@ export interface DailyUsage {
   cacheCreationTokens: number;
   cacheReadTokens: number;
   cost: number;
+  unpricedTokens?: number;
   modelsUsed: string[];
   modelBreakdowns: ModelBreakdown[];
 }
@@ -27,6 +30,7 @@ export interface MonthlyUsage {
   cacheCreationTokens: number;
   cacheReadTokens: number;
   cost: number;
+  unpricedTokens?: number;
   modelsUsed: string[];
   modelBreakdowns: ModelBreakdown[];
 }
@@ -38,6 +42,7 @@ export interface SessionOwnUsage {
   cacheCreationTokens: number;
   cacheReadTokens: number;
   cost: number;
+  unpricedTokens?: number;
   lastActivity: string;
 }
 
@@ -53,6 +58,7 @@ export interface SessionUsage {
   cacheCreationTokens: number;
   cacheReadTokens: number;
   cost: number;
+  unpricedTokens?: number;
   lastActivity: string;
   modelsUsed: string[];
   modelBreakdowns: ModelBreakdown[];
@@ -73,6 +79,7 @@ export interface EngineSummary {
   cacheCreationTokens: number;
   cacheReadTokens: number;
   cost: number;
+  unpricedTokens?: number;
   sessionCount: number;
   models: string[];
 }
@@ -156,6 +163,7 @@ export interface ModelStat {
   cacheWriteCost: number;
   cacheReadCost: number;
   cost: number;
+  unpricedTokens?: number;
   sessionCount: number;
   targets: string[];
 }
@@ -179,4 +187,19 @@ export function fmtCost(n: number): string {
   if (n === 0) return '$0';
   if (n < 0.01) return `$${n.toFixed(4)}`;
   return `$${n.toFixed(2)}`;
+}
+
+/**
+ * A cost for display next to usage that may include unpriced tokens. A figure
+ * that leaves some out is a lower bound and is marked `+`; one that covers
+ * none of its tokens is labelled rather than shown as `$0`, which would read
+ * as "free".
+ */
+export function fmtCostLabel(
+  cost: number,
+  unpricedTokens: number | undefined,
+  unpricedLabel: string,
+): string {
+  if (!unpricedTokens) return fmtCost(cost);
+  return cost > 0 ? `${fmtCost(cost)}+` : unpricedLabel;
 }

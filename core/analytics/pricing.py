@@ -1,5 +1,5 @@
 # 模型单价（美元 / 每百万 token）。数据外置在包内 model_pricing.json，
-# 调价只改数据文件，代码只负责查找与回退。数据来源：Anthropic / Google /
+# 调价只改数据文件，代码只负责查找。数据来源：Anthropic / Google /
 # OpenAI 官方定价页 + CCS model-pricing.ts。
 
 from __future__ import annotations
@@ -21,14 +21,7 @@ _PRICING: dict[str, tuple[float, float, float, float]] = {
 # 别名：model name → _PRICING 里的规范 key
 _ALIASES: dict[str, str] = _DATA["aliases"]
 
-# 未知模型的兜底价 —— 沿用 CCS 的做法，按 Claude Sonnet 计
-_FALLBACK_RATES = _DATA["unknown_fallback"]
-_UNKNOWN: tuple[float, float, float, float] = (
-    _FALLBACK_RATES[0],
-    _FALLBACK_RATES[1],
-    _FALLBACK_RATES[2],
-    _FALLBACK_RATES[3],
-)
+_FREE: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
 
 # Claude 模型的日期后缀：claude-sonnet-4-6-20260101 → claude-sonnet-4-6
 _DATE_SUFFIX_RE = re.compile(r"-\d{8}$")
@@ -61,7 +54,7 @@ def _strip_provider_prefix(model: str) -> str:
 
 
 def _resolve(key: str) -> tuple[float, float, float, float] | None:
-    """按 精确命中 → 别名 → 去日期后缀 → 最长后缀匹配 的顺序查价。"""
+    """按 精确命中 → 别名 → 去日期后缀 → 免费档 → 最长后缀匹配 的顺序查价。"""
     if key in _PRICING:
         return _PRICING[key]
 
@@ -72,6 +65,10 @@ def _resolve(key: str) -> tuple[float, float, float, float] | None:
     stripped = _DATE_SUFFIX_RE.sub("", key)
     if stripped != key and stripped in _PRICING:
         return _PRICING[stripped]
+
+    # 免费档 id（OpenCode Zen 等）以 -free 结尾。
+    if key.endswith("-free"):
+        return _FREE
 
     # 兜底：id 以已知 key 结尾仍可命中（非 "/" 分隔的 vendor 前缀）。
     # 取最长命中，避免 "some-vendor-glm-4.5-air" 错拿 glm-4.5 的价。
@@ -87,19 +84,18 @@ def _resolve(key: str) -> tuple[float, float, float, float] | None:
     return None
 
 
-def get_rates(model: str) -> tuple[float, float, float, float]:
-    """返回 (input, output, cache_write, cache_read) 美元/百万 token。"""
-    rates = _resolve(_strip_provider_prefix(model).lower().strip())
-    return rates if rates is not None else _UNKNOWN
+def get_rates(model: str) -> tuple[float, float, float, float] | None:
+    """返回 (input, output, cache_write, cache_read) 美元/百万 token。
+
+    查不到价时返回 None：调用方把这部分 token 记为未定价。拿别的模型的价
+    顶上，会把猜测当成确定的金额展示出来。
+    """
+    return _resolve(_strip_provider_prefix(model).lower().strip())
 
 
 def is_known_model(model: str) -> bool:
-    """模型能否在价目表中精确找到（不含未知兜底）。
-
-    未知模型会被 get_rates 按兜底价计出"看起来很确定"的金额；调用方可用
-    本函数区分真实价与估算价，在 UI 上标注 estimated。
-    """
-    return _resolve(_strip_provider_prefix(model).lower().strip()) is not None
+    """模型能否在价目表中查到价格。"""
+    return get_rates(model) is not None
 
 
 def calculate_cost(
@@ -108,8 +104,12 @@ def calculate_cost(
     output_tokens: int,
     cache_creation_tokens: int = 0,
     cache_read_tokens: int = 0,
-) -> float:
-    in_r, out_r, cw_r, cr_r = get_rates(model)
+) -> float | None:
+    """美元成本；模型查不到价时返回 None。"""
+    rates = get_rates(model)
+    if rates is None:
+        return None
+    in_r, out_r, cw_r, cr_r = rates
     cost = (
         input_tokens * in_r
         + output_tokens * out_r

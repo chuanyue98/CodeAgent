@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useIsMounted, useLatestRequest } from '../hooks/useAsyncGuards';
 import { useSearchParams } from 'react-router';
 import { ChevronRight, Clock, DollarSign, FileText, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
-import { fetchSessionPage, type SessionUsage, fmtCost, fmtTokens } from '../api/analytics';
+import { fetchSessionPage, type SessionUsage, fmtCostLabel, fmtTokens } from '../api/analytics';
 import { deleteHistorySession } from '../api/audit';
 import useActivityFilters from '../hooks/useActivityFilters';
 import { useT } from '../i18n/context';
@@ -448,7 +448,7 @@ export default function SessionsPage() {
                       <FileText className="w-3 h-3" />{fmtTokens(totalTokens)}
                     </span>
                     <span className="text-xs text-slate-500 flex items-center gap-1">
-                      <DollarSign className="w-3 h-3" />{fmtCost(session.cost)}
+                      <DollarSign className="w-3 h-3" />{fmtCostLabel(session.cost, session.unpricedTokens, t('cost.unpriced'))}
                     </span>
                     <span className="text-xs text-slate-400 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
