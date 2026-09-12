@@ -41,9 +41,9 @@ except ImportError:  # pragma: no cover - 依赖缺失时给出可读错误
 
 SERVER_NAME = "codeagent"
 SERVER_INSTRUCTIONS = (
-    "CodeAgent 技能库服务。默认只读,提供 skill_list / skill_read 两个工具,"
+    "CodeAgent 技能库与跨引擎协作服务。默认只读,提供 skill_list / skill_read 两个工具,"
     "以及 ca://skills 与 ca://skill/<name> 资源,所有内容来自磁盘上的 SKILL.md 原文。"
-    "以 --allow-write 启动时额外提供 skill_run / task_run(执行技能脚本与任务);"
+    "以 --allow-write 启动时额外提供 skill_run / task_run / ca_delegate_subtask / ca_handoff_session;"
     "以 --trust-hooks 启动时再额外提供 hook_fire(执行 hook 脚本)。"
 )
 
@@ -341,6 +341,84 @@ def build_server(
                 },
                 ensure_ascii=False,
             )
+
+        @server.tool()
+        def ca_delegate_subtask(
+            engine: str,
+            instruction: str,
+            target_paths: list[str] | None = None,
+            timeout: int = 300,
+            isolate_worktree: bool = True,
+        ) -> str:
+            """向其他专项引擎委派独立子任务(在隔离的 Git Worktree 分支中运行),并返回执行摘要与代码 Diff。
+
+            Args:
+                engine: 目标引擎名称 (claude / codex / opencode / antigravity / codebuddy)。
+                instruction: 具体的子任务描述与验收标准。
+                target_paths: 关注或修改的目标文件列表(可选)。
+                timeout: 最大执行超时时间(秒,默认 300)。
+                isolate_worktree: 是否在独立的 Git Worktree 分支中隔离执行(默认 True)。
+            """
+            _append_audit(
+                root_dir,
+                "ca_delegate_subtask",
+                {
+                    "engine": engine,
+                    "instruction": instruction[:200],
+                    "target_paths": target_paths,
+                    "isolate_worktree": isolate_worktree,
+                },
+            )
+            from core.services.delegation_service import delegate_subtask
+
+            res = delegate_subtask(
+                engine=engine,
+                instruction=instruction,
+                workspace=root_dir,
+                target_paths=target_paths,
+                timeout=timeout,
+                isolate=isolate_worktree,
+                group=group or "common",
+                root_dir=root_dir,
+            )
+            return res.to_summary()
+
+        @server.tool()
+        def ca_handoff_session(
+            target_engine: str,
+            reason: str = "",
+            source_engine: str | None = None,
+        ) -> str:
+            """当遇到上下文瓶颈、限流或死循环时,主动将当前会话打包并移交给目标引擎继续执行。
+
+            Args:
+                target_engine: 目标引擎名称 (claude / codex / opencode / antigravity / codebuddy)。
+                reason: 移交原因与当前进展摘要。
+                source_engine: 源引擎名称(可选,缺省自动检测)。
+            """
+            _append_audit(
+                root_dir,
+                "ca_handoff_session",
+                {
+                    "target_engine": target_engine,
+                    "reason": reason,
+                    "source_engine": source_engine,
+                },
+            )
+            from core.services.delegation_service import handoff_session
+
+            try:
+                result = handoff_session(
+                    target_engine=target_engine,
+                    source_engine=source_engine,
+                    project_path=root_dir,
+                    reason=reason,
+                )
+                return json.dumps(result, ensure_ascii=False, indent=2)
+            except Exception as exc:
+                return json.dumps(
+                    {"status": "failed", "error": str(exc)}, ensure_ascii=False
+                )
 
     if trust_hooks:
 

@@ -120,7 +120,13 @@ def test_group_bound_server(skills_root):
 def test_write_tools_hidden_by_default(skills_root):
     server = build_server(config=None, group=None, skills_root=skills_root)
     names = {t.name for t in asyncio.run(server.list_tools())}
-    assert {"skill_run", "task_run", "hook_fire"} & names == set()
+    assert {
+        "skill_run",
+        "task_run",
+        "hook_fire",
+        "ca_delegate_subtask",
+        "ca_handoff_session",
+    } & names == set()
 
 
 def test_write_tools_visible_with_allow_write(skills_root):
@@ -128,7 +134,12 @@ def test_write_tools_visible_with_allow_write(skills_root):
         config=None, group=None, skills_root=skills_root, allow_write=True
     )
     names = {t.name for t in asyncio.run(server.list_tools())}
-    assert {"skill_run", "task_run"} <= names
+    assert {
+        "skill_run",
+        "task_run",
+        "ca_delegate_subtask",
+        "ca_handoff_session",
+    } <= names
     assert "hook_fire" not in names  # 需要 trust_hooks
 
 
@@ -255,3 +266,79 @@ def test_hook_fire_executes_and_returns_output(skills_root, tmp_path, monkeypatc
     out = _text(result)
     assert "exit=0" in out
     assert "got:" in out and '"a": 1' in out
+
+
+def test_ca_delegate_subtask_tool(skills_root, tmp_path, monkeypatch):
+    from core.services.delegation_service import DelegationResult
+
+    fake_res = DelegationResult(
+        success=True,
+        engine="codex",
+        instruction="run tests",
+        exit_code=0,
+        output="passed",
+        duration_seconds=1.2,
+    )
+    monkeypatch.setattr(
+        "core.services.delegation_service.delegate_subtask",
+        lambda **kwargs: fake_res,
+    )
+    server = build_server(
+        config=None,
+        group=None,
+        skills_root=skills_root,
+        allow_write=True,
+        root_dir=tmp_path,
+    )
+    result = asyncio.run(
+        server.call_tool(
+            "ca_delegate_subtask",
+            {"engine": "codex", "instruction": "run tests"},
+        )
+    )
+    out = _text(result)
+    assert "[CODEX] — SUCCESS" in out
+
+    # Check audit log written
+    audit_file = tmp_path / ".ca_task_logs" / "mcp_audit.log"
+    assert audit_file.exists()
+    assert "ca_delegate_subtask" in audit_file.read_text(encoding="utf-8")
+
+
+def test_ca_handoff_session_tool(skills_root, tmp_path, monkeypatch):
+    fake_handoff = {
+        "status": "ready",
+        "source_engine": "claude",
+        "target_engine": "codex",
+        "original_session_id": "s1",
+        "new_session_id": "s2",
+        "resume_command": "ca codex --resume s2",
+        "reason": "rate limit",
+        "message": "Continue with ca codex",
+    }
+    monkeypatch.setattr(
+        "core.services.delegation_service.handoff_session",
+        lambda **kwargs: fake_handoff,
+    )
+    server = build_server(
+        config=None,
+        group=None,
+        skills_root=skills_root,
+        allow_write=True,
+        root_dir=tmp_path,
+    )
+    result = asyncio.run(
+        server.call_tool(
+            "ca_handoff_session",
+            {"target_engine": "codex", "reason": "rate limit"},
+        )
+    )
+    payload = json.loads(_text(result))
+    assert payload["status"] == "ready"
+    assert payload["target_engine"] == "codex"
+
+    # Check audit log written
+    audit_file = tmp_path / ".ca_task_logs" / "mcp_audit.log"
+    assert audit_file.exists()
+    assert "ca_handoff_session" in audit_file.read_text(encoding="utf-8")
+
