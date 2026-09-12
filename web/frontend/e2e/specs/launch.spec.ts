@@ -30,13 +30,19 @@ test('opening an engine streams its output into an in-browser terminal', async (
   // The fake `codex` binary (web/frontend/e2e/fixtures/fake-engines) sleeps
   // 4s on a headless-launch invocation, then prints this line and exits —
   // proving output actually streamed from the spawned process, not a stub.
+  // Budget is generous on purpose: the 4s sleep is only part of it — tmux has
+  // to create the session and attach to it first, and the CI runner is 2 vCPU
+  // shared with a second worker, so a 10s budget was measuring the runner.
   await expect(page.locator('.xterm-accessibility-tree')).toContainText(
     '(fake codex) ok:',
-    { timeout: 10000 },
+    { timeout: 30_000 },
   );
   // The process exiting on its own must be surfaced, not leave a silently
-  // dead connection.
-  await expect(page.getByText(/Session ended \(exit code/)).toBeVisible();
+  // dead connection. backend sends this after the process is reaped plus a
+  // bounded wait for the PTY tail to drain, so give it more than the default.
+  await expect(page.getByText(/Session ended \(exit code/)).toBeVisible({
+    timeout: 20_000,
+  });
 });
 
 test('closing a terminal returns to the engine picker', async ({ page }) => {

@@ -199,10 +199,17 @@ jobs:
       - name: Run E2E suite
         run: bunx playwright test --reporter=dot
 
-      - name: Upload Playwright report
+      # --reporter=dot 覆盖了 config 里的 html，playwright-report/ 从不生成，
+      # 这个上传步骤一直空转 —— 失败时既没有截图也没有 trace，/tmp 里的
+      # 隔离 HOME 又随 runner 一起销毁，等于无法复盘。test-results/ 才是
+      # Playwright 在失败时真正落盘的东西（screenshot/trace 见 config）。
+      - name: Upload Playwright failure artifacts
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report
-          path: web/frontend/playwright-report/
+          name: playwright-artifacts
+          path: |
+            web/frontend/test-results/
+            web/frontend/playwright-report/
+          if-no-files-found: ignore
           retention-days: 14
