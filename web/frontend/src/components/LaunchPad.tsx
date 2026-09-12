@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTerminal } from '../context/TerminalContext';
 import { useSearchParams } from 'react-router';
-import { AlertTriangle, ChevronDown, Loader2, Plus, Terminal, TerminalSquare, X, Zap } from 'lucide-react';
+import { AlertTriangle, Terminal, TerminalSquare } from 'lucide-react';
 import { fetchPtyStatus } from '../api/pty';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
@@ -10,7 +10,6 @@ import SectionLabel from './shared/SectionLabel';
 import TerminalSessionSidebar from './TerminalSessionSidebar';
 import {
   AGENT_ENGINES,
-  findEngine,
   SHELL_ENGINE,
   SHELL_ENGINE_ID,
   type Engine,
@@ -84,12 +83,6 @@ export default function LaunchPad() {
         </span>
       </button>
     );
-  };
-
-  const engineLabel = (id: string): string => {
-    const engine = findEngine(id);
-    if (!engine) return id;
-    return (engine.nameKey ? t(engine.nameKey) : engine.name) ?? id;
   };
 
   const launcher = (

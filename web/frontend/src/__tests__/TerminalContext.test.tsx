@@ -1,6 +1,5 @@
-import React from 'react';
 import { render, screen, act, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { TerminalProvider, useTerminal } from '../context/TerminalContext';
 
 const TestComponent = () => {

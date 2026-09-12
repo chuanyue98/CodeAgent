@@ -5,7 +5,8 @@ import '@xterm/xterm/css/xterm.css';
 import { ClipboardCopy, Eraser, RotateCw } from 'lucide-react';
 import { ptyWebSocketUrl } from '../api/pty';
 import { useT } from '../i18n/context';
-import { detectTerminalEvent, stripAnsi, TerminalEventType } from '../utils/terminalDetector';
+import { detectTerminalEvent, stripAnsi } from '../utils/terminalDetector';
+import type { TerminalEventType } from '../utils/terminalDetector';
 import { requestNotificationPermission, sendDesktopNotification } from '../utils/desktopNotification';
 
 type ConnectionState = 'connecting' | 'open' | 'closed' | 'error';

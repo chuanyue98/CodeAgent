@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
 
 export interface TerminalTab {
   id: string;
@@ -27,6 +28,7 @@ export interface TerminalContextValue {
 
 const TerminalContext = createContext<TerminalContextValue | undefined>(undefined);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useTerminal = () => {
   const context = useContext(TerminalContext);
   if (!context) {

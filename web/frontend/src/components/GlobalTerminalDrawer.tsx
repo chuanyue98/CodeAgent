@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Terminal, Plus, X, Maximize2, Minimize2, ChevronDown, ChevronUp, Zap, Loader2 } from 'lucide-react';
 import { useTerminal } from '../context/TerminalContext';
 import BrowserTerminal from './BrowserTerminal';
@@ -47,8 +47,8 @@ export default function GlobalTerminalDrawer() {
       });
       closeTab(activeTab.id);
       console.log("HANDOFF RESULT", result); openTab(result.engine, result.project, result.sessionId);
-    } catch (err: any) {
-      console.error(err); setHandoffError(err.message || String(err));
+    } catch (err) {
+      console.error(err); setHandoffError(err instanceof Error ? err.message : String(err));
     } finally {
       setHandoffLoading(null);
       setShowHandoffMenu(false);
@@ -70,7 +70,7 @@ export default function GlobalTerminalDrawer() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-slate-500">
             <Terminal size={16} />
-            <span className="text-xs font-semibold">{tabs.length} {t('launch.tabs') || 'Tabs'}</span>
+            <span className="text-xs font-semibold">{tabs.length} {t('launch.tabs')}</span>
           </div>
           <div className="flex gap-2">
             {tabs.map(tab => {

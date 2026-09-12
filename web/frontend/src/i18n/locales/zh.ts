@@ -620,6 +620,7 @@ export const zh: Record<TranslationKey, string> = {
   'terminalSidebar.collapse': '收起会话列表',
   'terminalSidebar.expand': '展开会话列表',
   'launch.openTerminals': '已打开的终端',
+  'launch.tabs': '个标签',
   'launch.newTerminal': '新终端',
   'launch.resumed': '已续接',
   'launch.handoff': '接力到',

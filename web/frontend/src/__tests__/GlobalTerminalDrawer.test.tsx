@@ -1,15 +1,16 @@
-import React from 'react';
+import React, { type ReactNode } from 'react';
 import { render, screen, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import GlobalTerminalDrawer from '../components/GlobalTerminalDrawer';
+import type { BrowserTerminalProps } from '../components/BrowserTerminal';
 import { TerminalProvider, useTerminal } from '../context/TerminalContext';
 
 // Mock BrowserTerminal to avoid testing xterm
 vi.mock('../components/BrowserTerminal', () => ({
-  default: ({ engine, cwd }: any) => <div data-testid={`mock-terminal-${engine}`}>{cwd}</div>
+  default: ({ engine, cwd }: BrowserTerminalProps) => <div data-testid={`mock-terminal-${engine}`}>{cwd}</div>
 }));
 
-const TestWrapper = ({ children, openDrawer, addTab }: any) => {
+const TestWrapper = ({ children, addTab }: { children: ReactNode; addTab?: boolean }) => {
   const ctx = useTerminal();
   React.useEffect(() => {
     if (addTab && ctx.tabs.length === 0) {

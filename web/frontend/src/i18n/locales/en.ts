@@ -634,6 +634,7 @@ export const en = {
   'terminalSidebar.collapse': 'Collapse the session list',
   'terminalSidebar.expand': 'Show the session list',
   'launch.openTerminals': 'Open terminals',
+  'launch.tabs': 'tabs',
   'launch.newTerminal': 'New terminal',
   'launch.resumed': 'Resumed',
   'launch.handoff': 'Relay to',

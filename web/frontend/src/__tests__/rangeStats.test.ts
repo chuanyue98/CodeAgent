@@ -42,7 +42,6 @@ describe('activeRangeOf', () => {
 
 describe('filterDailyByRange', () => {
   test('keeps only days at or after the window cutoff', () => {
-    const today = new Date();
     const iso = (offset: number) => localDayOffset(offset);
     const daily = [day(iso(0)), day(iso(6)), day(iso(7)), day(iso(30))];
     // localDayOffset(6) with days=7 keeps exactly the last 7 days.

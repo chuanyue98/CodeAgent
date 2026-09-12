@@ -118,6 +118,7 @@ const ConfigHub: React.FC = () => {
       else if (!Array.isArray(cloned.proxy)) cloned.proxy = [cloned.proxy];
       if (!cloned.paths) cloned.paths = {};
 
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocalConfig(cloned);
       setLocalProjects(
         deepClone(projects).map(project => ({
