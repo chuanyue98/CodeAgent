@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Terminal, Plus, X, Maximize2, Minimize2, ChevronDown, ChevronUp, Zap, Loader2 } from 'lucide-react';
 import { useTerminal } from '../context/TerminalContext';
 import BrowserTerminal from './BrowserTerminal';
@@ -29,10 +29,26 @@ export default function GlobalTerminalDrawer() {
   const [handoffLoading, setHandoffLoading] = useState<string | null>(null);
   const [handoffError, setHandoffError] = useState<string | null>(null);
   const [showHandoffMenu, setShowHandoffMenu] = useState(false);
+  const handoffMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (handoffMenuRef.current && !handoffMenuRef.current.contains(e.target as Node)) {
+        setShowHandoffMenu(false);
+      }
+    };
+    if (showHandoffMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showHandoffMenu]);
 
   if (tabs.length === 0) return null;
 
   const activeTab = tabs.find(tab => tab.id === activeTabId);
+  const isAgentEngine = Boolean(activeTab && AGENT_ENGINES.some(e => e.id === activeTab.engine));
 
   const handleHandoff = async (targetEngineId: string) => {
     if (!activeTab) return;
@@ -46,9 +62,10 @@ export default function GlobalTerminalDrawer() {
         projectPath: activeTab.cwd,
       });
       closeTab(activeTab.id);
-      console.log("HANDOFF RESULT", result); openTab(result.engine, result.project, result.sessionId);
+      openTab(result.engine, result.project, result.sessionId);
     } catch (err) {
-      console.error(err); setHandoffError(err instanceof Error ? err.message : String(err));
+      console.error(err);
+      setHandoffError(err instanceof Error ? err.message : String(err));
     } finally {
       setHandoffLoading(null);
       setShowHandoffMenu(false);
@@ -141,32 +158,54 @@ export default function GlobalTerminalDrawer() {
           </div>
 
           <div className="flex items-center gap-1.5 ml-4 shrink-0 pr-2">
-            {activeTab && (
-              <div className="relative">
+            {isAgentEngine && activeTab && (
+              <div ref={handoffMenuRef} className="relative">
                 <button
-                  onClick={() => setShowHandoffMenu(!showHandoffMenu)}
-                  className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors mr-2"
+                  type="button"
+                  data-testid="handoff-button"
+                  disabled={Boolean(handoffLoading)}
+                  onClick={() => setShowHandoffMenu(prev => !prev)}
+                  title={t('launch.handoffTitle')}
+                  aria-label={t('launch.handoffTitle')}
+                  className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors mr-2 disabled:opacity-50"
                 >
                   {handoffLoading ? (
                     <Loader2 size={13} className="animate-spin text-amber-500" />
                   ) : (
                     <Zap size={13} className="text-amber-500" />
                   )}
-                  <span>Handoff</span>
-                  <ChevronDown size={12} className={showHandoffMenu ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                  <span>{t('launch.handoff')}</span>
+                  <ChevronDown
+                    size={12}
+                    className={showHandoffMenu ? 'rotate-180 transition-transform' : 'transition-transform'}
+                  />
                 </button>
                 {showHandoffMenu && (
-                  <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-xl border border-slate-200 bg-white p-1 shadow-lg backdrop-blur">
-                    {AGENT_ENGINES.filter(e => e.id !== activeTab.engine).map(target => (
-                      <button
-                        key={target.id}
-                        onClick={() => void handleHandoff(target.id)}
-                        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100"
-                      >
-                        <span className={`h-2 w-2 rounded-full ${target.dot}`} />
-                        <span>{target.nameKey ? t(target.nameKey) : target.name}</span>
-                      </button>
-                    ))}
+                  <div
+                    data-testid="handoff-menu"
+                    className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-xl border border-slate-200 bg-white p-1 shadow-lg backdrop-blur"
+                  >
+                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      {t('launch.handoffTitle')}
+                    </div>
+                    {AGENT_ENGINES.filter(e => e.id !== activeTab.engine).map(target => {
+                      const isTargetLoading = handoffLoading === target.id;
+                      return (
+                        <button
+                          key={target.id}
+                          type="button"
+                          disabled={Boolean(handoffLoading)}
+                          onClick={() => void handleHandoff(target.id)}
+                          className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full ${target.dot}`} />
+                            <span>{target.nameKey ? t(target.nameKey) : target.name}</span>
+                          </span>
+                          {isTargetLoading && <Loader2 size={12} className="animate-spin text-amber-500" />}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>

@@ -637,7 +637,7 @@ export const en = {
   'launch.tabs': 'tabs',
   'launch.newTerminal': 'New terminal',
   'launch.resumed': 'Resumed',
-  'launch.handoff': 'Relay to',
+  'launch.handoff': 'Relay',
   'launch.handoffTitle': 'Relay session to different engine',
   'launch.handoffInProgress': 'Relaying to {engine}...',
   'launch.handoffFailed': 'Failed to relay session: {error}',

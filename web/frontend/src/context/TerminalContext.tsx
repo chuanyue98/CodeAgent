@@ -82,7 +82,7 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
     }
     const id = Math.random().toString(36).slice(2, 11);
-    console.log("OPENTAB", engine, sessionId); setTabs(prev => [...prev, { id, engine, cwd, sessionId, attachId }]);
+    setTabs(prev => [...prev, { id, engine, cwd, sessionId, attachId }]);
     setActiveTabId(id);
     setIsDrawerOpen(true);
   }, [tabs]);

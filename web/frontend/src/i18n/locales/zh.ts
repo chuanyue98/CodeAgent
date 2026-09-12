@@ -623,7 +623,7 @@ export const zh: Record<TranslationKey, string> = {
   'launch.tabs': '个标签',
   'launch.newTerminal': '新终端',
   'launch.resumed': '已续接',
-  'launch.handoff': '接力到',
+  'launch.handoff': '接力',
   'launch.handoffTitle': '将当前会话接力到其他引擎',
   'launch.handoffInProgress': '正在接力到 {engine}...',
   'launch.handoffFailed': '接力失败: {error}',
