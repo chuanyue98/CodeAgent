@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { ClipboardCopy, Eraser, RotateCw } from 'lucide-react';
+import { RotateCw } from 'lucide-react';
 import { ptyWebSocketUrl } from '../api/pty';
 import { useT } from '../i18n/context';
 import { detectTerminalEvent, stripAnsi } from '../utils/terminalDetector';
@@ -274,23 +274,6 @@ export default function BrowserTerminal({
 
   const canRestart = state === 'closed' || state === 'error';
 
-  const clear = useCallback(() => {
-    termRef.current?.clear();
-    termRef.current?.focus();
-  }, []);
-
-  const copyAll = useCallback(() => {
-    const term = termRef.current;
-    if (!term) return;
-    term.selectAll();
-    const text = term.getSelection();
-    term.clearSelection();
-    // Denied clipboard permission is the user's answer, not an error worth a
-    // banner over the terminal.
-    void navigator.clipboard?.writeText(text).catch(() => {});
-    term.focus();
-  }, []);
-
   return (
     <div
       className="flex h-full min-h-0 flex-col space-y-2"
@@ -318,24 +301,6 @@ export default function BrowserTerminal({
           )}
         </div>
       )}
-      <div className="flex shrink-0 items-center justify-end gap-1">
-        <button
-          onClick={clear}
-          aria-label={t('terminal.clear')}
-          title={t('terminal.clear')}
-          className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-        >
-          <Eraser className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={copyAll}
-          aria-label={t('terminal.copyAll')}
-          title={t('terminal.copyAll')}
-          className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-        >
-          <ClipboardCopy className="h-3.5 w-3.5" />
-        </button>
-      </div>
 
       {/* Fills the page's remaining height instead of a fixed vh slice -- the
           FitAddon + ResizeObserver below re-fit whenever this box resizes. */}

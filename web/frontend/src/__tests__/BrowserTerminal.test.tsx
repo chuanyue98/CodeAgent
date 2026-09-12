@@ -261,36 +261,6 @@ test('a torn-down socket cannot post its close over a live terminal', () => {
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
 });
 
-test('clear wipes the buffer and puts the caret back in the shell', () => {
-  open();
-
-  fireEvent.click(screen.getByRole('button', { name: 'Clear the terminal' }));
-
-  expect(terminals[0].cleared).toBe(1);
-  expect(terminals[0].focused).toBeGreaterThan(0);
-});
-
-test('copy hands the whole scrollback to the clipboard', async () => {
-  const writeText = vi.fn().mockResolvedValue(undefined);
-  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-  open();
-
-  fireEvent.click(screen.getByRole('button', { name: 'Copy everything on screen' }));
-
-  expect(writeText).toHaveBeenCalledWith('scrollback text');
-});
-
-test('a denied clipboard is the user’s answer, not a banner over the terminal', async () => {
-  const writeText = vi.fn().mockRejectedValue(new Error('denied'));
-  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-  open();
-
-  fireEvent.click(screen.getByRole('button', { name: 'Copy everything on screen' }));
-  await act(async () => {});
-
-  expect(screen.queryByRole('status')).not.toBeInTheDocument();
-});
-
 test('unmounting closes the socket and disposes the terminal', () => {
   const { unmount } = open();
 
