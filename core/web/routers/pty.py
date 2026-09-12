@@ -971,6 +971,16 @@ async def pty_websocket(
             if exit_wait_task in done or (
                 engine_watch_task is not None and engine_watch_task in done
             ):
+                # watch_engine_gone 先于 pump_exit 结束时（pane-died hook 偶尔
+                # detach 不中，靠 2s 轮询兜底），pump_exit 才刚拿到 returncode，
+                # 还在等输出排空——它最多再花 2s 才会发 exit。这里若直接进清理，
+                # 清理会 cancel exit_task，浏览器永远收不到退出码，只能把一个
+                # 正常结束读成"连接断开"。等它落地，超时兜底防止真的挂住。
+                if not process_exited.is_set():
+                    with contextlib.suppress(TimeoutError):
+                        await asyncio.wait_for(
+                            asyncio.shield(exit_wait_task), timeout=5
+                        )
                 receive_task.cancel()
                 with contextlib.suppress(Exception, asyncio.CancelledError):
                     await receive_task
