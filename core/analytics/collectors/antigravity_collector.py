@@ -7,6 +7,10 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from core.analytics.models import RawUsageEntry
+from core.session_history.parsers.antigravity_parser import (
+    extract_parent_recipient,
+    extract_subagent_spawns,
+)
 from core.session_history.paths import strip_extended_length_prefix
 from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_dirs, long_path
@@ -87,6 +91,7 @@ def _parse_transcript(
     since_timestamp: str = "",
     parent_session_id: str = "",
     agent: str = "",
+    lineage_out: dict[str, tuple[str, str]] | None = None,
 ) -> list[RawUsageEntry]:
     """Parses an Antigravity transcript file into raw usage entries."""
     if not path_exists(path):
@@ -94,6 +99,7 @@ def _parse_transcript(
 
     entries: list[RawUsageEntry] = []
     inferred_path = project_path
+    raw_rows: list[dict] = []
     try:
         with open(long_path(path), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -107,6 +113,7 @@ def _parse_transcript(
 
                 if not isinstance(row, dict):
                     continue
+                raw_rows.append(row)
 
                 tool_calls = row.get("tool_calls") or []
                 if not inferred_path:
@@ -190,6 +197,18 @@ def _parse_transcript(
                         agent=agent,
                     )
                 )
+
+        if lineage_out is not None and raw_rows:
+            spawns = extract_subagent_spawns(raw_rows)
+            for cid, role in spawns.items():
+                lineage_out[cid] = (session_id, role)
+
+        if not parent_session_id and raw_rows:
+            inferred_parent = extract_parent_recipient(raw_rows)
+            if inferred_parent:
+                for e in entries:
+                    e.parent_session_id = inferred_parent
+
         # Update any earlier entries if inferred_path was found later
         if inferred_path and not project_path:
             for e in entries:
@@ -222,6 +241,7 @@ def scan_antigravity_usage(
 
     entries: list[RawUsageEntry] = []
     seen_sessions: set[str] = set()
+    lineage: dict[str, tuple[str, str]] = {}
 
     # 1. From conversation_summaries.db
     if path_exists(db_path):
@@ -279,6 +299,7 @@ def scan_antigravity_usage(
                         since_timestamp,
                         parent_id,
                         agent,
+                        lineage_out=lineage,
                     )
                     if file_entries:
                         entries.extend(file_entries)
@@ -325,8 +346,17 @@ def scan_antigravity_usage(
                 "",
                 model,
                 since_timestamp,
+                lineage_out=lineage,
             )
             entries.extend(file_entries)
+
+    # Apply lineage: link child entries to their parent session
+    for e in entries:
+        if not e.parent_session_id and e.session_id in lineage:
+            parent_id, role = lineage[e.session_id]
+            e.parent_session_id = parent_id
+            if not e.agent and role:
+                e.agent = role
 
     # Inherit project_path for subagents or sessions that share a parent
     session_to_project: dict[str, str] = {

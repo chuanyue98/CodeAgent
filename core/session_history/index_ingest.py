@@ -133,6 +133,7 @@ class SessionIndexer:
         if self._index.closed:
             return
         self._apply_codex_lineage()
+        self._apply_antigravity_lineage()
         self._inherit_parent_projects()
         self._reconcile_subagent_titles()
         self._index.delete_orphan_sessions()
@@ -232,6 +233,30 @@ class SessionIndexer:
             self._index.set_session_parent(
                 session_key("codex", session_id), parent, agent
             )
+
+    def _apply_antigravity_lineage(self) -> None:
+        """antigravity 的子代理在物理目录上平铺，从父会话的 subagent_titles 恢复父子关系。"""
+        with self._index._lock:
+            rows = self._index._connection.execute(
+                "SELECT session_id, subagent_titles_json FROM sessions "
+                "WHERE engine = 'antigravity' AND subagent_titles_json != '{}' "
+                "AND subagent_titles_json != ''"
+            ).fetchall()
+        for r in rows:
+            parent_id = str(r["session_id"])
+            try:
+                titles = json.loads(str(r["subagent_titles_json"]))
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(titles, dict):
+                continue
+            for child_id, role in titles.items():
+                if not child_id or child_id == parent_id:
+                    continue
+                child_key = session_key("antigravity", child_id)
+                self._index.set_session_parent(child_key, parent_id, role)
+                if role:
+                    self._index.set_session_title(child_key, role)
 
     def _inherit_parent_projects(self) -> None:
         """antigravity 的子会话项目路径常为空，从父继承（父可能后到，跑两轮）。"""

@@ -34,7 +34,8 @@ logger = get_logger(__name__)
 #   3: CodeBuddy's subagent transcripts, and Codex's thread spawn edges.
 #   4: Antigravity session history and transcripts.
 #   5: Antigravity project_path inference from Cwd and user_information.
-BACKFILL_VERSION = 5
+#   6: Antigravity subagent lineage and parent_session_id resolution.
+BACKFILL_VERSION = 6
 
 
 def _collect_all() -> list[RawUsageEntry]:

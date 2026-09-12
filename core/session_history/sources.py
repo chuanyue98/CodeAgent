@@ -17,7 +17,12 @@ from pathlib import Path
 
 from core.session_history.index_store import SourceRef
 from core.session_history.parsers._subagents import subagent_files
-from core.session_history.parsers.antigravity_parser import parse_antigravity_session
+from core.session_history.parsers.antigravity_parser import (
+    antigravity_lineage as _antigravity_lineage,
+)
+from core.session_history.parsers.antigravity_parser import (
+    parse_antigravity_session,
+)
 from core.session_history.parsers.claude_parser import parse_claude_session
 from core.session_history.parsers.codebuddy_parser import parse_codebuddy_session
 from core.session_history.parsers.codex_parser import (
@@ -238,6 +243,11 @@ def codex_lineage(home: Path | None = None) -> dict[str, tuple[str, str]]:
 def codex_lineage_version(home: Path | None = None) -> str:
     base = (home or Path.home()) / ".codex"
     return file_version(base / "state_5.sqlite") or "absent"
+
+
+def antigravity_lineage(home: Path | None = None) -> dict[str, tuple[str, str]]:
+    """``child id -> (parent, agent)``；无子代理时为空。"""
+    return _antigravity_lineage(home)
 
 
 def enumerate_all_sources(home: Path | None = None) -> Iterator[SourceRef]:

@@ -513,3 +513,166 @@ def test_antigravity_model_extraction_from_transcript(tmp_path: Path):
     assert session is not None
     assert session.model == "gemini-3.8-flash"
     assert session.messages[1].model == "gemini-3.8-flash"
+
+
+def test_antigravity_subagent_lineage_and_parent_session(tmp_path: Path):
+    """Verifies that subagents spawned via invoke_subagent are correctly linked to parent."""
+    from core.analytics.collectors.antigravity_collector import scan_antigravity_usage
+    from core.session_history.parsers.antigravity_parser import antigravity_lineage
+
+    cli_dir = tmp_path / ".gemini" / "antigravity-cli"
+    parent_id = "parent-uuid-1"
+    child1_id = "child-uuid-1"
+    child2_id = "child-uuid-2"
+    project_path = "/workspace/myproject"
+
+    # 1. Create parent session
+    p_log = cli_dir / "brain" / parent_id / ".system_generated" / "logs"
+    p_log.mkdir(parents=True, exist_ok=True)
+    p_transcript = p_log / "transcript.jsonl"
+    p_lines = [
+        json.dumps({
+            "step_index": 1,
+            "source": "USER_EXPLICIT",
+            "type": "USER_INPUT",
+            "status": "DONE",
+            "created_at": "2026-09-12T01:00:00Z",
+            "content": f"<USER_REQUEST>\n开始重构\n{project_path} -> myproject\n</USER_REQUEST>",
+        }),
+        json.dumps({
+            "step_index": 2,
+            "source": "MODEL",
+            "type": "PLANNER_RESPONSE",
+            "status": "DONE",
+            "created_at": "2026-09-12T01:01:00Z",
+            "content": "Dispatching subagents",
+            "tool_calls": [
+                {
+                    "name": "invoke_subagent",
+                    "args": {
+                        "Subagents": [
+                            {
+                                "Model": "flash",
+                                "Role": "Reviewer Subagent",
+                                "Prompt": "You are reviewing Task 1 implementation.",
+                            },
+                            {
+                                "Model": "flash",
+                                "Prompt": "You are implementing Task 2 of the implementation plan.",
+                            },
+                        ],
+                        "toolAction": "Dispatch Task 2 Implementer",
+                    },
+                }
+            ],
+        }),
+        json.dumps({
+            "step_index": 3,
+            "source": "MODEL",
+            "type": "INVOKE_SUBAGENT",
+            "status": "DONE",
+            "created_at": "2026-09-12T01:01:05Z",
+            "content": (
+                "Created the following subagents:\n"
+                f'{{\n  "conversationId": "{child1_id}"\n}}\n'
+                f'{{\n  "conversationId": "{child2_id}"\n}}'
+            ),
+        }),
+    ]
+    p_transcript.write_text("\n".join(p_lines) + "\n", encoding="utf-8")
+
+    # 2. Create child 1 session (has send_message back to parent)
+    c1_log = cli_dir / "brain" / child1_id / ".system_generated" / "logs"
+    c1_log.mkdir(parents=True, exist_ok=True)
+    c1_transcript = c1_log / "transcript.jsonl"
+    c1_lines = [
+        json.dumps({
+            "step_index": 1,
+            "source": "USER_EXPLICIT",
+            "type": "USER_INPUT",
+            "status": "DONE",
+            "created_at": "2026-09-12T01:01:10Z",
+            "content": "<USER_REQUEST>You are reviewing Task 1 implementation.</USER_REQUEST>",
+        }),
+        json.dumps({
+            "step_index": 2,
+            "source": "MODEL",
+            "type": "PLANNER_RESPONSE",
+            "status": "DONE",
+            "created_at": "2026-09-12T01:02:00Z",
+            "content": "Review complete.",
+            "tool_calls": [
+                {
+                    "name": "send_message",
+                    "args": {
+                        "Recipient": parent_id,
+                        "Message": "All checks passed.",
+                    },
+                }
+            ],
+        }),
+    ]
+    c1_transcript.write_text("\n".join(c1_lines) + "\n", encoding="utf-8")
+
+    # 3. Create child 2 session (no send_message)
+    c2_log = cli_dir / "brain" / child2_id / ".system_generated" / "logs"
+    c2_log.mkdir(parents=True, exist_ok=True)
+    c2_transcript = c2_log / "transcript.jsonl"
+    c2_lines = [
+        json.dumps({
+            "step_index": 1,
+            "source": "USER_EXPLICIT",
+            "type": "USER_INPUT",
+            "status": "DONE",
+            "created_at": "2026-09-12T01:01:15Z",
+            "content": "<USER_REQUEST>You are implementing Task 2 of the implementation plan.</USER_REQUEST>",
+        }),
+        json.dumps({
+            "step_index": 2,
+            "source": "MODEL",
+            "type": "PLANNER_RESPONSE",
+            "status": "DONE",
+            "created_at": "2026-09-12T01:03:00Z",
+            "content": "Implementation complete.",
+            "tool_calls": [],
+        }),
+    ]
+    c2_transcript.write_text("\n".join(c2_lines) + "\n", encoding="utf-8")
+
+    # Test antigravity_lineage
+    lineage = antigravity_lineage(home=tmp_path)
+    assert child1_id in lineage
+    assert lineage[child1_id] == (parent_id, "Reviewer Subagent")
+    assert child2_id in lineage
+    assert lineage[child2_id] == (parent_id, "Dispatch Task 2 Implementer")
+
+    # Test find_antigravity_sessions
+    sessions = find_antigravity_sessions(home=tmp_path)
+    assert len(sessions) == 3
+    by_id = {s.session_id: s for s in sessions}
+
+    c1 = by_id[child1_id]
+    assert c1.parent_session_id == parent_id
+    assert c1.agent == "Reviewer Subagent"
+    assert c1.title == "Reviewer Subagent"
+    assert c1.project_path == project_path
+
+    c2 = by_id[child2_id]
+    assert c2.parent_session_id == parent_id
+    assert c2.agent == "Dispatch Task 2 Implementer"
+    assert c2.title == "Dispatch Task 2 Implementer"
+    assert c2.project_path == project_path
+
+    # Test scan_antigravity_usage
+    usage_entries = scan_antigravity_usage(home=tmp_path)
+    c1_usage = [e for e in usage_entries if e.session_id == child1_id]
+    assert len(c1_usage) > 0
+    assert c1_usage[0].parent_session_id == parent_id
+    assert c1_usage[0].agent == "Reviewer Subagent"
+    assert c1_usage[0].project_path == project_path
+
+    c2_usage = [e for e in usage_entries if e.session_id == child2_id]
+    assert len(c2_usage) > 0
+    assert c2_usage[0].parent_session_id == parent_id
+    assert c2_usage[0].agent == "Dispatch Task 2 Implementer"
+    assert c2_usage[0].project_path == project_path

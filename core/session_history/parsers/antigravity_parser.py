@@ -252,6 +252,133 @@ def _extract_user_content(content: str) -> str:
     return content.strip()
 
 
+def extract_subagent_spawns(raw_rows: list[dict]) -> dict[str, str]:
+    """从 transcript 行中提取由 invoke_subagent / manage_subagents 派生的子代理映射。
+
+    Returns:
+        dict[str, str]: child_conversation_id -> role_or_title
+    """
+    subagent_titles: dict[str, str] = {}
+    for row in raw_rows:
+        for tc in row.get("tool_calls") or []:
+            if not isinstance(tc, dict):
+                continue
+            tc_name = tc.get("name")
+            if tc_name == "invoke_subagent":
+                args = tc.get("args") or {}
+                subs = args.get("Subagents")
+                if isinstance(subs, str):
+                    try:
+                        subs = json.loads(subs)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                summary = str(
+                    args.get("toolSummary") or args.get("toolAction") or ""
+                ).strip("\"' ")
+                curr_step = row.get("step_index", 0)
+                for r2 in raw_rows:
+                    if r2.get("step_index", 0) > curr_step:
+                        c2 = r2.get("content") or ""
+                        if "conversationId" in c2:
+                            cids = re.findall(r'"conversationId":\s*"([^"]+)"', c2)
+                            for idx, cid in enumerate(cids):
+                                role = ""
+                                if (
+                                    isinstance(subs, list)
+                                    and idx < len(subs)
+                                    and isinstance(subs[idx], dict)
+                                ):
+                                    role = (
+                                        subs[idx].get("Role")
+                                        or subs[idx].get("TypeName")
+                                        or ""
+                                    )
+                                    if not role and summary:
+                                        role = summary
+                                    if not role:
+                                        prompt = subs[idx].get("Prompt") or ""
+                                        for line_text in prompt.splitlines():
+                                            cleaned = line_text.strip("#*- \t")
+                                            if cleaned:
+                                                role = cleaned[:60]
+                                                break
+                                subagent_titles[cid] = role or summary or "Subagent"
+                            break
+            elif tc_name == "manage_subagents":
+                curr_step = row.get("step_index", 0)
+                for r2 in raw_rows:
+                    if r2.get("step_index", 0) > curr_step:
+                        c2 = r2.get("content") or ""
+                        if "conversationId" in c2:
+                            m = re.search(r"\[\s*\{.*\}\s*\]", c2, re.DOTALL)
+                            if m:
+                                try:
+                                    items = json.loads(m.group(0))
+                                    if isinstance(items, list):
+                                        for item in items:
+                                            if (
+                                                isinstance(item, dict)
+                                                and item.get("conversationId")
+                                            ):
+                                                cid = str(item["conversationId"])
+                                                r_title = (
+                                                    item.get("role")
+                                                    or item.get("type")
+                                                    or "Subagent"
+                                                )
+                                                subagent_titles[cid] = str(r_title)
+                                except Exception:
+                                    pass
+                        break
+    return subagent_titles
+
+
+def extract_parent_recipient(raw_rows: list[dict]) -> str:
+    """如果该会话是子代理且向父会话发送过消息，提取父会话的 conversationId。"""
+    for row in raw_rows:
+        for tc in row.get("tool_calls") or []:
+            if isinstance(tc, dict) and tc.get("name") == "send_message":
+                args = tc.get("args") or {}
+                recipient = str(args.get("Recipient") or "").strip("\"' ")
+                if recipient and len(recipient) == 36 and "-" in recipient:
+                    return recipient
+    return ""
+
+
+def antigravity_lineage(home: Path | None = None) -> dict[str, tuple[str, str]]:
+    """child_id -> (parent_id, role) mapping for Antigravity sessions."""
+    base = (home or Path.home()) / ".gemini" / "antigravity-cli"
+    brain_dir = base / "brain"
+    if not brain_dir.is_dir():
+        return {}
+    lineage: dict[str, tuple[str, str]] = {}
+    for sess_dir in list_dirs(brain_dir):
+        session_id = sess_dir.name
+        transcript_file = sess_dir / ".system_generated" / "logs" / "transcript.jsonl"
+        if not transcript_file.is_file():
+            transcript_file = sess_dir / "transcript.jsonl"
+        if not transcript_file.is_file():
+            continue
+        try:
+            with open(
+                long_path(transcript_file), encoding="utf-8", errors="replace"
+            ) as f:
+                raw_rows = []
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            raw_rows.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
+                spawns = extract_subagent_spawns(raw_rows)
+                for child_id, role in spawns.items():
+                    lineage[child_id] = (session_id, role)
+        except OSError:
+            continue
+    return lineage
+
+
 @cached_file_parser
 def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
     """Parses an Antigravity transcript.jsonl file into a UnifiedSession.
@@ -343,32 +470,6 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
                         if inferred_project_path:
                             break
 
-        # 2. Collect subagent titles from invoke_subagent tool calls
-        for tc in row.get("tool_calls") or []:
-            if isinstance(tc, dict) and tc.get("name") == "invoke_subagent":
-                args = tc.get("args") or {}
-                subs = args.get("Subagents")
-                if isinstance(subs, str):
-                    try:
-                        subs = json.loads(subs)
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-                if isinstance(subs, list):
-                    curr_step = row.get("step_index", 0)
-                    for r2 in raw_rows:
-                        if r2.get("step_index", 0) > curr_step:
-                            c2 = r2.get("content") or ""
-                            if "conversationId" in c2:
-                                cids = re.findall(r'"conversationId":\s*"([^"]+)"', c2)
-                                for idx, cid in enumerate(cids):
-                                    if idx < len(subs) and isinstance(subs[idx], dict):
-                                        role = subs[idx].get("Role") or subs[idx].get(
-                                            "TypeName"
-                                        )
-                                        if role:
-                                            subagent_titles[cid] = role
-                                break
-
         # 3. Extract model information if present
         if not model:
             raw_model = row.get("model") or row.get("modelTier")
@@ -435,8 +536,14 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
         if msg.role == "assistant" and not msg.model:
             msg.model = model
 
+    subagent_titles = extract_subagent_spawns(raw_rows)
+    inferred_parent_id = extract_parent_recipient(raw_rows)
+    parent_session_id = meta.get("parent_session_id", "") or inferred_parent_id
+
     resolved_project_path = meta.get("project_path", "") or inferred_project_path
-    resolved_title = meta.get("title", "") or computed_title
+    resolved_title = meta.get("title", "")
+    if not resolved_title and not parent_session_id:
+        resolved_title = computed_title
 
     return UnifiedSession(
         session_id=session_id,
@@ -448,7 +555,7 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
         title=resolved_title,
         model=model,
         source_file=str(file_path),
-        parent_session_id=meta.get("parent_session_id", ""),
+        parent_session_id=parent_session_id,
         agent=meta.get("agent", ""),
         subagent_titles=subagent_titles,
     )
@@ -552,8 +659,23 @@ def find_antigravity_sessions(
             sessions.append(session)
             seen_ids.add(sess_id)
 
-    # Inherit project path from parent session when subagent project path is empty
+    # Link parent and child sessions using subagent_titles discovered in parent sessions
     by_id = {s.session_id: s for s in sessions}
+    for parent in sessions:
+        for child_id, role in parent.subagent_titles.items():
+            child = by_id.get(child_id)
+            if child:
+                if not child.parent_session_id:
+                    child.parent_session_id = parent.session_id
+                if not child.agent and role:
+                    child.agent = role
+                if role and (
+                    not child.title
+                    or child.title == _clean_title(child.first_user_message)
+                ):
+                    child.title = role
+
+    # Inherit project path from parent session when subagent project path is empty
     for s in sessions:
         if not s.project_path and s.parent_session_id:
             parent = by_id.get(s.parent_session_id)

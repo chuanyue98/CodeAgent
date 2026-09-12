@@ -283,3 +283,95 @@ def test_since_and_until_are_pushed_down(store_and_indexer, home_path):
     assert {e["timestamp"] for e in since} == {"2026-07-11T12:00:00.000Z"}
     until = store.audit_events(until=boundary, limit=100)
     assert {e["timestamp"] for e in until} == {"2026-07-11T10:00:00.000Z"}
+
+
+def test_antigravity_subagent_lineage_ingest(store_and_indexer, home_path):
+    """Antigravity 子代理在索引摄取后能正确归属父会话并隐藏在顶层列表。"""
+    store, indexer = store_and_indexer
+    cli_dir = home_path / ".gemini" / "antigravity-cli"
+
+    # Parent
+    p_log = cli_dir / "brain" / "parent-1" / ".system_generated" / "logs"
+    p_log.mkdir(parents=True, exist_ok=True)
+    p_lines = [
+        json.dumps({
+            "step_index": 1,
+            "source": "USER_EXPLICIT",
+            "type": "USER_INPUT",
+            "status": "DONE",
+            "created_at": "2026-09-12T01:00:00Z",
+            "content": "<USER_REQUEST>\n主任务执行\n/workspace/demo -> demo\n</USER_REQUEST>",
+        }),
+        json.dumps({
+            "step_index": 2,
+            "source": "MODEL",
+            "type": "PLANNER_RESPONSE",
+            "status": "DONE",
+            "created_at": "2026-09-12T01:01:00Z",
+            "tool_calls": [
+                {
+                    "name": "invoke_subagent",
+                    "args": {
+                        "Subagents": [
+                            {
+                                "Model": "flash",
+                                "Role": "Task 1 Reviewer",
+                                "Prompt": "Review task 1",
+                            }
+                        ],
+                    },
+                }
+            ],
+        }),
+        json.dumps({
+            "step_index": 3,
+            "source": "MODEL",
+            "type": "INVOKE_SUBAGENT",
+            "status": "DONE",
+            "created_at": "2026-09-12T01:01:05Z",
+            "content": 'Created the following subagents:\n{\n  "conversationId": "child-1"\n}',
+        }),
+    ]
+    (p_log / "transcript.jsonl").write_text("\n".join(p_lines) + "\n", encoding="utf-8")
+
+    # Child
+    c_log = cli_dir / "brain" / "child-1" / ".system_generated" / "logs"
+    c_log.mkdir(parents=True, exist_ok=True)
+    c_lines = [
+        json.dumps({
+            "step_index": 1,
+            "source": "USER_EXPLICIT",
+            "type": "USER_INPUT",
+            "status": "DONE",
+            "created_at": "2026-09-12T01:01:10Z",
+            "content": "<USER_REQUEST>Review task 1</USER_REQUEST>",
+        }),
+        json.dumps({
+            "step_index": 2,
+            "source": "MODEL",
+            "type": "PLANNER_RESPONSE",
+            "status": "DONE",
+            "created_at": "2026-09-12T01:02:00Z",
+            "content": "Done review.",
+            "tool_calls": [],
+        }),
+    ]
+    (c_log / "transcript.jsonl").write_text("\n".join(c_lines) + "\n", encoding="utf-8")
+
+    indexer.sync()
+
+    # Without subagents: only parent
+    top_summaries = store.list_summaries(include_subagents=False)
+    assert len(top_summaries) == 1
+    assert top_summaries[0].session_id == "parent-1"
+
+    # With subagents: both parent and child
+    all_summaries = store.list_summaries(include_subagents=True)
+    assert len(all_summaries) == 2
+    by_id = {s.session_id: s for s in all_summaries}
+
+    c = by_id["child-1"]
+    assert c.parent_session_id == "parent-1"
+    assert c.agent == "Task 1 Reviewer"
+    assert c.title == "Task 1 Reviewer"
+    assert c.project_path == "/workspace/demo"
