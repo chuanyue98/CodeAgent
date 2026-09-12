@@ -316,9 +316,8 @@ def extract_subagent_spawns(raw_rows: list[dict]) -> dict[str, str]:
                                     items = json.loads(m.group(0))
                                     if isinstance(items, list):
                                         for item in items:
-                                            if (
-                                                isinstance(item, dict)
-                                                and item.get("conversationId")
+                                            if isinstance(item, dict) and item.get(
+                                                "conversationId"
                                             ):
                                                 cid = str(item["conversationId"])
                                                 r_title = (
@@ -678,9 +677,9 @@ def find_antigravity_sessions(
     # Inherit project path from parent session when subagent project path is empty
     for s in sessions:
         if not s.project_path and s.parent_session_id:
-            parent = by_id.get(s.parent_session_id)
-            if parent and parent.project_path:
-                s.project_path = parent.project_path
+            parent_session = by_id.get(s.parent_session_id)
+            if parent_session and parent_session.project_path:
+                s.project_path = parent_session.project_path
 
     # Apply subagent titles from parent sessions
     title_subagent_runs(sessions)

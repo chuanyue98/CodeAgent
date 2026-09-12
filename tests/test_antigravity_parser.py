@@ -531,53 +531,59 @@ def test_antigravity_subagent_lineage_and_parent_session(tmp_path: Path):
     p_log.mkdir(parents=True, exist_ok=True)
     p_transcript = p_log / "transcript.jsonl"
     p_lines = [
-        json.dumps({
-            "step_index": 1,
-            "source": "USER_EXPLICIT",
-            "type": "USER_INPUT",
-            "status": "DONE",
-            "created_at": "2026-09-12T01:00:00Z",
-            "content": f"<USER_REQUEST>\n开始重构\n{project_path} -> myproject\n</USER_REQUEST>",
-        }),
-        json.dumps({
-            "step_index": 2,
-            "source": "MODEL",
-            "type": "PLANNER_RESPONSE",
-            "status": "DONE",
-            "created_at": "2026-09-12T01:01:00Z",
-            "content": "Dispatching subagents",
-            "tool_calls": [
-                {
-                    "name": "invoke_subagent",
-                    "args": {
-                        "Subagents": [
-                            {
-                                "Model": "flash",
-                                "Role": "Reviewer Subagent",
-                                "Prompt": "You are reviewing Task 1 implementation.",
-                            },
-                            {
-                                "Model": "flash",
-                                "Prompt": "You are implementing Task 2 of the implementation plan.",
-                            },
-                        ],
-                        "toolAction": "Dispatch Task 2 Implementer",
-                    },
-                }
-            ],
-        }),
-        json.dumps({
-            "step_index": 3,
-            "source": "MODEL",
-            "type": "INVOKE_SUBAGENT",
-            "status": "DONE",
-            "created_at": "2026-09-12T01:01:05Z",
-            "content": (
-                "Created the following subagents:\n"
-                f'{{\n  "conversationId": "{child1_id}"\n}}\n'
-                f'{{\n  "conversationId": "{child2_id}"\n}}'
-            ),
-        }),
+        json.dumps(
+            {
+                "step_index": 1,
+                "source": "USER_EXPLICIT",
+                "type": "USER_INPUT",
+                "status": "DONE",
+                "created_at": "2026-09-12T01:00:00Z",
+                "content": f"<USER_REQUEST>\n开始重构\n{project_path} -> myproject\n</USER_REQUEST>",
+            }
+        ),
+        json.dumps(
+            {
+                "step_index": 2,
+                "source": "MODEL",
+                "type": "PLANNER_RESPONSE",
+                "status": "DONE",
+                "created_at": "2026-09-12T01:01:00Z",
+                "content": "Dispatching subagents",
+                "tool_calls": [
+                    {
+                        "name": "invoke_subagent",
+                        "args": {
+                            "Subagents": [
+                                {
+                                    "Model": "flash",
+                                    "Role": "Reviewer Subagent",
+                                    "Prompt": "You are reviewing Task 1 implementation.",
+                                },
+                                {
+                                    "Model": "flash",
+                                    "Prompt": "You are implementing Task 2 of the implementation plan.",
+                                },
+                            ],
+                            "toolAction": "Dispatch Task 2 Implementer",
+                        },
+                    }
+                ],
+            }
+        ),
+        json.dumps(
+            {
+                "step_index": 3,
+                "source": "MODEL",
+                "type": "INVOKE_SUBAGENT",
+                "status": "DONE",
+                "created_at": "2026-09-12T01:01:05Z",
+                "content": (
+                    "Created the following subagents:\n"
+                    f'{{\n  "conversationId": "{child1_id}"\n}}\n'
+                    f'{{\n  "conversationId": "{child2_id}"\n}}'
+                ),
+            }
+        ),
     ]
     p_transcript.write_text("\n".join(p_lines) + "\n", encoding="utf-8")
 
@@ -586,31 +592,35 @@ def test_antigravity_subagent_lineage_and_parent_session(tmp_path: Path):
     c1_log.mkdir(parents=True, exist_ok=True)
     c1_transcript = c1_log / "transcript.jsonl"
     c1_lines = [
-        json.dumps({
-            "step_index": 1,
-            "source": "USER_EXPLICIT",
-            "type": "USER_INPUT",
-            "status": "DONE",
-            "created_at": "2026-09-12T01:01:10Z",
-            "content": "<USER_REQUEST>You are reviewing Task 1 implementation.</USER_REQUEST>",
-        }),
-        json.dumps({
-            "step_index": 2,
-            "source": "MODEL",
-            "type": "PLANNER_RESPONSE",
-            "status": "DONE",
-            "created_at": "2026-09-12T01:02:00Z",
-            "content": "Review complete.",
-            "tool_calls": [
-                {
-                    "name": "send_message",
-                    "args": {
-                        "Recipient": parent_id,
-                        "Message": "All checks passed.",
-                    },
-                }
-            ],
-        }),
+        json.dumps(
+            {
+                "step_index": 1,
+                "source": "USER_EXPLICIT",
+                "type": "USER_INPUT",
+                "status": "DONE",
+                "created_at": "2026-09-12T01:01:10Z",
+                "content": "<USER_REQUEST>You are reviewing Task 1 implementation.</USER_REQUEST>",
+            }
+        ),
+        json.dumps(
+            {
+                "step_index": 2,
+                "source": "MODEL",
+                "type": "PLANNER_RESPONSE",
+                "status": "DONE",
+                "created_at": "2026-09-12T01:02:00Z",
+                "content": "Review complete.",
+                "tool_calls": [
+                    {
+                        "name": "send_message",
+                        "args": {
+                            "Recipient": parent_id,
+                            "Message": "All checks passed.",
+                        },
+                    }
+                ],
+            }
+        ),
     ]
     c1_transcript.write_text("\n".join(c1_lines) + "\n", encoding="utf-8")
 
@@ -619,23 +629,27 @@ def test_antigravity_subagent_lineage_and_parent_session(tmp_path: Path):
     c2_log.mkdir(parents=True, exist_ok=True)
     c2_transcript = c2_log / "transcript.jsonl"
     c2_lines = [
-        json.dumps({
-            "step_index": 1,
-            "source": "USER_EXPLICIT",
-            "type": "USER_INPUT",
-            "status": "DONE",
-            "created_at": "2026-09-12T01:01:15Z",
-            "content": "<USER_REQUEST>You are implementing Task 2 of the implementation plan.</USER_REQUEST>",
-        }),
-        json.dumps({
-            "step_index": 2,
-            "source": "MODEL",
-            "type": "PLANNER_RESPONSE",
-            "status": "DONE",
-            "created_at": "2026-09-12T01:03:00Z",
-            "content": "Implementation complete.",
-            "tool_calls": [],
-        }),
+        json.dumps(
+            {
+                "step_index": 1,
+                "source": "USER_EXPLICIT",
+                "type": "USER_INPUT",
+                "status": "DONE",
+                "created_at": "2026-09-12T01:01:15Z",
+                "content": "<USER_REQUEST>You are implementing Task 2 of the implementation plan.</USER_REQUEST>",
+            }
+        ),
+        json.dumps(
+            {
+                "step_index": 2,
+                "source": "MODEL",
+                "type": "PLANNER_RESPONSE",
+                "status": "DONE",
+                "created_at": "2026-09-12T01:03:00Z",
+                "content": "Implementation complete.",
+                "tool_calls": [],
+            }
+        ),
     ]
     c2_transcript.write_text("\n".join(c2_lines) + "\n", encoding="utf-8")
 

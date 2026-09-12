@@ -294,43 +294,49 @@ def test_antigravity_subagent_lineage_ingest(store_and_indexer, home_path):
     p_log = cli_dir / "brain" / "parent-1" / ".system_generated" / "logs"
     p_log.mkdir(parents=True, exist_ok=True)
     p_lines = [
-        json.dumps({
-            "step_index": 1,
-            "source": "USER_EXPLICIT",
-            "type": "USER_INPUT",
-            "status": "DONE",
-            "created_at": "2026-09-12T01:00:00Z",
-            "content": "<USER_REQUEST>\n主任务执行\n/workspace/demo -> demo\n</USER_REQUEST>",
-        }),
-        json.dumps({
-            "step_index": 2,
-            "source": "MODEL",
-            "type": "PLANNER_RESPONSE",
-            "status": "DONE",
-            "created_at": "2026-09-12T01:01:00Z",
-            "tool_calls": [
-                {
-                    "name": "invoke_subagent",
-                    "args": {
-                        "Subagents": [
-                            {
-                                "Model": "flash",
-                                "Role": "Task 1 Reviewer",
-                                "Prompt": "Review task 1",
-                            }
-                        ],
-                    },
-                }
-            ],
-        }),
-        json.dumps({
-            "step_index": 3,
-            "source": "MODEL",
-            "type": "INVOKE_SUBAGENT",
-            "status": "DONE",
-            "created_at": "2026-09-12T01:01:05Z",
-            "content": 'Created the following subagents:\n{\n  "conversationId": "child-1"\n}',
-        }),
+        json.dumps(
+            {
+                "step_index": 1,
+                "source": "USER_EXPLICIT",
+                "type": "USER_INPUT",
+                "status": "DONE",
+                "created_at": "2026-09-12T01:00:00Z",
+                "content": "<USER_REQUEST>\n主任务执行\n/workspace/demo -> demo\n</USER_REQUEST>",
+            }
+        ),
+        json.dumps(
+            {
+                "step_index": 2,
+                "source": "MODEL",
+                "type": "PLANNER_RESPONSE",
+                "status": "DONE",
+                "created_at": "2026-09-12T01:01:00Z",
+                "tool_calls": [
+                    {
+                        "name": "invoke_subagent",
+                        "args": {
+                            "Subagents": [
+                                {
+                                    "Model": "flash",
+                                    "Role": "Task 1 Reviewer",
+                                    "Prompt": "Review task 1",
+                                }
+                            ],
+                        },
+                    }
+                ],
+            }
+        ),
+        json.dumps(
+            {
+                "step_index": 3,
+                "source": "MODEL",
+                "type": "INVOKE_SUBAGENT",
+                "status": "DONE",
+                "created_at": "2026-09-12T01:01:05Z",
+                "content": 'Created the following subagents:\n{\n  "conversationId": "child-1"\n}',
+            }
+        ),
     ]
     (p_log / "transcript.jsonl").write_text("\n".join(p_lines) + "\n", encoding="utf-8")
 
@@ -338,23 +344,27 @@ def test_antigravity_subagent_lineage_ingest(store_and_indexer, home_path):
     c_log = cli_dir / "brain" / "child-1" / ".system_generated" / "logs"
     c_log.mkdir(parents=True, exist_ok=True)
     c_lines = [
-        json.dumps({
-            "step_index": 1,
-            "source": "USER_EXPLICIT",
-            "type": "USER_INPUT",
-            "status": "DONE",
-            "created_at": "2026-09-12T01:01:10Z",
-            "content": "<USER_REQUEST>Review task 1</USER_REQUEST>",
-        }),
-        json.dumps({
-            "step_index": 2,
-            "source": "MODEL",
-            "type": "PLANNER_RESPONSE",
-            "status": "DONE",
-            "created_at": "2026-09-12T01:02:00Z",
-            "content": "Done review.",
-            "tool_calls": [],
-        }),
+        json.dumps(
+            {
+                "step_index": 1,
+                "source": "USER_EXPLICIT",
+                "type": "USER_INPUT",
+                "status": "DONE",
+                "created_at": "2026-09-12T01:01:10Z",
+                "content": "<USER_REQUEST>Review task 1</USER_REQUEST>",
+            }
+        ),
+        json.dumps(
+            {
+                "step_index": 2,
+                "source": "MODEL",
+                "type": "PLANNER_RESPONSE",
+                "status": "DONE",
+                "created_at": "2026-09-12T01:02:00Z",
+                "content": "Done review.",
+                "tool_calls": [],
+            }
+        ),
     ]
     (c_log / "transcript.jsonl").write_text("\n".join(c_lines) + "\n", encoding="utf-8")
 
