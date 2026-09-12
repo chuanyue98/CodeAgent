@@ -55,6 +55,31 @@ test('closing a terminal returns to the engine picker', async ({ page }) => {
   await expect(engineCard(page, 'Codex')).toBeVisible();
 });
 
+// The counterpart to the test above: a terminal the *engine* ended must stay
+// on screen showing why, rather than be torn down like a user-closed one.
+// Closing it would take the exit code and the final screen with it, which is
+// exactly what the global terminal drawer used to do (onExit -> closeTab).
+//
+// Driven with the Plain Terminal engine on purpose: it is a real shell that
+// exits on `exit`, so this needs neither tmux nor a fake engine binary and
+// therefore runs on every platform the suite supports.
+test('an engine that exits keeps its terminal on screen with the exit code', async ({ page }) => {
+  await gotoLaunch(page);
+  await engineCard(page, 'Plain Terminal').click();
+  await expect(page.locator('.xterm')).toBeVisible();
+
+  // Let the shell settle before ending it from the inside.
+  await page.waitForTimeout(2_000);
+  await page.locator('.xterm').click();
+  await page.keyboard.type('exit');
+  await page.keyboard.press('Enter');
+
+  await expect(page.getByText(/Session ended \(exit code/)).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.locator('.xterm')).toBeVisible();
+});
+
 test('unavailable browser terminal is explained and launch actions are disabled', async ({ page }) => {
   await page.route('**/api/pty/status', route => route.fulfill({
     contentType: 'application/json',

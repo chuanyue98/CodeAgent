@@ -215,7 +215,10 @@ export default function GlobalTerminalDrawer() {
                 cwd={tab.cwd}
                 sessionId={tab.sessionId}
                 attachId={tab.attachId}
-                onExit={() => closeTab(tab.id)}
+                // 引擎自己退出时不关标签页：BrowserTerminal 会就地显示退出码
+                // 和"重新开始"，用户还看得见最后那屏输出。这里挂 closeTab 会
+                // 立刻卸载终端、退回引擎选择器，退出原因和尾屏一起消失。
+                // 关标签页是用户动作，归上面的关闭按钮管。
                 onTerminalEvent={(event) => {
                   if (event === 'rate_limit') {
                     markRateLimited(tab.id);
