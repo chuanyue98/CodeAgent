@@ -15,6 +15,9 @@ export interface TerminalContextValue {
   rateLimitedTabIds: Set<string>;
   isDrawerOpen: boolean;
   isMaximized: boolean;
+  fontSize: number;
+  copyOnSelect: boolean;
+  zenMode: boolean;
   openTab: (engine: string, cwd: string, sessionId?: string, attachId?: string) => void;
   closeTab: (id: string) => void;
   setActiveTabId: (id: string | null) => void;
@@ -22,6 +25,11 @@ export interface TerminalContextValue {
   openDrawer: () => void;
   closeDrawer: () => void;
   toggleMaximize: () => void;
+  increaseFontSize: () => void;
+  decreaseFontSize: () => void;
+  resetFontSize: () => void;
+  toggleCopyOnSelect: () => void;
+  toggleZenMode: () => void;
   markRateLimited: (tabId: string) => void;
   clearRateLimited: (tabId: string) => void;
 }
@@ -56,6 +64,24 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [rateLimitedTabIds, setRateLimitedTabIds] = useState<Set<string>>(new Set());
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [zenMode, setZenMode] = useState(false);
+  const [fontSize, setFontSize] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('codeagent.terminalFontSize');
+      const parsed = saved ? parseInt(saved, 10) : 13;
+      return Number.isFinite(parsed) && parsed >= 10 && parsed <= 24 ? parsed : 13;
+    } catch {
+      return 13;
+    }
+  });
+  const [copyOnSelect, setCopyOnSelect] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('codeagent.terminalCopyOnSelect');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
 
   useEffect(() => {
     localStorage.setItem('codeagent.terminalTabs', JSON.stringify(tabs));
@@ -68,6 +94,14 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
       localStorage.removeItem('codeagent.activeTabId');
     }
   }, [activeTabId]);
+
+  useEffect(() => {
+    localStorage.setItem('codeagent.terminalFontSize', String(fontSize));
+  }, [fontSize]);
+
+  useEffect(() => {
+    localStorage.setItem('codeagent.terminalCopyOnSelect', String(copyOnSelect));
+  }, [copyOnSelect]);
 
   const openTab = useCallback((engine: string, cwd: string, sessionId?: string, attachId?: string) => {
     const identity = attachId ?? sessionId;
@@ -112,6 +146,23 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
   const openDrawer = useCallback(() => setIsDrawerOpen(true), []);
   const closeDrawer = useCallback(() => setIsDrawerOpen(false), []);
   const toggleMaximize = useCallback(() => setIsMaximized(prev => !prev), []);
+  const toggleZenMode = useCallback(() => setZenMode(prev => !prev), []);
+
+  const increaseFontSize = useCallback(() => {
+    setFontSize(prev => Math.min(24, prev + 1));
+  }, []);
+
+  const decreaseFontSize = useCallback(() => {
+    setFontSize(prev => Math.max(10, prev - 1));
+  }, []);
+
+  const resetFontSize = useCallback(() => {
+    setFontSize(13);
+  }, []);
+
+  const toggleCopyOnSelect = useCallback(() => {
+    setCopyOnSelect(prev => !prev);
+  }, []);
 
   const markRateLimited = useCallback((tabId: string) => {
     setRateLimitedTabIds(prev => {
@@ -129,17 +180,26 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
     });
   }, []);
 
-  // Keyboard shortcut Ctrl+` or Cmd+`
+  // Keyboard shortcut Ctrl+` or Cmd+`, and font zoom shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === '`') {
         e.preventDefault();
         toggleDrawer();
+      } else if (isDrawerOpen && (e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        increaseFontSize();
+      } else if (isDrawerOpen && (e.ctrlKey || e.metaKey) && (e.key === '-' || e.key === '_')) {
+        e.preventDefault();
+        decreaseFontSize();
+      } else if (isDrawerOpen && (e.ctrlKey || e.metaKey) && e.key === '0') {
+        e.preventDefault();
+        resetFontSize();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleDrawer]);
+  }, [toggleDrawer, isDrawerOpen, increaseFontSize, decreaseFontSize, resetFontSize]);
 
   const value = {
     tabs,
@@ -147,6 +207,9 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
     rateLimitedTabIds,
     isDrawerOpen,
     isMaximized,
+    fontSize,
+    copyOnSelect,
+    zenMode,
     openTab,
     closeTab,
     setActiveTabId,
@@ -154,6 +217,11 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
     openDrawer,
     closeDrawer,
     toggleMaximize,
+    increaseFontSize,
+    decreaseFontSize,
+    resetFontSize,
+    toggleCopyOnSelect,
+    toggleZenMode,
     markRateLimited,
     clearRateLimited,
   };

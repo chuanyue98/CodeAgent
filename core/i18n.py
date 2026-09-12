@@ -246,6 +246,14 @@ MESSAGES: dict[str, dict[str, str]] = {
             "  pip install -e ."
         ),
     },
+    "ui.node_modules_installing": {
+        "en": "Frontend dependencies (node_modules) not found. Installing ...",
+        "zh": "未检测到前端依赖 (node_modules)，正在安装 ...",
+    },
+    "ui.node_modules_install_failed": {
+        "en": "Failed to install frontend dependencies: {error}",
+        "zh": "安装前端依赖失败: {error}",
+    },
     "ui.vite_starting": {
         "en": "Starting Vite dev server at http://{host}:{port} ...",
         "zh": "正在启动 Vite 开发服务器 http://{host}:{port} ...",

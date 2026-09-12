@@ -69,6 +69,18 @@ def _frontend_source_exists() -> bool:
 
 
 def _ui_dev_server_command() -> list[str] | None:
+    pnpm_cmd = shutil.which("pnpm.cmd" if sys.platform == "win32" else "pnpm")
+    if pnpm_cmd:
+        return [
+            pnpm_cmd,
+            "run",
+            "dev",
+            "--",
+            "--host",
+            UI_DEV_SERVER_HOST,
+            "--port",
+            str(UI_DEV_SERVER_PORT),
+        ]
     bun_cmd = shutil.which("bun")
     if bun_cmd:
         return [
@@ -115,11 +127,42 @@ def _start_ui_dev_server() -> bool:
     if not cmd:
         return False
     frontend_root = _frontend_root()
+
+    # If node_modules does not exist, run package manager install first
+    if not (frontend_root / "node_modules").is_dir():
+        print(t("ui.node_modules_installing"))
+        installer = cmd[0]
+        try:
+            install_proc = subprocess.run(
+                [installer, "install"],
+                cwd=str(frontend_root),
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if install_proc.returncode != 0:
+                print(
+                    t("ui.node_modules_install_failed", error=install_proc.stderr.strip())
+                )
+                return False
+        except Exception as exc:
+            print(t("ui.node_modules_install_failed", error=str(exc)))
+            return False
+
+    log_dir = _helpers._project_root() / ".ca_task_logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    dev_log = log_dir / "vite_dev.log"
+
+    try:
+        log_fh = dev_log.open("w", encoding="utf-8", errors="replace")
+    except OSError:
+        log_fh = None
+
     _ui_dev_process = subprocess.Popen(  # noqa: S603
         cmd,
         cwd=str(frontend_root),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log_fh if log_fh else subprocess.DEVNULL,
+        stderr=subprocess.STDOUT if log_fh else subprocess.DEVNULL,
         stdin=subprocess.DEVNULL,
         start_new_session=True,
         env=os.environ.copy(),
@@ -130,6 +173,20 @@ def _start_ui_dev_server() -> bool:
             return True
         time.sleep(0.25)
     _stop_ui_dev_server()
+
+    # On failure, read tail of log so the developer can diagnose what went wrong
+    try:
+        if dev_log.exists():
+            lines = dev_log.read_text(encoding="utf-8", errors="replace").strip().splitlines()
+            if lines:
+                print("\n" + "=" * 50)
+                print("Vite Dev Server Output:")
+                for line in lines[-12:]:
+                    print("  " + line)
+                print("=" * 50 + "\n")
+    except Exception:
+        pass
+
     return False
 
 
@@ -140,9 +197,16 @@ def _stop_ui_dev_server() -> None:
     if process is None or process.poll() is not None:
         return
     try:
-        process.terminate()
-        process.wait(timeout=2)
-    except (OSError, subprocess.TimeoutExpired):
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                capture_output=True,
+                timeout=3,
+            )
+        else:
+            process.terminate()
+            process.wait(timeout=2)
+    except (OSError, subprocess.SubprocessError):
         try:
             process.kill()
         except OSError:

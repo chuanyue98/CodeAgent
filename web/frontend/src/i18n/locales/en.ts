@@ -653,6 +653,18 @@ export const en = {
   'terminal.startNew': 'Start new',
   'terminal.startNewHint':
     'Starts a fresh terminal session. The previous one has ended — its scrollback is not restored.',
+  'terminal.zoomIn': 'Zoom in (Ctrl++)',
+  'terminal.zoomOut': 'Zoom out (Ctrl+-)',
+  'terminal.resetZoom': 'Reset font size (Ctrl+0)',
+  'terminal.copyOnSelect': 'Copy on select',
+  'terminal.copyOnSelectEnabled': 'Copy on select enabled',
+  'terminal.copyOnSelectDisabled': 'Copy on select disabled',
+  'terminal.copiedToast': 'Selection copied to clipboard',
+  'terminal.zenMode': 'Zen / Fullscreen mode',
+  'terminal.zenModeExit': 'Exit Zen mode',
+  'terminal.shortcuts': 'Shortcuts guide',
+  'terminal.shortcutHelp':
+    'Shortcuts: Ctrl+` Toggle drawer · Ctrl+C (with selection) / Ctrl+Shift+C Copy · Ctrl+Shift+V Paste · Ctrl++/Ctrl+- Font zoom',
 
   // ── Logs ──────────────────────────────────────────────────────────────────
   'logs.loadFailed': 'Failed to load log files',

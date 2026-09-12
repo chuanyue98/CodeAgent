@@ -190,5 +190,74 @@ describe('GlobalTerminalDrawer', () => {
       projectPath: '/test',
     });
   });
+
+  it('can adjust font size via zoom controls', () => {
+    render(
+      <TerminalProvider>
+        <TestWrapper addTab>
+          <GlobalTerminalDrawer />
+        </TestWrapper>
+      </TerminalProvider>
+    );
+
+    const zoomInBtn = screen.getByTestId('terminal-zoom-in');
+    const zoomOutBtn = screen.getByTestId('terminal-zoom-out');
+    const fontBtn = screen.getByTestId('terminal-font-size-btn');
+
+    expect(fontBtn).toHaveTextContent('13px');
+
+    act(() => {
+      zoomInBtn.click();
+    });
+    expect(fontBtn).toHaveTextContent('14px');
+
+    act(() => {
+      zoomOutBtn.click();
+    });
+    expect(fontBtn).toHaveTextContent('13px');
+
+    // Zoom in twice then reset
+    act(() => {
+      zoomInBtn.click();
+      zoomInBtn.click();
+    });
+    expect(fontBtn).toHaveTextContent('15px');
+
+    act(() => {
+      fontBtn.click();
+    });
+    expect(fontBtn).toHaveTextContent('13px');
+  });
+
+  it('can toggle copy on select and zen mode', () => {
+    render(
+      <TerminalProvider>
+        <TestWrapper addTab>
+          <GlobalTerminalDrawer />
+        </TestWrapper>
+      </TerminalProvider>
+    );
+
+    const copyToggle = screen.getByTestId('copy-on-select-toggle');
+    expect(copyToggle).toBeInTheDocument();
+
+    act(() => {
+      copyToggle.click();
+    });
+
+    const zenToggle = screen.getByTestId('zen-mode-toggle');
+    const drawer = screen.getByTestId('drawer-expanded');
+    expect(drawer).not.toHaveClass('h-screen');
+
+    act(() => {
+      zenToggle.click();
+    });
+    expect(drawer).toHaveClass('h-screen');
+
+    act(() => {
+      zenToggle.click();
+    });
+    expect(drawer).not.toHaveClass('h-screen');
+  });
 });
 

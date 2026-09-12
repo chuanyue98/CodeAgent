@@ -18,6 +18,8 @@ export interface BrowserTerminalProps {
   sessionId?: string;
   /** Attach to a live browser terminal by its /api/pty/sessions id. */
   attachId?: string;
+  fontSize?: number;
+  copyOnSelect?: boolean;
   onExit?: (code: number | null) => void;
   onTerminalEvent?: (event: TerminalEventType, chunk: string) => void;
 }
@@ -56,12 +58,17 @@ export default function BrowserTerminal({
   cwd,
   sessionId,
   attachId,
+  fontSize = 13,
+  copyOnSelect = true,
   onExit,
   onTerminalEvent,
 }: BrowserTerminalProps) {
   const t = useT();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const [copiedToast, setCopiedToast] = useState(false);
   const [state, setState] = useState<ConnectionState>('connecting');
   const [message, setMessage] = useState<string | null>(null);
   // Bumping this tears the effect down and starts a fresh session. The PTY
@@ -110,6 +117,27 @@ export default function BrowserTerminal({
 
   const restart = useCallback(() => setAttempt(previous => previous + 1), []);
 
+  // Dynamic font size update without reconnecting socket
+  useEffect(() => {
+    if (termRef.current && fontSize) {
+      if (termRef.current.options && termRef.current.options.fontSize !== fontSize) {
+        termRef.current.options.fontSize = fontSize;
+      }
+      if (containerRef.current?.clientWidth && containerRef.current?.clientHeight) {
+        fitRef.current?.fit();
+        if (socketRef.current?.readyState === WebSocket.OPEN && termRef.current) {
+          socketRef.current.send(
+            JSON.stringify({
+              type: 'resize',
+              cols: termRef.current.cols,
+              rows: termRef.current.rows,
+            })
+          );
+        }
+      }
+    }
+  }, [fontSize]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -117,7 +145,7 @@ export default function BrowserTerminal({
     const term = new Terminal({
       cursorBlink: true,
       convertEol: true,
-      fontSize: 13,
+      fontSize: fontSize || 13,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
       theme: { background: '#0f172a' },
       screenReaderMode: true,
@@ -126,6 +154,7 @@ export default function BrowserTerminal({
     term.loadAddon(fit);
     term.open(container);
     termRef.current = term;
+    fitRef.current = fit;
 
     /** True when the fit actually happened; a hidden tab measures 0x0. */
     const fitIfVisible = (): boolean => {
@@ -150,6 +179,7 @@ export default function BrowserTerminal({
     // over a terminal that is connected and typing fine.
     let superseded = false;
     const socket = new WebSocket(ptyWebSocketUrl(engine, cwd, sessionId, attachId));
+    socketRef.current = socket;
 
     const handleVisibilityChange = () => {
       if (typeof document !== 'undefined' && !document.hidden) {
@@ -240,6 +270,79 @@ export default function BrowserTerminal({
       }
     });
 
+    let copyTimer: ReturnType<typeof setTimeout> | undefined;
+    let selectionDisposable = { dispose: () => {} };
+    if (typeof term.onSelectionChange === 'function') {
+      selectionDisposable = term.onSelectionChange(() => {
+        if (!copyOnSelect) return;
+        clearTimeout(copyTimer);
+        copyTimer = setTimeout(() => {
+          const sel = term.getSelection();
+          if (sel && sel.trim().length > 0) {
+            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+              void navigator.clipboard.writeText(sel).then(() => {
+                setCopiedToast(true);
+                setTimeout(() => setCopiedToast(false), 1500);
+              }).catch(() => {});
+            }
+          }
+        }, 250);
+      });
+    }
+
+    if (typeof term.attachCustomKeyEventHandler === 'function') {
+      term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      // 1. Ctrl+` bubbles to toggle terminal drawer
+      if ((e.ctrlKey || e.metaKey) && e.key === '`') {
+        return false;
+      }
+      // 2. Ctrl+C with text selected: copy text and avoid sending SIGINT \x03
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'c' || e.key === 'C')) {
+        if (term.hasSelection()) {
+          const sel = term.getSelection();
+          if (sel && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+            void navigator.clipboard.writeText(sel).then(() => {
+              setCopiedToast(true);
+              setTimeout(() => setCopiedToast(false), 1500);
+            }).catch(() => {});
+          }
+          term.clearSelection();
+          return false;
+        }
+        return true;
+      }
+      // 3. Ctrl+Shift+C: copy text
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'c' || e.key === 'C')) {
+        if (term.hasSelection()) {
+          const sel = term.getSelection();
+          if (sel && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+            void navigator.clipboard.writeText(sel).then(() => {
+              setCopiedToast(true);
+              setTimeout(() => setCopiedToast(false), 1500);
+            }).catch(() => {});
+          }
+          return false;
+        }
+      }
+      // 4. Ctrl+Shift+V: paste from clipboard
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'v' || e.key === 'V')) {
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.readText && socket.readyState === WebSocket.OPEN) {
+          void navigator.clipboard.readText().then((text) => {
+            if (text) {
+              socket.send(JSON.stringify({ type: 'input', data: text }));
+            }
+          }).catch(() => {});
+          return false;
+        }
+      }
+      // 5. Let Ctrl++/Ctrl+-/Ctrl+0 bubble to window for font zooming
+      if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '_' || e.key === '0')) {
+        return false;
+      }
+      return true;
+    });
+    }
+
     // A drag fires ResizeObserver on nearly every frame, and each callback
     // re-flowed the whole buffer and put a resize on the wire. Fit once the
     // drag settles instead.
@@ -263,22 +366,35 @@ export default function BrowserTerminal({
         window.removeEventListener('focus', handleWindowFocus);
       }
       superseded = true;
+      clearTimeout(copyTimer);
       clearTimeout(resizeTimer);
+      selectionDisposable.dispose();
       resizeObserver.disconnect();
       dataDisposable.dispose();
       socket.close();
+      fitRef.current = null;
+      socketRef.current = null;
       termRef.current = null;
       term.dispose();
     };
-  }, [engine, cwd, sessionId, attachId, attempt, restoreTitle, requestPermissionOnInteraction]);
+  }, [engine, cwd, sessionId, attachId, attempt, copyOnSelect, restoreTitle, requestPermissionOnInteraction]);
 
   const canRestart = state === 'closed' || state === 'error';
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col space-y-2"
+      className="relative flex h-full min-h-0 flex-col space-y-2"
       onClick={requestPermissionOnInteraction}
     >
+      {copiedToast && (
+        <div
+          data-testid="terminal-copied-toast"
+          className="pointer-events-none absolute right-4 top-3 z-30 flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-950/90 px-3 py-1.5 text-xs font-medium text-emerald-300 shadow-lg backdrop-blur"
+        >
+          <span>✓</span>
+          <span>{t('terminal.copiedToast')}</span>
+        </div>
+      )}
       {message && (
         <div
           role="status"

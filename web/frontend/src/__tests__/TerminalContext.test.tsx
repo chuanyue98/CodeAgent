@@ -18,6 +18,14 @@ const TestComponent = () => {
     toggleMaximize,
     markRateLimited,
     clearRateLimited,
+    fontSize,
+    increaseFontSize,
+    decreaseFontSize,
+    resetFontSize,
+    copyOnSelect,
+    toggleCopyOnSelect,
+    zenMode,
+    toggleZenMode,
   } = useTerminal();
 
   return (
@@ -27,6 +35,9 @@ const TestComponent = () => {
       <div data-testid="rate-limited">{Array.from(rateLimitedTabIds).join(',')}</div>
       <div data-testid="drawer-open">{isDrawerOpen.toString()}</div>
       <div data-testid="maximized">{isMaximized.toString()}</div>
+      <div data-testid="font-size">{fontSize}</div>
+      <div data-testid="copy-on-select">{copyOnSelect.toString()}</div>
+      <div data-testid="zen-mode">{zenMode.toString()}</div>
 
       <button onClick={() => openTab('test-engine', '/test/cwd')}>Open Tab</button>
       <button onClick={() => closeTab(tabs[0]?.id)}>Close Tab 1</button>
@@ -37,6 +48,11 @@ const TestComponent = () => {
       <button onClick={toggleMaximize}>Toggle Maximize</button>
       <button onClick={() => { if(tabs[0]) markRateLimited(tabs[0].id) }}>Mark Rate Limited</button>
       <button onClick={() => { if(tabs[0]) clearRateLimited(tabs[0].id) }}>Clear Rate Limited</button>
+      <button onClick={increaseFontSize}>Increase Font</button>
+      <button onClick={decreaseFontSize}>Decrease Font</button>
+      <button onClick={resetFontSize}>Reset Font</button>
+      <button onClick={toggleCopyOnSelect}>Toggle Copy On Select</button>
+      <button onClick={toggleZenMode}>Toggle Zen Mode</button>
     </div>
   );
 };
@@ -120,5 +136,89 @@ describe('TerminalContext', () => {
     });
     
     expect(screen.getByTestId('rate-limited')).toHaveTextContent('');
+  });
+
+  it('manages font size zooming and reset', () => {
+    render(
+      <TerminalProvider>
+        <TestComponent />
+      </TerminalProvider>
+    );
+
+    expect(screen.getByTestId('font-size')).toHaveTextContent('13');
+
+    act(() => {
+      screen.getByText('Increase Font').click();
+    });
+    expect(screen.getByTestId('font-size')).toHaveTextContent('14');
+
+    act(() => {
+      screen.getByText('Decrease Font').click();
+    });
+    expect(screen.getByTestId('font-size')).toHaveTextContent('13');
+
+    act(() => {
+      screen.getByText('Increase Font').click();
+      screen.getByText('Increase Font').click();
+    });
+    expect(screen.getByTestId('font-size')).toHaveTextContent('15');
+
+    act(() => {
+      screen.getByText('Reset Font').click();
+    });
+    expect(screen.getByTestId('font-size')).toHaveTextContent('13');
+  });
+
+  it('manages copyOnSelect and zenMode toggles', () => {
+    render(
+      <TerminalProvider>
+        <TestComponent />
+      </TerminalProvider>
+    );
+
+    expect(screen.getByTestId('copy-on-select')).toHaveTextContent('true');
+    expect(screen.getByTestId('zen-mode')).toHaveTextContent('false');
+
+    act(() => {
+      screen.getByText('Toggle Copy On Select').click();
+      screen.getByText('Toggle Zen Mode').click();
+    });
+
+    expect(screen.getByTestId('copy-on-select')).toHaveTextContent('false');
+    expect(screen.getByTestId('zen-mode')).toHaveTextContent('true');
+  });
+
+  it('supports font zoom keyboard shortcuts when drawer is open', () => {
+    render(
+      <TerminalProvider>
+        <TestComponent />
+      </TerminalProvider>
+    );
+
+    // Open drawer first
+    act(() => {
+      screen.getByText('Open Drawer').click();
+    });
+
+    act(() => {
+      fireEvent.keyDown(window, { key: '+', ctrlKey: true });
+    });
+    expect(screen.getByTestId('font-size')).toHaveTextContent('14');
+
+    act(() => {
+      fireEvent.keyDown(window, { key: '-', ctrlKey: true });
+    });
+    expect(screen.getByTestId('font-size')).toHaveTextContent('13');
+
+    act(() => {
+      fireEvent.keyDown(window, { key: '+', ctrlKey: true });
+      fireEvent.keyDown(window, { key: '+', ctrlKey: true });
+    });
+    expect(screen.getByTestId('font-size')).toHaveTextContent('15');
+
+    act(() => {
+      fireEvent.keyDown(window, { key: '0', ctrlKey: true });
+    });
+    expect(screen.getByTestId('font-size')).toHaveTextContent('13');
   });
 });

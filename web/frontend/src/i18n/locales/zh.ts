@@ -638,6 +638,17 @@ export const zh: Record<TranslationKey, string> = {
   'terminal.copyAll': '复制全部输出',
   'terminal.startNew': '开新会话',
   'terminal.startNewHint': '开启一个全新的终端会话。上一个已经结束，其回滚缓冲不会恢复。',
+  'terminal.zoomIn': '放大字号 (Ctrl++)',
+  'terminal.zoomOut': '缩小字号 (Ctrl+-)',
+  'terminal.resetZoom': '重置字号 (Ctrl+0)',
+  'terminal.copyOnSelect': '划选自动复制',
+  'terminal.copyOnSelectEnabled': '划选自动复制已开启',
+  'terminal.copyOnSelectDisabled': '划选自动复制已关闭',
+  'terminal.copiedToast': '已复制选中文本',
+  'terminal.zenMode': '全屏沉浸模式',
+  'terminal.zenModeExit': '退出全屏沉浸',
+  'terminal.shortcuts': '快捷键提示',
+  'terminal.shortcutHelp': '快捷键：Ctrl+` 唤起/收起抽屉 · 选中文本按 Ctrl+C / Ctrl+Shift+C 复制 · Ctrl+Shift+V 粘贴 · Ctrl++/Ctrl+- 缩放字号',
 
   // ── Logs ──────────────────────────────────────────────────────────────────
   'logs.loadFailed': '加载日志文件失败',
