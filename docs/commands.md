@@ -68,6 +68,33 @@ By default, YOLO mode is enabled (`-y` is appended automatically).
 
 ## Subcommands
 
+### `ca sync`
+
+Writes a resource group's standards and skills into every engine's user-level config, so
+the bare engine commands load them without going through `ca`.
+
+```bash
+ca sync                      # default_group from config.json, every engine
+ca sync --group work         # another group
+ca sync --engine claude      # only one engine (repeatable)
+ca sync --dry-run            # show what would change
+ca sync --remove             # undo
+```
+
+| Engine | Standards | Skills |
+|--------|-----------|--------|
+| `claude` | `~/.claude/CLAUDE.md` | `~/.claude/skills/` |
+| `codex` | `$CODEX_HOME/AGENTS.md` (default `~/.codex`) | `$CODEX_HOME/skills/` |
+| `opencode` | `~/.config/opencode/AGENTS.md` | `~/.config/opencode/skills/` |
+| `codebuddy` | `$CODEBUDDY_CONFIG_DIR/CODEBUDDY.md` (default `~/.codebuddy`) | `$CODEBUDDY_CONFIG_DIR/skills/` |
+| `antigravity` | `~/.gemini/config/GEMINI.md` | `~/.gemini/config/skills/` |
+
+Standards live in a `<!-- codeagent:begin group=... -->` block; content outside it is
+preserved and re-syncing replaces only the block. Skills are links recorded in a
+`.codeagent-links.json` manifest; an existing skill with the same name that CodeAgent did
+not create is reported as a conflict and left untouched. When the current project's group
+matches the synced group, `ca <engine>` skips injecting standards and skills again.
+
 ### `doctor`
 
 Run environment health check and auto-repair.

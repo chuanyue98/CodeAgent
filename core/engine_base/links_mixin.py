@@ -49,13 +49,11 @@ class _LinksMixin:
                 if registry.leave():
                     teardown()
 
-    def ensure_skills_link(self, target_link_path: str):
-        link_path = (Path.cwd() / target_link_path).absolute()
-
+    def resolve_skill_sources(self) -> list[tuple[str, Path]]:
+        """当前组要挂载的技能，按 (链接名, 源目录) 返回；重名时保留优先级高的来源。"""
         skills_to_mount = self.get_skills_to_mount()
         if not skills_to_mount:
-            self.link_manager.cleanup_link_dir(link_path)
-            return
+            return []
 
         skill_roots = self._get_skill_search_roots()
 
@@ -111,8 +109,7 @@ class _LinksMixin:
                 "Search roots: %s",
                 searched_roots,
             )
-            self.link_manager.cleanup_link_dir(link_path)
-            return
+            return []
 
         logger.info(
             "Skills matched group: [%s] (匹配 %d 个根目录，挂载 %d 个技能)",
@@ -120,6 +117,16 @@ class _LinksMixin:
             len(skills_to_mount),
             len(resolved_skills),
         )
+        return resolved_skills
+
+    def ensure_skills_link(self, target_link_path: str):
+        link_path = (Path.cwd() / target_link_path).absolute()
+
+        resolved_skills = self.resolve_skill_sources()
+        if not resolved_skills:
+            self.link_manager.cleanup_link_dir(link_path)
+            return
+
         link_path.mkdir(parents=True, exist_ok=True)
 
         desired_names = {target_name for target_name, _ in resolved_skills}

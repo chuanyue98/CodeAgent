@@ -16,6 +16,7 @@ from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import is_batch_shim, split_passthrough
 from core.i18n import t
+from core.services.sync_service import is_synced
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -113,7 +114,9 @@ def main():
             message = f"{message}\n\n{task_prompt}".strip()
 
     env = engine.env_manager.get_env()
-    standards = engine.assemble_standards()
+    # 用户级已经 `ca sync` 过同一组时，规范由 codebuddy 自己加载，不再重复注入。
+    synced = is_synced("codebuddy", engine.get_current_project_group())
+    standards = "" if synced else engine.assemble_standards()
     if standards and is_batch_shim(engine.COMMAND, env):
         print(
             t("engine.standards_skipped_batch_shim", engine=engine.name),

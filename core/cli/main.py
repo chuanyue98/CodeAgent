@@ -17,6 +17,7 @@ from .commands.mcp import mcp
 from .commands.project import project
 from .commands.resources import resources
 from .commands.switch import switch
+from .commands.sync import sync
 from .commands.tasks import batch_run, doctor, new, ps, stop, ui
 from .helpers import init_cli_runtime
 
@@ -32,6 +33,8 @@ Examples:
   ca claude do something   Start claude with extra args
   ca --proxy opencode      Start opencode with proxy enabled
   ca doctor --fix          Run health check and auto-repair
+  ca sync                  Install standards and skills into every engine's
+                           user-level config, so bare `claude` etc. load them
   ca ui                    Start the Web UI
   ca new my-task           Create a new task draft
   ca ps                    List running background task runs
@@ -153,6 +156,7 @@ cli.add_command(doctor)
 cli.add_command(new)
 cli.add_command(ui)
 cli.add_command(switch)
+cli.add_command(sync)
 
 
 def main():  # type: ignore[no-untyped-def]

@@ -23,6 +23,7 @@ from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import is_batch_shim, split_passthrough
 from core.i18n import t
 from core.logging_config import get_logger
+from core.services.sync_service import is_synced
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     get_tasks_dir,
@@ -812,6 +813,11 @@ def main() -> None:
     standards, general_commands = extract_shell_first_blocks(
         engine.assemble_standards()
     )
+    # 用户级已经 `ca sync` 过同一组时，规范和技能由 codex 自己加载，不再重复注入；
+    # shell:first 预启动命令仍然照常执行。
+    synced = is_synced("codex", engine.get_current_project_group())
+    if synced:
+        standards = ""
 
     task_prompt = handle_task_mode(args.task, file_suffix=TASK_FILE_SUFFIX)
     task_commands: list[str] = []
@@ -919,7 +925,8 @@ def main() -> None:
         engine.cleanup_plugins_link()
 
     def project_setup() -> None:
-        engine.ensure_skills_link(".codex/skills")
+        if not synced:
+            engine.ensure_skills_link(".codex/skills")
         resolved_hooks = engine.get_hooks_to_inject()
         # Codex reads hooks from .codex/config.toml (TOML, Claude-shaped
         # matcher groups); the old .codex/settings.json was never read by it.
