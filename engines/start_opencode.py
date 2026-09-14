@@ -18,6 +18,7 @@ from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import split_passthrough
 from core.i18n import t
 from core.logging_config import get_logger
+from core.services.sync_service import is_synced
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -555,8 +556,12 @@ def main():
         if task_prompt:
             message = f"{message}\n\n{task_prompt}".strip()
 
+    # 用户级已经 `ca sync` 过同一组时，规范和技能由 opencode 自己加载，不再重复注入。
+    synced = is_synced("opencode", engine.get_current_project_group())
+
     def setup() -> None:
-        engine.ensure_skills_link(".opencode/skills")
+        if not synced:
+            engine.ensure_skills_link(".opencode/skills")
         engine.ensure_plugins_link()
         # OpenCode 没有 settings.json 这个概念（在 opencode 1.18 的二进制里
         # 完全搜不到该文件名），它的钩子是插件模块导出的 JS 函数
@@ -572,7 +577,7 @@ def main():
 
     try:
         env = engine.env_manager.get_env()
-        standards = engine.assemble_standards()
+        standards = "" if synced else engine.assemble_standards()
         if standards:
             engine.inject_standards(
                 env, engine.write_temp_file(standards, suffix=".md")

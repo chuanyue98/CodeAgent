@@ -658,6 +658,41 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "\n[!] {failed} of {total} operations failed.",
         "zh": "\n[!] {total} 项操作中有 {failed} 项失败。",
     },
+    # --- ca sync ---
+    "sync.error": {"en": "[X] {error}", "zh": "[X] {error}"},
+    "sync.dry_run": {
+        "en": "Dry run — nothing was written.",
+        "zh": "演练模式 —— 未写入任何内容。",
+    },
+    "sync.group": {
+        "en": "Syncing resource group [{group}] into each engine's user-level config:",
+        "zh": "把资源组 [{group}] 同步到各引擎的用户级配置：",
+    },
+    "sync.removing": {
+        "en": "Removing what `ca sync` wrote from each engine's user-level config:",
+        "zh": "从各引擎的用户级配置中移除 `ca sync` 写入的内容：",
+    },
+    "sync.conflicts": {
+        "en": (
+            "\n[!] {count} skill(s) skipped: a file or link you own already has "
+            "that name, and `ca sync` never replaces it."
+        ),
+        "zh": "\n[!] 跳过了 {count} 个技能：同名的文件或链接是你自己的，`ca sync` 不会替换。",
+    },
+    "sync.partial_failure": {
+        "en": "\n[!] {failed} item(s) failed; see the warnings above.",
+        "zh": "\n[!] 有 {failed} 项失败，详见上方警告。",
+    },
+    "sync.done": {
+        "en": (
+            "\nDone. `claude`, `codex`, `opencode`, `codebuddy` and `agy` now load these "
+            "on their own.\nRe-run `ca sync` after changing prompts or skills."
+        ),
+        "zh": (
+            "\n完成。现在直接敲 `claude`、`codex`、`opencode`、`codebuddy`、`agy` 也会加载这些规范和技能。\n"
+            "修改 prompt 或技能后重新运行 `ca sync`。"
+        ),
+    },
     # --- ca doctor ---
     # Section titles and check labels are translated alongside details and fix
     # hints: a health report that mixes a Chinese hint under an English label

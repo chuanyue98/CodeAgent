@@ -15,6 +15,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import split_passthrough
+from core.services.sync_service import is_synced
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -118,8 +119,12 @@ def main():
         if task_prompt:
             message = f"{message}\n\n{task_prompt}".strip()
 
+    # 用户级已经 `ca sync` 过同一组时，规范和技能由 claude 自己加载，不再重复注入。
+    synced = is_synced("claude", engine.get_current_project_group())
+
     def setup() -> None:
-        engine.ensure_skills_link(".claude/skills")
+        if not synced:
+            engine.ensure_skills_link(".claude/skills")
         engine.inject_hooks_to_settings(
             ".claude/settings.json", engine.get_hooks_to_inject()
         )
@@ -129,7 +134,7 @@ def main():
         engine.cleanup_skills_link(".claude/skills")
 
     try:
-        standards = engine.assemble_standards()
+        standards = "" if synced else engine.assemble_standards()
         standards_file = (
             engine.write_temp_file(standards, suffix=".md") if standards else None
         )

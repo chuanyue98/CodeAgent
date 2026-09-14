@@ -169,6 +169,24 @@ Opens the dashboard at `http://127.0.0.1:8524`. Features:
 - Session history browser
 - Task monitoring
 
+### Use Your Standards Without `ca`
+
+```bash
+ca sync                  # write standards + skills into every engine's user-level config
+ca sync --dry-run        # preview first
+ca sync --engine claude  # just one engine
+ca sync --remove         # take it all back out
+```
+
+After one `ca sync`, the bare commands — `claude`, `codex`, `opencode`, `codebuddy`,
+`agy` — load your standards and skills by themselves. Standards go into a marked block
+inside each engine's own file (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
+`~/.config/opencode/AGENTS.md`, `~/.codebuddy/CODEBUDDY.md`,
+`~/.gemini/config/GEMINI.md`); anything you wrote outside that block is left alone, and a
+skill directory you already own is never replaced. `ca <engine>` notices the sync and
+stops injecting the same group a second time. Run it once on each machine — WSL and
+Windows keep separate home directories.
+
 ### Switch Engines Mid-Conversation
 
 The point of CodeAgent: a conversation outlives the tool it started in.

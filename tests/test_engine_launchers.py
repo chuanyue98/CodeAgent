@@ -160,6 +160,22 @@ def test_claude_standards_file_is_removed_after_the_session(isolated, monkeypatc
     assert not seen["standards_path"].exists()
 
 
+def test_claude_skips_injection_when_the_group_is_already_synced(isolated, monkeypatch):
+    _stub_resources(monkeypatch, claude_mod, claude_mod.ClaudeEngine)
+    monkeypatch.setattr(claude_mod, "is_synced", lambda _engine, _group: True)
+    linked: list[str] = []
+    monkeypatch.setattr(
+        claude_mod.ClaudeEngine, "ensure_skills_link", lambda self, p: linked.append(p)
+    )
+    seen = _capture_run(monkeypatch, claude_mod.ClaudeEngine)
+    monkeypatch.setattr(sys, "argv", ["start_claude_code.py"])
+
+    claude_mod.main()
+
+    assert "--append-system-prompt-file" not in seen["cmd"]
+    assert linked == []
+
+
 def test_claude_non_interactive_uses_print_mode():
     cmd = claude_mod.ClaudeEngine().build_command("do it", True)
 
