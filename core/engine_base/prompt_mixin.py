@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, cast
 from core.constants import TEMP_PROMPT_DIRNAME
 from core.engine_base.environment import EngineExecutionError
 from core.logging_config import get_logger
-from core.prompt_kit import prompt_general, prompt_review
+from core.prompt_kit import prompt_general, prompt_review, prompt_standards
 
 if TYPE_CHECKING:
     from core.prompt_scanner import PromptScanner
@@ -48,40 +48,53 @@ class _PromptMixin:
             prompt_root=self.prompt_scanner.prompt_root,
         )
 
-    def write_temp_prompt(self, prompt: str) -> str:
-        """Writes the assembled prompt to a temporary file in the project root.
+    def assemble_standards(self) -> str:
+        """当前项目要注入的规范正文，交给引擎原生的系统提示参数。"""
+        return prompt_standards(
+            groups=self.get_prompts_to_inject(),
+            prompt_root=self.prompt_scanner.prompt_root,
+        )
 
-        Args:
-            prompt (str): The full prompt string to write.
+    def first_message(self, message: str) -> str:
+        """单行消息原样作为首条消息；多行内容改成让模型去读临时文件。
 
-        Returns:
-            str: A guidance message for the agent on how to load the prompt.
+        任务模板和委派指令都是多行的，而多行参数过不了 Windows 上的 ``.cmd``
+        包装（见 ``launch_args.is_batch_shim``）。
         """
+        if "\n" not in message:
+            return message
+        return self.write_temp_prompt(message)
+
+    def write_temp_prompt(self, prompt: str) -> str:
+        """Writes *prompt* to a temp file and returns a message telling the agent to read it."""
+        abs_path = str(self.write_temp_file(prompt).absolute()).replace("\\", "/")
+        read_cmd = "Get-Content" if os.name == "nt" else "cat"
+
+        return (
+            f"IMPORTANT: The instructions for this session are in the CodeAgent file: {abs_path}. "
+            f"Please use your 'run_shell_command' (e.g., '{read_cmd}') to load this file IMMEDIATELY. "
+            f"**CRITICAL**: If searching for 'IMPLEMENTATION_PLAN.md' or other core files, be aware they may be listed in '.gitignore'. "
+            f"You MUST use 'read_file' directly or set 'no_ignore=true' in search tools to find them."
+        )
+
+    def write_temp_file(self, content: str, suffix: str = ".tmp") -> Path:
+        """Writes *content* to a temp file that :meth:`cleanup_temp_prompt` removes."""
         prompt_dir = Path(tempfile.gettempdir()) / TEMP_PROMPT_DIRNAME
         prompt_dir.mkdir(parents=True, exist_ok=True)
         fd, temp_name = tempfile.mkstemp(
-            dir=prompt_dir, prefix="ca_prompt.", suffix=".tmp", text=True
+            dir=prompt_dir, prefix="ca_prompt.", suffix=suffix, text=True
         )
         temp_file_path = Path(temp_name)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(prompt)
+                f.write(content)
         except Exception:
             temp_file_path.unlink(missing_ok=True)
             raise
         if not hasattr(self, "_temp_prompt_paths"):
             self._temp_prompt_paths = set()
         self._temp_prompt_paths.add(temp_file_path)
-
-        abs_path = str(temp_file_path.absolute()).replace("\\", "/")
-        read_cmd = "Get-Content" if os.name == "nt" else "cat"
-
-        return (
-            f"IMPORTANT: The engineering standards for this session are in the CodeAgent file: {abs_path}. "
-            f"Please use your 'run_shell_command' (e.g., '{read_cmd}') to load this file IMMEDIATELY. "
-            f"**CRITICAL**: If searching for 'IMPLEMENTATION_PLAN.md' or other core files, be aware they may be listed in '.gitignore'. "
-            f"You MUST use 'read_file' directly or set 'no_ignore=true' in search tools to find them."
-        )
+        return temp_file_path
 
     def cleanup_temp_prompt(self):
         """Removes temporary prompt files created by this engine instance."""

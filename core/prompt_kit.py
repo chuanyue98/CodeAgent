@@ -46,6 +46,45 @@ def get_prompts_from_directory(directory: Path) -> str:
     return "".join(prompt_parts).strip()
 
 
+def _standards_text(
+    groups: list[str], extra_contents: list[str] | None, prompt_root: Path
+) -> str:
+    parts = []
+
+    for group in groups:
+        group_dir = prompt_root / group
+        content = get_prompts_from_directory(group_dir)
+        if content:
+            parts.append(f"### {group.capitalize()} Standards ###")
+            parts.append(content)
+            parts.append("\n\n")
+
+    # Inject extra content (e.g., prompts from plugins)
+    if extra_contents:
+        for content in extra_contents:
+            parts.append(content)
+            parts.append("\n\n")
+
+    return "".join(parts)
+
+
+def prompt_standards(
+    groups: list[str] | None = None,
+    extra_contents: list[str] | None = None,
+    prompt_root: Path | None = None,
+) -> str:
+    """只有规范正文，不带任务段和等待模式段，用作引擎的系统提示。
+
+    :func:`prompt_general` 的等待模式段禁止模型探索代码库，只能作为一次性的
+    首条消息；放进系统提示会约束整场会话。
+    """
+    if prompt_root is None:
+        prompt_root = get_bundled_resource_root() / "prompt"
+    if groups is None:
+        groups = ["base", "engineering", "coding"]
+    return _standards_text(groups, extra_contents, prompt_root).strip()
+
+
 def prompt_general(
     task: str | None = None,
     groups: list[str] | None = None,
@@ -71,21 +110,7 @@ def prompt_general(
     if groups is None:
         groups = ["base", "engineering", "coding"]
 
-    parts = []
-
-    for group in groups:
-        group_dir = prompt_root / group
-        content = get_prompts_from_directory(group_dir)
-        if content:
-            parts.append(f"### {group.capitalize()} Standards ###")
-            parts.append(content)
-            parts.append("\n\n")
-
-    # Inject extra content (e.g., prompts from plugins)
-    if extra_contents:
-        for content in extra_contents:
-            parts.append(content)
-            parts.append("\n\n")
+    parts = [_standards_text(groups, extra_contents, prompt_root)]
 
     if task:
         parts.append(f"### CURRENT TASK ###\n{task}")

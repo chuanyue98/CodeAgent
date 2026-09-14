@@ -33,7 +33,9 @@ def _init_git_repo(path: Path) -> None:
     )
     readme = path / "README.md"
     readme.write_text("# Test Repo\n", encoding="utf-8")
-    subprocess.run(["git", "-C", str(path), "add", "README.md"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(path), "add", "README.md"], check=True, capture_output=True
+    )
     subprocess.run(
         ["git", "-C", str(path), "commit", "-m", "initial commit"],
         check=True,

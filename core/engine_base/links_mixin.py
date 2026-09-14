@@ -1,6 +1,9 @@
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO
+from typing import TYPE_CHECKING, Any
 
+from core.lock_manager import SessionRegistry
 from core.logging_config import get_logger
 
 if TYPE_CHECKING:
@@ -11,7 +14,7 @@ logger = get_logger(__name__)
 
 
 class _LinksMixin:
-    """Resource locking passthrough and skills/plugins symlink management."""
+    """Shared injection lifecycle and skills/plugins symlink management."""
 
     # Provided by BaseEngine.__init__ / _ConfigMixin.
     if TYPE_CHECKING:
@@ -23,11 +26,28 @@ class _LinksMixin:
         def get_plugins_to_mount(self) -> list[dict[str, Any]]: ...
         def _get_skill_search_roots(self) -> list[Path]: ...
 
-    def acquire_resource_lock(self, lock_path: Path) -> BinaryIO:
-        return self.lock_manager.acquire_resource_lock(lock_path)
+    @contextmanager
+    def shared_injection(
+        self,
+        scope: Path,
+        setup: Callable[[], None],
+        teardown: Callable[[], None],
+    ) -> Iterator[None]:
+        """在 *scope* 上注入资源，同一 *scope* 的并发会话共用这份注入。
 
-    def release_resource_lock(self, handle: BinaryIO) -> None:
-        self.lock_manager.release_resource_lock(handle)
+        每个会话都会跑一次 *setup*（注入是幂等的），*teardown* 只在最后一个
+        会话退出时执行，避免先退出的会话把别人还在用的链接和钩子拆掉。
+        """
+        registry = SessionRegistry(scope, lock_manager=self.lock_manager)
+        try:
+            with registry.exclusive():
+                registry.join()
+                setup()
+            yield
+        finally:
+            with registry.exclusive():
+                if registry.leave():
+                    teardown()
 
     def ensure_skills_link(self, target_link_path: str):
         link_path = (Path.cwd() / target_link_path).absolute()

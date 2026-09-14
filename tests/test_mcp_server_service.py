@@ -341,4 +341,3 @@ def test_ca_handoff_session_tool(skills_root, tmp_path, monkeypatch):
     audit_file = tmp_path / ".ca_task_logs" / "mcp_audit.log"
     assert audit_file.exists()
     assert "ca_handoff_session" in audit_file.read_text(encoding="utf-8")
-

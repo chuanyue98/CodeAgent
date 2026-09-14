@@ -130,7 +130,19 @@ python ca_launcher.py antigravity           # Google Antigravity (alias: agy)
 python ca_launcher.py opencode "Refactor this module"
 python ca_launcher.py claude -t refactor    # Run pre-defined task
 python ca_launcher.py antigravity -t code_review
+
+# Engine flags pass straight through, so resuming works as usual
+ca claude -r
+ca opencode -s <session_id>
+ca codex resume --last
 ```
+
+Anything `ca` does not recognise goes to the engine unchanged, and `ca claude --help`
+shows Claude's own help. Your standards reach the engine through its native
+system-prompt option (Claude/CodeBuddy `--append-system-prompt`, Codex
+`developer_instructions`, OpenCode `instructions`), so the first message of the
+conversation stays yours. Several sessions can run in the same project at once; the
+injected skills and hooks are removed when the last of them exits.
 
 The `ca` command is also registered as a console script after `pip install -e .`:
 
