@@ -17,7 +17,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -76,7 +76,11 @@ class DelegationResult:
 
         if self.output:
             tail_lines = self.output.strip().splitlines()[-25:]
-            lines.append("\n<details><summary>Execution Output Tail (25 lines)</summary>\n\n```\n" + "\n".join(tail_lines) + "\n```\n</details>")
+            lines.append(
+                "\n<details><summary>Execution Output Tail (25 lines)</summary>\n\n```\n"
+                + "\n".join(tail_lines)
+                + "\n```\n</details>"
+            )
 
         return "\n".join(lines)
 
@@ -140,7 +144,16 @@ def isolated_worktree(
     created = False
     try:
         add_proc = subprocess.run(
-            ["git", "-C", str(repo_root), "worktree", "add", str(worktree_dir), "-b", branch],
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "worktree",
+                "add",
+                str(worktree_dir),
+                "-b",
+                branch,
+            ],
             capture_output=True,
             text=True,
             timeout=_GIT_TIMEOUT_SECONDS,
@@ -204,7 +217,15 @@ def isolated_worktree(
 
             # Clean up the worktree
             subprocess.run(
-                ["git", "-C", str(repo_root), "worktree", "remove", "--force", str(worktree_dir)],
+                [
+                    "git",
+                    "-C",
+                    str(repo_root),
+                    "worktree",
+                    "remove",
+                    "--force",
+                    str(worktree_dir),
+                ],
                 capture_output=True,
                 text=True,
                 timeout=_GIT_TIMEOUT_SECONDS,
@@ -334,10 +355,12 @@ def delegate_subtask(
     prompt_parts.append(instruction.strip())
     full_prompt = "\n".join(prompt_parts)
 
-    worktree_ctx = (
+    worktree_ctx: AbstractContextManager[dict[str, Any]] = (
         isolated_worktree(ws)
         if isolate
-        else contextmanager(lambda: (yield {"path": ws, "isolated": False, "branch": None, "repo_root": None}))()
+        else nullcontext(
+            {"path": ws, "isolated": False, "branch": None, "repo_root": None}
+        )
     )
 
     t0 = time.time()
@@ -400,7 +423,9 @@ def delegate_subtask(
                 branch=branch,
                 isolated_worktree=isolated,
                 duration_seconds=duration,
-                error=None if proc.returncode == 0 else f"Process exited with code {proc.returncode}",
+                error=None
+                if proc.returncode == 0
+                else f"Process exited with code {proc.returncode}",
             )
 
     except subprocess.TimeoutExpired:

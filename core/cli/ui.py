@@ -142,7 +142,10 @@ def _start_ui_dev_server() -> bool:
             )
             if install_proc.returncode != 0:
                 print(
-                    t("ui.node_modules_install_failed", error=install_proc.stderr.strip())
+                    t(
+                        "ui.node_modules_install_failed",
+                        error=install_proc.stderr.strip(),
+                    )
                 )
                 return False
         except Exception as exc:
@@ -177,7 +180,11 @@ def _start_ui_dev_server() -> bool:
     # On failure, read tail of log so the developer can diagnose what went wrong
     try:
         if dev_log.exists():
-            lines = dev_log.read_text(encoding="utf-8", errors="replace").strip().splitlines()
+            lines = (
+                dev_log.read_text(encoding="utf-8", errors="replace")
+                .strip()
+                .splitlines()
+            )
             if lines:
                 print("\n" + "=" * 50)
                 print("Vite Dev Server Output:")
