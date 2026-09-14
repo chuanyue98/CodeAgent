@@ -225,6 +225,13 @@ MESSAGES: dict[str, dict[str, str]] = {
         ),
         "zh": "[!] YOLO 模式已开启: 引擎可能不经确认就修改文件、执行命令。",
     },
+    "engine.standards_skipped_batch_shim": {
+        "en": (
+            "[i] {engine} is a .cmd wrapper on Windows and cannot take a "
+            "multi-line system prompt safely; launching without CodeAgent standards."
+        ),
+        "zh": "[i] {engine} 在 Windows 上是 .cmd 包装，无法安全传入多行系统提示，本次不注入 CodeAgent 规范。",
+    },
     # --- ca ui ---
     "ui.open_in_browser": {
         "en": "Open the UI in your browser: {url}",

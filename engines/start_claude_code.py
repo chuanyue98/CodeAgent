@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 # 确保能找到 core 模块
@@ -13,6 +14,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
+from core.engine_base.launch_args import split_passthrough
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -36,13 +38,25 @@ class ClaudeEngine(BaseEngine):
         # no accurate value to store here.
         super().__init__("Claude", "")
 
-    def build_command(self, message: str, non_interactive: bool) -> list[str]:
+    def build_command(
+        self,
+        message: str,
+        non_interactive: bool,
+        standards_file: Path | None = None,
+        passthrough: Sequence[str] = (),
+    ) -> list[str]:
         cmd = [self.CLAUDE_COMMAND, self.CLAUDE_SKIP_PERMISSIONS_FLAG]
         for plugin_meta in self.get_plugins_to_mount():
             plugin_dir = plugin_meta.get("_plugin_dir")
             if plugin_dir:
                 cmd.extend(["--plugin-dir", plugin_dir])
-        cmd.append(message)
+        if standards_file is not None:
+            cmd.extend(["--append-system-prompt-file", str(standards_file)])
+        if non_interactive:
+            cmd.append("-p")
+        cmd.extend(passthrough)
+        if message:
+            cmd.append(message)
         return cmd
 
     def build_chat_command(
@@ -72,7 +86,10 @@ class ClaudeEngine(BaseEngine):
 
 def main():
     engine = ClaudeEngine()
-    parser = argparse.ArgumentParser(description="Claude Agent Controller")
+    # 不接管 -h：ca claude --help 应该看到 claude 自己的帮助。
+    parser = argparse.ArgumentParser(
+        description="Claude Agent Controller", add_help=False, allow_abbrev=False
+    )
     parser.add_argument("-t", "--task", nargs="?", const="", help="任务模式")
     parser.add_argument("--list", action="store_true", help="列出所有任务")
     parser.add_argument(
@@ -93,47 +110,43 @@ def main():
     if not require_engine_cli("claude"):
         sys.exit(1)
 
-    # 使用基类统一合成提示词
-    full_prompt = engine.assemble_prompt(task=" ".join(unknown))
-
+    message, passthrough = split_passthrough(unknown)
     if args.task is not None:
         task_prompt = handle_task_mode(
             args.task, label="Task", file_suffix=TASK_FILE_SUFFIX
         )
         if task_prompt:
-            full_prompt = f"{full_prompt}\n\n{task_prompt}"
+            message = f"{message}\n\n{task_prompt}".strip()
 
-    resource_lock = engine.acquire_resource_lock(
-        Path.cwd() / ".claude" / ".codeagent-session.lock"
-    )
-    try:
-        # 使用临时文件引导模式 (关键：解决命令行超长问题)
-        concise_msg = engine.write_temp_prompt(full_prompt)
-
-        # 统一技能链接
+    def setup() -> None:
         engine.ensure_skills_link(".claude/skills")
+        engine.inject_hooks_to_settings(
+            ".claude/settings.json", engine.get_hooks_to_inject()
+        )
 
-        # 注入动态钩子
-        resolved_hooks = engine.get_hooks_to_inject()
-        engine.inject_hooks_to_settings(".claude/settings.json", resolved_hooks)
+    def teardown() -> None:
+        engine.restore_settings(".claude/settings.json")
+        engine.cleanup_skills_link(".claude/skills")
 
+    try:
+        standards = engine.assemble_standards()
+        standards_file = (
+            engine.write_temp_file(standards, suffix=".md") if standards else None
+        )
+        final_command = engine.build_command(
+            engine.first_message(message),
+            args.non_interactive,
+            standards_file=standards_file,
+            passthrough=passthrough,
+        )
         env = engine.env_manager.get_env()
         register_signal_handler()
 
-        final_command = engine.build_command(concise_msg, args.non_interactive)
-        print(f"🚀 Launching {engine.name}...")
-
-        engine.run_shell(final_command, env)
+        with engine.shared_injection(Path.cwd() / ".claude", setup, teardown):
+            print(f"🚀 Launching {engine.name}...")
+            engine.run_shell(final_command, env)
     finally:
-        try:
-            # 1. 还原配置到注入前状态
-            engine.restore_settings(".claude/settings.json")
-            # 2. 清理技能链接，保持项目纯净
-            engine.cleanup_skills_link(".claude/skills")
-            # 3. 使用基类统一清理临时提示词
-            engine.cleanup_temp_prompt()
-        finally:
-            engine.release_resource_lock(resource_lock)
+        engine.cleanup_temp_prompt()
 
 
 if __name__ == "__main__":

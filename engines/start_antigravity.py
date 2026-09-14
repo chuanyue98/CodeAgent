@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
+from core.engine_base.launch_args import split_passthrough
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -27,9 +29,13 @@ class AntigravityEngine(BaseEngine):
         super().__init__("Antigravity", "")
 
     def build_command(
-        self, message: str, non_interactive: bool = False, yolo: bool = False
+        self,
+        message: str,
+        non_interactive: bool = False,
+        yolo: bool = False,
+        passthrough: Sequence[str] = (),
     ) -> list[str]:
-        cmd = [self.COMMAND]
+        cmd = [self.COMMAND, *passthrough]
         if non_interactive:
             cmd.extend(["-p", message, "--output-format", "json"])
         else:
@@ -57,7 +63,9 @@ class AntigravityEngine(BaseEngine):
 
 def main() -> None:
     engine = AntigravityEngine()
-    parser = argparse.ArgumentParser(description="Antigravity Agent Controller")
+    parser = argparse.ArgumentParser(
+        description="Antigravity Agent Controller", add_help=False, allow_abbrev=False
+    )
     parser.add_argument("-t", "--task", nargs="?", const="", help="任务模式")
     parser.add_argument("--list", action="store_true", help="列出所有任务")
     parser.add_argument(
@@ -75,7 +83,7 @@ def main() -> None:
     if not require_engine_cli("agy"):
         sys.exit(1)
 
-    message = " ".join(unknown).strip()
+    message, passthrough = split_passthrough(unknown)
     if args.task is not None:
         task_prompt = handle_task_mode(args.task, file_suffix=TASK_FILE_SUFFIX)
         if isinstance(task_prompt, str) and task_prompt:
@@ -84,7 +92,9 @@ def main() -> None:
     env = engine.env_manager.get_env()
     register_signal_handler()
 
-    final_command = engine.build_command(message, args.non_interactive, yolo=args.yolo)
+    final_command = engine.build_command(
+        message, args.non_interactive, yolo=args.yolo, passthrough=passthrough
+    )
     print(f"🚀 Launching {engine.name}...")
     engine.run_shell(final_command, env)
 

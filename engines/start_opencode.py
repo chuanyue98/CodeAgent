@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 # 确保能找到 core 模块
@@ -14,6 +15,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
+from core.engine_base.launch_args import split_passthrough
 from core.i18n import t
 from core.logging_config import get_logger
 from core.task_lib import (
@@ -23,6 +25,8 @@ from core.task_lib import (
 )
 
 logger = get_logger(__name__)
+
+CONFIG_CONTENT_ENV = "OPENCODE_CONFIG_CONTENT"
 
 
 class OpenCodeEngine(BaseEngine):
@@ -459,13 +463,43 @@ export default async () => {{
             except Exception:
                 pass
 
-    def build_command(self, message: str, non_interactive: bool) -> list[str]:
+    def build_command(
+        self, message: str, non_interactive: bool, passthrough: Sequence[str] = ()
+    ) -> list[str]:
         if non_interactive:
             # 非交互模式使用 run
-            return [self.OPENCODE_COMMAND, "run", message]
+            return [self.OPENCODE_COMMAND, "run", *passthrough, message]
 
         # 交互模式：在当前目录启动 TUI 并注入初始提示词
-        return [self.OPENCODE_COMMAND, ".", "--prompt", message]
+        cmd = [self.OPENCODE_COMMAND, ".", *passthrough]
+        if message:
+            cmd.extend(["--prompt", message])
+        return cmd
+
+    def inject_standards(self, env: dict[str, str], standards_file: Path) -> None:
+        """把规范文件追加进 ``OPENCODE_CONFIG_CONTENT`` 的 instructions。
+
+        opencode 把这份配置与全局、项目配置合并，instructions 是拼接而不是
+        覆盖（1.18 实测），所以不会挤掉项目自己的 instructions。
+        """
+        raw = env.get(CONFIG_CONTENT_ENV, "")
+        try:
+            data = json.loads(raw) if raw.strip() else {}
+        except ValueError:
+            data = None
+        if not isinstance(data, dict) or not isinstance(
+            data.get("instructions", []), list
+        ):
+            logger.warning(
+                "%s is not mergeable JSON; launching without CodeAgent standards",
+                CONFIG_CONTENT_ENV,
+            )
+            return
+        data["instructions"] = [
+            *data.get("instructions", []),
+            standards_file.as_posix(),
+        ]
+        env[CONFIG_CONTENT_ENV] = json.dumps(data, ensure_ascii=False)
 
     def build_chat_command(
         self, message: str, session_id: str | None = None
@@ -484,7 +518,9 @@ export default async () => {{
 
 def main():
     engine = OpenCodeEngine()
-    parser = argparse.ArgumentParser(description="OpenCode Agent Controller")
+    parser = argparse.ArgumentParser(
+        description="OpenCode Agent Controller", add_help=False, allow_abbrev=False
+    )
     parser.add_argument(
         "-t", "--task", nargs="?", const="", help=t("cli.help.task_mode")
     )
@@ -511,54 +547,46 @@ def main():
     if not require_engine_cli("opencode"):
         sys.exit(1)
 
-    # 使用基类统一合成提示词
-    full_prompt = engine.assemble_prompt(task=" ".join(unknown))
-
+    message, passthrough = split_passthrough(unknown)
     if args.task is not None:
         task_prompt = handle_task_mode(
             args.task, label="Task", file_suffix=TASK_FILE_SUFFIX
         )
         if task_prompt:
-            full_prompt = f"{full_prompt}\n\n{task_prompt}"
+            message = f"{message}\n\n{task_prompt}".strip()
 
-    resource_lock = engine.acquire_resource_lock(
-        Path.cwd() / ".opencode" / ".codeagent-session.lock"
-    )
-    try:
-        # 使用临时文件引导模式，解决命令行超长问题
-        concise_msg = engine.write_temp_prompt(full_prompt)
-
-        # 统一技能链接 (挂载到 .opencode/skills)
+    def setup() -> None:
         engine.ensure_skills_link(".opencode/skills")
-        # 统一插件链接
         engine.ensure_plugins_link()
-
         # OpenCode 没有 settings.json 这个概念（在 opencode 1.18 的二进制里
         # 完全搜不到该文件名），它的钩子是插件模块导出的 JS 函数
         # (tool.execute.before / tool.execute.after)，不是 shell 命令。
         # 因此用生成的桥接插件来跑 CodeAgent 的 shell 钩子。
-        resolved_hooks = engine.get_hooks_to_inject()
-        engine.ensure_hooks_bridge(resolved_hooks)
+        engine.ensure_hooks_bridge(engine.get_hooks_to_inject())
 
+    def teardown() -> None:
+        # 清理旧版本可能遗留的 settings.json 注入文件
+        engine.restore_settings(".opencode/settings.json")
+        engine.cleanup_skills_link(".opencode/skills")
+        engine.cleanup_plugins_link()
+
+    try:
         env = engine.env_manager.get_env()
+        standards = engine.assemble_standards()
+        if standards:
+            engine.inject_standards(
+                env, engine.write_temp_file(standards, suffix=".md")
+            )
+        final_command = engine.build_command(
+            engine.first_message(message), args.non_interactive, passthrough
+        )
         register_signal_handler()
 
-        final_command = engine.build_command(concise_msg, args.non_interactive)
-        print(f"🚀 Launching {engine.name}...")
-
-        engine.run_shell(final_command, env)
+        with engine.shared_injection(Path.cwd() / ".opencode", setup, teardown):
+            print(f"🚀 Launching {engine.name}...")
+            engine.run_shell(final_command, env)
     finally:
-        try:
-            # 1. 清理旧版本可能遗留的 settings.json 注入文件
-            engine.restore_settings(".opencode/settings.json")
-            # 2. 清理技能链接
-            engine.cleanup_skills_link(".opencode/skills")
-            # 3. 清理插件链接
-            engine.cleanup_plugins_link()
-            # 4. 使用基类统一清理临时提示词
-            engine.cleanup_temp_prompt()
-        finally:
-            engine.release_resource_lock(resource_lock)
+        engine.cleanup_temp_prompt()
 
 
 if __name__ == "__main__":

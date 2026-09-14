@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -19,6 +20,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
+from core.engine_base.launch_args import is_batch_shim, split_passthrough
 from core.i18n import t
 from core.logging_config import get_logger
 from core.task_lib import (
@@ -37,6 +39,35 @@ CODE_PLAN_HISTORY_FILENAME = "history.json"
 CODEX_COMMAND = "codex"
 CODEX_EXEC_SUBCOMMAND = "exec"
 CODEX_SKIP_PERMISSIONS_FLAG = "--dangerously-bypass-approvals-and-sandbox"
+# 会开出会话的子命令：注入的参数跟在子命令后面（这几个都接受 -c 与 bypass）。
+CODEX_SESSION_SUBCOMMANDS = frozenset({"exec", "e", "resume", "fork"})
+# 其余子命令与会话无关，原样透传、不注入。
+CODEX_OTHER_SUBCOMMANDS = frozenset(
+    {
+        "review",
+        "login",
+        "logout",
+        "mcp",
+        "plugin",
+        "mcp-server",
+        "app-server",
+        "remote-control",
+        "completion",
+        "update",
+        "doctor",
+        "sandbox",
+        "debug",
+        "apply",
+        "a",
+        "archive",
+        "delete",
+        "unarchive",
+        "cloud",
+        "exec-server",
+        "features",
+        "help",
+    }
+)
 SHELL_FIRST_MARKER = "```shell:first"
 # ``shell:first`` blocks let a prompt/task/code-plan markdown file specify shell
 # commands that this script executes automatically before Codex launches. Those
@@ -102,26 +133,38 @@ class CodexEngine(BaseEngine):
             )
 
     def build_command(
-        self, message: str = "", non_interactive: bool = False, yolo: bool = False
+        self,
+        message: str = "",
+        non_interactive: bool = False,
+        yolo: bool = False,
+        standards: str = "",
+        passthrough: Sequence[str] = (),
     ) -> list[str]:
         effective_yolo = (
             yolo
             or getattr(self, "yolo", False)
             or os.environ.get("CA_YOLO", "").lower() in ("1", "true")
         )
-        if non_interactive:
-            cmd = [
-                CODEX_COMMAND,
-                CODEX_EXEC_SUBCOMMAND,
-                CODEX_SKIP_PERMISSIONS_FLAG,
-            ]
-            if message:
-                cmd.append(message)
-            return cmd
+        rest = list(passthrough)
+        if rest and rest[0] in CODEX_OTHER_SUBCOMMANDS:
+            return [CODEX_COMMAND, *rest]
 
         cmd = [CODEX_COMMAND]
-        if effective_yolo:
+        if rest and rest[0] in CODEX_SESSION_SUBCOMMANDS:
+            cmd.append(rest.pop(0))
+            bypass = effective_yolo
+        elif non_interactive:
+            cmd.append(CODEX_EXEC_SUBCOMMAND)
+            bypass = True
+        else:
+            bypass = effective_yolo
+        if bypass:
             cmd.append(CODEX_SKIP_PERMISSIONS_FLAG)
+        if standards:
+            # codex 按 TOML 解析 -c 的值，JSON 字符串恰好也是合法的 TOML 基本字符串。
+            value = json.dumps(standards, ensure_ascii=False)
+            cmd.extend(["-c", f"developer_instructions={value}"])
+        cmd.extend(rest)
         if message:
             cmd.append(message)
         return cmd
@@ -696,7 +739,9 @@ def select_code_plan_directory_interactively(directories: list[str]) -> str:
 
 
 def parse_arguments() -> tuple[argparse.Namespace, list[str]]:
-    parser = argparse.ArgumentParser(description="Codex Agent Controller")
+    parser = argparse.ArgumentParser(
+        description="Codex Agent Controller", add_help=False, allow_abbrev=False
+    )
     parser.add_argument("-t", "--task", nargs="?", const="", help="Task mode")
     parser.add_argument(
         "-cp",
@@ -761,8 +806,12 @@ def main() -> None:
     if not require_engine_cli("codex"):
         sys.exit(1)
 
-    full_prompt = engine.assemble_prompt(task=" ".join(extra_args).strip() or None)
-    full_prompt, general_commands = extract_shell_first_blocks(full_prompt)
+    message, passthrough = split_passthrough(
+        extra_args, CODEX_SESSION_SUBCOMMANDS | CODEX_OTHER_SUBCOMMANDS
+    )
+    standards, general_commands = extract_shell_first_blocks(
+        engine.assemble_standards()
+    )
 
     task_prompt = handle_task_mode(args.task, file_suffix=TASK_FILE_SUFFIX)
     task_commands: list[str] = []
@@ -771,9 +820,7 @@ def main() -> None:
             raise TypeError("Task mode returned an unexpected multi-task result")
         task_prompt, task_commands = extract_shell_first_blocks(task_prompt)
         if task_prompt:
-            full_prompt = (
-                f"{full_prompt}\n\n{task_prompt}" if full_prompt else task_prompt
-            )
+            message = f"{message}\n\n{task_prompt}" if message else task_prompt
 
     code_plan_prompts: list[str] = []
     code_plan_files: list[Path] = []
@@ -853,18 +900,26 @@ def main() -> None:
         code_plan_prompts = sanitized_prompts
 
     env = engine.env_manager.get_env()
+    if standards and is_batch_shim(CODEX_COMMAND, env):
+        print(
+            t("engine.standards_skipped_batch_shim", engine=engine.name),
+            file=sys.stderr,
+        )
+        standards = ""
     pre_launch_commands = list(general_commands) + list(task_commands)
     allow_shell_first = args.allow_shell_first or _shell_first_allowed_via_override()
 
-    resource_lock = engine.acquire_resource_lock(
-        Path.home() / ".codex" / ".codeagent-session.lock"
-    )
-    try:
-        engine.ensure_skills_link(".codex/skills")
-        # 挂载插件 (创建全局临时映射以满足 Codex 加载要求)
+    def global_setup() -> None:
+        # Codex 读取用户级插件配置与安装缓存，而不是项目内 .codex/config.toml
         engine.ensure_plugins_link()
+        engine.ensure_plugins_available()
 
-        # 注入动态钩子
+    def global_teardown() -> None:
+        engine.cleanup_plugins_available()
+        engine.cleanup_plugins_link()
+
+    def project_setup() -> None:
+        engine.ensure_skills_link(".codex/skills")
         resolved_hooks = engine.get_hooks_to_inject()
         # Codex reads hooks from .codex/config.toml (TOML, Claude-shaped
         # matcher groups); the old .codex/settings.json was never read by it.
@@ -872,84 +927,78 @@ def main() -> None:
         if resolved_hooks:
             engine.warn_if_project_untrusted()
 
-        # Codex 读取用户级插件配置与安装缓存，而不是项目内 .codex/config.toml
-        engine.ensure_plugins_available()
+    def project_teardown() -> None:
+        engine.restore_settings(".codex/config.toml")
+        # 清理旧版本遗留的 .codex/settings.json —— codex 从不读取它，不清会让
+        # ca doctor 一直报 "stale injections"。
+        engine.restore_settings(".codex/settings.json")
+        engine.cleanup_skills_link(".codex/skills")
 
-        register_signal_handler()
-        run_prelaunch_commands(
-            pre_launch_commands,
-            env,
-            codex_non_interactive=codex_non_interactive,
-            allow_override=allow_shell_first,
+    def launch(text: str) -> None:
+        final_command = engine.build_command(
+            engine.first_message(text),
+            codex_non_interactive,
+            yolo=args.yolo,
+            standards=standards,
+            passthrough=passthrough,
         )
-
-        if code_plan_prompts:
-            for prompt, file_path, plan_commands in zip(
-                code_plan_prompts,
-                code_plan_files,
-                plan_command_sets,
-                strict=False,
-            ):
-                relative_plan = f"{file_path.parent.name}/{file_path.name}"
-                print(f"Code Plan: {relative_plan}")
-
-                message = full_prompt
-                if prompt:
-                    message = f"{message}\n\n{prompt}" if message else prompt
-
-                run_prelaunch_commands(
-                    plan_commands,
-                    env,
-                    codex_non_interactive=codex_non_interactive,
-                    allow_override=allow_shell_first,
-                )
-
-                concise_msg = engine.write_temp_prompt(message)
-                try:
-                    final_command = engine.build_command(
-                        concise_msg, codex_non_interactive, yolo=args.yolo
-                    )
-                    print(f"Launching {engine.name}...")
-                    engine.run_shell(final_command, env)
-                finally:
-                    engine.cleanup_temp_prompt()
-
-                code_plan_history = update_code_plan_history(
-                    file_path, code_plan_history
-                )
-                timestamp = (
-                    code_plan_history.get(file_path.stem) if code_plan_history else None
-                )
-                if timestamp:
-                    print(f"Recorded code plan run: {timestamp} ({relative_plan})")
-        else:
-            concise_msg = engine.write_temp_prompt(full_prompt)
-            try:
-                final_command = engine.build_command(
-                    concise_msg, codex_non_interactive, yolo=args.yolo
-                )
-                print(f"Launching {engine.name}...")
-                engine.run_shell(final_command, env)
-            finally:
-                engine.cleanup_temp_prompt()
-    finally:
+        print(f"Launching {engine.name}...")
         try:
-            # 1. 还原配置到注入前状态
-            engine.restore_settings(".codex/config.toml")
-            # 1b. 清理旧版本遗留的 .codex/settings.json —— codex 从不读取它，
-            #     钩子改写 config.toml 后它就成了孤儿，不清会让 ca doctor 一直报
-            #     "stale injections"。
-            engine.restore_settings(".codex/settings.json")
-            # 2. 还原全局 config.toml 并清理缓存
-            engine.cleanup_plugins_available()
-            # 3. 清理插件链接，避免 ~/.codex/plugins/ 下符号链接泄漏
-            engine.cleanup_plugins_link()
-            # 4. 清理所有技能链接
-            engine.cleanup_skills_link(".codex/skills")
-            # 5. 兜底清理所有临时文件
-            engine.cleanup_temp_prompt()
+            engine.run_shell(final_command, env)
         finally:
-            engine.release_resource_lock(resource_lock)
+            engine.cleanup_temp_prompt()
+
+    try:
+        # 全局范围用 config.toml 而不是 ~/.codex 做 key：在家目录里启动时项目
+        # 范围恰好也是 ~/.codex，两者不能落进同一份登记表。
+        with (
+            engine.shared_injection(
+                Path.home() / ".codex" / "config.toml", global_setup, global_teardown
+            ),
+            engine.shared_injection(
+                Path.cwd() / ".codex", project_setup, project_teardown
+            ),
+        ):
+            register_signal_handler()
+            run_prelaunch_commands(
+                pre_launch_commands,
+                env,
+                codex_non_interactive=codex_non_interactive,
+                allow_override=allow_shell_first,
+            )
+
+            if code_plan_prompts:
+                for prompt, file_path, plan_commands in zip(
+                    code_plan_prompts,
+                    code_plan_files,
+                    plan_command_sets,
+                    strict=False,
+                ):
+                    relative_plan = f"{file_path.parent.name}/{file_path.name}"
+                    print(f"Code Plan: {relative_plan}")
+
+                    run_prelaunch_commands(
+                        plan_commands,
+                        env,
+                        codex_non_interactive=codex_non_interactive,
+                        allow_override=allow_shell_first,
+                    )
+                    launch(f"{message}\n\n{prompt}".strip())
+
+                    code_plan_history = update_code_plan_history(
+                        file_path, code_plan_history
+                    )
+                    timestamp = (
+                        code_plan_history.get(file_path.stem)
+                        if code_plan_history
+                        else None
+                    )
+                    if timestamp:
+                        print(f"Recorded code plan run: {timestamp} ({relative_plan})")
+            else:
+                launch(message)
+    finally:
+        engine.cleanup_temp_prompt()
 
 
 if __name__ == "__main__":

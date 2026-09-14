@@ -525,9 +525,7 @@ def test_pty_websocket_kills_the_whole_process_group_without_tmux(
     """tmux 不可用时的回退：关闭终端必须连引擎 CLI（孙子进程）一起带走。
 
     The launcher execs the provider CLI as its own child, so signalling only
-    the tracked pid left that grandchild alive holding the workspace's
-    ``.codeagent-session.lock`` — and every later launch of that engine in
-    the workspace then blocked forever in ``flock(LOCK_EX)``.
+    the tracked pid left that grandchild alive with no terminal attached.
     """
     if sys.platform == "win32":
         pytest.skip("PTY sessions are POSIX-only")

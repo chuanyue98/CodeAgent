@@ -497,11 +497,10 @@ class _PosixSession:
 
         ``_spawn_posix`` passes ``start_new_session=True``, so the child is a
         process-group leader and the engine CLI it execs is a *grandchild*.
-        Signalling only the tracked pid leaves that grandchild running, and
-        with it the ``.codeagent-session.lock`` the launcher holds for the
-        workspace — after which every later launch of that engine there
-        blocks forever in ``flock(LOCK_EX)``, printing its banner and nothing
-        more. The Windows path already kills the tree for the same reason.
+        Signalling only the tracked pid leaves that grandchild running with no
+        terminal attached, and the launcher never gets to undo what it
+        injected into the workspace. The Windows path already kills the tree
+        for the same reason.
         """
         pid = self._process.pid
         if pid is None:

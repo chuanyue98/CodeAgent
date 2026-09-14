@@ -30,7 +30,29 @@ ca codebuddy               # Launch CodeBuddy engine
 ca antigravity             # Launch Antigravity engine (alias: agy)
 ca agy "Refactor this"     # Execute a task with Antigravity
 ca claude -t refactor      # Run a pre-defined task with Claude
+ca claude -r               # Engine flags pass through: resume a Claude session
+ca opencode -s <id>        # ...or an OpenCode one
+ca codex resume --last     # Codex subcommands pass through too
 ```
+
+Arguments the launcher does not recognise go to the engine unchanged. Only when every
+one of them is a plain word are they joined into the first message (`ca claude fix the
+login`); as soon as a native flag or subcommand appears, the whole list is passed
+through, because the launcher cannot tell which words are a flag's value.
+
+CodeAgent's standards are delivered through each engine's own system-prompt option, not
+the first message:
+
+| Engine | Channel |
+|--------|---------|
+| `claude` | `--append-system-prompt-file` |
+| `codebuddy` | `--append-system-prompt` (skipped on Windows, where `codebuddy` is a `.cmd` wrapper) |
+| `codex` | `-c developer_instructions=...` (skipped behind a Windows `.cmd` wrapper) |
+| `opencode` | appended to `instructions` via `OPENCODE_CONFIG_CONTENT` |
+| `antigravity` | none |
+
+Several sessions may run in the same project at once. Injected skills, hooks and plugin
+links are set up by each session and removed only when the last session using them exits.
 
 **Engine-Specific Behavior:**
 
