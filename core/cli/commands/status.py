@@ -21,7 +21,7 @@ from core.engine_registry import ENGINES, EngineSpec
 from core.i18n import t
 from core.project_groups import resolve_project_group
 from core.report import INFO, OK, WARN, Section, display_width, render_sections
-from core.services.sync_service import engine_targets, synced_group
+from core.services.sync_service import standards_file, synced_group
 
 _RESOURCE_KINDS = (
     ("skills", "status.kind_skills"),
@@ -73,6 +73,29 @@ def _project_section(config: dict, group: str) -> Section:
             "status.projects_count", count=len(config.get("project_registry") or [])
         ),
     )
+
+    # 规范只落一个文件，所以它属于"这个项目"，不属于某个引擎。
+    block_group = synced_group(standards_file())
+    if block_group == group:
+        section.add(
+            OK,
+            t("status.label_standards"),
+            detail=t("status.standards_ok", group=group),
+        )
+    elif block_group is not None:
+        # 项目登记换过组、或文件是别的项目留下的块，此刻的规范并不适用于本项目。
+        section.add(
+            WARN,
+            t("status.label_standards"),
+            detail=t("status.standards_other_group", other=block_group, group=group),
+        )
+    else:
+        section.add(
+            WARN,
+            t("status.label_standards"),
+            detail=t("status.standards_missing"),
+            fix_hint=t("status.standards_sync_hint"),
+        )
     return section
 
 
@@ -93,27 +116,7 @@ def _resources_section(config: dict, group: str) -> Section:
     return section
 
 
-def _standards_detail(spec: EngineSpec, group: str) -> tuple[str, str]:
-    """该引擎的规范状态，返回 ``(是否正常, 描述)``。"""
-    target = engine_targets().get(spec.name)
-    block_group = synced_group(target.memory_file) if target is not None else None
-
-    if target is not None and block_group == group:
-        return "ok", t("status.standards_user_config", path=str(target.memory_file))
-    if target is not None and block_group is not None:
-        # 用户级托管块只有一个 group 位。当前项目要的组和别人写进去的不一致，
-        # 说明规范此刻并不适用于这个项目——这正是"多项目共用一个用户级文件"
-        # 的固有风险，必须说出来。
-        return "warn", t(
-            "status.standards_other_group",
-            path=str(target.memory_file),
-            other=block_group,
-            group=group,
-        )
-    return "warn", t("status.standards_not_synced")
-
-
-def _engines_section(group: str) -> Section:
+def _engines_section() -> Section:
     section = Section(t("status.section_engines"))
 
     for spec in ENGINES.values():
@@ -125,19 +128,8 @@ def _engines_section(group: str) -> Section:
                 detail=t("status.engine_missing"),
                 fix_hint=spec.install_hint,
             )
-            continue
-
-        ok, detail = _standards_detail(spec, group)
-        section.add(
-            OK if ok == "ok" else WARN,
-            spec.display_name,
-            detail=f"{cli_path}  —  {detail}" if detail else cli_path,
-            fix_hint=(
-                t("status.standards_sync_hint", engine=spec.name)
-                if ok == "warn"
-                else ""
-            ),
-        )
+        else:
+            section.add(OK, spec.display_name, detail=cli_path)
     return section
 
 
@@ -156,7 +148,7 @@ def status(ctx):  # type: ignore[no-untyped-def]
     sections = [
         _project_section(config, group),
         _resources_section(config, group),
-        _engines_section(group),
+        _engines_section(),
     ]
 
     click.echo()

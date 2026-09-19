@@ -12,10 +12,8 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from core.cli.commands.status import _standards_detail
 from core.cli.main import cli
-from core.engine_registry import get_spec
-from core.services.sync_service import engine_targets, render_block
+from core.services.sync_service import STANDARDS_FILENAME, render_block
 
 
 def _write_config(path: Path, registry: list[dict]) -> None:
@@ -63,6 +61,7 @@ def test_status_reports_the_group_and_its_resources(status_env):
     for heading in ("Project", "Resources in group common", "Engines"):
         assert heading in result.output
     assert "Resource group" in result.output
+    assert "Standards" in result.output
     assert "skills 1" in result.output
     assert "prompts 1" in result.output
     assert "plugins 1" in result.output
@@ -98,35 +97,33 @@ def test_status_survives_a_group_that_is_not_defined(tmp_path, monkeypatch, home
     assert "ghost" in result.output
 
 
-# --- 每个引擎的规范状态判定 ------------------------------------------------
+# --- 规范落盘状态（项目根的 AGENTS.md）------------------------------------
 
 
-def test_nothing_synced_is_flagged(home):
-    state, detail = _standards_detail(get_spec("claude"), "common")
+def test_agents_md_without_a_block_is_flagged_with_the_sync_hint(status_env):
+    result = CliRunner().invoke(cli, ["status"])
 
-    assert state == "warn"
-    assert "not synced" in detail
-
-
-def test_a_user_level_block_for_this_group_is_ok(home):
-    target = engine_targets()["claude"]
-    target.memory_file.parent.mkdir(parents=True, exist_ok=True)
-    target.memory_file.write_text(render_block("common", "S"), encoding="utf-8")
-
-    state, detail = _standards_detail(get_spec("claude"), "common")
-
-    assert state == "ok"
-    assert "user-level" in detail
+    assert result.exit_code == 0, result.output
+    assert "no AGENTS.md block yet" in result.output
+    assert "ca sync" in result.output
 
 
-def test_a_user_level_block_for_another_group_is_flagged(home):
-    """用户级托管块只有一个 group 位，别的项目写进去后本项目的规范就失效了。"""
-    target = engine_targets()["claude"]
-    target.memory_file.parent.mkdir(parents=True, exist_ok=True)
-    target.memory_file.write_text(render_block("work", "S"), encoding="utf-8")
+def test_agents_md_for_this_group_is_ok(status_env):
+    (status_env / STANDARDS_FILENAME).write_text(
+        render_block("common", "S"), encoding="utf-8"
+    )
 
-    state, detail = _standards_detail(get_spec("claude"), "common")
+    result = CliRunner().invoke(cli, ["status"])
 
-    assert state == "warn"
-    assert "work" in detail
-    assert "common" in detail
+    assert "AGENTS.md holds group common" in result.output
+
+
+def test_agents_md_for_another_group_is_flagged(status_env):
+    """项目登记换过组、或文件是别的项目留下的块，此刻的规范并不适用于本项目。"""
+    (status_env / STANDARDS_FILENAME).write_text(
+        render_block("work", "S"), encoding="utf-8"
+    )
+
+    result = CliRunner().invoke(cli, ["status"])
+
+    assert "holds group work, not common" in result.output

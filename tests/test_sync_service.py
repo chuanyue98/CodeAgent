@@ -9,9 +9,11 @@ from click.testing import CliRunner
 from core.link_manager import LinkManager
 from core.services import sync_service
 from core.services.sync_service import (
+    STANDARDS_FILENAME,
     SyncItem,
     render_block,
     replace_block,
+    standards_file,
     strip_block,
     synced_group,
 )
@@ -51,6 +53,13 @@ def home(tmp_path, monkeypatch):
     monkeypatch.delenv("CODEX_HOME", raising=False)
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     return home
+
+
+@pytest.fixture
+def project(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    return project
 
 
 def _use_resources(monkeypatch, standards="STANDARDS_BODY", skills=()):
@@ -95,73 +104,133 @@ def test_synced_group_reads_the_marker(tmp_path):
     assert synced_group(path) == "work"
 
 
+def test_standards_file_defaults_to_the_current_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    assert standards_file() == tmp_path / STANDARDS_FILENAME
+    assert standards_file(tmp_path / "elsewhere") == (
+        tmp_path / "elsewhere" / STANDARDS_FILENAME
+    )
+
+
 # --- sync ----------------------------------------------------------------
 
 
-def test_sync_writes_every_engine_and_is_idempotent(monkeypatch, home, skill_source):
+def test_sync_writes_one_agents_md_and_skills_for_every_engine(
+    monkeypatch, home, project, skill_source
+):
+    """规范只写一个文件、只报一条；技能仍然每个引擎一份。"""
     _use_resources(monkeypatch, skills=[("commit-message", skill_source)])
 
-    group, items = sync_service.sync(home=home)
+    group, items = sync_service.sync(root=project, home=home)
 
     assert group == "common"
+    assert (project / STANDARDS_FILENAME).read_text(encoding="utf-8").count(
+        "STANDARDS_BODY"
+    ) == 1
+    # 不再 fan-out 到各引擎自己的文件名。
+    for name in ("CLAUDE.md", "CODEBUDDY.md", "GEMINI.md"):
+        assert not (project / name).exists()
+
+    standards_items = [item for item in items if item.kind == "standards"]
+    assert len(standards_items) == 1
+    assert standards_items[0].engine == ""
+    assert standards_items[0].name == STANDARDS_FILENAME
+
     targets = sync_service.engine_targets(home)
     for target in targets.values():
-        assert "STANDARDS_BODY" in target.memory_file.read_text(encoding="utf-8")
         assert (target.skills_dir / "commit-message" / "SKILL.md").exists()
     assert {item.action for item in items} == {"write"}
-    assert (
-        targets["antigravity"].memory_file == home / ".gemini" / "config" / "GEMINI.md"
-    )
 
-    _, again = sync_service.sync(home=home)
+    _, again = sync_service.sync(root=project, home=home)
     assert {item.action for item in again} == {"unchanged"}
 
 
-def test_sync_keeps_user_content_and_remove_takes_only_our_part(
-    monkeypatch, home, skill_source
+def test_sync_keeps_agents_md_content_and_remove_takes_only_our_part(
+    monkeypatch, home, project, skill_source
 ):
-    claude_md = home / ".claude" / "CLAUDE.md"
-    claude_md.parent.mkdir(parents=True)
-    claude_md.write_text("# 我自己的规则\n", encoding="utf-8")
+    agents_md = project / STANDARDS_FILENAME
+    agents_md.write_text("# 我自己的规则\n", encoding="utf-8")
     _use_resources(monkeypatch, skills=[("commit-message", skill_source)])
-    sync_service.sync(engines=["claude"], home=home)
+    sync_service.sync(engines=["claude"], root=project, home=home)
 
-    _, items = sync_service.sync(engines=["claude"], remove=True, home=home)
+    assert "# 我自己的规则" in agents_md.read_text(encoding="utf-8")
 
-    assert claude_md.read_text(encoding="utf-8") == "# 我自己的规则\n"
+    _, items = sync_service.sync(
+        engines=["claude"], remove=True, root=project, home=home
+    )
+
+    assert agents_md.read_text(encoding="utf-8") == "# 我自己的规则\n"
     assert not (home / ".claude" / "skills" / "commit-message").exists()
-    assert {(item.kind, item.action) for item in items} == {
+    assert [(item.kind, item.action) for item in items] == [
         ("standards", "remove"),
         ("skill", "remove"),
-    }
+    ]
 
 
-def test_sync_never_replaces_a_user_owned_skill(monkeypatch, home, skill_source):
+def test_remove_deletes_an_agents_md_that_only_held_our_block(
+    monkeypatch, home, project
+):
+    """项目里原本没有 AGENTS.md 时，还原就该还原成没有，而不是留个空文件。"""
+    _use_resources(monkeypatch)
+    sync_service.sync(root=project, home=home)
+    assert (project / STANDARDS_FILENAME).exists()
+
+    sync_service.sync(remove=True, root=project, home=home)
+
+    assert not (project / STANDARDS_FILENAME).exists()
+
+
+def test_sync_never_replaces_a_user_owned_skill(
+    monkeypatch, home, project, skill_source
+):
     own = home / ".claude" / "skills" / "commit-message"
     own.mkdir(parents=True)
     (own / "SKILL.md").write_text("mine", encoding="utf-8")
     _use_resources(monkeypatch, skills=[("commit-message", skill_source)])
 
-    _, items = sync_service.sync(engines=["claude"], home=home)
+    _, items = sync_service.sync(engines=["claude"], root=project, home=home)
 
     assert _by(items, "claude", "skill")[0].action == "conflict"
     assert (own / "SKILL.md").read_text(encoding="utf-8") == "mine"
 
 
-def test_dry_run_writes_nothing(monkeypatch, home, skill_source):
+def test_dry_run_writes_nothing(monkeypatch, home, project, skill_source):
     _use_resources(monkeypatch, skills=[("commit-message", skill_source)])
 
-    _, items = sync_service.sync(dry_run=True, home=home)
+    _, items = sync_service.sync(dry_run=True, root=project, home=home)
 
     assert {item.action for item in items} == {"write"}
     assert not any(home.iterdir())
+    assert not any(project.iterdir())
 
 
-def test_unknown_group_is_rejected(monkeypatch, home):
+def test_unknown_group_is_rejected(monkeypatch, home, project):
     _use_resources(monkeypatch)
 
     with pytest.raises(ValueError, match="nope"):
-        sync_service.sync(group="nope", home=home)
+        sync_service.sync(group="nope", root=project, home=home)
+
+
+def test_unknown_scope_is_rejected(monkeypatch, home, project):
+    _use_resources(monkeypatch)
+
+    with pytest.raises(ValueError, match="Unknown scope"):
+        sync_service.sync(scope="galaxy", root=project, home=home)
+
+
+def test_user_scope_still_writes_each_engines_user_level_config(
+    monkeypatch, home, project
+):
+    """`ca sync --user` 保留旧位置，用来清理历史遗留的托管块。"""
+    _use_resources(monkeypatch)
+
+    _, items = sync_service.sync(scope="user", engines=["claude"], home=home)
+
+    memory_file = home / ".claude" / "CLAUDE.md"
+    assert "STANDARDS_BODY" in memory_file.read_text(encoding="utf-8")
+    assert not (project / STANDARDS_FILENAME).exists()
+    assert _by(items, "", "standards")[0].name == str(memory_file)
 
 
 def test_codex_home_is_respected(monkeypatch, home, tmp_path):
@@ -181,17 +250,6 @@ def test_codebuddy_config_dir_is_respected(monkeypatch, home, tmp_path):
     assert target.memory_file == tmp_path / "cb" / "CODEBUDDY.md"
 
 
-def test_is_synced_matches_engine_and_group(monkeypatch, home):
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("USERPROFILE", str(home))
-    _use_resources(monkeypatch)
-    sync_service.sync(group="work", engines=["opencode"], home=home)
-
-    assert sync_service.is_synced("opencode", "work")
-    assert not sync_service.is_synced("opencode", "common")
-    assert not sync_service.is_synced("claude", "work")
-
-
 # --- CLI -----------------------------------------------------------------
 
 
@@ -200,18 +258,33 @@ def test_cli_reports_each_item_and_fails_on_errors(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     items = [
-        SyncItem("claude", "standards", str(Path("/h/.claude/CLAUDE.md")), "write"),
+        SyncItem("", "standards", "AGENTS.md", "write"),
         SyncItem("claude", "skill", "commit-message", "failed"),
     ]
     with patch.object(sync_service, "sync", return_value=("common", items)) as mocked:
         result = CliRunner().invoke(cli, ["sync", "--engine", "claude", "--dry-run"])
 
     mocked.assert_called_once_with(
-        group=None, engines=["claude"], remove=False, dry_run=True
+        group=None,
+        engines=["claude"],
+        remove=False,
+        dry_run=True,
+        scope="project",
+        root=None,
     )
-    assert "CLAUDE.md" in result.output
+    assert "AGENTS.md" in result.output
     assert "skills/commit-message" in result.output
     assert result.exit_code == 1
+
+
+def test_cli_user_flag_changes_the_scope(tmp_path, monkeypatch):
+    from core.cli.main import cli
+
+    monkeypatch.chdir(tmp_path)
+    with patch.object(sync_service, "sync", return_value=("common", [])) as mocked:
+        CliRunner().invoke(cli, ["sync", "--user"])
+
+    assert mocked.call_args.kwargs["scope"] == "user"
 
 
 def test_cli_turns_value_errors_into_exit_code_1(tmp_path, monkeypatch):
@@ -223,3 +296,16 @@ def test_cli_turns_value_errors_into_exit_code_1(tmp_path, monkeypatch):
 
     assert result.exit_code == 1
     assert "bad group" in result.output
+
+
+def test_cli_project_option_points_the_standards_at_another_directory(
+    tmp_path, monkeypatch
+):
+    from core.cli.main import cli
+
+    monkeypatch.chdir(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    with patch.object(sync_service, "sync", return_value=("common", [])) as mocked:
+        CliRunner().invoke(cli, ["sync", "--project", str(elsewhere)])
+
+    assert mocked.call_args.kwargs["root"] == Path(elsewhere)

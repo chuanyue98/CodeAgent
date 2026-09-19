@@ -2,7 +2,7 @@
 
 > **Philosophy**: Don't be a tenant in someone else's IDE. Own your prompts, own your standards, and switch your AI engine at will.
 
-CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an **engineering shell** that injects your private standards (The "Soul") and automation tools (The "Skills") into any LLM engine, ensuring consistent, high-quality engineering output.
+CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an **engineering shell** that delivers your private standards (The "Soul") and automation tools (The "Skills") to any LLM engine, ensuring consistent, high-quality engineering output.
 
 ## Features
 
@@ -116,7 +116,7 @@ the whole loop — everything below is optional.
 ### Launch an Engine
 
 ```bash
-# Start the default engine (opencode) with project context injection
+# Start the default engine (opencode) with project context
 python ca_launcher.py
 
 # Launch a specific engine
@@ -138,11 +138,11 @@ ca codex resume --last
 ```
 
 Anything `ca` does not recognise goes to the engine unchanged, and `ca claude --help`
-shows Claude's own help. Your standards reach the engine through its native
-system-prompt option (Claude/CodeBuddy `--append-system-prompt`, Codex
-`developer_instructions`, OpenCode `instructions`), so the first message of the
-conversation stays yours. Several sessions can run in the same project at once; the
-injected skills and hooks are removed when the last of them exits.
+shows Claude's own help. Your standards reach the engine the same way they reach a bare
+`claude` or `codex` run: from the project's `AGENTS.md`, which `ca sync` writes and every
+engine reads by itself. Nothing is injected into the system prompt, so the first message
+of the conversation stays yours. Several sessions can run in the same project at once;
+the linked skills and hooks are removed when the last of them exits.
 
 The `ca` command is also registered as a console script after `pip install -e .`:
 
@@ -172,20 +172,22 @@ Opens the dashboard at `http://127.0.0.1:8524`. Features:
 ### Use Your Standards Without `ca`
 
 ```bash
-ca sync                  # write standards + skills into every engine's user-level config
+ca sync                  # write the standards into this project's AGENTS.md
 ca sync --dry-run        # preview first
-ca sync --engine claude  # just one engine
+ca sync --engine claude  # just one engine's skills
 ca sync --remove         # take it all back out
+ca sync --user           # legacy: engines' user-level config (cleanup only)
 ```
 
-After one `ca sync`, the bare commands — `claude`, `codex`, `opencode`, `codebuddy`,
-`agy` — load your standards and skills by themselves. Standards go into a marked block
-inside each engine's own file (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
-`~/.config/opencode/AGENTS.md`, `~/.codebuddy/CODEBUDDY.md`,
-`~/.gemini/config/GEMINI.md`); anything you wrote outside that block is left alone, and a
-skill directory you already own is never replaced. `ca <engine>` notices the sync and
-stops injecting the same group a second time. Run it once on each machine — WSL and
-Windows keep separate home directories.
+After one `ca sync`, the bare commands — `claude`, `codex`, `opencode`, `codebuddy` —
+load your standards by themselves: the group's standards go into a marked block inside
+the project's `AGENTS.md`, and anything you wrote outside that block is left alone.
+One file, not one per engine — all four read `AGENTS.md` natively (verified). Skills
+still get linked into each engine's own **user-level** skill directory, because their
+layouts differ; a skill directory you already own is never replaced.
+
+`agy` is the exception: it reads no project-level file at all (verified), so nothing is
+written for it. Run `ca sync` once per project, and re-run it after changing prompts.
 
 ### Switch Engines Mid-Conversation
 

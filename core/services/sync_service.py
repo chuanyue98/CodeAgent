@@ -1,11 +1,17 @@
-"""``ca sync``：把一个资源组的规范和技能写进各引擎的用户级位置。
+"""``ca sync``：把一个资源组的规范落到当前项目，技能挂到各引擎的用户级位置。
 
-同步一次之后，直接敲 ``claude``、``opencode`` 等原生命令也带着 CodeAgent 的
-规范和技能，不必每次都经过 ``ca`` 启动。
+规范写进项目根的 ``AGENTS.md``，一段带标记的托管块，块外内容原样保留。
+不按引擎 fan-out 到 ``CLAUDE.md`` / ``CODEBUDDY.md`` / ``GEMINI.md``：各引擎
+都原生读 ``AGENTS.md``（依据见 :data:`STANDARDS_FILENAME` 处的注释），
+antigravity 则项目级一个都不读，代它写没有意义。
 
-规范写成用户规范文件（``CLAUDE.md``、``AGENTS.md`` ……）里一段带标记的托管块，
-块外的内容原样保留；技能以链接形式挂进用户级技能目录，只动 CodeAgent 自己
-清单里记录的链接，同名的用户文件一律不碰。
+技能仍然挂到各引擎的**用户级**技能目录。技能的目录布局各引擎不同，而且启动器
+本来就会按当前项目临时挂一份（``_LinksMixin.ensure_skills_link``），用户级那份
+是"不经 ``ca`` 直接敲原生命令"时的兜底。两处用同一套 manifest 机制，但落在
+不同目录，所以互不干扰。
+
+``scope="user"`` 是旧行为（规范写进各引擎的用户级规范文件），只保留给
+``ca sync --user`` 清理历史遗留的托管块用。
 """
 
 from __future__ import annotations
@@ -22,6 +28,14 @@ from core.logging_config import get_logger
 from core.utils.atomic_write import atomic_write
 
 logger = get_logger(__name__)
+
+#: 项目级规范落盘的文件名。claude / codebuddy / opencode / codex 都原生读取项目根
+#: 的这个文件，依据是 2026-09-19 的实测：临时目录里只放一个 ``AGENTS.md``，
+#: 用 headless 模式追问"你的口令是什么"，claude 与 opencode 都答对了；codebuddy
+#: 在被它自己启动的会话里直接把该文件当 project instructions 带进了系统提示；
+#: codex 的 ``AGENTS.md`` 本来就是它定义的。antigravity 则连给它 ``GEMINI.md``
+#: 都答 ``UNKNOWN``，其全局配置里也查不到任何记忆文件机制，故不为它落盘。
+STANDARDS_FILENAME = "AGENTS.md"
 
 _BLOCK_END = "<!-- codeagent:end -->"
 _BLOCK_RE = re.compile(
@@ -43,14 +57,22 @@ class EngineTarget:
 
 @dataclass(frozen=True)
 class SyncItem:
-    engine: str
+    engine: str  # 规范条目为空串：它不属于某个引擎
     kind: str  # "standards" | "skill"
     name: str
     action: str  # "write" | "update" | "unchanged" | "remove" | "conflict" | "failed"
 
 
+def standards_file(root: Path | None = None) -> Path:
+    """规范落盘位置：项目根的 ``AGENTS.md``。"""
+    return (root if root is not None else Path.cwd()) / STANDARDS_FILENAME
+
+
 def engine_targets(home: Path | None = None) -> dict[str, EngineTarget]:
-    """各引擎用户级规范文件与技能目录的位置（均按引擎自带的发现规则确认过）。"""
+    """各引擎用户级规范文件与技能目录的位置（均按引擎自带的发现规则确认过）。
+
+    技能仍落在这里；规范文件只有 ``ca sync --user`` 还用得到。
+    """
     home = home if home is not None else Path.home()
     codex_home = (
         Path(os.environ["CODEX_HOME"])
@@ -113,12 +135,6 @@ def synced_group(memory_file: Path) -> str | None:
     return match.group("group") if match else None
 
 
-def is_synced(engine: str, group: str) -> bool:
-    """*engine* 的用户级位置是否已经同步了 *group*，启动器据此跳过重复注入。"""
-    target = engine_targets().get(normalize_engine_name(engine))
-    return target is not None and synced_group(target.memory_file) == group
-
-
 class _GroupEngine(BaseEngine):
     """按指定资源组解析规范和技能，而不是按当前目录所属的组。"""
 
@@ -135,15 +151,24 @@ def sync(
     engines: list[str] | None = None,
     remove: bool = False,
     dry_run: bool = False,
+    scope: str = "project",
+    root: Path | None = None,
     home: Path | None = None,
 ) -> tuple[str, list[SyncItem]]:
-    """把 *group* 同步到 *engines*（默认全部）的用户级位置，返回 (组名, 逐项结果)。
+    """把 *group* 落盘，返回 (组名, 逐项结果)。
+
+    ``scope="project"``（默认）把规范写进 ``root`` 下的 ``AGENTS.md``；
+    ``scope="user"`` 写进各引擎的用户级规范文件，只用于清理旧同步。
+    技能一律挂到各引擎的用户级技能目录。
 
     ``remove=True`` 撤掉 CodeAgent 写入的托管块和技能链接。
 
     Raises:
-        ValueError: 资源组或引擎名不存在。
+        ValueError: 资源组、引擎名或 scope 不存在。
     """
+    if scope not in ("project", "user"):
+        raise ValueError(f"Unknown scope {scope!r}; expected 'project' or 'user'")
+
     resources = _GroupEngine(group)
     known_groups = resources.full_config.get("groups", {})
     if not remove and resources.group not in known_groups:
@@ -163,17 +188,37 @@ def sync(
     skills = [] if remove else resources.resolve_skill_sources()
 
     items: list[SyncItem] = []
+    if scope == "user":
+        for name in selected:
+            memory_file = targets[name].memory_file
+            items.append(
+                _sync_standards(
+                    memory_file, str(memory_file), resources.group, standards, dry_run
+                )
+            )
+    else:
+        items.append(
+            _sync_standards(
+                standards_file(root),
+                STANDARDS_FILENAME,
+                resources.group,
+                standards,
+                dry_run,
+            )
+        )
+
     for name in selected:
-        target = targets[name]
-        items.append(_sync_standards(target, resources.group, standards, dry_run))
-        items.extend(_sync_skills(resources.link_manager, target, skills, dry_run))
+        items.extend(
+            _sync_skills(
+                resources.link_manager, name, targets[name].skills_dir, skills, dry_run
+            )
+        )
     return resources.group, items
 
 
 def _sync_standards(
-    target: EngineTarget, group: str, standards: str, dry_run: bool
+    path: Path, label: str, group: str, standards: str, dry_run: bool
 ) -> SyncItem:
-    path = target.memory_file
     try:
         current = path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -194,23 +239,28 @@ def _sync_standards(
         action = "write"
 
     if not dry_run and updated != current:
-        # 撤销后即使只剩空内容也保留文件：它可能是用户自己建的空文件。
-        path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write(path, updated)
-    return SyncItem(target.engine, "standards", str(path), action)
+        if not updated and _BLOCK_RE.search(current):
+            # 文件里原本只有我们的块（多半是 `ca sync` 建出来的），删掉块后
+            # 留一个空文件是噪音——原本就不存在的东西，还原成不存在。
+            path.unlink(missing_ok=True)
+        else:
+            # 撤销后即使只剩空内容也保留文件：它可能是用户自己建的空文件。
+            path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write(path, updated)
+    return SyncItem("", "standards", label, action)
 
 
 def _sync_skills(
     links: LinkManager,
-    target: EngineTarget,
+    engine: str,
+    link_dir: Path,
     skills: list[tuple[str, Path]],
     dry_run: bool,
 ) -> list[SyncItem]:
-    link_dir = target.skills_dir
     manifest = links.load_manifest(link_dir) if link_dir.is_dir() else {}
     desired = {name for name, _ in skills}
     items = [
-        SyncItem(target.engine, "skill", name, "remove")
+        SyncItem(engine, "skill", name, "remove")
         for name in sorted(set(manifest) - desired)
     ]
 
@@ -238,5 +288,5 @@ def _sync_skills(
                     "Failed to link skill %r into %s: %s", name, link_dir, exc
                 )
                 action = "failed"
-        items.append(SyncItem(target.engine, "skill", name, action))
+        items.append(SyncItem(engine, "skill", name, action))
     return items

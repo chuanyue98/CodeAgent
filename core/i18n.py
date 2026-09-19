@@ -294,21 +294,25 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "not found on PATH",
         "zh": "未在 PATH 上找到",
     },
-    "status.standards_user_config": {
-        "en": "standards via user-level {path}",
-        "zh": "规范由用户级 {path} 提供",
+    "status.label_standards": {
+        "en": "Standards",
+        "zh": "规范",
+    },
+    "status.standards_ok": {
+        "en": "AGENTS.md holds group {group}",
+        "zh": "AGENTS.md 里是本组（{group}）",
     },
     "status.standards_other_group": {
-        "en": "user-level {path} holds group {other}, not {group}",
-        "zh": "用户级 {path} 里是分组 {other}，当前项目要的是 {group}",
+        "en": "AGENTS.md holds group {other}, not {group}",
+        "zh": "AGENTS.md 里是分组 {other}，当前项目要的是 {group}",
     },
-    "status.standards_not_synced": {
-        "en": "standards not synced for this group",
-        "zh": "本组规范尚未落盘",
+    "status.standards_missing": {
+        "en": "no AGENTS.md block yet",
+        "zh": "AGENTS.md 里还没有托管块",
     },
     "status.standards_sync_hint": {
-        "en": "ca sync --engine {engine}",
-        "zh": "ca sync --engine {engine}",
+        "en": "ca sync",
+        "zh": "ca sync",
     },
     # --- ca ui ---
     "ui.open_in_browser": {
@@ -743,12 +747,22 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh": "演练模式 —— 未写入任何内容。",
     },
     "sync.group": {
-        "en": "Syncing resource group [{group}] into each engine's user-level config:",
-        "zh": "把资源组 [{group}] 同步到各引擎的用户级配置：",
+        "en": "Syncing resource group [{group}] into this project's {file}:",
+        "zh": "把资源组 [{group}] 同步到本项目的 {file}：",
     },
     "sync.removing": {
-        "en": "Removing what `ca sync` wrote from each engine's user-level config:",
-        "zh": "从各引擎的用户级配置中移除 `ca sync` 写入的内容：",
+        "en": "Removing what `ca sync` wrote:",
+        "zh": "移除 `ca sync` 写入的内容：",
+    },
+    "sync.user_scope": {
+        "en": (
+            "[!] --user writes into each engine's user-level config instead of the "
+            "project's AGENTS.md; use it only to clean up older syncs."
+        ),
+        "zh": (
+            "[!] --user 会写进各引擎的用户级配置，而不是本项目的 AGENTS.md；"
+            "只用于清理早前同步留下的内容。"
+        ),
     },
     "sync.conflicts": {
         "en": (
@@ -763,11 +777,13 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
     "sync.done": {
         "en": (
-            "\nDone. `claude`, `codex`, `opencode`, `codebuddy` and `agy` now load these "
-            "on their own.\nRe-run `ca sync` after changing prompts or skills."
+            "\nDone. The engines read AGENTS.md on their own, so `claude`, `codex`, "
+            "`opencode` and `codebuddy` pick it up without going through `ca`.\n"
+            "Re-run `ca sync` after changing prompts or skills."
         ),
         "zh": (
-            "\n完成。现在直接敲 `claude`、`codex`、`opencode`、`codebuddy`、`agy` 也会加载这些规范和技能。\n"
+            "\n完成。各引擎自己会读 AGENTS.md，所以直接敲 `claude`、`codex`、`opencode`、"
+            "`codebuddy` 也能拿到规范，不必经过 `ca`。\n"
             "修改 prompt 或技能后重新运行 `ca sync`。"
         ),
     },
