@@ -1,10 +1,12 @@
-"""ca 启动器到原生 CLI 的端到端行为：参数透传、规范走系统提示、并发会话。"""
+"""ca 启动器到原生 CLI 的端到端行为：参数透传、并发会话。
+
+规范不在这里测：启动器已经不投递规范（各引擎自己读项目根的 AGENTS.md），
+落盘是 ``ca sync`` 的事，见 ``tests/test_sync_service.py``。
+"""
 
 from __future__ import annotations
 
-import json
 import sys
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -29,23 +31,14 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.delenv("CA_YOLO", raising=False)
-    monkeypatch.delenv(opencode_mod.CONFIG_CONTENT_ENV, raising=False)
     monkeypatch.chdir(project)
     return project
 
 
-def _stub_resources(
-    monkeypatch, module, engine_cls, standards="STANDARDS_MARKER", batch_shim=False
-):
+def _stub_resources(monkeypatch, module, engine_cls):
     monkeypatch.setattr(module, "require_engine_cli", lambda _name: True)
-    monkeypatch.setattr(engine_cls, "assemble_standards", lambda self: standards)
     for name in ("get_plugins_to_mount", "get_skills_to_mount", "get_hooks_to_inject"):
         monkeypatch.setattr(engine_cls, name, lambda self: [])
-    if hasattr(module, "is_batch_shim"):
-        # 跑测试的机器可能真把 codex/codebuddy 装成 .cmd 包装，而"规范注入了
-        # 没有"取决于这个条件。所以它必须由用例钉住，不能跟着机器走，否则同
-        # 一个用例在 Linux CI 绿、在 Windows 本地红。
-        monkeypatch.setattr(module, "is_batch_shim", lambda *_a: batch_shim)
 
 
 def _capture_run(monkeypatch, engine_cls, on_run=None):
@@ -128,14 +121,7 @@ def test_teardown_still_runs_when_the_session_fails(isolated):
 
 def _run_claude(monkeypatch, argv):
     _stub_resources(monkeypatch, claude_mod, claude_mod.ClaudeEngine)
-
-    def read_standards(seen):
-        cmd = seen["cmd"]
-        standards_path = Path(cmd[cmd.index("--append-system-prompt-file") + 1])
-        seen["standards_path"] = standards_path
-        seen["standards"] = standards_path.read_text(encoding="utf-8")
-
-    seen = _capture_run(monkeypatch, claude_mod.ClaudeEngine, read_standards)
+    seen = _capture_run(monkeypatch, claude_mod.ClaudeEngine)
     monkeypatch.setattr(sys, "argv", ["start_claude_code.py", *argv])
     claude_mod.main()
     return seen
@@ -145,7 +131,6 @@ def test_claude_resume_flag_reaches_claude_instead_of_the_prompt(isolated, monke
     seen = _run_claude(monkeypatch, ["-r"])
 
     assert seen["cmd"][-1] == "-r"
-    assert seen["standards"] == "STANDARDS_MARKER"
     assert not any("CURRENT TASK" in arg or "IMPORTANT" in arg for arg in seen["cmd"])
 
 
@@ -161,28 +146,6 @@ def test_claude_help_is_claudes_own(isolated, monkeypatch):
     assert seen["cmd"][-1] == "--help"
 
 
-def test_claude_standards_file_is_removed_after_the_session(isolated, monkeypatch):
-    seen = _run_claude(monkeypatch, [])
-
-    assert not seen["standards_path"].exists()
-
-
-def test_claude_skips_injection_when_the_group_is_already_synced(isolated, monkeypatch):
-    _stub_resources(monkeypatch, claude_mod, claude_mod.ClaudeEngine)
-    monkeypatch.setattr(claude_mod, "is_synced", lambda _engine, _group: True)
-    linked: list[str] = []
-    monkeypatch.setattr(
-        claude_mod.ClaudeEngine, "ensure_skills_link", lambda self, p: linked.append(p)
-    )
-    seen = _capture_run(monkeypatch, claude_mod.ClaudeEngine)
-    monkeypatch.setattr(sys, "argv", ["start_claude_code.py"])
-
-    claude_mod.main()
-
-    assert "--append-system-prompt-file" not in seen["cmd"]
-    assert linked == []
-
-
 def test_claude_non_interactive_uses_print_mode():
     cmd = claude_mod.ClaudeEngine().build_command("do it", True)
 
@@ -192,52 +155,39 @@ def test_claude_non_interactive_uses_print_mode():
 # --- codebuddy -----------------------------------------------------------
 
 
-def _run_codebuddy(monkeypatch, argv, batch_shim=False):
-    _stub_resources(
-        monkeypatch,
-        codebuddy_mod,
-        codebuddy_mod.CodeBuddyEngine,
-        batch_shim=batch_shim,
-    )
+def _run_codebuddy(monkeypatch, argv):
+    _stub_resources(monkeypatch, codebuddy_mod, codebuddy_mod.CodeBuddyEngine)
     seen = _capture_run(monkeypatch, codebuddy_mod.CodeBuddyEngine)
     monkeypatch.setattr(sys, "argv", ["start_codebuddy.py", *argv])
     codebuddy_mod.main()
     return seen
 
 
-def test_codebuddy_appends_standards_to_the_system_prompt(isolated, monkeypatch):
+def test_codebuddy_keeps_auto_permission_mode_and_passes_through(isolated, monkeypatch):
     seen = _run_codebuddy(monkeypatch, ["--resume", "abc"])
 
-    cmd = seen["cmd"]
-    assert cmd[cmd.index("--append-system-prompt") + 1] == "STANDARDS_MARKER"
-    assert cmd[-2:] == ["--resume", "abc"]
-
-
-def test_codebuddy_skips_standards_behind_a_windows_cmd_wrapper(
-    isolated, monkeypatch, capsys
-):
-    seen = _run_codebuddy(monkeypatch, ["hi"], batch_shim=True)
-
-    assert "--append-system-prompt" not in seen["cmd"]
-    assert seen["cmd"][-1] == "hi"
-    assert ".cmd" in capsys.readouterr().err
+    assert seen["cmd"] == [
+        "codebuddy",
+        "--permission-mode",
+        "auto",
+        "--resume",
+        "abc",
+    ]
 
 
 # --- codex ---------------------------------------------------------------
 
 
-def test_codex_session_subcommand_takes_the_injected_flags_after_it():
+def test_codex_session_subcommand_comes_before_the_bypass_flag():
     cmd = codex_mod.CodexEngine().build_command(
-        "", yolo=True, standards="S", passthrough=["resume", "abc"]
+        "", yolo=True, passthrough=["resume", "abc"]
     )
 
-    assert cmd == ["codex", "resume", BYPASS, "-c", 'developer_instructions="S"', "abc"]
+    assert cmd == ["codex", "resume", BYPASS, "abc"]
 
 
 def test_codex_unrelated_subcommand_is_passed_through_bare():
-    cmd = codex_mod.CodexEngine().build_command(
-        "", yolo=True, standards="S", passthrough=["login"]
-    )
+    cmd = codex_mod.CodexEngine().build_command("", yolo=True, passthrough=["login"])
 
     assert cmd == ["codex", "login"]
 
@@ -251,19 +201,8 @@ def test_codex_non_interactive_shape_is_unchanged():
     ]
 
 
-def test_codex_standards_value_round_trips_through_toml():
-    standards = '# 规范\nsay "hi" & | <x>\n\ttab \\ backslash'
-    cmd = codex_mod.CodexEngine().build_command("", standards=standards)
-
-    key, _, value = cmd[cmd.index("-c") + 1].partition("=")
-    assert key == "developer_instructions"
-    assert tomllib.loads(f"v = {value}")["v"] == standards
-
-
-def _run_codex(monkeypatch, argv, batch_shim=False):
-    _stub_resources(
-        monkeypatch, codex_mod, codex_mod.CodexEngine, batch_shim=batch_shim
-    )
+def _run_codex(monkeypatch, argv):
+    _stub_resources(monkeypatch, codex_mod, codex_mod.CodexEngine)
     monkeypatch.setattr(codex_mod, "list_code_plan_directories", lambda: [])
     seen = _capture_run(monkeypatch, codex_mod.CodexEngine)
     monkeypatch.setattr(sys, "argv", ["start_codex.py", *argv])
@@ -275,67 +214,23 @@ def test_codex_native_config_flag_is_not_mistaken_for_code_plan(isolated, monkey
     seen = _run_codex(monkeypatch, ["-c", "model=o3"])
 
     assert seen["cmd"][-2:] == ["-c", "model=o3"]
-    assert 'developer_instructions="STANDARDS_MARKER"' in seen["cmd"]
-
-
-def test_codex_skips_standards_behind_a_windows_cmd_wrapper(
-    isolated, monkeypatch, capsys
-):
-    seen = _run_codex(monkeypatch, ["hi"], batch_shim=True)
-
-    assert not any(arg.startswith("developer_instructions") for arg in seen["cmd"])
-    assert ".cmd" in capsys.readouterr().err
 
 
 # --- opencode ------------------------------------------------------------
 
 
-def test_opencode_standards_are_appended_to_existing_config_content():
-    env = {opencode_mod.CONFIG_CONTENT_ENV: '{"instructions": ["a.md"], "model": "x"}'}
-
-    injected = opencode_mod.OpenCodeEngine().inject_standards(env, Path("/tmp/std.md"))
-
-    assert injected is True
-    data = json.loads(env[opencode_mod.CONFIG_CONTENT_ENV])
-    assert data == {"instructions": ["a.md", "/tmp/std.md"], "model": "x"}
-
-
-def test_opencode_leaves_unmergeable_config_content_alone():
-    env = {opencode_mod.CONFIG_CONTENT_ENV: "not json"}
-
-    injected = opencode_mod.OpenCodeEngine().inject_standards(env, Path("/tmp/std.md"))
-
-    # 返回 False 是调用方把它报给用户的依据，不能只是沉在日志里。
-    assert injected is False
-    assert env[opencode_mod.CONFIG_CONTENT_ENV] == "not json"
-
-
-def test_opencode_reports_unmergeable_config_to_the_user(isolated, monkeypatch, capsys):
-    monkeypatch.setenv(opencode_mod.CONFIG_CONTENT_ENV, "not json")
+def _run_opencode(monkeypatch, argv):
     _stub_resources(monkeypatch, opencode_mod, opencode_mod.OpenCodeEngine)
-    _capture_run(monkeypatch, opencode_mod.OpenCodeEngine)
-    monkeypatch.setattr(sys, "argv", ["start_opencode.py"])
-
+    seen = _capture_run(monkeypatch, opencode_mod.OpenCodeEngine)
+    monkeypatch.setattr(sys, "argv", ["start_opencode.py", *argv])
     opencode_mod.main()
-
-    err = capsys.readouterr().err
-    assert "standards injection failed" in err
-    assert opencode_mod.CONFIG_CONTENT_ENV in err
+    return seen
 
 
 def test_opencode_session_flag_is_passed_through(isolated, monkeypatch):
-    _stub_resources(monkeypatch, opencode_mod, opencode_mod.OpenCodeEngine)
-
-    def read_instructions(seen):
-        content = json.loads(seen["env"][opencode_mod.CONFIG_CONTENT_ENV])
-        seen["standards"] = Path(content["instructions"][0]).read_text(encoding="utf-8")
-
-    seen = _capture_run(monkeypatch, opencode_mod.OpenCodeEngine, read_instructions)
-    monkeypatch.setattr(sys, "argv", ["start_opencode.py", "-s", "ses_1"])
-    opencode_mod.main()
+    seen = _run_opencode(monkeypatch, ["-s", "ses_1"])
 
     assert seen["cmd"] == ["opencode", ".", "-s", "ses_1"]
-    assert seen["standards"] == "STANDARDS_MARKER"
 
 
 # --- antigravity ---------------------------------------------------------
@@ -356,33 +251,24 @@ def test_antigravity_conversation_flag_is_passed_through(isolated, monkeypatch):
     ]
 
 
-def test_antigravity_reports_that_it_has_no_standards_channel(
-    isolated, monkeypatch, capsys
-):
-    """Antigravity 没有 system-prompt 通道，此前是静默丢规范。"""
-    monkeypatch.setattr(agy_mod, "require_engine_cli", lambda _name: True)
-    monkeypatch.setattr(agy_mod, "is_synced", lambda _engine, _group: False)
-    _capture_run(monkeypatch, agy_mod.AntigravityEngine)
-    monkeypatch.setattr(sys, "argv", ["start_antigravity.py"])
-
-    agy_mod.main()
-
-    err = capsys.readouterr().err
-    assert "no system-prompt channel" in err
-    assert "ca sync --engine antigravity" in err
+# --- the decision this file guards ---------------------------------------
 
 
-def test_antigravity_is_quiet_about_standards_once_synced(
-    isolated, monkeypatch, capsys
-):
-    """用户级已经 sync 过时，规范其实生效了，不该再报"未注入"。"""
-    monkeypatch.setattr(agy_mod, "require_engine_cli", lambda _name: True)
-    monkeypatch.setattr(agy_mod, "is_synced", lambda _engine, _group: True)
-    _capture_run(monkeypatch, agy_mod.AntigravityEngine)
-    monkeypatch.setattr(sys, "argv", ["start_antigravity.py"])
+def test_launchers_never_pass_standards_to_the_engine(isolated, monkeypatch):
+    """规范只经 `ca sync` 落盘，启动器不再往命令行/环境里塞 system prompt。
 
-    agy_mod.main()
+    claude/codebuddy/codex 各是一套原生参数（--append-system-prompt-file、
+    --append-system-prompt、-c developer_instructions=），opencode 是环境变量；
+    这些都删掉了，这里把它们钉住不许回来。
+    """
+    runs = [
+        _run_claude(monkeypatch, []),
+        _run_codebuddy(monkeypatch, []),
+        _run_codex(monkeypatch, []),
+        _run_opencode(monkeypatch, []),
+    ]
 
-    err = capsys.readouterr().err
-    assert "no system-prompt channel" not in err
-    assert "come from your user-level" in err
+    for seen in runs:
+        assert not any("system-prompt" in arg for arg in seen["cmd"])
+        assert not any(arg.startswith("developer_instructions") for arg in seen["cmd"])
+        assert "OPENCODE_CONFIG_CONTENT" not in seen["env"]

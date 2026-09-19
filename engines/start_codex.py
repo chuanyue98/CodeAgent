@@ -20,11 +20,9 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
-from core.engine_base.launch_args import is_batch_shim, split_passthrough
-from core.engine_base.standards_report import report_standards_delivery
+from core.engine_base.launch_args import split_passthrough
 from core.i18n import t
 from core.logging_config import get_logger
-from core.services.sync_service import is_synced
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     get_tasks_dir,
@@ -139,7 +137,6 @@ class CodexEngine(BaseEngine):
         message: str = "",
         non_interactive: bool = False,
         yolo: bool = False,
-        standards: str = "",
         passthrough: Sequence[str] = (),
     ) -> list[str]:
         effective_yolo = (
@@ -162,10 +159,6 @@ class CodexEngine(BaseEngine):
             bypass = effective_yolo
         if bypass:
             cmd.append(CODEX_SKIP_PERMISSIONS_FLAG)
-        if standards:
-            # codex 按 TOML 解析 -c 的值，JSON 字符串恰好也是合法的 TOML 基本字符串。
-            value = json.dumps(standards, ensure_ascii=False)
-            cmd.extend(["-c", f"developer_instructions={value}"])
         cmd.extend(rest)
         if message:
             cmd.append(message)
@@ -811,14 +804,6 @@ def main() -> None:
     message, passthrough = split_passthrough(
         extra_args, CODEX_SESSION_SUBCOMMANDS | CODEX_OTHER_SUBCOMMANDS
     )
-    standards, general_commands = extract_shell_first_blocks(
-        engine.assemble_standards()
-    )
-    # 用户级已经 `ca sync` 过同一组时，规范和技能由 codex 自己加载，不再重复注入；
-    # shell:first 预启动命令仍然照常执行。
-    synced = is_synced("codex", engine.get_current_project_group())
-    if synced:
-        standards = ""
 
     task_prompt = handle_task_mode(args.task, file_suffix=TASK_FILE_SUFFIX)
     task_commands: list[str] = []
@@ -907,14 +892,7 @@ def main() -> None:
         code_plan_prompts = sanitized_prompts
 
     env = engine.env_manager.get_env()
-    skip_reason = ""
-    if standards and is_batch_shim(CODEX_COMMAND, env):
-        skip_reason = t("engine.standards_skip_batch_shim_reason")
-        standards = ""
-    report_standards_delivery(
-        "codex", engine.name, synced=synced, skip_reason=skip_reason
-    )
-    pre_launch_commands = list(general_commands) + list(task_commands)
+    pre_launch_commands = list(task_commands)
     allow_shell_first = args.allow_shell_first or _shell_first_allowed_via_override()
 
     def global_setup() -> None:
@@ -927,8 +905,7 @@ def main() -> None:
         engine.cleanup_plugins_link()
 
     def project_setup() -> None:
-        if not synced:
-            engine.ensure_skills_link(".codex/skills")
+        engine.ensure_skills_link(".codex/skills")
         resolved_hooks = engine.get_hooks_to_inject()
         # Codex reads hooks from .codex/config.toml (TOML, Claude-shaped
         # matcher groups); the old .codex/settings.json was never read by it.
@@ -948,7 +925,6 @@ def main() -> None:
             engine.first_message(text),
             codex_non_interactive,
             yolo=args.yolo,
-            standards=standards,
             passthrough=passthrough,
         )
         print(f"Launching {engine.name}...")

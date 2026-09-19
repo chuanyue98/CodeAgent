@@ -101,11 +101,11 @@ def test_status_survives_a_group_that_is_not_defined(tmp_path, monkeypatch, home
 # --- 每个引擎的规范状态判定 ------------------------------------------------
 
 
-def test_launch_channel_is_reported_when_nothing_is_synced(home):
+def test_nothing_synced_is_flagged(home):
     state, detail = _standards_detail(get_spec("claude"), "common")
 
-    assert state == "ok"
-    assert "at launch" in detail
+    assert state == "warn"
+    assert "not synced" in detail
 
 
 def test_a_user_level_block_for_this_group_is_ok(home):
@@ -130,10 +130,3 @@ def test_a_user_level_block_for_another_group_is_flagged(home):
     assert state == "warn"
     assert "work" in detail
     assert "common" in detail
-
-
-def test_engines_without_a_channel_are_flagged(home):
-    state, detail = _standards_detail(get_spec("antigravity"), "common")
-
-    assert state == "warn"
-    assert "no system-prompt channel" in detail

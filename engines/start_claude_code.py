@@ -15,8 +15,6 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import split_passthrough
-from core.engine_base.standards_report import report_standards_delivery
-from core.services.sync_service import is_synced
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -44,7 +42,6 @@ class ClaudeEngine(BaseEngine):
         self,
         message: str,
         non_interactive: bool,
-        standards_file: Path | None = None,
         passthrough: Sequence[str] = (),
     ) -> list[str]:
         cmd = [self.CLAUDE_COMMAND, self.CLAUDE_SKIP_PERMISSIONS_FLAG]
@@ -52,8 +49,6 @@ class ClaudeEngine(BaseEngine):
             plugin_dir = plugin_meta.get("_plugin_dir")
             if plugin_dir:
                 cmd.extend(["--plugin-dir", plugin_dir])
-        if standards_file is not None:
-            cmd.extend(["--append-system-prompt-file", str(standards_file)])
         if non_interactive:
             cmd.append("-p")
         cmd.extend(passthrough)
@@ -120,12 +115,8 @@ def main():
         if task_prompt:
             message = f"{message}\n\n{task_prompt}".strip()
 
-    # 用户级已经 `ca sync` 过同一组时，规范和技能由 claude 自己加载，不再重复注入。
-    synced = is_synced("claude", engine.get_current_project_group())
-
     def setup() -> None:
-        if not synced:
-            engine.ensure_skills_link(".claude/skills")
+        engine.ensure_skills_link(".claude/skills")
         engine.inject_hooks_to_settings(
             ".claude/settings.json", engine.get_hooks_to_inject()
         )
@@ -134,16 +125,12 @@ def main():
         engine.restore_settings(".claude/settings.json")
         engine.cleanup_skills_link(".claude/skills")
 
+    # 规范不由启动器投递：claude 自己读项目根的 AGENTS.md（已实测）。
+    # 规范与技能的落盘是 `ca sync` 的事，这里只做本次会话需要的注入。
     try:
-        standards = "" if synced else engine.assemble_standards()
-        report_standards_delivery("claude", engine.name, synced=synced)
-        standards_file = (
-            engine.write_temp_file(standards, suffix=".md") if standards else None
-        )
         final_command = engine.build_command(
             engine.first_message(message),
             args.non_interactive,
-            standards_file=standards_file,
             passthrough=passthrough,
         )
         env = engine.env_manager.get_env()

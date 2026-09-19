@@ -13,8 +13,6 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import split_passthrough
-from core.engine_base.standards_report import report_standards_delivery
-from core.services.sync_service import is_synced
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -93,11 +91,6 @@ def main() -> None:
 
     env = engine.env_manager.get_env()
     register_signal_handler()
-
-    # Antigravity 没有 system-prompt 通道，规范只能靠 `ca sync` 写进用户级
-    # GEMINI.md。这里把结论明确报出来，不再静默丢掉。
-    synced = is_synced("antigravity", engine.get_current_project_group())
-    report_standards_delivery("antigravity", engine.name, synced=synced)
 
     final_command = engine.build_command(
         message, args.non_interactive, yolo=args.yolo, passthrough=passthrough

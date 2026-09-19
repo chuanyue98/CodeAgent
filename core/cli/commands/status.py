@@ -110,9 +110,7 @@ def _standards_detail(spec: EngineSpec, group: str) -> tuple[str, str]:
             other=block_group,
             group=group,
         )
-    if spec.standards_channel:
-        return "ok", t("status.standards_channel", channel=t(spec.standards_channel))
-    return "warn", t("status.standards_no_channel")
+    return "warn", t("status.standards_not_synced")
 
 
 def _engines_section(group: str) -> Section:
@@ -135,8 +133,8 @@ def _engines_section(group: str) -> Section:
             spec.display_name,
             detail=f"{cli_path}  —  {detail}" if detail else cli_path,
             fix_hint=(
-                t("status.standards_no_channel_hint", engine=spec.name)
-                if ok == "warn" and not spec.standards_channel
+                t("status.standards_sync_hint", engine=spec.name)
+                if ok == "warn"
                 else ""
             ),
         )

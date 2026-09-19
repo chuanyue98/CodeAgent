@@ -16,10 +16,8 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import split_passthrough
-from core.engine_base.standards_report import report_standards_delivery
 from core.i18n import t
 from core.logging_config import get_logger
-from core.services.sync_service import is_synced
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -27,8 +25,6 @@ from core.task_lib import (
 )
 
 logger = get_logger(__name__)
-
-CONFIG_CONTENT_ENV = "OPENCODE_CONFIG_CONTENT"
 
 
 class OpenCodeEngine(BaseEngine):
@@ -478,36 +474,6 @@ export default async () => {{
             cmd.extend(["--prompt", message])
         return cmd
 
-    def inject_standards(self, env: dict[str, str], standards_file: Path) -> bool:
-        """把规范文件追加进 ``OPENCODE_CONFIG_CONTENT`` 的 instructions。
-
-        opencode 把这份配置与全局、项目配置合并，instructions 是拼接而不是
-        覆盖（1.18 实测），所以不会挤掉项目自己的 instructions。
-
-        返回是否真的写进去了——调用方要把 False 报给用户，而不是让它沉在
-        日志里（``ca <engine>`` 的启动状态行由 ``report_standards_delivery``
-        统一打印）。
-        """
-        raw = env.get(CONFIG_CONTENT_ENV, "")
-        try:
-            data = json.loads(raw) if raw.strip() else {}
-        except ValueError:
-            data = None
-        if not isinstance(data, dict) or not isinstance(
-            data.get("instructions", []), list
-        ):
-            logger.warning(
-                "%s is not mergeable JSON; launching without CodeAgent standards",
-                CONFIG_CONTENT_ENV,
-            )
-            return False
-        data["instructions"] = [
-            *data.get("instructions", []),
-            standards_file.as_posix(),
-        ]
-        env[CONFIG_CONTENT_ENV] = json.dumps(data, ensure_ascii=False)
-        return True
-
     def build_chat_command(
         self, message: str, session_id: str | None = None
     ) -> list[str]:
@@ -562,12 +528,8 @@ def main():
         if task_prompt:
             message = f"{message}\n\n{task_prompt}".strip()
 
-    # 用户级已经 `ca sync` 过同一组时，规范和技能由 opencode 自己加载，不再重复注入。
-    synced = is_synced("opencode", engine.get_current_project_group())
-
     def setup() -> None:
-        if not synced:
-            engine.ensure_skills_link(".opencode/skills")
+        engine.ensure_skills_link(".opencode/skills")
         engine.ensure_plugins_link()
         # OpenCode 没有 settings.json 这个概念（在 opencode 1.18 的二进制里
         # 完全搜不到该文件名），它的钩子是插件模块导出的 JS 函数
@@ -583,18 +545,6 @@ def main():
 
     try:
         env = engine.env_manager.get_env()
-        standards = "" if synced else engine.assemble_standards()
-        injected = True
-        if standards:
-            injected = engine.inject_standards(
-                env, engine.write_temp_file(standards, suffix=".md")
-            )
-        report_standards_delivery(
-            "opencode",
-            engine.name,
-            synced=synced,
-            failure="" if injected else t("standards.env_not_mergeable"),
-        )
         final_command = engine.build_command(
             engine.first_message(message), args.non_interactive, passthrough
         )

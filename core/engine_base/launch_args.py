@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-from collections.abc import Collection, Mapping
-
-_IS_WINDOWS = os.name == "nt"
+from collections.abc import Collection
 
 
 def is_native_flag(arg: str) -> bool:
@@ -28,16 +24,3 @@ def split_passthrough(
     if args[0] in subcommands or any(is_native_flag(arg) for arg in args):
         return "", list(args)
     return " ".join(args).strip(), []
-
-
-def is_batch_shim(command: str, env: Mapping[str, str]) -> bool:
-    """*command* 在 Windows 上是否解析成 ``.cmd``/``.bat`` 包装。
-
-    npm 装的 CLI 在 Windows 上是 ``.cmd``，参数要经 cmd.exe 转一手：多行参数
-    在换行处被截断，引号里的 ``&``、``|`` 还可能被当成命令执行。多行内容不能
-    作为参数传给这类命令。
-    """
-    if not _IS_WINDOWS:
-        return False
-    resolved = shutil.which(command, path=env.get("PATH"))
-    return resolved is not None and resolved.lower().endswith((".cmd", ".bat"))

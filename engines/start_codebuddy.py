@@ -14,10 +14,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
-from core.engine_base.launch_args import is_batch_shim, split_passthrough
-from core.engine_base.standards_report import report_standards_delivery
-from core.i18n import t
-from core.services.sync_service import is_synced
+from core.engine_base.launch_args import split_passthrough
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -41,15 +38,11 @@ class CodeBuddyEngine(BaseEngine):
         self,
         message: str,
         non_interactive: bool,
-        standards: str = "",
         passthrough: Sequence[str] = (),
     ) -> list[str]:
         # ``auto`` 权限模式下，安全的工具调用自动通过，风险操作被拒绝，
         # 避免交互式授权卡住 ``ca`` 终端启动。
         cmd = [self.COMMAND, "--permission-mode", "auto"]
-        # CodeBuddy 只有内联的 --append-system-prompt，没有 -file 版本。
-        if standards:
-            cmd.extend(["--append-system-prompt", standards])
         if non_interactive:
             cmd.append("-p")
         cmd.extend(passthrough)
@@ -115,22 +108,12 @@ def main():
             message = f"{message}\n\n{task_prompt}".strip()
 
     env = engine.env_manager.get_env()
-    # 用户级已经 `ca sync` 过同一组时，规范由 codebuddy 自己加载，不再重复注入。
-    synced = is_synced("codebuddy", engine.get_current_project_group())
-    standards = "" if synced else engine.assemble_standards()
-    skip_reason = ""
-    if standards and is_batch_shim(engine.COMMAND, env):
-        skip_reason = t("engine.standards_skip_batch_shim_reason")
-        standards = ""
-    report_standards_delivery(
-        "codebuddy", engine.name, synced=synced, skip_reason=skip_reason
-    )
+    # 规范不由启动器投递：codebuddy 自己读项目根的 AGENTS.md。
 
     try:
         final_command = engine.build_command(
             engine.first_message(message),
             args.non_interactive,
-            standards=standards,
             passthrough=passthrough,
         )
         register_signal_handler()

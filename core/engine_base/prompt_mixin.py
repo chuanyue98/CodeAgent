@@ -58,8 +58,9 @@ class _PromptMixin:
     def first_message(self, message: str) -> str:
         """单行消息原样作为首条消息；多行内容改成让模型去读临时文件。
 
-        任务模板和委派指令都是多行的，而多行参数过不了 Windows 上的 ``.cmd``
-        包装（见 ``launch_args.is_batch_shim``）。
+        Windows 上 npm 装的引擎 CLI 是 ``.cmd`` 包装，参数要经 cmd.exe 转一手：
+        多行参数会在换行处被截断，引号里的 ``&``、``|`` 还可能被当成命令执行。
+        所以多行内容一律不走参数。
         """
         if "\n" not in message:
             return message

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.engine_base import launch_args
-from core.engine_base.launch_args import is_batch_shim, split_passthrough
+from core.engine_base.launch_args import split_passthrough
 
 
 @pytest.mark.parametrize(
@@ -34,28 +33,3 @@ def test_lone_dash_is_a_word_not_a_flag():
 def test_subcommand_passes_through_only_when_declared():
     assert split_passthrough(["resume", "abc"], {"resume"}) == ("", ["resume", "abc"])
     assert split_passthrough(["resume", "abc"]) == ("resume abc", [])
-
-
-def test_batch_shim_is_never_reported_off_windows(monkeypatch):
-    monkeypatch.setattr(launch_args, "_IS_WINDOWS", False)
-    monkeypatch.setattr(
-        launch_args.shutil, "which", lambda *_a, **_k: r"D:\npm\codex.cmd"
-    )
-
-    assert is_batch_shim("codex", {}) is False
-
-
-@pytest.mark.parametrize(
-    ("resolved", "expected"),
-    [
-        (r"D:\npm\codex.CMD", True),
-        (r"D:\npm\codebuddy.bat", True),
-        (r"C:\Users\me\.local\bin\claude.exe", False),
-        (None, False),
-    ],
-)
-def test_batch_shim_detection_on_windows(monkeypatch, resolved, expected):
-    monkeypatch.setattr(launch_args, "_IS_WINDOWS", True)
-    monkeypatch.setattr(launch_args.shutil, "which", lambda *_a, **_k: resolved)
-
-    assert is_batch_shim("codex", {"PATH": "unused"}) is expected

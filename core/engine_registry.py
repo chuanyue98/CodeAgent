@@ -32,16 +32,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-#: 引擎承载 CodeAgent 规范正文的通道，取值是 ``core/i18n.py`` 的 key。
-#: 空串是真实取值：表示该引擎根本没有 system-prompt 通道，规范只能靠
-#: ``ca sync`` 写进用户级规范文件。``ca <engine>`` 的启动状态行
-#: （core/engine_base/standards_report.py）与 ``ca status`` 都读这里，
-#: 所以加引擎时不必再去两个地方各说一遍。
-CHANNEL_SYSTEM_PROMPT_FILE = "standards.channel_system_prompt_file"
-CHANNEL_SYSTEM_PROMPT_INLINE = "standards.channel_system_prompt_inline"
-CHANNEL_CONFIG_OVERRIDE = "standards.channel_config_override"
-CHANNEL_CONFIG_ENV = "standards.channel_config_env"
-
 
 @dataclass(frozen=True)
 class EngineSpec:
@@ -62,9 +52,6 @@ class EngineSpec:
     #: ``_build_engine`` (imported lazily to avoid a core→engines→core
     #: import cycle).
     adapter: str
-    #: Which channel carries this engine's copy of the standards; one of the
-    #: ``CHANNEL_*`` keys above, or ``""`` when the engine has none.
-    standards_channel: str = ""
     #: JSON(L) field names a chat turn's log may carry the engine-reported
     #: session id under — codex calls it thread_id, the rest vary.
     session_id_fields: tuple[str, ...] = ()
@@ -94,7 +81,6 @@ ENGINES: dict[str, EngineSpec] = {
             cli_candidates=("claude", "claude.cmd"),
             install_hint="npm install -g @anthropic-ai/claude-code",
             adapter="engines.start_claude_code:ClaudeEngine",
-            standards_channel=CHANNEL_SYSTEM_PROMPT_FILE,
             session_id_fields=("session_id",),
         ),
         EngineSpec(
@@ -104,7 +90,6 @@ ENGINES: dict[str, EngineSpec] = {
             cli_candidates=("opencode", "opencode.cmd"),
             install_hint="npm install -g opencode-ai",
             adapter="engines.start_opencode:OpenCodeEngine",
-            standards_channel=CHANNEL_CONFIG_ENV,
             session_id_fields=("sessionID",),
         ),
         EngineSpec(
@@ -114,7 +99,6 @@ ENGINES: dict[str, EngineSpec] = {
             cli_candidates=("codex", "codex.cmd"),
             install_hint="npm install -g @openai/codex",
             adapter="engines.start_codex:CodexEngine",
-            standards_channel=CHANNEL_CONFIG_OVERRIDE,
             session_id_fields=("thread_id",),
         ),
         EngineSpec(
@@ -124,7 +108,6 @@ ENGINES: dict[str, EngineSpec] = {
             cli_candidates=("codebuddy", "codebuddy.cmd"),
             install_hint="npm install -g @tencent-ai/codebuddy-code",
             adapter="engines.start_codebuddy:CodeBuddyEngine",
-            standards_channel=CHANNEL_SYSTEM_PROMPT_INLINE,
             session_id_fields=("session_id", "sessionId"),
         ),
         EngineSpec(
@@ -134,9 +117,6 @@ ENGINES: dict[str, EngineSpec] = {
             cli_candidates=("agy", "agy.cmd", "agy.exe"),
             install_hint="Follow https://antigravity.google/docs/cli to install agy",
             adapter="engines.start_antigravity:AntigravityEngine",
-            # 故意留空 standards_channel：agy 没有 system-prompt 参数，规范
-            # 只能靠 `ca sync` 写进用户级 GEMINI.md，`ca status` 与启动状态行
-            # 会据此如实报告"未注入"，而不是假装注入了。
             session_id_fields=(
                 "session_id",
                 "sessionId",
