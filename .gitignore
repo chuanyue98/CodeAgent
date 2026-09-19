@@ -43,7 +43,7 @@ assets/edit_tmp/
 assets/watermark_tmp/
 
 .superpowers/
-docs/superpowers/plans/
+docs/
 
 # Debug and local engine configs
 prompt_debug*.json
