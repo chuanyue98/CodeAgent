@@ -16,6 +16,7 @@ from .commands.history import history
 from .commands.mcp import mcp
 from .commands.project import project
 from .commands.resources import resources
+from .commands.status import status
 from .commands.switch import switch
 from .commands.sync import sync
 from .commands.tasks import batch_run, doctor, new, ps, stop, ui
@@ -149,6 +150,7 @@ cli.add_command(history)
 cli.add_command(mcp)
 cli.add_command(project)
 cli.add_command(resources)
+cli.add_command(status)
 cli.add_command(ps)
 cli.add_command(stop)
 cli.add_command(batch_run)

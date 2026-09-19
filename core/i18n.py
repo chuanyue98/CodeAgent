@@ -276,6 +276,95 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "OPENCODE_CONFIG_CONTENT is not mergeable JSON",
         "zh": "OPENCODE_CONFIG_CONTENT 不是可合并的 JSON",
     },
+    # --- ca status ---
+    "status.title": {
+        "en": "CodeAgent status",
+        "zh": "CodeAgent 状态",
+    },
+    "status.section_project": {
+        "en": "Project",
+        "zh": "项目",
+    },
+    "status.section_resources": {
+        "en": "Resources in group {group}",
+        "zh": "分组 {group} 的资源",
+    },
+    "status.section_engines": {
+        "en": "Engines",
+        "zh": "引擎",
+    },
+    "status.label_cwd": {
+        "en": "Directory",
+        "zh": "当前目录",
+    },
+    "status.label_group": {
+        "en": "Resource group",
+        "zh": "资源分组",
+    },
+    "status.label_projects": {
+        "en": "Registered projects",
+        "zh": "已登记项目",
+    },
+    "status.group_unregistered": {
+        "en": "{group} (this directory is not registered)",
+        "zh": "{group}（当前目录未登记）",
+    },
+    "status.group_register_hint": {
+        "en": "ca project add . --group <group>",
+        "zh": "ca project add . --group <组名>",
+    },
+    "status.projects_count": {
+        "en": "{count}",
+        "zh": "{count} 个",
+    },
+    "status.group_missing": {
+        "en": "no group {group} in config.json",
+        "zh": "config.json 里没有分组 {group}",
+    },
+    "status.kind_skills": {
+        "en": "skills",
+        "zh": "技能",
+    },
+    "status.kind_prompts": {
+        "en": "prompts",
+        "zh": "规范",
+    },
+    "status.kind_hooks": {
+        "en": "hooks",
+        "zh": "钩子",
+    },
+    "status.kind_plugins": {
+        "en": "plugins",
+        "zh": "插件",
+    },
+    "status.resource_count": {
+        "en": "{kind} {count}",
+        "zh": "{kind} {count}",
+    },
+    "status.engine_missing": {
+        "en": "not found on PATH",
+        "zh": "未在 PATH 上找到",
+    },
+    "status.standards_user_config": {
+        "en": "standards via user-level {path}",
+        "zh": "规范由用户级 {path} 提供",
+    },
+    "status.standards_other_group": {
+        "en": "user-level {path} holds group {other}, not {group}",
+        "zh": "用户级 {path} 里是分组 {other}，当前项目要的是 {group}",
+    },
+    "status.standards_channel": {
+        "en": "standards injected at launch via {channel}",
+        "zh": "启动时经 {channel} 注入规范",
+    },
+    "status.standards_no_channel": {
+        "en": "no system-prompt channel; standards not injected",
+        "zh": "无 system-prompt 通道，规范未注入",
+    },
+    "status.standards_no_channel_hint": {
+        "en": "ca sync --engine {engine}",
+        "zh": "ca sync --engine {engine}",
+    },
     # --- ca ui ---
     "ui.open_in_browser": {
         "en": "Open the UI in your browser: {url}",
