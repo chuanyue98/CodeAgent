@@ -8,8 +8,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import unicodedata
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import click
@@ -20,45 +18,20 @@ from core.hook_scanner import get_hooks_to_inject
 from core.i18n import t
 from core.link_manager import is_windows_link
 from core.plugin_scanner import get_plugins_to_mount
+from core.report import (
+    FAIL,
+    INFO,
+    OK,
+    WARN,
+    Section,
+    render_sections,
+)
+from core.report import (
+    display_width as _display_width,
+)
 from core.resource_locator import CODE_ROOT, seed_config_if_missing
 from core.services.config_service import ConfigService
 from core.settings_manager import SettingsFile
-
-# ── Status symbols ────────────────────────────────────────────────────────────
-
-OK = "[OK]"
-WARN = "[!] "
-FAIL = "[X] "
-INFO = "[i] "
-
-_STATUS_COLORS = {
-    OK: "green",
-    WARN: "yellow",
-    FAIL: "red",
-    INFO: "cyan",
-}
-
-# ── Result model ──────────────────────────────────────────────────────────────
-
-
-@dataclass
-class Check:
-    status: str  # OK / WARN / FAIL / INFO
-    label: str
-    detail: str = ""
-    fix_hint: str = ""
-
-
-@dataclass
-class Section:
-    title: str
-    checks: list[Check] = field(default_factory=list)
-
-    def add(
-        self, status: str, label: str, detail: str = "", fix_hint: str = ""
-    ) -> None:
-        self.checks.append(Check(status, label, detail, fix_hint))
-
 
 # ── Engine binary map ─────────────────────────────────────────────────────────
 
@@ -701,42 +674,14 @@ class _LightweightResolver:
 
 
 # ── Renderer ─────────────────────────────────────────────────────────────────
-
-
-def _display_width(text: str) -> int:
-    """Terminal columns ``text`` occupies, not its character count.
-
-    Section titles are translated, and CJK characters render two columns
-    wide -- so a ``len()``-based rule underlines a Chinese heading to barely
-    half its width.
-    """
-    return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
+#
+# Section bodies are rendered by core.report.render_sections, which ca status
+# shares. Only the summary line below is doctor's own.
 
 
 def _render(sections: list[Section]) -> int:
-    """Print results and return number of failures.
-
-    Uses ``click.style``/``click.echo`` so status markers are color-coded in
-    a real terminal, while automatically degrading to plain text when output
-    isn't a TTY (piped to a file, CI logs, etc.) -- click detects that for us.
-    """
-    failures = 0
-    warnings = 0
-    for section in sections:
-        click.echo(f"\n  {section.title}")
-        click.echo("  " + "─" * _display_width(section.title))
-        for c in section.checks:
-            status = click.style(c.status, fg=_STATUS_COLORS.get(c.status), bold=True)
-            line = f"  {status}  {c.label}"
-            if c.detail:
-                line += f"  —  {c.detail}"
-            click.echo(line)
-            if c.fix_hint and c.status in (WARN, FAIL):
-                click.echo(f"         ↳ {c.fix_hint}")
-            if c.status == FAIL:
-                failures += 1
-            elif c.status == WARN:
-                warnings += 1
+    """Print results and return number of failures."""
+    failures, warnings = render_sections(sections)
 
     click.echo()
     if failures:
