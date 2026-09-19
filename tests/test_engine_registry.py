@@ -31,6 +31,22 @@ def test_every_spec_is_complete():
         assert spec.session_id_fields, f"{name} needs chat session-id fields"
 
 
+def test_standards_channel_is_declared_for_every_engine():
+    """每个引擎的规范通道必须在这里说清楚，antigravity 的"没有"也是声明。
+
+    `ca <engine>` 的启动状态行与 `ca status` 都读这个字段，所以它不能靠默认
+    值蒙混过去——漏填会让用户看到"未注入"却不知道为什么。
+    """
+    from core.engine_registry import CHANNEL_CONFIG_ENV, CHANNEL_CONFIG_OVERRIDE
+
+    assert ENGINES["claude"].standards_channel.startswith("standards.channel_")
+    assert ENGINES["codebuddy"].standards_channel.startswith("standards.channel_")
+    assert ENGINES["codex"].standards_channel == CHANNEL_CONFIG_OVERRIDE
+    assert ENGINES["opencode"].standards_channel == CHANNEL_CONFIG_ENV
+    # agy 没有 system-prompt 通道，规范只能靠 `ca sync` 写用户级 GEMINI.md。
+    assert ENGINES["antigravity"].standards_channel == ""
+
+
 def test_launch_scripts_exist():
     from core.resource_locator import CODE_ROOT
 

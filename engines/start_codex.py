@@ -21,6 +21,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import is_batch_shim, split_passthrough
+from core.engine_base.standards_report import report_standards_delivery
 from core.i18n import t
 from core.logging_config import get_logger
 from core.services.sync_service import is_synced
@@ -906,12 +907,13 @@ def main() -> None:
         code_plan_prompts = sanitized_prompts
 
     env = engine.env_manager.get_env()
+    skip_reason = ""
     if standards and is_batch_shim(CODEX_COMMAND, env):
-        print(
-            t("engine.standards_skipped_batch_shim", engine=engine.name),
-            file=sys.stderr,
-        )
+        skip_reason = t("engine.standards_skip_batch_shim_reason")
         standards = ""
+    report_standards_delivery(
+        "codex", engine.name, synced=synced, skip_reason=skip_reason
+    )
     pre_launch_commands = list(general_commands) + list(task_commands)
     allow_shell_first = args.allow_shell_first or _shell_first_allowed_via_override()
 

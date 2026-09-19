@@ -15,6 +15,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import split_passthrough
+from core.engine_base.standards_report import report_standards_delivery
 from core.services.sync_service import is_synced
 from core.task_lib import (
     TASK_FILE_SUFFIX,
@@ -135,6 +136,7 @@ def main():
 
     try:
         standards = "" if synced else engine.assemble_standards()
+        report_standards_delivery("claude", engine.name, synced=synced)
         standards_file = (
             engine.write_temp_file(standards, suffix=".md") if standards else None
         )

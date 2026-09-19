@@ -34,11 +34,18 @@ def isolated(tmp_path, monkeypatch):
     return project
 
 
-def _stub_resources(monkeypatch, module, engine_cls, standards="STANDARDS_MARKER"):
+def _stub_resources(
+    monkeypatch, module, engine_cls, standards="STANDARDS_MARKER", batch_shim=False
+):
     monkeypatch.setattr(module, "require_engine_cli", lambda _name: True)
     monkeypatch.setattr(engine_cls, "assemble_standards", lambda self: standards)
     for name in ("get_plugins_to_mount", "get_skills_to_mount", "get_hooks_to_inject"):
         monkeypatch.setattr(engine_cls, name, lambda self: [])
+    if hasattr(module, "is_batch_shim"):
+        # 跑测试的机器可能真把 codex/codebuddy 装成 .cmd 包装，而"规范注入了
+        # 没有"取决于这个条件。所以它必须由用例钉住，不能跟着机器走，否则同
+        # 一个用例在 Linux CI 绿、在 Windows 本地红。
+        monkeypatch.setattr(module, "is_batch_shim", lambda *_a: batch_shim)
 
 
 def _capture_run(monkeypatch, engine_cls, on_run=None):
@@ -185,8 +192,13 @@ def test_claude_non_interactive_uses_print_mode():
 # --- codebuddy -----------------------------------------------------------
 
 
-def _run_codebuddy(monkeypatch, argv):
-    _stub_resources(monkeypatch, codebuddy_mod, codebuddy_mod.CodeBuddyEngine)
+def _run_codebuddy(monkeypatch, argv, batch_shim=False):
+    _stub_resources(
+        monkeypatch,
+        codebuddy_mod,
+        codebuddy_mod.CodeBuddyEngine,
+        batch_shim=batch_shim,
+    )
     seen = _capture_run(monkeypatch, codebuddy_mod.CodeBuddyEngine)
     monkeypatch.setattr(sys, "argv", ["start_codebuddy.py", *argv])
     codebuddy_mod.main()
@@ -204,9 +216,7 @@ def test_codebuddy_appends_standards_to_the_system_prompt(isolated, monkeypatch)
 def test_codebuddy_skips_standards_behind_a_windows_cmd_wrapper(
     isolated, monkeypatch, capsys
 ):
-    monkeypatch.setattr(codebuddy_mod, "is_batch_shim", lambda *_a: True)
-
-    seen = _run_codebuddy(monkeypatch, ["hi"])
+    seen = _run_codebuddy(monkeypatch, ["hi"], batch_shim=True)
 
     assert "--append-system-prompt" not in seen["cmd"]
     assert seen["cmd"][-1] == "hi"
@@ -250,8 +260,10 @@ def test_codex_standards_value_round_trips_through_toml():
     assert tomllib.loads(f"v = {value}")["v"] == standards
 
 
-def _run_codex(monkeypatch, argv):
-    _stub_resources(monkeypatch, codex_mod, codex_mod.CodexEngine)
+def _run_codex(monkeypatch, argv, batch_shim=False):
+    _stub_resources(
+        monkeypatch, codex_mod, codex_mod.CodexEngine, batch_shim=batch_shim
+    )
     monkeypatch.setattr(codex_mod, "list_code_plan_directories", lambda: [])
     seen = _capture_run(monkeypatch, codex_mod.CodexEngine)
     monkeypatch.setattr(sys, "argv", ["start_codex.py", *argv])
@@ -269,9 +281,7 @@ def test_codex_native_config_flag_is_not_mistaken_for_code_plan(isolated, monkey
 def test_codex_skips_standards_behind_a_windows_cmd_wrapper(
     isolated, monkeypatch, capsys
 ):
-    monkeypatch.setattr(codex_mod, "is_batch_shim", lambda *_a: True)
-
-    seen = _run_codex(monkeypatch, ["hi"])
+    seen = _run_codex(monkeypatch, ["hi"], batch_shim=True)
 
     assert not any(arg.startswith("developer_instructions") for arg in seen["cmd"])
     assert ".cmd" in capsys.readouterr().err
@@ -283,8 +293,9 @@ def test_codex_skips_standards_behind_a_windows_cmd_wrapper(
 def test_opencode_standards_are_appended_to_existing_config_content():
     env = {opencode_mod.CONFIG_CONTENT_ENV: '{"instructions": ["a.md"], "model": "x"}'}
 
-    opencode_mod.OpenCodeEngine().inject_standards(env, Path("/tmp/std.md"))
+    injected = opencode_mod.OpenCodeEngine().inject_standards(env, Path("/tmp/std.md"))
 
+    assert injected is True
     data = json.loads(env[opencode_mod.CONFIG_CONTENT_ENV])
     assert data == {"instructions": ["a.md", "/tmp/std.md"], "model": "x"}
 
@@ -292,9 +303,24 @@ def test_opencode_standards_are_appended_to_existing_config_content():
 def test_opencode_leaves_unmergeable_config_content_alone():
     env = {opencode_mod.CONFIG_CONTENT_ENV: "not json"}
 
-    opencode_mod.OpenCodeEngine().inject_standards(env, Path("/tmp/std.md"))
+    injected = opencode_mod.OpenCodeEngine().inject_standards(env, Path("/tmp/std.md"))
 
+    # 返回 False 是调用方把它报给用户的依据，不能只是沉在日志里。
+    assert injected is False
     assert env[opencode_mod.CONFIG_CONTENT_ENV] == "not json"
+
+
+def test_opencode_reports_unmergeable_config_to_the_user(isolated, monkeypatch, capsys):
+    monkeypatch.setenv(opencode_mod.CONFIG_CONTENT_ENV, "not json")
+    _stub_resources(monkeypatch, opencode_mod, opencode_mod.OpenCodeEngine)
+    _capture_run(monkeypatch, opencode_mod.OpenCodeEngine)
+    monkeypatch.setattr(sys, "argv", ["start_opencode.py"])
+
+    opencode_mod.main()
+
+    err = capsys.readouterr().err
+    assert "standards injection failed" in err
+    assert opencode_mod.CONFIG_CONTENT_ENV in err
 
 
 def test_opencode_session_flag_is_passed_through(isolated, monkeypatch):
@@ -328,3 +354,35 @@ def test_antigravity_conversation_flag_is_passed_through(isolated, monkeypatch):
         "c1",
         "--dangerously-skip-permissions",
     ]
+
+
+def test_antigravity_reports_that_it_has_no_standards_channel(
+    isolated, monkeypatch, capsys
+):
+    """Antigravity 没有 system-prompt 通道，此前是静默丢规范。"""
+    monkeypatch.setattr(agy_mod, "require_engine_cli", lambda _name: True)
+    monkeypatch.setattr(agy_mod, "is_synced", lambda _engine, _group: False)
+    _capture_run(monkeypatch, agy_mod.AntigravityEngine)
+    monkeypatch.setattr(sys, "argv", ["start_antigravity.py"])
+
+    agy_mod.main()
+
+    err = capsys.readouterr().err
+    assert "no system-prompt channel" in err
+    assert "ca sync --engine antigravity" in err
+
+
+def test_antigravity_is_quiet_about_standards_once_synced(
+    isolated, monkeypatch, capsys
+):
+    """用户级已经 sync 过时，规范其实生效了，不该再报"未注入"。"""
+    monkeypatch.setattr(agy_mod, "require_engine_cli", lambda _name: True)
+    monkeypatch.setattr(agy_mod, "is_synced", lambda _engine, _group: True)
+    _capture_run(monkeypatch, agy_mod.AntigravityEngine)
+    monkeypatch.setattr(sys, "argv", ["start_antigravity.py"])
+
+    agy_mod.main()
+
+    err = capsys.readouterr().err
+    assert "no system-prompt channel" not in err
+    assert "come from your user-level" in err

@@ -225,12 +225,56 @@ MESSAGES: dict[str, dict[str, str]] = {
         ),
         "zh": "[!] YOLO 模式已开启: 引擎可能不经确认就修改文件、执行命令。",
     },
-    "engine.standards_skipped_batch_shim": {
+    "engine.standards_skip_batch_shim_reason": {
         "en": (
-            "[i] {engine} is a .cmd wrapper on Windows and cannot take a "
-            "multi-line system prompt safely; launching without CodeAgent standards."
+            "a .cmd wrapper on Windows cannot take a multi-line system prompt safely"
         ),
-        "zh": "[i] {engine} 在 Windows 上是 .cmd 包装，无法安全传入多行系统提示，本次不注入 CodeAgent 规范。",
+        "zh": "Windows 上的 .cmd 包装无法安全传入多行系统提示",
+    },
+    # --- 规范注入状态（每次 ca <engine> 启动打印一行，见 core/engine_base/standards_report.py）---
+    "standards.channel_system_prompt_file": {
+        "en": "system-prompt file",
+        "zh": "系统提示文件",
+    },
+    "standards.channel_system_prompt_inline": {
+        "en": "system-prompt argument",
+        "zh": "系统提示参数",
+    },
+    "standards.channel_config_override": {
+        "en": "config override",
+        "zh": "配置覆盖",
+    },
+    "standards.channel_config_env": {
+        "en": "config environment variable",
+        "zh": "配置环境变量",
+    },
+    "standards.injected": {
+        "en": "[OK] {engine}: standards injected via {channel}",
+        "zh": "[OK] {engine}: 规范已注入（{channel}）",
+    },
+    "standards.via_user_config": {
+        "en": "[OK] {engine}: standards come from your user-level {path} (ca sync)",
+        "zh": "[OK] {engine}: 规范由用户级 {path} 提供（ca sync）",
+    },
+    "standards.unsupported": {
+        "en": "[!] {engine}: no system-prompt channel; standards NOT injected",
+        "zh": "[!] {engine}: 该引擎没有 system-prompt 通道，规范未注入",
+    },
+    "standards.unsupported_hint": {
+        "en": "    ↳ run `ca sync --engine {engine}` to write them into {path}",
+        "zh": "    ↳ 运行 `ca sync --engine {engine}` 可写入 {path}",
+    },
+    "standards.skipped": {
+        "en": "[!] {engine}: standards NOT injected; {reason}",
+        "zh": "[!] {engine}: 规范未注入；{reason}",
+    },
+    "standards.failed": {
+        "en": "[!] {engine}: standards injection failed; {reason}",
+        "zh": "[!] {engine}: 规范注入失败；{reason}",
+    },
+    "standards.env_not_mergeable": {
+        "en": "OPENCODE_CONFIG_CONTENT is not mergeable JSON",
+        "zh": "OPENCODE_CONFIG_CONTENT 不是可合并的 JSON",
     },
     # --- ca ui ---
     "ui.open_in_browser": {
