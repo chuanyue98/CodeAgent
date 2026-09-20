@@ -41,7 +41,7 @@ def init_cli_runtime() -> None:
     configure_root_logging()
 
 
-FALLBACK_ENGINE = "opencode"
+FALLBACK_ENGINE: str | None = None
 
 
 def _installed_root() -> Path:
@@ -240,23 +240,9 @@ def _ensure_project_registered(root: Path, config: dict) -> None:
     print(t("project.registered", group=chosen_group))
 
 
-def _resolve_default_engine(config: dict, engine_script_map: dict) -> str:
-    configured = config.get("default_engine")
-    if configured is None:
-        return FALLBACK_ENGINE
-    name = str(configured).strip().lower()
-    if name in engine_script_map:
-        return name
-    print(
-        t(
-            "engine.unknown_default",
-            value=configured,
-            known=", ".join(sorted(engine_script_map)),
-            fallback=FALLBACK_ENGINE,
-        ),
-        file=sys.stderr,
-    )
-    return FALLBACK_ENGINE
+def _resolve_default_engine(config: dict, engine_script_map: dict) -> str | None:
+    """Deprecated: CodeAgent requires explicitly specifying the engine to run."""
+    return None
 
 
 def _launch_engine(ctx, args: list[str]):  # type: ignore[no-untyped-def]
@@ -271,18 +257,24 @@ def _launch_engine(ctx, args: list[str]):  # type: ignore[no-untyped-def]
 
     _ensure_project_registered(obj["root"], obj["config"])
 
-    engine_name = _resolve_default_engine(obj["config"], engine_script_map)
-    extra_params: list[str] = []
+    if not args:
+        print(t("cli.specify_engine", engines=", ".join(sorted(ENGINES))))
+        return 1
 
-    if args:
-        first_arg = args[0].lower()
-        if first_arg in engine_script_map:
-            # Normalize aliases ("agy") to the canonical name so downstream
-            # consumers see the same value they would from "ca antigravity".
-            engine_name = normalize_engine_name(first_arg)
-            extra_params = list(args[1:])
-        else:
-            extra_params = list(args)
+    first_arg = args[0].lower()
+    if first_arg not in engine_script_map:
+        print(
+            t(
+                "cli.unknown_engine_or_command",
+                name=args[0],
+                engines=", ".join(sorted(ENGINES)),
+            ),
+            file=sys.stderr,
+        )
+        return 1
+
+    engine_name = normalize_engine_name(first_arg)
+    extra_params = list(args[1:])
 
     yolo_enabled = bool(obj.get("yolo", False))
     if yolo_enabled and "-y" not in extra_params and "--yolo" not in extra_params:
@@ -294,6 +286,7 @@ def _launch_engine(ctx, args: list[str]):  # type: ignore[no-untyped-def]
     target_script = engine_script_map[engine_name]
     cmd = [sys.executable, target_script] + extra_params
     return subprocess.run(cmd, env=child_env).returncode
+
 
 
 def _get_task_runner(root: Path):  # type: ignore[no-untyped-def]

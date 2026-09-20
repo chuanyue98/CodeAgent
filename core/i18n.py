@@ -530,6 +530,48 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "[X] Conversion failed: {error}",
         "zh": "[X] 转换失败: {error}",
     },
+    # --- ca resume / ca -r ---
+    "resume.title": {
+        "en": "Recent sessions in {path} ({count} found):",
+        "zh": "当前项目的最近会话 ({count} 条，目录: {path}):",
+    },
+    "resume.no_sessions": {
+        "en": "[X] No session history found for {path}.\nStart one first, e.g.:  ca claude",
+        "zh": "[X] 在 {path} 没有找到任何历史会话。\n请先启动一个引擎开启会话，例如:  ca claude",
+    },
+    "resume.prompt": {
+        "en": "Select session to resume [1-{count}] (Enter for [1], 'q' to quit):",
+        "zh": "请选择要恢复的会话 [1-{count}] (直接回车默认 [1]，输入 q 退出):",
+    },
+    "resume.launching": {
+        "en": "Resuming {engine} session: {title}",
+        "zh": "正在恢复 {engine} 会话: {title}",
+    },
+    "resume.invalid_index": {
+        "en": "[X] Invalid session number [{index}] -- this project has {count}.",
+        "zh": "[X] 无效的会话序号 [{index}] —— 当前项目共有 {count} 条会话。",
+    },
+    "resume.invalid_choice": {
+        "en": "[X] Invalid choice '{input}'. Please enter a number between 1 and {count}, or 'q' to quit.",
+        "zh": "[X] 无效输入 '{input}'。请输入 1 到 {count} 之间的数字，或输入 'q' 退出。",
+    },
+    "resume.not_found": {
+        "en": "[X] No session matching {selector!r} in this project.",
+        "zh": "[X] 当前项目没有匹配 {selector!r} 的会话。",
+    },
+    "resume.no_resume_command": {
+        "en": "[X] Cannot build resume command: {error}",
+        "zh": "[X] 无法生成恢复命令: {error}",
+    },
+    "resume.command_preview": {
+        "en": "Resume command: {command}",
+        "zh": "恢复命令: {command}",
+    },
+    "time.just_now": {"en": "just now", "zh": "刚刚"},
+    "time.minutes_ago": {"en": "{minutes}m ago", "zh": "{minutes} 分钟前"},
+    "time.hours_ago": {"en": "{hours}h ago", "zh": "{hours} 小时前"},
+    "time.yesterday": {"en": "yesterday", "zh": "昨天"},
+    "time.days_ago": {"en": "{days}d ago", "zh": "{days} 天前"},
     # --- ca switch ---
     "select.no_sessions": {
         "en": ("[X] No sessions found for {path}.\nStart one first, e.g.:  ca claude"),
@@ -1079,6 +1121,14 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
     # --- top level ---
     "cli.cancelled": {"en": "\n\nCancelled", "zh": "\n\n已取消"},
+    "cli.specify_engine": {
+        "en": "Please specify an engine to launch (e.g. ca claude). Available engines: {engines}",
+        "zh": "请指定要启动的引擎（例如 ca claude）。可用引擎: {engines}",
+    },
+    "cli.unknown_engine_or_command": {
+        "en": "Unknown engine or command: '{name}'. Available engines: {engines}. Run 'ca --help' for available commands.",
+        "zh": "未知的引擎或命令: '{name}'。可用引擎: {engines}。运行 'ca --help' 查看可用命令。",
+    },
 }
 
 

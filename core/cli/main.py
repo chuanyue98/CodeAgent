@@ -16,6 +16,7 @@ from .commands.history import history
 from .commands.mcp import mcp
 from .commands.project import project
 from .commands.resources import resources
+from .commands.resume import resume, resume_session_flow
 from .commands.status import status
 from .commands.switch import switch
 from .commands.sync import sync
@@ -24,30 +25,24 @@ from .helpers import init_cli_runtime
 
 EPILOG = """\
 Engines: opencode, claude, codex, codebuddy, antigravity (agy)
-         (default: opencode; set "default_engine" in config.json to change)
 
 YOLO mode is enabled by default.
 
-\\b
+\b
 Examples:
-  ca                       Start the default engine
-  ca claude do something   Start claude with extra args
-  ca --proxy opencode      Start opencode with proxy enabled
+  ca claude                Start Claude Code
+  ca codex                 Start OpenAI Codex
+  ca opencode              Start OpenCode
+  ca agy                   Start Google Antigravity
+  ca -r                    List and resume recent sessions across all engines
+  ca -r 2                  Resume the 2nd most recent session directly
+  ca resume                Same as ca -r (supports --engine <name>)
+  ca switch codex          Convert and carry current session to Codex
+  ca status                Show current project, group, and standards status
+  ca sync                  Install standards and skills into project AGENTS.md
   ca doctor --fix          Run health check and auto-repair
-  ca sync                  Install standards and skills into every engine's
-                           user-level config, so bare `claude` etc. load them
   ca ui                    Start the Web UI
-  ca new my-task           Create a new task draft
-  ca ps                    List running background task runs
-  ca stop <task_id>        Stop a background task run
-  ca batch-run code_review --engine claude --group work
-                           Run one task across every registered project in a group
-  ca project add . --group work
-                           Register the current directory, non-interactively
-  ca project list         List every registered project
   ca history list          List sessions (use --engine <name> to filter)
-  ca history show <engine> <session_id>
-  ca history convert <source_engine> <session_id> <target_engine>
 """
 
 
@@ -100,8 +95,30 @@ class CodeAgentGroup(click.Group):
     default=False,
     help="Enable YOLO mode (bypass sandbox and approvals)",
 )
+@click.option(
+    "-r",
+    "--resume",
+    "resume_selector",
+    is_flag=False,
+    flag_value="",
+    default=None,
+    help="Resume a previous session (list sessions or pass index/ID)",
+)
+@click.option(
+    "-e",
+    "--engine",
+    "resume_engine",
+    default=None,
+    help="Filter sessions by engine when resuming",
+)
+@click.option(
+    "--no-launch",
+    is_flag=True,
+    default=False,
+    help="Print the command without starting the engine",
+)
 @click.pass_context
-def cli(ctx, proxy, yolo):  # type: ignore[no-untyped-def]
+def cli(ctx, proxy, yolo, resume_selector, resume_engine, no_launch):  # type: ignore[no-untyped-def]
     """CodeAgent: Professional AI Engineering Shell."""
     init_cli_runtime()
     ctx.ensure_object(dict)
@@ -131,7 +148,15 @@ def cli(ctx, proxy, yolo):  # type: ignore[no-untyped-def]
         yolo=yolo,
     )
     if ctx.invoked_subcommand is None:
-        return _helpers_mod._launch_engine(ctx, [])
+        if resume_selector is not None:
+            return resume_session_flow(
+                ctx,
+                selector=resume_selector,
+                engine=resume_engine,
+                no_launch=no_launch,
+            )
+        click.echo(ctx.get_help())
+        return 0
 
 
 @cli.command(
@@ -151,6 +176,7 @@ cli.add_command(mcp)
 cli.add_command(project)
 cli.add_command(resources)
 cli.add_command(status)
+cli.add_command(resume)
 cli.add_command(ps)
 cli.add_command(stop)
 cli.add_command(batch_run)

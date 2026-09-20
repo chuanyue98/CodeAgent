@@ -331,11 +331,13 @@ def test_main_engine_selection_with_yolo(monkeypatch):
         assert "-y" in cmd
 
 
-def test_main_default_engine_with_proxy(monkeypatch, capsys):
+def test_main_engine_with_proxy(monkeypatch, capsys):
     # --proxy must precede the prompt/engine name (documented in EPILOG) to
     # be recognized as a real flag -- see
     # test_proxy_word_after_prompt_is_not_treated_as_a_flag for the opposite.
-    monkeypatch.setattr("sys.argv", ["ca_launcher.py", "--proxy", "some task"])
+    monkeypatch.setattr(
+        "sys.argv", ["ca_launcher.py", "--proxy", "opencode", "some task"]
+    )
     with patch("core.cli.helpers.is_tcp_port_open", return_value=True):
         with patch("subprocess.run") as mock_run:
             ca_launcher.main()
@@ -383,13 +385,10 @@ def test_main_passes_dash_p_through_to_engine(monkeypatch):
         assert "HTTP_PROXY" not in kwargs["env"]
 
 
-def test_prompt_starting_with_a_reserved_word_still_launches_the_engine(monkeypatch):
-    # "new"/"doctor"/"ui"/"history" are registered subcommand names, but a
-    # prompt that happens to start with one of those words (e.g. "new" as
-    # in "tell me what's new") must still reach the engine instead of
-    # crashing with click's "unexpected extra arguments".
+def test_prompt_starting_with_a_reserved_word_with_engine(monkeypatch):
     monkeypatch.setattr(
-        "sys.argv", ["ca_launcher.py", "new", "is", "broken", "please", "fix"]
+        "sys.argv",
+        ["ca_launcher.py", "opencode", "new", "is", "broken", "please", "fix"],
     )
     with patch("subprocess.run") as mock_run:
         ca_launcher.main()
@@ -399,9 +398,10 @@ def test_prompt_starting_with_a_reserved_word_still_launches_the_engine(monkeypa
         assert cmd[2:] == ["new", "is", "broken", "please", "fix"]
 
 
-def test_history_prompt_words_still_launch_the_engine(monkeypatch):
+def test_history_prompt_words_with_engine(monkeypatch):
     monkeypatch.setattr(
-        "sys.argv", ["ca_launcher.py", "history", "please", "explain", "this"]
+        "sys.argv",
+        ["ca_launcher.py", "opencode", "history", "please", "explain", "this"],
     )
     with patch("subprocess.run") as mock_run:
         ca_launcher.main()
@@ -409,6 +409,16 @@ def test_history_prompt_words_still_launch_the_engine(monkeypatch):
         cmd = args[0]
         assert "start_opencode.py" in cmd[1]
         assert cmd[2:] == ["history", "please", "explain", "this"]
+
+
+def test_prompt_without_engine_fails_without_fallback(monkeypatch, capsys):
+    monkeypatch.setattr(
+        "sys.argv", ["ca_launcher.py", "new", "is", "broken", "please", "fix"]
+    )
+    ret = ca_launcher.main()
+    assert ret == 1
+    err = capsys.readouterr().err
+    assert "Unknown engine or command" in err or "未知的引擎或命令" in err
 
 
 def test_new_command_with_a_real_name_still_dispatches_to_new(monkeypatch):
@@ -1049,34 +1059,18 @@ def test_mcp_remove_succeeds(tmp_path, monkeypatch, capsys):
     assert "Removed 'fs' from opencode" in capsys.readouterr().out
 
 
-# --- default engine ---------------------------------------------------------
+# --- default engine (deprecated) --------------------------------------------
 #
-# `ca` used to hard-code one engine, so anyone working primarily in another
-# had to name it on every single invocation.
+# CodeAgent is now a neutral multi-harness control plane with no implicit
+# fallback engine. Engines are launched explicitly (e.g. `ca claude`).
 
 _ENGINE_MAP = {"claude": "c", "opencode": "o", "codex": "x", "codebuddy": "b"}
 
 
-def test_default_engine_falls_back_when_unset():
-    assert ca_launcher._resolve_default_engine({}, _ENGINE_MAP) == "opencode"
-
-
-@pytest.mark.parametrize("value", ["claude", "CLAUDE", "  codex  "])
-def test_default_engine_honours_config(value):
-    expected = value.strip().lower()
+def test_default_engine_is_none():
+    assert ca_launcher._resolve_default_engine({}, _ENGINE_MAP) is None
     assert (
-        ca_launcher._resolve_default_engine({"default_engine": value}, _ENGINE_MAP)
-        == expected
+        ca_launcher._resolve_default_engine({"default_engine": "claude"}, _ENGINE_MAP)
+        is None
     )
 
-
-def test_unknown_default_engine_warns_and_falls_back(capsys):
-    """Worth saying out loud -- silently starting a different engine than the
-    one configured would be its own surprise -- but not worth aborting over."""
-    resolved = ca_launcher._resolve_default_engine(
-        {"default_engine": "gpt5"}, _ENGINE_MAP
-    )
-    assert resolved == "opencode"
-    stderr = capsys.readouterr().err
-    assert "gpt5" in stderr
-    assert "claude" in stderr  # lists what it does know

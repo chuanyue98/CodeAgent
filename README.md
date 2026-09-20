@@ -203,6 +203,17 @@ One step: it converts the session into the target engine's native format and
 hands it straight to that engine's CLI. The source session is left untouched,
 and switching to the engine a session is already in just resumes it.
 
+### Resume Sessions (Cross-Engine)
+
+Like `claude -r`, but across all engines in the project:
+
+```bash
+ca -r                    # Interactive list of recent sessions across all engines
+ca -r 2                  # Resume session [2] directly
+ca -r --engine codex     # Filter sessions by engine
+ca resume                # Subcommand alias, identical to `ca -r`
+```
+
 ### Session History
 
 ```bash
