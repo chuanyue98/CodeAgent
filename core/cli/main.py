@@ -30,6 +30,8 @@ YOLO mode is enabled by default.
 
 \b
 Examples:
+  ca                       Open interactive launcher console (in terminal)
+  ca menu                  Same as bare ca
   ca claude                Start Claude Code
   ca codex                 Start OpenAI Codex
   ca opencode              Start OpenCode
@@ -130,8 +132,15 @@ class CodeAgentGroup(click.Group):
     default=False,
     help="Print the command without starting the engine",
 )
+@click.option(
+    "-i",
+    "--interactive",
+    is_flag=True,
+    default=False,
+    help="Launch interactive console menu",
+)
 @click.pass_context
-def cli(ctx, proxy, yolo, resume_selector, resume_engine, no_launch):  # type: ignore[no-untyped-def]
+def cli(ctx, proxy, yolo, resume_selector, resume_engine, no_launch, interactive):  # type: ignore[no-untyped-def]
     """CodeAgent: Professional AI Engineering Shell."""
     init_cli_runtime()
     ctx.ensure_object(dict)
@@ -168,6 +177,11 @@ def cli(ctx, proxy, yolo, resume_selector, resume_engine, no_launch):  # type: i
                 engine=resume_engine,
                 no_launch=no_launch,
             )
+        if interactive or (sys.stdin.isatty() and sys.stdout.isatty()):
+            from .launcher_menu import run_interactive_launcher
+
+            return run_interactive_launcher(ctx)
+
         click.echo(ctx.get_help())
         return 0
 
@@ -181,6 +195,17 @@ def cli(ctx, proxy, yolo, resume_selector, resume_engine, no_launch):  # type: i
 @click.pass_context
 def _launch(ctx, args):  # type: ignore[no-untyped-def]
     return _helpers_mod._launch_engine(ctx, list(args))
+
+
+@cli.command(
+    name="menu",
+    help="Open the interactive launcher console",
+)
+@click.pass_context
+def menu(ctx):  # type: ignore[no-untyped-def]
+    from .launcher_menu import run_interactive_launcher
+
+    return run_interactive_launcher(ctx)
 
 
 # Register extracted subcommands — keeps the original ``ca history`` / ``ca mcp`` etc. names.
@@ -198,6 +223,7 @@ cli.add_command(new)
 cli.add_command(ui)
 cli.add_command(switch)
 cli.add_command(sync)
+cli.add_command(menu)
 
 
 def main():  # type: ignore[no-untyped-def]

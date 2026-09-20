@@ -116,15 +116,15 @@ the whole loop — everything below is optional.
 ### Launch an Engine
 
 ```bash
-# Start the default engine (opencode) with project context
-python ca_launcher.py
+# Open interactive launcher console in terminal (launch engine, resume, switch, Web UI)
+ca
 
-# Launch a specific engine
-python ca_launcher.py opencode              # OpenCode TUI
-python ca_launcher.py claude                # Anthropic Claude
-python ca_launcher.py codex                 # OpenAI Codex
-python ca_launcher.py codebuddy             # CodeBuddy Code
-python ca_launcher.py antigravity           # Google Antigravity (alias: agy)
+# Or launch a specific engine directly
+ca opencode              # OpenCode TUI
+ca claude                # Anthropic Claude
+ca codex                 # OpenAI Codex
+ca codebuddy             # CodeBuddy Code
+ca agy                   # Google Antigravity (alias: antigravity)
 
 # Execute a task directly
 python ca_launcher.py opencode "Refactor this module"
@@ -147,7 +147,7 @@ the linked skills and hooks are removed when the last of them exits.
 The `ca` command is also registered as a console script after `pip install -e .`:
 
 ```bash
-ca              # Same as python ca_launcher.py
+ca              # Open interactive launcher console (or ca menu)
 ca opencode     # Launch OpenCode engine
 ca doctor --fix # Self-check and repair environment
 ca ui           # Start Web UI dashboard

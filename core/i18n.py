@@ -1161,6 +1161,63 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Unknown engine or command: '{name}'. Available engines: {engines}. Run 'ca --help' for available commands.",
         "zh": "未知的引擎或命令: '{name}'。可用引擎: {engines}。运行 'ca --help' 查看可用命令。",
     },
+    # --- interactive launcher ---
+    "launcher.banner_title": {
+        "en": "CodeAgent: Professional AI Engineering Shell",
+        "zh": "CodeAgent 统一 AI 编程辅助平台",
+    },
+    "launcher.project_label": {"en": "Project", "zh": "当前项目"},
+    "launcher.latest_session_label": {"en": "Latest", "zh": "最近会话"},
+    "launcher.select_action": {
+        "en": "What would you like to do?",
+        "zh": "请选择操作:",
+    },
+    "launcher.resume_latest": {
+        "en": "🔄 Resume latest ({engine}) · {time} ({title})",
+        "zh": "🔄 继续上次会话 ({engine}) · {time} ({title})",
+    },
+    "launcher.launch_engine": {
+        "en": "🚀 Launch an AI Engine (Codex, Claude, OpenCode...)",
+        "zh": "🚀 启动 AI 引擎 (Codex / Claude / OpenCode / Antigravity...)",
+    },
+    "launcher.browse_sessions": {
+        "en": "📜 Browse & Resume Sessions (ca -r)",
+        "zh": "📜 浏览历史会话 (ca -r)",
+    },
+    "launcher.switch_session": {
+        "en": "⚡ Switch / Relay Session to Another Engine (ca -s)",
+        "zh": "⚡ 跨引擎会话接力 (ca -s)",
+    },
+    "launcher.web_ui": {
+        "en": "🌐 Open Web Dashboard (ca ui)",
+        "zh": "🌐 启动 Web 控制台 (ca ui)",
+    },
+    "launcher.status": {
+        "en": "📊 Show Project & Standards Status (ca status)",
+        "zh": "📊 查看项目与规范状态 (ca status)",
+    },
+    "launcher.sync": {
+        "en": "📥 Sync Standards & Skills to AGENTS.md (ca sync)",
+        "zh": "📥 同步规范与技能到 AGENTS.md (ca sync)",
+    },
+    "launcher.doctor": {
+        "en": "🩺 Health Check & Auto-Repair (ca doctor)",
+        "zh": "🩺 环境健康检查与修复 (ca doctor)",
+    },
+    "launcher.help": {
+        "en": "❓ View Full Command Help (--help)",
+        "zh": "❓ 查看完整命令帮助 (--help)",
+    },
+    "launcher.more": {
+        "en": "📋 More Actions (Sync / Doctor / Help)...",
+        "zh": "📋 更多操作 (Sync / Doctor / 帮助)...",
+    },
+    "launcher.back": {"en": "↩️  Back", "zh": "↩️  返回上一级"},
+    "launcher.exit": {"en": "🚪 Exit", "zh": "🚪 退出"},
+    "launcher.select_engine": {
+        "en": "Select engine to launch:",
+        "zh": "请选择要启动的引擎:",
+    },
 }
 
 
