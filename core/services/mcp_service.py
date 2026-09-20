@@ -38,6 +38,7 @@ from typing import Any
 
 from core.constants import ENGINES
 from core.logging_config import get_logger
+from core.resource_locator import CODE_ROOT
 from core.utils.atomic_write import atomic_write
 
 logger = get_logger(__name__)
@@ -611,3 +612,141 @@ def _sync_one(
         return record("failed", str(exc))
 
     return record("replaced" if present else "added", "ok")
+
+
+def install_codeagent_server(
+    project_path: str,
+    targets: list[str] | None = None,
+    allow_write: bool = True,
+    overwrite: bool = True,
+    dry_run: bool = False,
+    code_root: Path | None = None,
+) -> list[dict]:
+    """Registers CodeAgent's internal FastMCP server into target engines.
+
+    Args:
+        project_path: Working directory / project root.
+        targets: Target engines to register into (default: all supported engines).
+        allow_write: Whether to enable write tools (--allow-write).
+        overwrite: Replace existing codeagent MCP entry if present.
+        dry_run: Preview actions without writing.
+        code_root: Path to CodeAgent repository root.
+
+    Returns:
+        List of result dicts with keys: engine, name, action, detail.
+    """
+    root = code_root or CODE_ROOT
+    target_engines = targets or sorted(ENGINES)
+    for t_eng in target_engines:
+        _validate_engine(t_eng)
+
+    cmd = [
+        "uv",
+        "run",
+        "--project",
+        str(root),
+        "python",
+        "-m",
+        "core.services.mcp_server_service",
+    ]
+    if allow_write:
+        cmd.append("--allow-write")
+
+    entry = {
+        "name": "codeagent",
+        "command": cmd,
+        "transport": "stdio",
+        "env": {},
+    }
+
+    results: list[dict] = []
+    for target in target_engines:
+        try:
+            existing = {e["name"] for e in list_servers(target, project_path)}
+        except Exception as exc:
+            results.append(
+                {
+                    "engine": target,
+                    "name": "codeagent",
+                    "action": "failed",
+                    "detail": f"could not read {target} config: {exc}",
+                }
+            )
+            continue
+
+        results.append(
+            _sync_one(target, project_path, entry, existing, overwrite, dry_run)
+        )
+
+    return results
+
+
+def remove_codeagent_server(
+    project_path: str,
+    targets: list[str] | None = None,
+    dry_run: bool = False,
+) -> list[dict]:
+    """Removes CodeAgent's internal FastMCP server from target engines."""
+    target_engines = targets or sorted(ENGINES)
+    for t_eng in target_engines:
+        _validate_engine(t_eng)
+
+    results: list[dict] = []
+    for target in target_engines:
+        try:
+            existing = {e["name"] for e in list_servers(target, project_path)}
+        except Exception as exc:
+            results.append(
+                {
+                    "engine": target,
+                    "name": "codeagent",
+                    "action": "failed",
+                    "detail": f"could not read {target} config: {exc}",
+                }
+            )
+            continue
+
+        if "codeagent" not in existing:
+            results.append(
+                {
+                    "engine": target,
+                    "name": "codeagent",
+                    "action": "skipped",
+                    "detail": "not present in target",
+                }
+            )
+            continue
+
+        if dry_run:
+            results.append(
+                {
+                    "engine": target,
+                    "name": "codeagent",
+                    "action": "remove",
+                    "detail": "would be removed",
+                }
+            )
+            continue
+
+        try:
+            remove_server(target, project_path, "codeagent")
+            results.append(
+                {
+                    "engine": target,
+                    "name": "codeagent",
+                    "action": "remove",
+                    "detail": "ok",
+                }
+            )
+        except Exception as exc:
+            results.append(
+                {
+                    "engine": target,
+                    "name": "codeagent",
+                    "action": "failed",
+                    "detail": str(exc),
+                }
+            )
+
+    return results
+

@@ -348,16 +348,16 @@ def build_server(
             instruction: str,
             target_paths: list[str] | None = None,
             timeout: int = 300,
-            isolate_worktree: bool = True,
+            isolate_worktree: bool = False,
         ) -> str:
-            """向其他专项引擎委派独立子任务(在隔离的 Git Worktree 分支中运行),并返回执行摘要与代码 Diff。
+            """向其他专项引擎委派子任务。默认在当前工作区直接就地执行代码改动（修改即刻生效）；若需要沙盒隔离，可指定 isolate_worktree=True 在临时 Git Worktree 分支中运行。
 
             Args:
                 engine: 目标引擎名称 (claude / codex / opencode / antigravity / codebuddy)。
                 instruction: 具体的子任务描述与验收标准。
                 target_paths: 关注或修改的目标文件列表(可选)。
                 timeout: 最大执行超时时间(秒,默认 300)。
-                isolate_worktree: 是否在独立的 Git Worktree 分支中隔离执行(默认 True)。
+                isolate_worktree: 是否在独立的 Git Worktree 分支中隔离执行(默认 False 就地执行)。
             """
             _append_audit(
                 root_dir,

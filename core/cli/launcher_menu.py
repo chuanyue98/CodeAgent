@@ -178,6 +178,7 @@ def run_interactive_launcher(ctx: click.Context) -> int:
         if action == "more":
             more_choices = [
                 Choice(title=t("launcher.sync"), value="sync"),
+                Choice(title=t("launcher.mcp_install"), value="mcp_install"),
                 Choice(title=t("launcher.doctor"), value="doctor"),
                 Choice(title=t("launcher.help"), value="help"),
                 Choice(title=t("launcher.back"), value="back"),
@@ -198,6 +199,11 @@ def run_interactive_launcher(ctx: click.Context) -> int:
                 from .commands.sync import sync
 
                 return ctx.invoke(sync)
+
+            if chosen_more == "mcp_install":
+                from .commands.mcp import mcp_install
+
+                return ctx.invoke(mcp_install)
 
             if chosen_more == "doctor":
                 from .commands.tasks import doctor

@@ -227,6 +227,45 @@ with open("result.txt", "w", encoding="utf-8") as f:
     assert res.isolated_worktree is True
 
 
+def test_delegate_subtask_execution_inplace(tmp_path: Path):
+    git_repo = tmp_path / "exec_repo_inplace"
+    git_repo.mkdir()
+    _init_git_repo(git_repo)
+
+    # Setup fake engine launch script
+    root = tmp_path / "ca_root_inplace"
+    engines_dir = root / "engines"
+    engines_dir.mkdir(parents=True)
+    fake_claude = engines_dir / "start_claude_code.py"
+    fake_claude.write_text(
+        """import sys
+print("Subtask in-place executed")
+with open("inplace.txt", "w", encoding="utf-8") as f:
+    f.write("inplace result\\n")
+""",
+        encoding="utf-8",
+    )
+
+    # Default isolate=False
+    res = delegate_subtask(
+        engine="claude",
+        instruction="Generate inplace.txt",
+        workspace=git_repo,
+        target_paths=["inplace.txt"],
+        root_dir=root,
+    )
+
+    assert res.success
+    assert res.exit_code == 0
+    assert "Subtask in-place executed" in res.output
+    assert "inplace.txt" in res.files_changed
+    assert res.branch is None
+    assert res.isolated_worktree is False
+    assert (git_repo / "inplace.txt").exists()
+    assert (git_repo / "inplace.txt").read_text(encoding="utf-8") == "inplace result\n"
+
+
+
 def test_delegate_subtask_timeout(tmp_path: Path, monkeypatch):
     root = tmp_path / "ca_root"
     engines_dir = root / "engines"

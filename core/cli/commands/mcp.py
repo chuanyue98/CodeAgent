@@ -232,3 +232,75 @@ def mcp_serve(ctx, http, port, group, allow_write, trust_hooks):  # type: ignore
     except RuntimeError as exc:
         print(click.style(f"✗ {exc}", fg="red"))
         sys.exit(1)
+
+
+@mcp.command(name="install")
+@click.option(
+    "--engine",
+    "targets",
+    multiple=True,
+    type=_ENGINE_CHOICE,
+    help="Target engine(s) to register CodeAgent MCP server into. Defaults to all.",
+)
+@click.option(
+    "--no-write",
+    is_flag=True,
+    help="Register in read-only mode (disable write tools like ca_delegate_subtask).",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would change without writing anything.",
+)
+@click.option(
+    "--remove",
+    is_flag=True,
+    help="Remove CodeAgent MCP server from target engines instead of installing.",
+)
+@click.pass_context
+def mcp_install(ctx, targets, no_write, dry_run, remove):  # type: ignore[no-untyped-def]
+    """Register CodeAgent's internal MCP server into target engines.
+
+    Allows engines like Claude, Codex, OpenCode, and Antigravity to
+    automatically discover CodeAgent's delegation tools (ca_delegate_subtask)
+    and shared skills.
+    """
+    _helpers._ensure_project_on_path(ctx.obj["root"])
+    from core.services import mcp_service
+
+    project_path = str(Path.cwd())
+    allow_write = not no_write
+    engines_list = list(targets) if targets else None
+
+    if remove:
+        results = mcp_service.remove_codeagent_server(
+            project_path, targets=engines_list, dry_run=dry_run
+        )
+    else:
+        results = mcp_service.install_codeagent_server(
+            project_path,
+            targets=engines_list,
+            allow_write=allow_write,
+            dry_run=dry_run,
+            code_root=ctx.obj.get("root"),
+        )
+
+    marks = {
+        "added": click.style("+", fg="green"),
+        "replaced": click.style("~", fg="yellow"),
+        "remove": click.style("-", fg="red"),
+        "skipped": click.style("=", fg="bright_black"),
+        "failed": click.style("!", fg="red"),
+    }
+    if dry_run:
+        click.echo(click.style(t("mcp.dry_run"), bold=True))
+
+    for item in results:
+        mark = marks.get(item["action"], "?")
+        click.echo(f"  {mark} [{item['engine']}] {item['name']} — {item['detail']}")
+
+    failed = sum(1 for item in results if item["action"] == "failed")
+    if failed:
+        print(t("mcp.partial_failure", failed=failed, total=len(results)))
+        sys.exit(1)
+

@@ -1204,6 +1204,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "🩺 Health Check & Auto-Repair (ca doctor)",
         "zh": "🩺 环境健康检查与修复 (ca doctor)",
     },
+    "launcher.mcp_install": {
+        "en": "🔌 Install / Register CodeAgent MCP to engines (ca mcp install)",
+        "zh": "🔌 安装/注册内置 MCP 到各引擎 (ca mcp install)",
+    },
     "launcher.help": {
         "en": "❓ View Full Command Help (--help)",
         "zh": "❓ 查看完整命令帮助 (--help)",

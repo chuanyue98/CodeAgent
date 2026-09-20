@@ -281,11 +281,11 @@ def delegate_subtask(
     workspace: Path | str | None = None,
     target_paths: list[str] | None = None,
     timeout: int = _DEFAULT_TIMEOUT_SECONDS,
-    isolate: bool = True,
+    isolate: bool = False,
     group: str = "common",
     root_dir: Path | None = None,
 ) -> DelegationResult:
-    """Delegates an isolated subtask to another engine.
+    """Delegates a subtask to another engine.
 
     Args:
         engine: Target engine (claude, codex, opencode, antigravity, codebuddy).
@@ -293,7 +293,7 @@ def delegate_subtask(
         workspace: Project directory to execute in (default: current working directory).
         target_paths: Optional list of files or folders the subtask focuses on.
         timeout: Maximum execution timeout in seconds.
-        isolate: Whether to run in an isolated Git worktree (if in a Git repo).
+        isolate: Whether to run in an isolated Git worktree (default: False, in-place).
         group: Resource group to mount (default: "common").
         root_dir: CodeAgent repository root directory.
 

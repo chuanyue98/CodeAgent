@@ -233,3 +233,58 @@ def test_serve_runtime_error_exits(monkeypatch, capsys):
             _run(monkeypatch, "mcp", "serve", "--http")
     assert excinfo.value.code == 1
     assert "port taken" in capsys.readouterr().out
+
+
+# ── ca mcp install ───────────────────────────────────────────────────────────
+
+
+def test_install_calls_service(monkeypatch, capsys):
+    fake_results = [
+        {"engine": "claude", "name": "codeagent", "action": "added", "detail": "ok"},
+        {"engine": "codex", "name": "codeagent", "action": "added", "detail": "ok"},
+    ]
+    with patch(
+        "core.services.mcp_service.install_codeagent_server",
+        return_value=fake_results,
+    ) as install_mock:
+        _run(monkeypatch, "mcp", "install")
+
+    assert install_mock.called
+    kwargs = install_mock.call_args.kwargs
+    assert kwargs["allow_write"] is True
+    assert kwargs["dry_run"] is False
+    out = capsys.readouterr().out
+    assert "[claude] codeagent — ok" in out
+    assert "[codex] codeagent — ok" in out
+
+
+def test_install_with_engine_filter_and_dry_run(monkeypatch, capsys):
+    with patch(
+        "core.services.mcp_service.install_codeagent_server",
+        return_value=[
+            {"engine": "claude", "name": "codeagent", "action": "added", "detail": "would be added"}
+        ],
+    ) as install_mock:
+        _run(monkeypatch, "mcp", "install", "--engine", "claude", "--dry-run")
+
+    assert install_mock.called
+    kwargs = install_mock.call_args.kwargs
+    assert kwargs["targets"] == ["claude"]
+    assert kwargs["dry_run"] is True
+    out = capsys.readouterr().out
+    assert "[claude] codeagent — would be added" in out
+
+
+def test_install_remove_flag(monkeypatch, capsys):
+    with patch(
+        "core.services.mcp_service.remove_codeagent_server",
+        return_value=[
+            {"engine": "claude", "name": "codeagent", "action": "remove", "detail": "ok"}
+        ],
+    ) as remove_mock:
+        _run(monkeypatch, "mcp", "install", "--remove")
+
+    assert remove_mock.called
+    out = capsys.readouterr().out
+    assert "[claude] codeagent — ok" in out
+
