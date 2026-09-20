@@ -45,7 +45,7 @@ def _history_list(ctx, engine, include_subagents=False):  # type: ignore[no-unty
     print(t("history.show_hint"))
 
 
-@click.group(invoke_without_command=True)
+@click.group(invoke_without_command=True, hidden=True)
 @click.pass_context
 def history(ctx):  # type: ignore[no-untyped-def]
     """Session history management."""

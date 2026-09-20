@@ -47,7 +47,7 @@ Examples:
   ca sync                  Install standards and skills into project AGENTS.md
   ca doctor --fix          Run health check and auto-repair
   ca ui                    Start the Web UI
-  ca history list          List sessions (use --engine <name> to filter)
+  ca mcp install           Install CodeAgent MCP server into all engines
 """
 
 
