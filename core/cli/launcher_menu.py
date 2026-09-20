@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import click
 import questionary
-from questionary import Choice, Style
+from questionary import Choice, Separator, Style
 
 from core.console import configure_console_encoding
 from core.engine_registry import ENGINES
 from core.i18n import t
+from core.report import display_width
 from core.session_history import repository
 
 from . import helpers as _helpers
@@ -22,10 +24,10 @@ if TYPE_CHECKING:
 
 MENU_STYLE = Style(
     [
-        ("qmark", "fg:#f59e0b bold"),
+        ("qmark", "fg:#3b82f6 bold"),
         ("question", "bold"),
         ("pointer", "fg:#3b82f6 bold"),
-        ("highlighted", "fg:#3b82f6 bold"),
+        ("highlighted", "fg:#60a5fa bold"),
         ("selected", "fg:#10b981"),
         ("separator", "fg:#64748b"),
         ("instruction", "fg:#94a3b8"),
@@ -38,21 +40,32 @@ def print_banner(project_path: Path, latest_summary: dict | None = None) -> None
     proj_name = project_path.name or str(project_path)
     proj_str = str(project_path)
 
-    print()
-    print("  ╭─ CodeAgent CLI ─────────────────────────────────────────────╮")
-    print(f"  │  📂 {t('launcher.project_label')}: {proj_name} ({proj_str})")
+    line1 = f"📂 {t('launcher.project_label')}: {proj_name}  ({proj_str})"
+    lines = [line1]
+
     if latest_summary:
         eng = latest_summary.get("engine", "unknown")
         rel_time = format_relative_time(latest_summary.get("started_at", ""))
         msg_count = latest_summary.get("message_count", 0)
         title = latest_summary.get("title") or t("history.no_title")
         title = title.replace("\n", " ").strip()
-        if len(title) > 35:
-            title = title[:32] + "..."
-        print(
-            f"  │  💬 {t('launcher.latest_session_label')}: [{eng}] {rel_time} · {title} ({msg_count} msgs)"
-        )
-    print("  ╰─────────────────────────────────────────────────────────────╯")
+        if len(title) > 40:
+            title = title[:37] + "..."
+        line2 = f"💬 {t('launcher.latest_session_label')}: [{eng}] {rel_time} · {title} ({msg_count} msgs)"
+        lines.append(line2)
+
+    inner_w = max(64, max(display_width(item) for item in lines) + 2)
+    brand_title = "🤖 CodeAgent CLI "
+    bar_len = max(0, inner_w + 2 - display_width(brand_title) - 2)
+    top = "  ╭─ " + brand_title + ("─" * bar_len) + "╮"
+    bot = "  ╰" + ("─" * (inner_w + 2)) + "╯"
+
+    print()
+    print(top)
+    for line_text in lines:
+        pad = inner_w - display_width(line_text)
+        print(f"  │ {line_text}{' ' * pad} │")
+    print(bot)
     print()
 
 
@@ -75,7 +88,7 @@ def run_interactive_launcher(ctx: click.Context) -> int:
     print_banner(project_path, latest_summary)
 
     while True:
-        choices: list[Choice] = []
+        choices: list[Choice | Separator] = []
 
         if latest_summary:
             eng = latest_summary.get("engine", "unknown")
@@ -92,13 +105,26 @@ def run_interactive_launcher(ctx: click.Context) -> int:
             )
             choices.append(Choice(title=resume_text, value="resume_latest"))
 
+        choices.append(Separator(f"── {t('launcher.group_sessions')} ──"))
         choices.extend(
             [
                 Choice(title=t("launcher.launch_engine"), value="launch_engine"),
                 Choice(title=t("launcher.browse_sessions"), value="browse_sessions"),
                 Choice(title=t("launcher.switch_session"), value="switch_session"),
+            ]
+        )
+
+        choices.append(Separator(f"── {t('launcher.group_tools')} ──"))
+        choices.extend(
+            [
                 Choice(title=t("launcher.web_ui"), value="web_ui"),
                 Choice(title=t("launcher.status"), value="status"),
+            ]
+        )
+
+        choices.append(Separator(f"── {t('launcher.group_manage')} ──"))
+        choices.extend(
+            [
                 Choice(title=t("launcher.more"), value="more"),
                 Choice(title=t("launcher.exit"), value="exit"),
             ]
@@ -141,24 +167,28 @@ def run_interactive_launcher(ctx: click.Context) -> int:
 
         if action == "launch_engine":
             engine_choices: list[Choice] = []
-            order = ["codex", "claude", "opencode", "antigravity", "codebuddy"]
+            order = ["claude", "codex", "opencode", "antigravity", "codebuddy"]
             for eng_id in order:
                 spec = ENGINES.get(eng_id)
                 if spec:
-                    engine_choices.append(
-                        Choice(
-                            title=f"{spec.display_name:<18} ({spec.name})",
-                            value=spec.name,
-                        )
+                    installed = any(shutil.which(cmd) for cmd in spec.cli_candidates)
+                    badge = (
+                        t("launcher.engine_ready")
+                        if installed
+                        else t("launcher.engine_missing")
                     )
+                    title_line = f"{spec.display_name:<20} {badge}"
+                    engine_choices.append(Choice(title=title_line, value=spec.name))
             for name, spec in ENGINES.items():
                 if name not in order:
-                    engine_choices.append(
-                        Choice(
-                            title=f"{spec.display_name:<18} ({spec.name})",
-                            value=spec.name,
-                        )
+                    installed = any(shutil.which(cmd) for cmd in spec.cli_candidates)
+                    badge = (
+                        t("launcher.engine_ready")
+                        if installed
+                        else t("launcher.engine_missing")
                     )
+                    title_line = f"{spec.display_name:<20} {badge}"
+                    engine_choices.append(Choice(title=title_line, value=spec.name))
             engine_choices.append(Choice(title=t("launcher.back"), value="back"))
 
             try:

@@ -50,6 +50,45 @@ def format_relative_time(ts_str: str) -> str:
         return ts_str[:10]
 
 
+ENGINE_BADGES: dict[str, str] = {
+    "claude": "[Claude]",
+    "codex": "[Codex]",
+    "opencode": "[OpenCode]",
+    "antigravity": "[Antigravity]",
+    "codebuddy": "[CodeBuddy]",
+}
+
+
+def _pad_display(text: str, width: int) -> str:
+    """Pads string to exact terminal column width, accounting for wide CJK characters."""
+    from core.report import display_width
+
+    w = display_width(text)
+    if w < width:
+        return text + " " * (width - w)
+    return text
+
+
+def format_session_choice_title(idx: int, s: dict) -> str:
+    """Formats a session row with aligned columns and distinct engine badges."""
+    eng_raw = s.get("engine", "unknown")
+    eng_label = ENGINE_BADGES.get(eng_raw.lower(), f"[{eng_raw.capitalize()}]")
+    eng_padded = _pad_display(eng_label, 14)
+
+    time_str = format_relative_time(s.get("started_at", ""))
+    time_padded = _pad_display(time_str, 12)
+
+    msg_count = s.get("message_count", 0)
+    msg_str = f"{msg_count:3d} msgs"
+
+    title = s.get("title") or t("history.no_title")
+    title = title.replace("\n", " ").strip()
+    if len(title) > 50:
+        title = title[:47] + "..."
+
+    return f"[{idx:2d}]  {eng_padded} {time_padded} · {msg_str}  │ {title}"
+
+
 def resume_session_flow(
     ctx: click.Context,
     selector: str | None = None,
@@ -100,56 +139,91 @@ def resume_session_flow(
                 print(t("resume.not_found", selector=selector))
                 return 1
     else:
-        print(t("resume.title", path=project_path, count=len(summaries)))
-        for i, s in enumerate(summaries, 1):
-            eng = s.get("engine", "unknown")
-            time_str = format_relative_time(s.get("started_at", ""))
-            msg_count = s.get("message_count", 0)
-            title = s.get("title") or t("history.no_title")
-            title = title.replace("\n", " ").strip()
-            if len(title) > 60:
-                title = title[:57] + "..."
-            print(
-                f"  [{i:2d}]  [{eng:<10s}]  {time_str:<8s}  ·  {msg_count:3d} msgs  |  {title}"
-            )
-
         if not sys.stdin.isatty():
+            print(t("resume.title", path=project_path, count=len(summaries)))
+            for i, s in enumerate(summaries, 1):
+                print(f"  {format_session_choice_title(i, s)}")
             chosen_summary = summaries[0]
         else:
-            prompt_text = t("resume.prompt", count=len(summaries))
+            used_questionary = False
             try:
-                raw = input(f"\n{prompt_text} ").strip()
-            except (KeyboardInterrupt, EOFError):
-                print()
-                return 0
+                import questionary
+                from questionary import Choice, Style
 
-            if not raw:
-                chosen_summary = summaries[0]
-            elif raw.lower() in ("q", "quit", "exit"):
-                return 0
-            else:
+                choices: list[Choice] = []
+                for i, s in enumerate(summaries, 1):
+                    choices.append(
+                        Choice(title=format_session_choice_title(i, s), value=s)
+                    )
+                choices.append(Choice(title=t("launcher.exit"), value="exit"))
+
+                menu_style = Style(
+                    [
+                        ("qmark", "fg:#3b82f6 bold"),
+                        ("question", "bold"),
+                        ("pointer", "fg:#3b82f6 bold"),
+                        ("highlighted", "fg:#60a5fa bold"),
+                        ("selected", "fg:#10b981"),
+                        ("separator", "fg:#64748b"),
+                        ("instruction", "fg:#94a3b8"),
+                    ]
+                )
+                selected = questionary.select(
+                    t("resume.select_prompt"),
+                    choices=choices,
+                    style=menu_style,
+                ).ask()
+
+                if selected is None or selected == "exit":
+                    print(t("cli.cancelled"))
+                    return 0
+                chosen_summary = selected
+                used_questionary = True
+            except Exception:
+                used_questionary = False
+
+            if not used_questionary:
+                print(t("resume.title", path=project_path, count=len(summaries)))
+                for i, s in enumerate(summaries, 1):
+                    print(f"  {format_session_choice_title(i, s)}")
+
+                prompt_text = t("resume.prompt", count=len(summaries))
                 try:
-                    choice_idx = int(raw)
-                    if 1 <= choice_idx <= len(summaries):
-                        chosen_summary = summaries[choice_idx - 1]
-                    else:
+                    raw = input(f"\n{prompt_text} ").strip()
+                except (KeyboardInterrupt, EOFError):
+                    print()
+                    return 0
+
+                if not raw:
+                    chosen_summary = summaries[0]
+                elif raw.lower() in ("q", "quit", "exit"):
+                    return 0
+                else:
+                    try:
+                        choice_idx = int(raw)
+                        if 1 <= choice_idx <= len(summaries):
+                            chosen_summary = summaries[choice_idx - 1]
+                        else:
+                            print(
+                                t(
+                                    "resume.invalid_index",
+                                    index=choice_idx,
+                                    count=len(summaries),
+                                )
+                            )
+                            return 1
+                    except ValueError:
                         print(
                             t(
-                                "resume.invalid_index",
-                                index=choice_idx,
+                                "resume.invalid_choice",
+                                input=raw,
                                 count=len(summaries),
                             )
                         )
                         return 1
-                except ValueError:
-                    print(
-                        t(
-                            "resume.invalid_choice",
-                            input=raw,
-                            count=len(summaries),
-                        )
-                    )
-                    return 1
+
+    if chosen_summary is None:
+        return 0
 
     target_engine = chosen_summary["engine"]
     session_id = chosen_summary["session_id"]

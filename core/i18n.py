@@ -539,6 +539,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "[X] No session history found for {path}.\nStart one first, e.g.:  ca claude",
         "zh": "[X] 在 {path} 没有找到任何历史会话。\n请先启动一个引擎开启会话，例如:  ca claude",
     },
+    "resume.select_prompt": {
+        "en": "Select a session to resume (↑/↓ to navigate, Enter to resume):",
+        "zh": "请选择要恢复的历史会话 (↑/↓ 键选择，Enter 确认恢复):",
+    },
     "resume.prompt": {
         "en": "Select session to resume [1-{count}] (Enter for [1], 'q' to quit):",
         "zh": "请选择要恢复的会话 [1-{count}] (直接回车默认 [1]，输入 q 退出):",
@@ -1176,25 +1180,30 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "🔄 Resume latest ({engine}) · {time} ({title})",
         "zh": "🔄 继续上次会话 ({engine}) · {time} ({title})",
     },
+    "launcher.group_sessions": {"en": "Sessions & Engines", "zh": "会话与引擎"},
+    "launcher.group_tools": {"en": "Workspaces & Metrics", "zh": "工作台与监控"},
+    "launcher.group_manage": {"en": "System & Tools", "zh": "系统与管理"},
+    "launcher.engine_ready": {"en": "● Ready", "zh": "● 已就绪"},
+    "launcher.engine_missing": {"en": "○ Not Found", "zh": "○ 未安装"},
     "launcher.launch_engine": {
-        "en": "🚀 Launch an AI Engine (Codex, Claude, OpenCode...)",
-        "zh": "🚀 启动 AI 引擎 (Codex / Claude / OpenCode / Antigravity...)",
+        "en": "🚀 Launch Engine       Codex, Claude, OpenCode, Antigravity, CodeBuddy",
+        "zh": "🚀 启动 AI 引擎       Codex / Claude / OpenCode / Antigravity / CodeBuddy",
     },
     "launcher.browse_sessions": {
-        "en": "📜 Browse & Resume Sessions (ca -r)",
-        "zh": "📜 浏览历史会话 (ca -r)",
+        "en": "📜 Browse Sessions     Interactive session list across all engines (ca -r)",
+        "zh": "📜 浏览历史会话       跨引擎选择并恢复历史会话 (ca -r)",
     },
     "launcher.switch_session": {
-        "en": "⚡ Switch / Relay Session to Another Engine (ca -s)",
-        "zh": "⚡ 跨引擎会话接力 (ca -s)",
+        "en": "⚡ Switch Engine       Relay current conversation to another engine (ca -s)",
+        "zh": "⚡ 跨引擎会话接力     将当前会话一键转至另一引擎 (ca -s)",
     },
     "launcher.web_ui": {
-        "en": "🌐 Open Web Dashboard (ca ui)",
-        "zh": "🌐 启动 Web 控制台 (ca ui)",
+        "en": "🌐 Web Dashboard       Open full-featured browser GUI (ca ui)",
+        "zh": "🌐 启动 Web 控制台    打开全功能浏览器图形界面 (ca ui)",
     },
     "launcher.status": {
-        "en": "📊 Show Project & Standards Status (ca status)",
-        "zh": "📊 查看项目与规范状态 (ca status)",
+        "en": "📊 Project Status      Inspect resource group, standards & engines (ca status)",
+        "zh": "📊 查看系统状态       查看项目分组、规范托管与引擎状态 (ca status)",
     },
     "launcher.sync": {
         "en": "📥 Sync Standards & Skills to AGENTS.md (ca sync)",
@@ -1213,8 +1222,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh": "❓ 查看完整命令帮助 (--help)",
     },
     "launcher.more": {
-        "en": "📋 More Actions (Sync / Doctor / Help)...",
-        "zh": "📋 更多操作 (Sync / Doctor / 帮助)...",
+        "en": "📋 More Actions...     Sync standards / Install MCP / Health check / Help",
+        "zh": "📋 更多操作...        规范同步 / MCP 安装 / 健康检查 / 帮助",
     },
     "launcher.back": {"en": "↩️  Back", "zh": "↩️  返回上一级"},
     "launcher.exit": {"en": "🚪 Exit", "zh": "🚪 退出"},

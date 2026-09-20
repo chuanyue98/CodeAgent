@@ -191,3 +191,36 @@ def unittest_cwd() -> str:
     from pathlib import Path
 
     return str(Path.cwd())
+
+
+def test_ca_dash_r_interactive_questionary_select(find_all, monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    mock_select = MagicMock()
+    mock_select.ask.return_value = {
+        "engine": "opencode",
+        "session_id": "ses-opencode-3",
+        "title": "OpenCode Task",
+    }
+    completed = MagicMock(returncode=0)
+    with patch("questionary.select", return_value=mock_select):
+        with patch("subprocess.run", return_value=completed):
+            ret = _run_cli(monkeypatch, ["-r", "--no-launch"])
+            assert ret == 0
+
+    out = capsys.readouterr().out
+    assert "OpenCode Task" in out
+    assert "opencode" in out
+    assert "-s ses-opencode-3" in out
+
+
+def test_ca_dash_r_interactive_questionary_exit(find_all, monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    mock_select = MagicMock()
+    mock_select.ask.return_value = "exit"
+    with patch("questionary.select", return_value=mock_select):
+        ret = _run_cli(monkeypatch, ["-r", "--no-launch"])
+        assert ret == 0
+
+    out = capsys.readouterr().out
+    assert "操作已取消" in out or "cancelled" in out.lower()
+
