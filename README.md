@@ -8,12 +8,13 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 
 - **Multi-Engine Support** — Seamlessly switch between Claude, OpenCode, Codex, CodeBuddy, and Google Antigravity without changing your workflow
 - **Prompt Sovereignty** — Your engineering rules live in your repo as Plain Markdown. No hidden system prompts
+- **Cross-Engine Delegation & MCP** — Built-in FastMCP server turns CodeAgent into a multi-engine hub where models dynamically delegate subtasks and hand off sessions
 - **Modular Skills System** — Atomic, reusable automation capabilities with instruction files and executable scripts
 - **Lifecycle Hooks** — Execute custom commands on the `before_tool` / `after_tool` events (e.g. branch protection, CI monitoring, pre-commit linting)
 - **Plugin Architecture** — Bundle skills, prompts, and hooks into domain-specific capability packages
 - **Analytics Dashboard** — Built-in web UI for monitoring usage, costs, and session history across all engines
-- **Session Management** — List, view, and convert sessions between different engine formats
-- **MCP Sync** — Configure an MCP server once, then `ca mcp sync <engine>` copies it into every other engine's native config
+- **Session Management** — List, view, convert, resume, and switch sessions across different engine formats
+- **MCP Management & Sync** — One-click install of CodeAgent's internal server into all engines (`ca mcp install`), or copy external MCP servers across engines (`ca mcp sync`)
 - **Background Task Management** — List (`ca ps`) and stop (`ca stop`) background task runs, or fan a task out across every registered project at once with `ca batch-run`
 - **Scheduled Tasks** — Cron-like scheduler for automated recurring execution
 - **Task Authoring** — Interview-style workflow for creating new task templates
@@ -215,6 +216,30 @@ ca -r 2                  # Resume session [2] directly
 ca -r --engine codex     # Filter sessions by engine
 ca resume                # Subcommand alias, identical to `ca -r`
 ```
+
+### Built-in MCP Server & Cross-Engine Delegation
+
+CodeAgent can expose its skills, tasks, and multi-agent coordination capabilities as a standards-compliant FastMCP server. Once registered, any LLM engine (including official CLIs and IDE extensions) can autonomously delegate subtasks to other engines or hand off sessions.
+
+```bash
+# Register CodeAgent FastMCP server into all detected engines (Claude, Codex, OpenCode, Antigravity, CodeBuddy)
+ca mcp install
+
+# Target specific engines, preview changes, or remove
+ca mcp install --engine codex
+ca mcp install --dry-run
+ca mcp install --remove
+
+# Or run as a standalone stdio/HTTP MCP server
+ca mcp serve --allow-write
+ca mcp serve --http --port 8525
+```
+
+**Available MCP Tools:**
+- `ca_delegate_subtask(engine, task, isolate_worktree=False)`: Delegate a subtask to another engine (e.g., dispatching heavy refactoring to Codex or architecture design to Claude). Modifications are applied **in-place** directly to the working directory by default so changes are immediately visible in your editor, with optional isolated Git worktree sandboxing (`isolate_worktree=True`).
+- `ca_handoff_session(target_engine, prompt)`: Package the active conversation history and hand off smoothly to another engine.
+- `skill_run` / `task_run`: Run project automation skills and workflow tasks.
+- `skill_list` / `skill_read`: Discover available skills and read instruction manifests.
 
 ### Session History
 
