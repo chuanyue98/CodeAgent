@@ -15,6 +15,7 @@ whatever you were just working in.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -22,6 +23,7 @@ from pathlib import Path
 import click
 
 from core.constants import ENGINES, normalize_engine_name
+from core.engine_registry import ENGINES as ENGINE_SPECS
 from core.i18n import t
 
 from .. import helpers as _helpers
@@ -256,6 +258,24 @@ def switch(ctx, target_engine, selector, source_engine, yes, no_launch):  # type
             argv, cwd=project_path, env=ctx.obj.get("child_env")
         ).returncode
     except FileNotFoundError:
+        if sys.platform == "win32":
+            candidates = [argv[0]]
+            spec = ENGINE_SPECS.get(target_engine)
+            if spec:
+                for c in spec.cli_candidates:
+                    if c not in candidates:
+                        candidates.append(c)
+            for cand in candidates:
+                resolved = shutil.which(cand)
+                if resolved:
+                    try:
+                        return subprocess.run(
+                            [resolved, *argv[1:]],
+                            cwd=project_path,
+                            env=ctx.obj.get("child_env"),
+                        ).returncode
+                    except FileNotFoundError:
+                        continue
         # The conversion already succeeded, so the session is waiting for them
         # once the CLI is on PATH -- say so rather than looking like a failure.
         print(t("switch.engine_not_installed", engine=target_engine))

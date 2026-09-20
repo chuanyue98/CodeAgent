@@ -7,6 +7,7 @@ experience for the current project.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -15,6 +16,7 @@ from pathlib import Path
 import click
 
 from core.constants import normalize_engine_name
+from core.engine_registry import ENGINES
 from core.i18n import t
 
 from .. import helpers as _helpers
@@ -230,6 +232,24 @@ def resume_session_flow(
             argv, cwd=project_path, env=ctx.obj.get("child_env")
         ).returncode
     except FileNotFoundError:
+        if sys.platform == "win32":
+            candidates = [argv[0]]
+            spec = ENGINES.get(target_engine)
+            if spec:
+                for c in spec.cli_candidates:
+                    if c not in candidates:
+                        candidates.append(c)
+            for cand in candidates:
+                resolved = shutil.which(cand)
+                if resolved:
+                    try:
+                        return subprocess.run(
+                            [resolved, *argv[1:]],
+                            cwd=project_path,
+                            env=ctx.obj.get("child_env"),
+                        ).returncode
+                    except FileNotFoundError:
+                        continue
         print(t("switch.engine_not_installed", engine=target_engine))
         print(t("switch.resume_manually", command=" ".join(argv)))
         return 1

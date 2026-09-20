@@ -224,3 +224,25 @@ def test_ca_dash_r_interactive_questionary_exit(find_all, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "操作已取消" in out or "cancelled" in out.lower()
 
+
+def test_ca_resume_resolves_windows_cli_candidate_on_file_not_found(find_all, monkeypatch):
+    """When bare command raises FileNotFoundError on Windows, fallback resolves .cmd."""
+    monkeypatch.setattr("sys.platform", "win32")
+    calls = []
+
+    def mock_run(argv, **kwargs):
+        calls.append(argv)
+        if argv[0] == "codex":
+            raise FileNotFoundError("codex not found")
+        return MagicMock(returncode=0)
+
+    with patch("shutil.which", side_effect=lambda cmd: r"C:\npm\codex.cmd" if "codex" in cmd else None):
+        with patch("subprocess.run", side_effect=mock_run):
+            ret = _run_cli(monkeypatch, ["-r", "2"])
+            assert ret == 0
+
+    assert len(calls) == 2
+    assert calls[0] == ["codex", "resume", "ses-codex-2"]
+    assert calls[1][0] == r"C:\npm\codex.cmd"
+    assert calls[1][1:] == ["resume", "ses-codex-2"]
+
