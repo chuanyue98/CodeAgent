@@ -37,7 +37,10 @@ Examples:
   ca -r                    List and resume recent sessions across all engines
   ca -r 2                  Resume the 2nd most recent session directly
   ca resume                Same as ca -r (supports --engine <name>)
-  ca switch codex          Convert and carry current session to Codex
+  ca -s                    Switch a session to another engine interactively
+  ca -s codex              Switch current session to Codex (Enter to confirm)
+  ca -s codex 2            Switch 2nd session to Codex directly
+  ca switch codex          Same as ca -s codex
   ca status                Show current project, group, and standards status
   ca sync                  Install standards and skills into project AGENTS.md
   ca doctor --fix          Run health check and auto-repair
@@ -61,6 +64,16 @@ def _reserved_command_can_handle(cmd, parent_ctx, cmd_name, rest):  # type: igno
 
 
 class CodeAgentGroup(click.Group):
+    def parse_args(self, ctx, args):  # type: ignore[no-untyped-def]
+        new_args = list(args)
+        for i, arg in enumerate(new_args):
+            if arg in ("-s", "--switch", "s"):
+                new_args[i] = "switch"
+                break
+            elif not arg.startswith("-"):
+                break
+        return super().parse_args(ctx, new_args)
+
     def resolve_command(self, ctx, args):  # type: ignore[no-untyped-def]
         if args:
             cmd_name = args[0]

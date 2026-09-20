@@ -585,6 +585,38 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "[X] No session matching {selector!r} in this project.",
         "zh": "[X] 这个项目里没有匹配 {selector!r} 的会话。",
     },
+    "switch.candidate_title_with_target": {
+        "en": "Candidate source sessions to switch (target: {target}):",
+        "zh": "接力候选源会话 (目标: {target}):",
+    },
+    "switch.candidate_title": {
+        "en": "Candidate source sessions to switch:",
+        "zh": "接力候选源会话:",
+    },
+    "switch.default_marker": {
+        "en": "(default)",
+        "zh": "(默认)",
+    },
+    "switch.prompt_source": {
+        "en": "Confirm source session to switch to {target} [1-{count}] (Enter for [1], number to change, q to quit):",
+        "zh": "请确认要接力给 {target} 的源会话 [1-{count}] (直接回车默认 [1]，输入序号换选，q 退出):",
+    },
+    "switch.prompt_source_no_target": {
+        "en": "Select source session [1-{count}] (Enter for [1], number to change, q to quit):",
+        "zh": "请选择要接力的源会话 [1-{count}] (直接回车默认 [1]，输入序号换选，q 退出):",
+    },
+    "switch.target_engine_title": {
+        "en": "Select target engine to switch to:",
+        "zh": "请选择要接力到的目标引擎:",
+    },
+    "switch.prompt_target": {
+        "en": "Target engine [1-{count}] (Enter number or engine name, q to quit):",
+        "zh": "目标引擎 [1-{count}] (输入序号或引擎名称，q 退出):",
+    },
+    "switch.missing_target": {
+        "en": "[X] Target engine is required in non-interactive mode. Run `ca switch <target_engine>` or `ca -s <target_engine>`.",
+        "zh": "[X] 非交互模式下必须指定目标引擎。请运行 `ca switch <目标引擎>` 或 `ca -s <目标引擎>`。",
+    },
     "switch.unknown_engine": {
         "en": "[X] Unknown engine: {engine}",
         "zh": "[X] 未知引擎: {engine}",

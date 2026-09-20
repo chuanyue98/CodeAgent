@@ -160,3 +160,193 @@ def test_a_missing_engine_cli_still_reports_the_conversion_succeeded(
     out = capsys.readouterr().out
     assert "was converted" in out
     assert "codex resume new-id" in out
+
+
+def _run_cli(monkeypatch, argv):
+    monkeypatch.setattr("sys.argv", ["ca_launcher.py", *argv])
+    return ca_launcher.main()
+
+
+def test_switch_dash_s_shorthand_routes_to_switch(monkeypatch, capsys):
+    source = _session("src-id", EngineType.CLAUDE, "2026-08-27T10:00:00")
+    completed = MagicMock(returncode=0)
+
+    with patch("core.cli.commands.switch.resolve_session", return_value=source):
+        with patch("core.session_history.writers.write_session", return_value="new-id"):
+            with patch(
+                "core.cli.commands.switch.subprocess.run", return_value=completed
+            ) as run:
+                assert _run_cli(monkeypatch, ["-s", "codex"]) == 0
+
+    assert run.call_args.args[0] == ["codex", "resume", "new-id"]
+
+
+def test_switch_dash_s_with_selector(monkeypatch, capsys):
+    source = _session("src-id", EngineType.CLAUDE, "2026-08-27T10:00:00")
+    completed = MagicMock(returncode=0)
+
+    with patch(
+        "core.cli.commands.switch.resolve_session", return_value=source
+    ) as mock_resolve:
+        with patch("core.session_history.writers.write_session", return_value="new-id"):
+            with patch(
+                "core.cli.commands.switch.subprocess.run", return_value=completed
+            ):
+                assert _run_cli(monkeypatch, ["-s", "codex", "2"]) == 0
+
+    mock_resolve.assert_called_once()
+    assert mock_resolve.call_args.args[0] == "2"
+
+
+def test_switch_s_subcommand_routes_to_switch(monkeypatch, capsys):
+    source = _session("src-id", EngineType.CLAUDE, "2026-08-27T10:00:00")
+    completed = MagicMock(returncode=0)
+
+    with patch("core.cli.commands.switch.resolve_session", return_value=source):
+        with patch("core.session_history.writers.write_session", return_value="new-id"):
+            with patch(
+                "core.cli.commands.switch.subprocess.run", return_value=completed
+            ):
+                assert _run_cli(monkeypatch, ["s", "codex"]) == 0
+
+
+def test_interactive_switch_shows_preview_and_confirms_default_with_enter(
+    monkeypatch, capsys, sessions
+):
+    summaries = [s.to_summary_dict() for s in sessions]
+    completed = MagicMock(returncode=0)
+
+    with patch("sys.stdin.isatty", return_value=True):
+        with patch("builtins.input", return_value=""):  # Press Enter for default [1]
+            with patch(
+                "core.session_history.repository.list_summaries",
+                return_value=summaries,
+            ):
+                with patch(
+                    "core.session_history.repository.get_full",
+                    return_value=sessions[0],
+                ):
+                    with patch(
+                        "core.session_history.writers.write_session",
+                        return_value="new-id",
+                    ):
+                        with patch(
+                            "core.cli.commands.switch.subprocess.run",
+                            return_value=completed,
+                        ) as run:
+                            assert _run_cli(monkeypatch, ["-s", "codex"]) == 0
+
+    out = capsys.readouterr().out
+    assert "[ 1]" in out
+    assert "default" in out or "默认" in out
+    assert run.call_args.args[0] == ["codex", "resume", "new-id"]
+
+
+def test_interactive_switch_picks_another_session_by_index(
+    monkeypatch, capsys, sessions
+):
+    summaries = [s.to_summary_dict() for s in sessions]
+    completed = MagicMock(returncode=0)
+
+    with patch("sys.stdin.isatty", return_value=True):
+        with patch("builtins.input", return_value="2"):  # Pick #2 (middle: opencode)
+            with patch(
+                "core.session_history.repository.list_summaries",
+                return_value=summaries,
+            ):
+                with patch(
+                    "core.session_history.repository.get_full",
+                    return_value=sessions[1],
+                ):
+                    with patch(
+                        "core.session_history.writers.write_session",
+                        return_value="new-id",
+                    ):
+                        with patch(
+                            "core.cli.commands.switch.subprocess.run",
+                            return_value=completed,
+                        ) as run:
+                            assert _run_cli(monkeypatch, ["-s", "codex"]) == 0
+
+    out = capsys.readouterr().out
+    assert "opencode -> codex" in out
+    assert run.call_args.args[0] == ["codex", "resume", "new-id"]
+
+
+def test_interactive_switch_quit(monkeypatch, capsys, sessions):
+    summaries = [s.to_summary_dict() for s in sessions]
+
+    with patch("sys.stdin.isatty", return_value=True):
+        with patch("builtins.input", return_value="q"):
+            with patch(
+                "core.session_history.repository.list_summaries",
+                return_value=summaries,
+            ):
+                assert _run_cli(monkeypatch, ["-s", "codex"]) == 0
+
+
+def test_interactive_bare_switch_prompts_for_source_and_target_engine(
+    monkeypatch, capsys, sessions
+):
+    summaries = [s.to_summary_dict() for s in sessions]
+    completed = MagicMock(returncode=0)
+
+    # First input: "" (confirm default session [1], which is CLAUDE)
+    # Second input: "1" (select first target engine in list, which is codex)
+    inputs = iter(["", "1"])
+
+    with patch("sys.stdin.isatty", return_value=True):
+        with patch("builtins.input", side_effect=lambda *args, **kwargs: next(inputs)):
+            with patch(
+                "core.session_history.repository.list_summaries",
+                return_value=summaries,
+            ):
+                with patch(
+                    "core.session_history.repository.get_full",
+                    return_value=sessions[0],
+                ):
+                    with patch(
+                        "core.session_history.writers.write_session",
+                        return_value="new-id",
+                    ):
+                        with patch(
+                            "core.cli.commands.switch.subprocess.run",
+                            return_value=completed,
+                        ) as run:
+                            assert _run_cli(monkeypatch, ["-s"]) == 0
+
+    out = capsys.readouterr().out
+    assert "codex" in out
+    assert run.call_args.args[0] == ["codex", "resume", "new-id"]
+
+
+def test_noninteractive_bare_switch_requires_target_engine(monkeypatch, capsys):
+    with patch("sys.stdin.isatty", return_value=False):
+        assert _run_cli(monkeypatch, ["-s"]) == 1
+
+    out = capsys.readouterr().out
+    assert "Target engine is required" in out or "非交互模式下必须指定目标引擎" in out
+
+
+def test_switch_yes_flag_skips_prompt(monkeypatch, capsys, sessions):
+    completed = MagicMock(returncode=0)
+
+    with patch("sys.stdin.isatty", return_value=True):
+        with patch(
+            "builtins.input",
+            side_effect=AssertionError("Should not prompt with -y"),
+        ):
+            with patch(
+                "core.cli.commands.switch.resolve_session",
+                return_value=sessions[0],
+            ):
+                with patch(
+                    "core.session_history.writers.write_session",
+                    return_value="new-id",
+                ):
+                    with patch(
+                        "core.cli.commands.switch.subprocess.run",
+                        return_value=completed,
+                    ):
+                        assert _run_cli(monkeypatch, ["-s", "codex", "-y"]) == 0
+
