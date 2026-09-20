@@ -36,13 +36,35 @@ export interface TerminalContextValue {
 
 const TerminalContext = createContext<TerminalContextValue | undefined>(undefined);
 
+const defaultTerminalContext: TerminalContextValue = {
+  tabs: [],
+  activeTabId: null,
+  rateLimitedTabIds: new Set(),
+  isDrawerOpen: false,
+  isMaximized: false,
+  fontSize: 13,
+  copyOnSelect: true,
+  zenMode: false,
+  openTab: () => {},
+  closeTab: () => {},
+  setActiveTabId: () => {},
+  toggleDrawer: () => {},
+  openDrawer: () => {},
+  closeDrawer: () => {},
+  toggleMaximize: () => {},
+  increaseFontSize: () => {},
+  decreaseFontSize: () => {},
+  resetFontSize: () => {},
+  toggleCopyOnSelect: () => {},
+  toggleZenMode: () => {},
+  markRateLimited: () => {},
+  clearRateLimited: () => {},
+};
+
 // eslint-disable-next-line react-refresh/only-export-components
-export const useTerminal = () => {
+export const useTerminal = (): TerminalContextValue => {
   const context = useContext(TerminalContext);
-  if (!context) {
-    throw new Error('useTerminal must be used within a TerminalProvider');
-  }
-  return context;
+  return context ?? defaultTerminalContext;
 };
 
 export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }) => {

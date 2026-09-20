@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { Loader2, Zap } from 'lucide-react';
 import { fetchSessionPage, type SessionUsage } from '../api/analytics';
+import { convertAndLaunchSession } from '../api/audit';
 import { useLanguageCode, useT } from '../i18n/context';
 import { relativeTime, workspaceLabel } from '../utils/workspaceFormat';
-import { engineAccent, findEngine } from './terminalEngines';
+import { AGENT_ENGINES, engineAccent, findEngine } from './terminalEngines';
 import SectionLabel from './shared/SectionLabel';
 
 const LIMIT = 8;
@@ -42,6 +44,10 @@ export default function RecentSessions({
   const language = useLanguageCode();
   const [result, setResult] = useState<Result | null>(null);
 
+  const [handoffSessionId, setHandoffSessionId] = useState<string | null>(null);
+  const [handoffLoading, setHandoffLoading] = useState<string | null>(null);
+  const handoffRef = useRef<HTMLDivElement>(null);
+
   const fresh = result?.workspace === workspace ? result : null;
 
   // A slow answer for the previous workspace must not land on the new one.
@@ -73,7 +79,39 @@ export default function RecentSessions({
       });
   }, [workspace]);
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (handoffRef.current && !handoffRef.current.contains(event.target as Node)) {
+        setHandoffSessionId(null);
+      }
+    }
+    if (handoffSessionId) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [handoffSessionId]);
+
   if (!workspace) return null;
+
+  const handleHandoff = async (session: SessionUsage, targetEngine: string) => {
+    setHandoffLoading(session.sessionId);
+    try {
+      const result = await convertAndLaunchSession({
+        sourceEngine: session.target,
+        sessionId: session.sessionId,
+        targetEngine,
+        projectPath: session.projectPath,
+      });
+      setHandoffSessionId(null);
+      onOpen(result.engine, result.project, result.sessionId);
+    } catch (err) {
+      console.error('Failed to handoff session:', err);
+    } finally {
+      setHandoffLoading(null);
+    }
+  };
 
   const engineName = (id: string) => {
     const engine = findEngine(id);
@@ -99,7 +137,7 @@ export default function RecentSessions({
             const title = session.title || t('terminalSidebar.untitled');
             const active = session.sessionId === activeSessionId;
             return (
-              <li key={`${session.target}:${session.sessionId}`}>
+              <li key={`${session.target}:${session.sessionId}`} className="group relative">
                 <button
                   type="button"
                   onClick={() => onOpen(session.target, session.projectPath, session.sessionId)}
@@ -111,7 +149,7 @@ export default function RecentSessions({
                       : 'border-slate-200 hover:border-primary/40 hover:bg-white'
                   }`}
                 >
-                  <span className="line-clamp-2 text-sm font-medium text-slate-800">{title}</span>
+                  <span className="line-clamp-2 text-sm font-medium text-slate-800 pr-6">{title}</span>
                   <span className="mt-auto flex items-center gap-2 text-[11px] text-slate-400">
                     <span className={`shrink-0 rounded px-1.5 py-0.5 font-medium ${engineAccent(session.target)}`}>
                       {engineName(session.target)}
@@ -126,6 +164,48 @@ export default function RecentSessions({
                     <span className="shrink-0">{relativeTime(session.lastActivity, language)}</span>
                   </span>
                 </button>
+
+                <div className="absolute right-2 top-2 z-10" onClick={e => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    disabled={handoffLoading === session.sessionId}
+                    onClick={() => setHandoffSessionId(prev => prev === session.sessionId ? null : session.sessionId)}
+                    title={t('launch.handoffTitle')}
+                    aria-label={t('launch.handoffTitle')}
+                    className={`rounded p-1 text-slate-400 transition-colors hover:bg-amber-100 hover:text-amber-700 ${
+                      handoffSessionId === session.sessionId
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                  >
+                    {handoffLoading === session.sessionId ? (
+                      <Loader2 size={13} className="animate-spin text-amber-600" />
+                    ) : (
+                      <Zap size={13} />
+                    )}
+                  </button>
+                  {handoffSessionId === session.sessionId && (
+                    <div
+                      ref={handoffRef}
+                      className="absolute right-0 top-full z-50 mt-1 min-w-36 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur"
+                    >
+                      <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                        {t('launch.handoffTitle')}
+                      </div>
+                      {AGENT_ENGINES.filter(e => e.id !== session.target).map(target => (
+                        <button
+                          key={target.id}
+                          disabled={Boolean(handoffLoading)}
+                          onClick={() => void handleHandoff(session, target.id)}
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                        >
+                          <span className={`h-2 w-2 rounded-full ${target.dot}`} />
+                          <span className="font-medium">{target.nameKey ? t(target.nameKey) : target.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </li>
             );
           })}

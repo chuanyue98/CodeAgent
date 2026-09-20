@@ -1,14 +1,16 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useIsMounted, useLatestRequest } from '../hooks/useAsyncGuards';
 import { useSearchParams } from 'react-router';
-import { ChevronRight, Clock, FileText, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, FileText, AlertCircle, Loader2, Play, RefreshCw, Trash2, Zap } from 'lucide-react';
 import { fetchSessionPage, type SessionUsage, fmtTokens } from '../api/analytics';
-import { deleteHistorySession } from '../api/audit';
+import { convertAndLaunchSession, deleteHistorySession } from '../api/audit';
 import useActivityFilters from '../hooks/useActivityFilters';
+import { useTerminal } from '../context/TerminalContext';
 import { useT } from '../i18n/context';
 import { isWithinLocalDayRange } from '../utils/dateRange';
 import ActivityFilterPanel from './ActivityFilterPanel';
 import { eb } from './analytics/present';
+import { AGENT_ENGINES } from './terminalEngines';
 import SessionDetailPanel from './SessionDetailPanel';
 import ConfirmDialog from './shared/ConfirmDialog';
 import EmptyState from './shared/EmptyState';
@@ -53,6 +55,49 @@ export default function SessionsPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const { openTab, openDrawer } = useTerminal();
+  const [handoffSessionId, setHandoffSessionId] = useState<string | null>(null);
+  const [handoffLoading, setHandoffLoading] = useState<string | null>(null);
+  const handoffRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (handoffRef.current && !handoffRef.current.contains(event.target as Node)) {
+        setHandoffSessionId(null);
+      }
+    }
+    if (handoffSessionId) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [handoffSessionId]);
+
+  const handleResumeSession = (session: SessionUsage) => {
+    openTab(session.target, session.projectPath, session.sessionId);
+    openDrawer();
+  };
+
+  const handleHandoffSession = async (session: SessionUsage, targetEngine: string) => {
+    setHandoffLoading(session.sessionId);
+    try {
+      const result = await convertAndLaunchSession({
+        sourceEngine: session.target,
+        sessionId: session.sessionId,
+        targetEngine,
+        projectPath: session.projectPath,
+      });
+      setHandoffSessionId(null);
+      openTab(result.engine, result.project, result.sessionId);
+      openDrawer();
+    } catch (err) {
+      console.error('Failed to handoff session:', err);
+    } finally {
+      setHandoffLoading(null);
+    }
+  };
 
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -450,8 +495,67 @@ export default function SessionsPage() {
                       <Clock className="w-3 h-3" />
                       {new Date(session.lastActivity).toLocaleDateString()}
                     </span>
+
+                    {/* Quick Action Buttons: Resume & Relay */}
+                    <div className="flex items-center gap-1.5 shrink-0" onClick={event => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => handleResumeSession(session)}
+                        title={t('sessions.resumeTitle')}
+                        aria-label={t('sessions.resumeTitle')}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-colors shadow-xs"
+                      >
+                        <Play size={11} className="fill-slate-600" />
+                        <span className="hidden sm:inline">{t('sessions.resume')}</span>
+                      </button>
+
+                      <div className="relative">
+                        <button
+                          type="button"
+                          disabled={handoffLoading === session.sessionId}
+                          onClick={() => setHandoffSessionId(prev => prev === session.sessionId ? null : session.sessionId)}
+                          title={t('launch.handoffTitle')}
+                          aria-label={t('launch.handoffTitle')}
+                          className={`inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50/80 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors shadow-xs ${
+                            handoffSessionId === session.sessionId ? 'bg-amber-100 ring-2 ring-amber-400/30' : ''
+                          }`}
+                        >
+                          {handoffLoading === session.sessionId ? (
+                            <Loader2 size={11} className="animate-spin text-amber-600" />
+                          ) : (
+                            <Zap size={11} className="text-amber-600" />
+                          )}
+                          <span className="hidden sm:inline">{t('launch.handoff')}</span>
+                          <ChevronDown size={10} className={handoffSessionId === session.sessionId ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                        </button>
+
+                        {handoffSessionId === session.sessionId && (
+                          <div
+                            ref={handoffRef}
+                            className="absolute right-0 top-full z-50 mt-1 min-w-36 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur"
+                          >
+                            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                              {t('launch.handoffTitle')}
+                            </div>
+                            {AGENT_ENGINES.filter(e => e.id !== session.target).map(target => (
+                              <button
+                                key={target.id}
+                                type="button"
+                                disabled={Boolean(handoffLoading)}
+                                onClick={() => void handleHandoffSession(session, target.id)}
+                                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50"
+                              >
+                                <span className={`h-2 w-2 rounded-full ${target.dot}`} />
+                                <span className="font-medium">{target.nameKey ? t(target.nameKey) : target.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                     <ChevronRight
-                      className={`w-4 h-4 transition-colors ${isSelected ? 'text-primary' : 'text-slate-300'}`}
+                      className={`w-4 h-4 transition-colors shrink-0 ${isSelected ? 'text-primary' : 'text-slate-300'}`}
                     />
                   </div>
                 </div>

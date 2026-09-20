@@ -173,6 +173,8 @@ export const zh: Record<TranslationKey, string> = {
   'sessions.deleteSelected': '删除所选',
   'sessions.sortDate': '日期',
   'sessions.sortTokens': 'Token 数',
+  'sessions.resume': '继续',
+  'sessions.resumeTitle': '在终端中继续此会话',
   'sessions.open': '打开会话 {id}',
   'sessions.select': '选择会话 {id}',
   'sessions.loadMore': '加载更多',

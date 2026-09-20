@@ -177,6 +177,8 @@ export const en = {
   'sessions.deleteSelected': 'Delete selected',
   'sessions.sortDate': 'Date',
   'sessions.sortTokens': 'Tokens',
+  'sessions.resume': 'Resume',
+  'sessions.resumeTitle': 'Resume session in terminal',
   'sessions.open': 'Open session {id}',
   'sessions.select': 'Select session {id}',
   'sessions.loadMore': 'Load more',
