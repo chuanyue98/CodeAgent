@@ -189,14 +189,16 @@ layouts differ; a skill directory you already own is never replaced.
 `agy` is the exception: it reads no project-level file at all (verified), so nothing is
 written for it. Run `ca sync` once per project, and re-run it after changing prompts.
 
-### Switch Engines Mid-Conversation
+### Switch Engines Mid-Conversation (`ca -s`)
 
 The point of CodeAgent: a conversation outlives the tool it started in.
 
 ```bash
-ca switch codex          # carry the most recent session here into Codex, and open it
-ca switch claude 3       # session [3] from `ca history`, into Claude
-ca switch codex --no-launch   # convert only, print the resume command
+ca -s codex              # previews recent sessions; press Enter to carry [1] into Codex
+ca -s codex 2            # session [2] from the preview/history, into Codex
+ca -s                    # fully interactive: pick source session, then pick target engine
+ca switch codex -y       # skip confirmation prompt and carry latest session directly
+ca -s codex --no-launch  # convert only, print the resume command
 ```
 
 One step: it converts the session into the target engine's native format and
