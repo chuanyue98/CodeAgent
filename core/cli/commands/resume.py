@@ -18,6 +18,16 @@ from core.constants import normalize_engine_name
 from core.i18n import t
 
 from .. import helpers as _helpers
+from ..ui_styles import (
+    CLI_QUESTIONARY_STYLE,
+    ENGINE_THEMES,
+    format_styled_session_choice,
+    get_engine_theme,
+    pad_display,
+)
+
+ENGINE_BADGES: dict[str, str] = {k: v.badge for k, v in ENGINE_THEMES.items()}
+_pad_display = pad_display
 
 
 def format_relative_time(ts_str: str) -> str:
@@ -50,33 +60,14 @@ def format_relative_time(ts_str: str) -> str:
         return ts_str[:10]
 
 
-ENGINE_BADGES: dict[str, str] = {
-    "claude": "[Claude]",
-    "codex": "[Codex]",
-    "opencode": "[OpenCode]",
-    "antigravity": "[Antigravity]",
-    "codebuddy": "[CodeBuddy]",
-}
-
-
-def _pad_display(text: str, width: int) -> str:
-    """Pads string to exact terminal column width, accounting for wide CJK characters."""
-    from core.report import display_width
-
-    w = display_width(text)
-    if w < width:
-        return text + " " * (width - w)
-    return text
-
-
 def format_session_choice_title(idx: int, s: dict) -> str:
     """Formats a session row with aligned columns and distinct engine badges."""
     eng_raw = s.get("engine", "unknown")
-    eng_label = ENGINE_BADGES.get(eng_raw.lower(), f"[{eng_raw.capitalize()}]")
-    eng_padded = _pad_display(eng_label, 14)
+    theme = get_engine_theme(eng_raw)
+    eng_padded = pad_display(theme.badge, 14)
 
     time_str = format_relative_time(s.get("started_at", ""))
-    time_padded = _pad_display(time_str, 12)
+    time_padded = pad_display(time_str, 12)
 
     msg_count = s.get("message_count", 0)
     msg_str = f"{msg_count:3d} msgs"
@@ -148,30 +139,23 @@ def resume_session_flow(
             used_questionary = False
             try:
                 import questionary
-                from questionary import Choice, Style
+                from questionary import Choice
 
                 choices: list[Choice] = []
                 for i, s in enumerate(summaries, 1):
+                    rel_time = format_relative_time(s.get("started_at", ""))
                     choices.append(
-                        Choice(title=format_session_choice_title(i, s), value=s)
+                        Choice(
+                            title=format_styled_session_choice(i, s, rel_time),
+                            value=s,
+                        )
                     )
                 choices.append(Choice(title=t("launcher.exit"), value="exit"))
 
-                menu_style = Style(
-                    [
-                        ("qmark", "fg:#3b82f6 bold"),
-                        ("question", "bold"),
-                        ("pointer", "fg:#3b82f6 bold"),
-                        ("highlighted", "fg:#60a5fa bold"),
-                        ("selected", "fg:#10b981"),
-                        ("separator", "fg:#64748b"),
-                        ("instruction", "fg:#94a3b8"),
-                    ]
-                )
                 selected = questionary.select(
                     t("resume.select_prompt"),
                     choices=choices,
-                    style=menu_style,
+                    style=CLI_QUESTIONARY_STYLE,
                 ).ask()
 
                 if selected is None or selected == "exit":

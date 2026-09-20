@@ -130,3 +130,68 @@ def test_interactive_launcher_more_sync():
             result = runner.invoke(cli, ["-i"])
             assert result.exit_code == 0
             assert mock_invoke.called
+
+
+def test_print_banner_without_summary(capsys):
+    from pathlib import Path
+
+    from core.cli.launcher_menu import print_banner
+
+    print_banner(Path("/test/proj"), None)
+    out = capsys.readouterr().out
+    assert "CodeAgent CLI" in out
+    assert "proj" in out
+
+
+def test_print_banner_with_summary(capsys):
+    from pathlib import Path
+
+    from core.cli.launcher_menu import print_banner
+
+    summary = {
+        "engine": "claude",
+        "started_at": "2026-09-20T10:00:00Z",
+        "message_count": 5,
+        "title": "Fix login issue",
+    }
+    print_banner(Path("/test/proj"), summary)
+    out = capsys.readouterr().out
+    assert "CodeAgent CLI" in out
+    assert "[Claude]" in out
+    assert "Fix login issue" in out
+
+
+def test_ui_styles_engine_theme_and_styled_title():
+    from core.cli.ui_styles import (
+        StyledTitle,
+        format_styled_session_choice,
+        get_engine_theme,
+        pad_display,
+    )
+
+    t_claude = get_engine_theme("claude")
+    assert t_claude.badge == "[Claude]"
+    assert t_claude.style_class == "eng_claude"
+
+    t_unknown = get_engine_theme("nonexistent")
+    assert t_unknown.badge == "[Nonexistent]"
+
+    st = StyledTitle([("class:test", "hello")], "hello")
+    assert isinstance(st, list)
+    assert st.lower() == "hello"
+    assert str(st) == "hello"
+    assert repr(st) == "StyledTitle('hello')"
+
+    assert pad_display("abc", 5) == "abc  "
+
+    s = {
+        "engine": "opencode",
+        "started_at": "2026-09-20T10:00:00Z",
+        "message_count": 3,
+        "title": "My Task",
+    }
+    choice = format_styled_session_choice(1, s, "刚刚")
+    assert isinstance(choice, list)
+    assert "[OpenCode]" in str(choice)
+    assert "My Task" in str(choice)
+    assert choice.lower() == str(choice).lower()

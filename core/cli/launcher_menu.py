@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import click
 import questionary
-from questionary import Choice, Separator, Style
+from questionary import Choice, Separator
 
 from core.console import configure_console_encoding
 from core.engine_registry import ENGINES
@@ -18,21 +18,17 @@ from core.session_history import repository
 
 from . import helpers as _helpers
 from .commands.resume import format_relative_time, resume_session_flow
+from .ui_styles import (
+    CLI_QUESTIONARY_STYLE,
+    StyledTitle,
+    get_engine_theme,
+    pad_display,
+)
 
 if TYPE_CHECKING:
     pass
 
-MENU_STYLE = Style(
-    [
-        ("qmark", "fg:#3b82f6 bold"),
-        ("question", "bold"),
-        ("pointer", "fg:#3b82f6 bold"),
-        ("highlighted", "fg:#60a5fa bold"),
-        ("selected", "fg:#10b981"),
-        ("separator", "fg:#64748b"),
-        ("instruction", "fg:#94a3b8"),
-    ]
-)
+MENU_STYLE = CLI_QUESTIONARY_STYLE
 
 
 def print_banner(project_path: Path, latest_summary: dict | None = None) -> None:
@@ -40,31 +36,48 @@ def print_banner(project_path: Path, latest_summary: dict | None = None) -> None
     proj_name = project_path.name or str(project_path)
     proj_str = str(project_path)
 
-    line1 = f"📂 {t('launcher.project_label')}: {proj_name}  ({proj_str})"
-    lines = [line1]
+    line1_raw = f"📂 {t('launcher.project_label')}: {proj_name}  ({proj_str})"
+    line1_styled = (
+        f"📂 {click.style(t('launcher.project_label') + ':', bold=True)} "
+        f"{click.style(proj_name, fg='bright_cyan', bold=True)}  "
+        f"{click.style('(' + proj_str + ')', fg='bright_black')}"
+    )
+    lines: list[tuple[str, str]] = [(line1_raw, line1_styled)]
 
     if latest_summary:
-        eng = latest_summary.get("engine", "unknown")
+        eng_raw = latest_summary.get("engine", "unknown")
+        theme = get_engine_theme(eng_raw)
         rel_time = format_relative_time(latest_summary.get("started_at", ""))
         msg_count = latest_summary.get("message_count", 0)
         title = latest_summary.get("title") or t("history.no_title")
         title = title.replace("\n", " ").strip()
         if len(title) > 40:
             title = title[:37] + "..."
-        line2 = f"💬 {t('launcher.latest_session_label')}: [{eng}] {rel_time} · {title} ({msg_count} msgs)"
-        lines.append(line2)
+        line2_raw = f"💬 {t('launcher.latest_session_label')}: {theme.badge} {rel_time} · {title} ({msg_count} msgs)"
+        line2_styled = (
+            f"💬 {click.style(t('launcher.latest_session_label') + ':', bold=True)} "
+            f"{click.style(theme.badge, fg=theme.click_fg, bold=True)} "
+            f"{click.style(rel_time, fg='bright_black')} "
+            f"{click.style('·', fg='bright_black')} "
+            f"{click.style(title, fg='bright_white')} "
+            f"{click.style(f'({msg_count} msgs)', fg='bright_black')}"
+        )
+        lines.append((line2_raw, line2_styled))
 
-    inner_w = max(64, max(display_width(item) for item in lines) + 2)
-    brand_title = "🤖 CodeAgent CLI "
-    bar_len = max(0, inner_w + 2 - display_width(brand_title) - 2)
-    top = "  ╭─ " + brand_title + ("─" * bar_len) + "╮"
-    bot = "  ╰" + ("─" * (inner_w + 2)) + "╯"
+    inner_w = max(64, max(display_width(r) for r, _ in lines) + 2)
+    raw_brand = "🤖 CodeAgent CLI "
+    bar_len = max(0, inner_w + 2 - display_width(raw_brand) - 2)
+
+    border_color = "bright_blue"
+    brand_styled = click.style(raw_brand, fg="bright_cyan", bold=True)
+    top = f"  {click.style('╭─ ', fg=border_color)}{brand_styled}{click.style('─' * bar_len + '╮', fg=border_color)}"
+    bot = f"  {click.style('╰' + '─' * (inner_w + 2) + '╯', fg=border_color)}"
 
     print()
     print(top)
-    for line_text in lines:
-        pad = inner_w - display_width(line_text)
-        print(f"  │ {line_text}{' ' * pad} │")
+    for raw, styled in lines:
+        pad = inner_w - display_width(raw)
+        print(f"  {click.style('│', fg=border_color)} {styled}{' ' * pad} {click.style('│', fg=border_color)}")
     print(bot)
     print()
 
@@ -92,18 +105,32 @@ def run_interactive_launcher(ctx: click.Context) -> int:
 
         if latest_summary:
             eng = latest_summary.get("engine", "unknown")
+            theme = get_engine_theme(eng)
             rel_time = format_relative_time(latest_summary.get("started_at", ""))
             title = latest_summary.get("title") or t("history.no_title")
             title = title.replace("\n", " ").strip()
             if len(title) > 28:
                 title = title[:25] + "..."
-            resume_text = t(
+            resume_plain = t(
                 "launcher.resume_latest",
                 engine=eng,
                 time=rel_time,
                 title=title,
             )
-            choices.append(Choice(title=resume_text, value="resume_latest"))
+            resume_tokens = [
+                ("class:instruction", "↩  "),
+                ("class:text", f"{t('launcher.latest_session_label')}: "),
+                (f"class:{theme.style_class}", f"{theme.badge} "),
+                ("class:time", f"{rel_time} "),
+                ("class:dim", "· "),
+                ("class:session_title", f"{title}"),
+            ]
+            choices.append(
+                Choice(
+                    title=StyledTitle(resume_tokens, resume_plain),
+                    value="resume_latest",
+                )
+            )
 
         choices.append(Separator(f"── {t('launcher.group_sessions')} ──"))
         choices.extend(
@@ -177,8 +204,19 @@ def run_interactive_launcher(ctx: click.Context) -> int:
                         if installed
                         else t("launcher.engine_missing")
                     )
-                    title_line = f"{spec.display_name:<20} {badge}"
-                    engine_choices.append(Choice(title=title_line, value=spec.name))
+                    badge_class = (
+                        "class:badge_ready" if installed else "class:badge_missing"
+                    )
+                    theme = get_engine_theme(eng_id)
+                    name_padded = pad_display(spec.display_name, 18)
+                    plain = f"{name_padded} {badge}"
+                    tokens = [
+                        (f"class:{theme.style_class}", name_padded + " "),
+                        (badge_class, badge),
+                    ]
+                    engine_choices.append(
+                        Choice(title=StyledTitle(tokens, plain), value=spec.name)
+                    )
             for name, spec in ENGINES.items():
                 if name not in order:
                     installed = any(shutil.which(cmd) for cmd in spec.cli_candidates)
@@ -187,8 +225,19 @@ def run_interactive_launcher(ctx: click.Context) -> int:
                         if installed
                         else t("launcher.engine_missing")
                     )
-                    title_line = f"{spec.display_name:<20} {badge}"
-                    engine_choices.append(Choice(title=title_line, value=spec.name))
+                    badge_class = (
+                        "class:badge_ready" if installed else "class:badge_missing"
+                    )
+                    theme = get_engine_theme(name)
+                    name_padded = pad_display(spec.display_name, 18)
+                    plain = f"{name_padded} {badge}"
+                    tokens = [
+                        (f"class:{theme.style_class}", name_padded + " "),
+                        (badge_class, badge),
+                    ]
+                    engine_choices.append(
+                        Choice(title=StyledTitle(tokens, plain), value=spec.name)
+                    )
             engine_choices.append(Choice(title=t("launcher.back"), value="back"))
 
             try:
