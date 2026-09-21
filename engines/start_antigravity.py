@@ -13,6 +13,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import split_passthrough
+from core.engine_base.plugin_bundle_mixin import _PluginBundleMixin
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -20,13 +21,24 @@ from core.task_lib import (
 )
 
 
-class AntigravityEngine(BaseEngine):
-    """Google Antigravity (agy) 引擎实现。"""
+class AntigravityEngine(_PluginBundleMixin, BaseEngine):
+    """Google Antigravity (agy) 引擎实现。
+
+    技能不能像 claude 那样挂目录：agy 的扩展单位是插件，见
+    :mod:`core.engine_base.plugin_bundle_mixin`。
+    """
 
     COMMAND = "agy"
 
     def __init__(self) -> None:
         super().__init__("Antigravity", "")
+
+    def _get_plugin_config_dir(self) -> Path:
+        """agy 的全局 customization root 是 ``~/.gemini/config/``，不是 ``~/.gemini/``。
+
+        没有可覆盖它的环境变量：agy 的二进制里搜不到任何 ``GEMINI_*_DIR``。
+        """
+        return Path.home() / ".gemini" / "config"
 
     def build_command(
         self,
@@ -92,11 +104,18 @@ def main() -> None:
     env = engine.env_manager.get_env()
     register_signal_handler()
 
-    final_command = engine.build_command(
-        message, args.non_interactive, yolo=args.yolo, passthrough=passthrough
-    )
-    print(f"🚀 Launching {engine.name}...")
-    engine.run_shell(final_command, env)
+    def setup() -> None:
+        engine.ensure_plugin_bundle()
+
+    def teardown() -> None:
+        engine.cleanup_plugin_bundle()
+
+    with engine.shared_injection(Path.cwd(), setup, teardown):
+        final_command = engine.build_command(
+            message, args.non_interactive, yolo=args.yolo, passthrough=passthrough
+        )
+        print(f"🚀 Launching {engine.name}...")
+        engine.run_shell(final_command, env)
 
 
 if __name__ == "__main__":
