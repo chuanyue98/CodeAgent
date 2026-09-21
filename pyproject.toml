@@ -59,6 +59,12 @@ dev = [
     "pytest-timeout>=2.4.0",
 ]
 
+[tool.ruff]
+# plugins/ 下是 git submodule 检出的第三方插件源码（如 base/superpowers），
+# 不归本仓库的风格约束管。submodule 一初始化，不排除就会让 lint 与 format
+# 在别人的代码上失败。
+extend-exclude = ["plugins"]
+
 [tool.ruff.lint]
 # E4/E7/E9 + F: ruff's own implicit default rule set, made explicit here so
 # it's versioned rather than relying on ruff's defaults changing under us.
