@@ -18,12 +18,15 @@ from core.engine_base.plugin_bundle_mixin import (  # noqa: E402
     BUNDLE_NAME,
     _PluginBundleMixin,
 )
+from core.link_manager import LinkManager  # noqa: E402
 
 
 class FakeEngine(_PluginBundleMixin):
     def __init__(self, config_dir: Path, skills: list[tuple[str, Path]]):
         self._config_dir = config_dir
         self._skills = skills
+        # 用真实的 LinkManager：托管链接的幂等与 manifest 语义正是要测的东西。
+        self.link_manager = LinkManager()
 
     def _get_plugin_config_dir(self) -> Path:
         return self._config_dir
@@ -31,11 +34,13 @@ class FakeEngine(_PluginBundleMixin):
     def resolve_skill_sources(self) -> list[tuple[str, Path]]:
         return self._skills
 
-    def _create_skill_link(self, source: Path, target: Path) -> None:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists() or target.is_symlink():
-            target.unlink()
-        target.symlink_to(source, target_is_directory=True)
+    def _ensure_managed_link(self, source: Path, target: Path, link_path: Path) -> bool:
+        return self.link_manager.ensure_managed_link(source, target, link_path)
+
+    def _remove_stale_managed_links(
+        self, link_path: Path, desired_names: set[str]
+    ) -> None:
+        self.link_manager.remove_stale_managed_links(link_path, desired_names)
 
 
 def _make_skill(root: Path, name: str) -> Path:
@@ -77,10 +82,11 @@ def test_skills_are_linked_into_the_bundle(engine):
     link = skills_dir / "task-authoring"
     assert link.is_symlink(), "技能要链接过去，改源文件下次启动即生效"
     assert (link / "SKILL.md").exists()
-    assert sorted(p.name for p in skills_dir.iterdir()) == [
-        "commit-message",
-        "task-authoring",
-    ]
+    # 托管链接自带一份 .codeagent-links.json manifest，它正是"这条链接是我们挂的"
+    # 的依据，不算技能。
+    assert sorted(
+        p.name for p in skills_dir.iterdir() if not p.name.startswith(".")
+    ) == ["commit-message", "task-authoring"]
 
 
 def test_bundle_is_enabled_in_the_config(engine):
@@ -146,3 +152,29 @@ def test_a_corrupt_config_is_replaced_rather_than_crashing(engine):
     engine.ensure_plugin_bundle()
 
     assert _config(engine)["plugins"][BUNDLE_NAME] == {"enabled": True}
+
+
+def test_rerunning_reuses_the_existing_links(engine):
+    """第二次启动时链接已经在了，裸 symlink 会 FileExistsError，托管链接不会。"""
+    assert engine.ensure_plugin_bundle() is True
+
+    assert engine.ensure_plugin_bundle() is True
+    skills_dir = engine._get_plugin_config_dir() / "plugins" / BUNDLE_NAME / "skills"
+    assert (skills_dir / "task-authoring" / "SKILL.md").exists()
+
+
+def test_a_skill_dropped_from_the_group_is_unlinked(tmp_path):
+    src = tmp_path / "skills"
+    both = [
+        ("task-authoring", _make_skill(src, "task-authoring")),
+        ("commit-message", _make_skill(src, "commit-message")),
+    ]
+    config_dir = tmp_path / "config"
+    FakeEngine(config_dir, both).ensure_plugin_bundle()
+
+    FakeEngine(config_dir, both[:1]).ensure_plugin_bundle()
+
+    skills_dir = config_dir / "plugins" / BUNDLE_NAME / "skills"
+    assert [p.name for p in skills_dir.iterdir() if not p.name.startswith(".")] == [
+        "task-authoring"
+    ]

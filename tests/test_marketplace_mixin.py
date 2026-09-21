@@ -36,12 +36,6 @@ class FakeEngine(_MarketplaceMixin):
     def resolve_skill_sources(self) -> list[tuple[str, Path]]:
         return self._skills
 
-    def _create_skill_link(self, source: Path, target: Path) -> None:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists() or target.is_symlink():
-            target.unlink()
-        target.symlink_to(source, target_is_directory=True)
-
 
 def _make_skill(root: Path, name: str, description: str) -> Path:
     skill_dir = root / name
@@ -92,12 +86,38 @@ def test_plugin_description_comes_from_the_skill_frontmatter(engine):
     assert manifest["plugins"][0]["description"] == "写任务模板"
 
 
-def test_skills_are_linked_not_copied(engine):
+def test_skills_are_copied_into_the_marketplace(engine):
+    """CodeBuddy 会拒绝 resolve 后跑出市场根的插件源，所以只能复制不能链接。"""
     engine.ensure_marketplace()
 
-    link = engine._get_marketplace_root() / "plugins" / "task-authoring"
-    assert link.is_symlink(), "技能要链接过去，改源文件下次启动即生效"
-    assert (link / "SKILL.md").exists()
+    plugin = engine._get_marketplace_root() / "plugins" / "task-authoring"
+    assert plugin.is_dir() and not plugin.is_symlink()
+    assert (plugin / "SKILL.md").exists()
+
+
+def test_rerunning_rebuilds_instead_of_failing(engine):
+    """第二次启动不能因为目录已存在就炸，整个 plugins/ 由我们独占，重建即可。"""
+    engine.ensure_marketplace()
+
+    assert engine.ensure_marketplace() == ["task-authoring", "commit-message"]
+    assert (
+        engine._get_marketplace_root() / "plugins" / "task-authoring" / "SKILL.md"
+    ).exists()
+
+
+def test_a_skill_dropped_from_the_group_is_gone_on_the_next_run(tmp_path):
+    src = tmp_path / "skills"
+    both = [
+        ("task-authoring", _make_skill(src, "task-authoring", "写任务模板")),
+        ("commit-message", _make_skill(src, "commit-message", "写提交信息")),
+    ]
+    home = tmp_path / "home"
+    FakeEngine(home, both).ensure_marketplace()
+
+    FakeEngine(home, both[:1]).ensure_marketplace()
+
+    plugins_dir = FakeEngine(home, both)._get_marketplace_root() / "plugins"
+    assert sorted(p.name for p in plugins_dir.iterdir()) == ["task-authoring"]
 
 
 def test_registration_uses_a_directory_source(engine):

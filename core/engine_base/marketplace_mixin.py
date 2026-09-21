@@ -8,11 +8,17 @@ CodeAgent 的技能格式完全一致（实测 codebuddy 官方市场里的 ``al
 
 市场本身注册进用户级的 ``known_marketplaces.json``，但**启用哪些插件是每次启动
 用 ``--channels`` 现给的**，由当前项目组决定。注册会在最后一个会话退出时还原。
+
+技能是**复制**进市场而不是链接：CodeBuddy 安装插件时会检查源路径 resolve 之后
+是否仍在市场根内，链接到仓库里的 ``skills/`` 会被判为
+``Plugin source path escapes marketplace root`` 而拒绝。技能都是小体积的
+Markdown，每次启动重建一份的代价可以忽略，改了源文件下次启动即生效。
 """
 
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -35,7 +41,6 @@ class _MarketplaceMixin:
         link_manager: LinkManager
 
         def resolve_skill_sources(self) -> list[tuple[str, Path]]: ...
-        def _create_skill_link(self, source: Path, target: Path) -> None: ...
 
     def _get_marketplace_root(self) -> Path:
         """市场落地目录。
@@ -62,16 +67,19 @@ class _MarketplaceMixin:
 
         root = self._get_marketplace_root()
         plugins_dir = root / "plugins"
-        plugins_dir.mkdir(parents=True, exist_ok=True)
+        # 整个 plugins/ 目录由本方法独占，清空重建最省事，也顺带摘掉上一次挂了
+        # 而这次不在组里的技能。
+        if plugins_dir.exists():
+            shutil.rmtree(plugins_dir)
+        plugins_dir.mkdir(parents=True)
 
         entries: list[dict[str, Any]] = []
         names: list[str] = []
         for target_name, skill_src in skills:
-            link = plugins_dir / target_name
             try:
-                self._create_skill_link(skill_src, link)
+                shutil.copytree(skill_src, plugins_dir / target_name)
             except Exception as exc:
-                logger.warning("Failed to link skill '%s': %s", target_name, exc)
+                logger.warning("Failed to copy skill '%s': %s", target_name, exc)
                 continue
             names.append(target_name)
             entries.append(
@@ -79,6 +87,7 @@ class _MarketplaceMixin:
                     "name": target_name,
                     "description": _describe(skill_src),
                     "source": f"./plugins/{target_name}",
+                    "version": "1.0.0",
                     "skills": [f"./plugins/{target_name}"],
                 }
             )
