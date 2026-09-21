@@ -14,7 +14,7 @@ dependencies = [
     "croniter>=2.0.0",
     "fastapi>=0.115.0",
     "mcp>=1.28",
-    "packaging==26.2",
+    "packaging==26.3",
     "pathspec==1.1.1",
     "psutil>=6.0",
     "python-dotenv==1.2.2",
