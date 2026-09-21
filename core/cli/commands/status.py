@@ -21,7 +21,6 @@ from core.engine_registry import ENGINES, EngineSpec
 from core.i18n import t
 from core.project_groups import resolve_project_group
 from core.report import INFO, OK, WARN, Section, display_width, render_sections
-from core.services.sync_service import standards_file, synced_group
 
 _RESOURCE_KINDS = (
     ("skills", "status.kind_skills"),
@@ -74,28 +73,6 @@ def _project_section(config: dict, group: str) -> Section:
         ),
     )
 
-    # 规范只落一个文件，所以它属于"这个项目"，不属于某个引擎。
-    block_group = synced_group(standards_file())
-    if block_group == group:
-        section.add(
-            OK,
-            t("status.label_standards"),
-            detail=t("status.standards_ok", group=group),
-        )
-    elif block_group is not None:
-        # 项目登记换过组、或文件是别的项目留下的块，此刻的规范并不适用于本项目。
-        section.add(
-            WARN,
-            t("status.label_standards"),
-            detail=t("status.standards_other_group", other=block_group, group=group),
-        )
-    else:
-        section.add(
-            WARN,
-            t("status.label_standards"),
-            detail=t("status.standards_missing"),
-            fix_hint=t("status.standards_sync_hint"),
-        )
     return section
 
 

@@ -19,7 +19,6 @@ from .commands.resources import resources
 from .commands.resume import resume, resume_session_flow
 from .commands.status import status
 from .commands.switch import switch
-from .commands.sync import sync
 from .commands.tasks import batch_run, doctor, new, ps, stop, ui
 from .helpers import init_cli_runtime
 
@@ -44,7 +43,6 @@ Examples:
   ca -s codex 2            Switch 2nd session to Codex directly
   ca switch codex          Same as ca -s codex
   ca status                Show current project, group, and standards status
-  ca sync                  Install standards and skills into project AGENTS.md
   ca doctor --fix          Run health check and auto-repair
   ca ui                    Start the Web UI
   ca mcp install           Install CodeAgent MCP server into all engines
@@ -222,7 +220,6 @@ cli.add_command(doctor)
 cli.add_command(new)
 cli.add_command(ui)
 cli.add_command(switch)
-cli.add_command(sync)
 cli.add_command(menu)
 
 

@@ -1,7 +1,6 @@
 """ca 启动器到原生 CLI 的端到端行为：参数透传、并发会话。
 
-规范不在这里测：启动器已经不投递规范（各引擎自己读项目根的 AGENTS.md），
-落盘是 ``ca sync`` 的事，见 ``tests/test_sync_service.py``。
+规范不在这里测：启动器不投递规范，各引擎自己读项目根的 AGENTS.md。
 """
 
 from __future__ import annotations
@@ -255,7 +254,7 @@ def test_antigravity_conversation_flag_is_passed_through(isolated, monkeypatch):
 
 
 def test_launchers_never_pass_standards_to_the_engine(isolated, monkeypatch):
-    """规范只经 `ca sync` 落盘，启动器不再往命令行/环境里塞 system prompt。
+    """启动器不往命令行/环境里塞 system prompt，各引擎自己读 AGENTS.md。
 
     claude/codebuddy/codex 各是一套原生参数（--append-system-prompt-file、
     --append-system-prompt、-c developer_instructions=），opencode 是环境变量；
