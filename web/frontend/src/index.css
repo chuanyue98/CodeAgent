@@ -5,6 +5,10 @@
    display copy (see `.font-display`), so it's still worth the one
    remaining network fetch. */
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
+/* Token colours for code fences, applied by rehype-highlight (see
+   MarkdownMessage). Imported here rather than from the component so it stays
+   above the reset below in source order. */
+@import 'highlight.js/styles/github-dark.css';
 
 @tailwind base;
 @tailwind components;
@@ -153,6 +157,20 @@
     font-weight: 400;
     letter-spacing: -0.01em;
   }
+}
+
+/* Code fence highlighting. The imported highlight.js theme is unlayered, so
+   this reset is too — a rule inside @layer base would lose to it. Only the
+   container is reset: the theme's token colours are what we want, and they
+   are tuned for a near-black background like the code block's slate-900. */
+.hljs {
+  background: transparent;
+  color: inherit;
+}
+pre code.hljs {
+  display: block;
+  overflow-x: visible;
+  padding: 0;
 }
 
 @layer utilities {

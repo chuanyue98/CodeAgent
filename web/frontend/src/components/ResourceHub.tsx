@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { BookOpen, ChevronDown, ChevronRight, Cpu, Globe, Layers, Terminal } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import rehypeHighlight from 'rehype-highlight';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
 import useAllResourceData, { type LoadedKind } from '../hooks/useAllResourceData';
@@ -489,9 +490,12 @@ function DetailView({ hit, active, currentGroup, onBack, onToggle }: DetailViewP
         )}
         <div className="prose prose-slate max-w-none flex-1 overflow-y-auto bg-white p-8 prose-headings:text-slate-900 prose-p:text-slate-700 prose-strong:text-slate-900 prose-li:text-slate-700">
           <ReactMarkdown
+            rehypePlugins={[rehypeHighlight]}
             components={{
               code({ className, children, ...props }) {
-                const isCodeBlock = className && className.startsWith('language-');
+                // rehype-highlight prefixes the class list with `hljs`, so the
+                // language marker is no longer necessarily the first class.
+                const isCodeBlock = Boolean(className?.includes('language-'));
                 return isCodeBlock ? (
                   <code className={`${className} font-mono`} {...props}>
                     {children}

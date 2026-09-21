@@ -1,6 +1,7 @@
 import { useRef, useState, type ComponentPropsWithoutRef } from 'react';
 import { Check, Copy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import rehypeHighlight from 'rehype-highlight';
 import { useT } from '../i18n/context';
 
 function CodeBlockWrapper({ children, ...props }: ComponentPropsWithoutRef<'pre'>) {
@@ -40,6 +41,7 @@ type Props = {
 export default function MarkdownMessage({ text }: Props) {
   return (
     <ReactMarkdown
+      rehypePlugins={[rehypeHighlight]}
       components={{
         pre({ children, ...props }) {
           return (
