@@ -13,7 +13,6 @@ import pytest
 from click.testing import CliRunner
 
 from core.cli.main import cli
-from core.services.sync_service import STANDARDS_FILENAME, render_block
 
 
 def _write_config(path: Path, registry: list[dict]) -> None:
@@ -61,7 +60,6 @@ def test_status_reports_the_group_and_its_resources(status_env):
     for heading in ("Project", "Resources in group common", "Engines"):
         assert heading in result.output
     assert "Resource group" in result.output
-    assert "Standards" in result.output
     assert "skills 1" in result.output
     assert "prompts 1" in result.output
     assert "plugins 1" in result.output
@@ -95,35 +93,3 @@ def test_status_survives_a_group_that_is_not_defined(tmp_path, monkeypatch, home
 
     assert result.exit_code == 0, result.output
     assert "ghost" in result.output
-
-
-# --- 规范落盘状态（项目根的 AGENTS.md）------------------------------------
-
-
-def test_agents_md_without_a_block_is_flagged_with_the_sync_hint(status_env):
-    result = CliRunner().invoke(cli, ["status"])
-
-    assert result.exit_code == 0, result.output
-    assert "no AGENTS.md block yet" in result.output
-    assert "ca sync" in result.output
-
-
-def test_agents_md_for_this_group_is_ok(status_env):
-    (status_env / STANDARDS_FILENAME).write_text(
-        render_block("common", "S"), encoding="utf-8"
-    )
-
-    result = CliRunner().invoke(cli, ["status"])
-
-    assert "AGENTS.md holds group common" in result.output
-
-
-def test_agents_md_for_another_group_is_flagged(status_env):
-    """项目登记换过组、或文件是别的项目留下的块，此刻的规范并不适用于本项目。"""
-    (status_env / STANDARDS_FILENAME).write_text(
-        render_block("work", "S"), encoding="utf-8"
-    )
-
-    result = CliRunner().invoke(cli, ["status"])
-
-    assert "holds group work, not common" in result.output

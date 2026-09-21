@@ -294,26 +294,6 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "not found on PATH",
         "zh": "未在 PATH 上找到",
     },
-    "status.label_standards": {
-        "en": "Standards",
-        "zh": "规范",
-    },
-    "status.standards_ok": {
-        "en": "AGENTS.md holds group {group}",
-        "zh": "AGENTS.md 里是本组（{group}）",
-    },
-    "status.standards_other_group": {
-        "en": "AGENTS.md holds group {other}, not {group}",
-        "zh": "AGENTS.md 里是分组 {other}，当前项目要的是 {group}",
-    },
-    "status.standards_missing": {
-        "en": "no AGENTS.md block yet",
-        "zh": "AGENTS.md 里还没有托管块",
-    },
-    "status.standards_sync_hint": {
-        "en": "ca sync",
-        "zh": "ca sync",
-    },
     # --- ca ui ---
     "ui.open_in_browser": {
         "en": "Open the UI in your browser: {url}",
@@ -818,53 +798,6 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "\n[!] {failed} of {total} operations failed.",
         "zh": "\n[!] {total} 项操作中有 {failed} 项失败。",
     },
-    # --- ca sync ---
-    "sync.error": {"en": "[X] {error}", "zh": "[X] {error}"},
-    "sync.dry_run": {
-        "en": "Dry run — nothing was written.",
-        "zh": "演练模式 —— 未写入任何内容。",
-    },
-    "sync.group": {
-        "en": "Syncing resource group [{group}] into this project's {file}:",
-        "zh": "把资源组 [{group}] 同步到本项目的 {file}：",
-    },
-    "sync.removing": {
-        "en": "Removing what `ca sync` wrote:",
-        "zh": "移除 `ca sync` 写入的内容：",
-    },
-    "sync.user_scope": {
-        "en": (
-            "[!] --user writes into each engine's user-level config instead of the "
-            "project's AGENTS.md; use it only to clean up older syncs."
-        ),
-        "zh": (
-            "[!] --user 会写进各引擎的用户级配置，而不是本项目的 AGENTS.md；"
-            "只用于清理早前同步留下的内容。"
-        ),
-    },
-    "sync.conflicts": {
-        "en": (
-            "\n[!] {count} skill(s) skipped: a file or link you own already has "
-            "that name, and `ca sync` never replaces it."
-        ),
-        "zh": "\n[!] 跳过了 {count} 个技能：同名的文件或链接是你自己的，`ca sync` 不会替换。",
-    },
-    "sync.partial_failure": {
-        "en": "\n[!] {failed} item(s) failed; see the warnings above.",
-        "zh": "\n[!] 有 {failed} 项失败，详见上方警告。",
-    },
-    "sync.done": {
-        "en": (
-            "\nDone. The engines read AGENTS.md on their own, so `claude`, `codex`, "
-            "`opencode` and `codebuddy` pick it up without going through `ca`.\n"
-            "Re-run `ca sync` after changing prompts or skills."
-        ),
-        "zh": (
-            "\n完成。各引擎自己会读 AGENTS.md，所以直接敲 `claude`、`codex`、`opencode`、"
-            "`codebuddy` 也能拿到规范，不必经过 `ca`。\n"
-            "修改 prompt 或技能后重新运行 `ca sync`。"
-        ),
-    },
     # --- ca doctor ---
     # Section titles and check labels are translated alongside details and fix
     # hints: a health report that mixes a Chinese hint under an English label
@@ -1202,12 +1135,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh": "🌐 启动 Web 控制台    打开全功能浏览器图形界面 (ca ui)",
     },
     "launcher.status": {
-        "en": "📊 Project Status      Inspect resource group, standards & engines (ca status)",
-        "zh": "📊 查看系统状态       查看项目分组、规范托管与引擎状态 (ca status)",
-    },
-    "launcher.sync": {
-        "en": "📥 Sync Standards & Skills to AGENTS.md (ca sync)",
-        "zh": "📥 同步规范与技能到 AGENTS.md (ca sync)",
+        "en": "📊 Project Status      Inspect resource group & engines (ca status)",
+        "zh": "📊 查看系统状态       查看项目分组与引擎状态 (ca status)",
     },
     "launcher.doctor": {
         "en": "🩺 Health Check & Auto-Repair (ca doctor)",
