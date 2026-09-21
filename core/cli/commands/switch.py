@@ -111,7 +111,9 @@ def switch(ctx, target_engine, selector, source_engine, yes, no_launch):  # type
             eng = s.get("engine", "unknown")
             time_str = format_relative_time(s.get("started_at", ""))
             msg_count = s.get("message_count", 0)
-            title = s.get("title") or s.get("first_user_message") or t("history.no_title")
+            title = (
+                s.get("title") or s.get("first_user_message") or t("history.no_title")
+            )
             title = title.replace("\n", " ").strip()
             if len(title) > 55:
                 title = title[:52] + "..."

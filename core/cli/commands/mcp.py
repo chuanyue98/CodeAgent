@@ -303,4 +303,3 @@ def mcp_install(ctx, targets, no_write, dry_run, remove):  # type: ignore[no-unt
     if failed:
         print(t("mcp.partial_failure", failed=failed, total=len(results)))
         sys.exit(1)
-

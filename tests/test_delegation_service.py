@@ -265,7 +265,6 @@ with open("inplace.txt", "w", encoding="utf-8") as f:
     assert (git_repo / "inplace.txt").read_text(encoding="utf-8") == "inplace result\n"
 
 
-
 def test_delegate_subtask_timeout(tmp_path: Path, monkeypatch):
     root = tmp_path / "ca_root"
     engines_dir = root / "engines"

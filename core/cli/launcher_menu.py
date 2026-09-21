@@ -77,7 +77,9 @@ def print_banner(project_path: Path, latest_summary: dict | None = None) -> None
     print(top)
     for raw, styled in lines:
         pad = inner_w - display_width(raw)
-        print(f"  {click.style('│', fg=border_color)} {styled}{' ' * pad} {click.style('│', fg=border_color)}")
+        print(
+            f"  {click.style('│', fg=border_color)} {styled}{' ' * pad} {click.style('│', fg=border_color)}"
+        )
     print(bot)
     print()
 

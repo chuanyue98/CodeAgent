@@ -19,7 +19,9 @@ def test_cli_bare_non_interactive_prints_help():
 def test_cli_menu_subcommand_invokes_interactive_launcher():
     """``ca menu`` explicitly runs the interactive launcher."""
     runner = CliRunner()
-    with patch("core.cli.launcher_menu.run_interactive_launcher", return_value=0) as mock_menu:
+    with patch(
+        "core.cli.launcher_menu.run_interactive_launcher", return_value=0
+    ) as mock_menu:
         result = runner.invoke(cli, ["menu"])
         assert result.exit_code == 0
         assert mock_menu.called
@@ -28,7 +30,9 @@ def test_cli_menu_subcommand_invokes_interactive_launcher():
 def test_cli_flag_interactive_invokes_interactive_launcher():
     """``ca -i`` runs the interactive launcher even if non-TTY."""
     runner = CliRunner()
-    with patch("core.cli.launcher_menu.run_interactive_launcher", return_value=0) as mock_menu:
+    with patch(
+        "core.cli.launcher_menu.run_interactive_launcher", return_value=0
+    ) as mock_menu:
         result = runner.invoke(cli, ["-i"])
         assert result.exit_code == 0
         assert mock_menu.called
@@ -54,7 +58,9 @@ def test_interactive_launcher_resume_latest():
         mock_prompt.ask.return_value = "resume_latest"
         mock_select.return_value = mock_prompt
 
-        with patch("core.cli.launcher_menu.resume_session_flow", return_value=0) as mock_resume:
+        with patch(
+            "core.cli.launcher_menu.resume_session_flow", return_value=0
+        ) as mock_resume:
             result = runner.invoke(cli, ["-i"])
             assert result.exit_code == 0
             mock_resume.assert_called_once()
@@ -70,7 +76,9 @@ def test_interactive_launcher_browse_sessions():
         mock_prompt.ask.return_value = "browse_sessions"
         mock_select.return_value = mock_prompt
 
-        with patch("core.cli.launcher_menu.resume_session_flow", return_value=0) as mock_resume:
+        with patch(
+            "core.cli.launcher_menu.resume_session_flow", return_value=0
+        ) as mock_resume:
             result = runner.invoke(cli, ["-i"])
             assert result.exit_code == 0
             mock_resume.assert_called_once()

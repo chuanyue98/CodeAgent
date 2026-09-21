@@ -288,7 +288,6 @@ def _launch_engine(ctx, args: list[str]):  # type: ignore[no-untyped-def]
     return subprocess.run(cmd, env=child_env).returncode
 
 
-
 def _get_task_runner(root: Path):  # type: ignore[no-untyped-def]
     from core.services.runner_service import TaskRunner
 

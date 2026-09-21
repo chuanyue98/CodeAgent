@@ -262,7 +262,12 @@ def test_install_with_engine_filter_and_dry_run(monkeypatch, capsys):
     with patch(
         "core.services.mcp_service.install_codeagent_server",
         return_value=[
-            {"engine": "claude", "name": "codeagent", "action": "added", "detail": "would be added"}
+            {
+                "engine": "claude",
+                "name": "codeagent",
+                "action": "added",
+                "detail": "would be added",
+            }
         ],
     ) as install_mock:
         _run(monkeypatch, "mcp", "install", "--engine", "claude", "--dry-run")
@@ -279,7 +284,12 @@ def test_install_remove_flag(monkeypatch, capsys):
     with patch(
         "core.services.mcp_service.remove_codeagent_server",
         return_value=[
-            {"engine": "claude", "name": "codeagent", "action": "remove", "detail": "ok"}
+            {
+                "engine": "claude",
+                "name": "codeagent",
+                "action": "remove",
+                "detail": "ok",
+            }
         ],
     ) as remove_mock:
         _run(monkeypatch, "mcp", "install", "--remove")
@@ -287,4 +297,3 @@ def test_install_remove_flag(monkeypatch, capsys):
     assert remove_mock.called
     out = capsys.readouterr().out
     assert "[claude] codeagent — ok" in out
-

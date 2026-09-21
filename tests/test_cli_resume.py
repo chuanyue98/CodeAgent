@@ -81,14 +81,12 @@ def test_format_relative_time_units():
         "刚刚",
         "just now",
     )
-    assert (
-        "分钟" in format_relative_time((now - timedelta(minutes=15)).isoformat())
-        or "15m ago" in format_relative_time((now - timedelta(minutes=15)).isoformat())
-    )
-    assert (
-        "小时" in format_relative_time((now - timedelta(hours=3)).isoformat())
-        or "3h ago" in format_relative_time((now - timedelta(hours=3)).isoformat())
-    )
+    assert "分钟" in format_relative_time(
+        (now - timedelta(minutes=15)).isoformat()
+    ) or "15m ago" in format_relative_time((now - timedelta(minutes=15)).isoformat())
+    assert "小时" in format_relative_time(
+        (now - timedelta(hours=3)).isoformat()
+    ) or "3h ago" in format_relative_time((now - timedelta(hours=3)).isoformat())
     assert format_relative_time((now - timedelta(days=1)).isoformat()) in (
         "昨天",
         "yesterday",
@@ -225,7 +223,9 @@ def test_ca_dash_r_interactive_questionary_exit(find_all, monkeypatch, capsys):
     assert "操作已取消" in out or "cancelled" in out.lower()
 
 
-def test_ca_resume_resolves_windows_cli_candidate_on_file_not_found(find_all, monkeypatch):
+def test_ca_resume_resolves_windows_cli_candidate_on_file_not_found(
+    find_all, monkeypatch
+):
     """When bare command raises FileNotFoundError on Windows, fallback resolves .cmd."""
     monkeypatch.setattr("sys.platform", "win32")
     calls = []
@@ -236,7 +236,10 @@ def test_ca_resume_resolves_windows_cli_candidate_on_file_not_found(find_all, mo
             raise FileNotFoundError("codex not found")
         return MagicMock(returncode=0)
 
-    with patch("shutil.which", side_effect=lambda cmd: r"C:\npm\codex.cmd" if "codex" in cmd else None):
+    with patch(
+        "shutil.which",
+        side_effect=lambda cmd: r"C:\npm\codex.cmd" if "codex" in cmd else None,
+    ):
         with patch("subprocess.run", side_effect=mock_run):
             ret = _run_cli(monkeypatch, ["-r", "2"])
             assert ret == 0
@@ -245,4 +248,3 @@ def test_ca_resume_resolves_windows_cli_candidate_on_file_not_found(find_all, mo
     assert calls[0] == ["codex", "resume", "ses-codex-2"]
     assert calls[1][0] == r"C:\npm\codex.cmd"
     assert calls[1][1:] == ["resume", "ses-codex-2"]
-

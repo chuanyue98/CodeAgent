@@ -1073,4 +1073,3 @@ def test_default_engine_is_none():
         ca_launcher._resolve_default_engine({"default_engine": "claude"}, _ENGINE_MAP)
         is None
     )
-

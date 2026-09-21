@@ -778,10 +778,11 @@ def test_remove_codeagent_server(tmp_path, home, calls):
     # Pre-configure codeagent in claude
     _write_claude_source(tmp_path, {"codeagent": {"command": "echo"}})
 
-    results = mcp_service.remove_codeagent_server(str(tmp_path), targets=["claude", "codex"])
+    results = mcp_service.remove_codeagent_server(
+        str(tmp_path), targets=["claude", "codex"]
+    )
     claude_res = next(r for r in results if r["engine"] == "claude")
     codex_res = next(r for r in results if r["engine"] == "codex")
 
     assert claude_res["action"] == "remove"
     assert codex_res["action"] == "skipped"  # Not present in codex
-

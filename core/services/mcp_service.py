@@ -749,4 +749,3 @@ def remove_codeagent_server(
             )
 
     return results
-

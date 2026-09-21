@@ -349,4 +349,3 @@ def test_switch_yes_flag_skips_prompt(monkeypatch, capsys, sessions):
                         return_value=completed,
                     ):
                         assert _run_cli(monkeypatch, ["-s", "codex", "-y"]) == 0
-
