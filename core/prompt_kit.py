@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -46,6 +47,29 @@ def get_prompts_from_directory(directory: Path) -> str:
     return "".join(prompt_parts).strip()
 
 
+_FENCE_RE = re.compile(r"^\s*(?:```|~~~)")
+_MAX_HEADING_LEVEL = 6
+
+
+def _demote_headings(text: str, levels: int) -> str:
+    """把 Markdown 标题降 *levels* 级，使注入内容挂在分组标题之下。
+
+    围栏代码块里的 ``#`` 是正文（规范里就有一段 ``markdown`` 示例写着
+    ``## 阶段 N``），跳过不改。
+    """
+    lines = []
+    in_fence = False
+    for line in text.split("\n"):
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+        elif not in_fence and line.startswith("#"):
+            depth = len(line) - len(line.lstrip("#"))
+            if 1 <= depth <= _MAX_HEADING_LEVEL:
+                line = "#" * min(depth + levels, _MAX_HEADING_LEVEL) + line[depth:]
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def _standards_text(
     groups: list[str], extra_contents: list[str] | None, prompt_root: Path
 ) -> str:
@@ -55,8 +79,10 @@ def _standards_text(
         group_dir = prompt_root / group
         content = get_prompts_from_directory(group_dir)
         if content:
-            parts.append(f"### {group.capitalize()} Standards ###")
-            parts.append(content)
+            # 分组标题是 h3，注入内容整体降到它下面；少了这里的换行，
+            # 标题的 ``###`` 会和正文首行的 ``#`` 连成一行。
+            parts.append(f"### {group.capitalize()} Standards ###\n\n")
+            parts.append(_demote_headings(content, 3))
             parts.append("\n\n")
 
     # Inject extra content (e.g., prompts from plugins)

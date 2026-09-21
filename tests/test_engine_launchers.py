@@ -62,7 +62,7 @@ def test_prompt_standards_has_no_task_or_waiting_mode_section(tmp_path):
 
     standards = prompt_standards(groups=["base"], prompt_root=tmp_path)
 
-    assert standards == "### Base Standards ###RULE_BODY"
+    assert standards == "### Base Standards ###\n\nRULE_BODY"
     assert prompt_general(groups=["base"], prompt_root=tmp_path).startswith(standards)
     assert "WAITING FOR INSTRUCTION" in prompt_general(
         groups=["base"], prompt_root=tmp_path
