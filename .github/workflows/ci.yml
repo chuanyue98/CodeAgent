@@ -105,7 +105,7 @@ jobs:
       - name: Replace committed UI with tested artifact
         run: rm -rf web/frontend/dist
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: frontend-dist
           path: web/frontend/dist
@@ -133,7 +133,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Replace committed UI with tested artifact
         run: rm -rf web/frontend/dist
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: frontend-dist
           path: web/frontend/dist
@@ -182,7 +182,7 @@ jobs:
         run: rm -rf web/frontend/dist
         working-directory: .
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: frontend-dist
           path: web/frontend/dist
