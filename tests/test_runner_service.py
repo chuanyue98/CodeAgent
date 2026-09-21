@@ -74,6 +74,55 @@ def test_task_runner_rejects_unknown_engine(tmp_path, new_runner):
         runner.run_task("review", "shell", "common")
 
 
+@pytest.mark.asyncio
+async def test_run_task_wakes_a_streamer_as_output_lands(tmp_path, new_runner):
+    """每一个输出块都即时唤醒日志订阅者，而不是等下一次定时轮询。"""
+    (tmp_path / "ca_launcher.py").write_text(
+        "import time\ntime.sleep(0.5)\nprint('woke you', flush=True)\ntime.sleep(5)\n",
+        encoding="utf-8",
+    )
+    runner = new_runner(tmp_path)
+    run = runner.run_task("review", "codex", "common", workspace=str(tmp_path))
+
+    subscription = runner.log_broker.subscribe(run.task_id)
+    try:
+        subscription.arm()
+        assert await subscription.wait(timeout=5) is True
+        assert "woke you" in Path(run.log_path).read_text(encoding="utf-8")
+    finally:
+        subscription.release()
+        runner.kill_all()
+
+
+def test_run_task_log_is_complete_once_the_run_completes(tmp_path, new_runner):
+    """状态翻成 completed 时日志文件已经是完整的。
+
+    The launcher writes far more than a pipe buffer holds, so the child cannot
+    exit until the pump has drained it -- a run reported as completed with a
+    short log would mean the drain was not waited for.
+    """
+    (tmp_path / "ca_launcher.py").write_text(
+        "for index in range(1000): print('x' * 200 + f' {index}', flush=True)\n",
+        encoding="utf-8",
+    )
+    runner = new_runner(tmp_path)
+    run = runner.run_task("review", "codex", "common")
+
+    deadline = time.time() + 30
+    status = None
+    while time.time() < deadline:
+        status = runner.get_status(run.task_id)
+        if status and status.status != "running":
+            break
+        time.sleep(0.01)
+
+    assert status is not None
+    assert status.status == "completed"
+    lines = Path(status.log_path).read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1000
+    assert lines[-1].endswith(" 999")
+
+
 def test_task_library_uses_explicit_tasks_root(tmp_path, monkeypatch):
     tasks_root = tmp_path / "external-tasks"
     tasks_root.mkdir()

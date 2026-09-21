@@ -13,10 +13,12 @@ import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import IO
 
 from core.engine_registry import ENGINES, get_spec
 from core.host_env import child_environ
 from core.logging_config import get_logger
+from core.services.log_broker import LogBroker
 from core.services.run_store import RunStore, TaskRunRecord
 
 logger = get_logger(__name__)
@@ -50,6 +52,25 @@ def _retention_days() -> int:
 #: ``{task_id}.log``, ``run_chat_turn`` writes ``{turn_id}.jsonl``. Both
 #: sweepers glob this, so a new artifact kind is collected by adding it here.
 _LOG_PATTERNS = ("*.log", "*.jsonl")
+
+#: How long a finished run's log pump may take to drain the pipe before the run
+#: is reported as stopped anyway. The pipe can hold output the child wrote just
+#: before exiting; without the wait a completed run's log is one chunk short.
+_PUMP_DRAIN_TIMEOUT = 5.0
+
+
+def _read_available(stream: IO[bytes], size: int = 65536) -> bytes:
+    """Returns what the pipe already holds, without waiting to fill *size*.
+
+    ``BufferedReader.read(n)`` blocks until it has ``n`` bytes or reaches EOF,
+    which would sit on a chunk until the next one arrived. ``read1`` returns
+    after a single underlying read instead, so output is forwarded as it lands.
+    """
+    read1 = getattr(stream, "read1", None)
+    if read1 is not None:
+        result: bytes = read1(size)
+        return result
+    return stream.read(size)
 
 
 def _unlink_quietly(path: Path) -> None:
@@ -105,7 +126,15 @@ class TaskRunner:
         self.log_dir = self.root_dir / ".ca_task_logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self._run_store = RunStore(self.log_dir / "runs.db")
+        # stdout 由 _pump_stdout 线程写盘后唤醒日志流订阅者，见 log_broker。
+        self._log_broker = LogBroker()
+        self._pumps: dict[str, threading.Thread] = {}
         self._load_persisted_runs()
+
+    @property
+    def log_broker(self) -> LogBroker:
+        """日志流端点用它等待「有新输出」，替代定时轮询文件。"""
+        return self._log_broker
 
     def reset_for_e2e(self) -> None:
         """Wipes all run state: log files, DB rows, in-memory tracking.
@@ -119,6 +148,7 @@ class TaskRunner:
             self.active_runs.clear()
             self._processes.clear()
             self._stopping_tasks.clear()
+            self._pumps.clear()
         self._run_store.clear()
         for f in self._log_files():
             _unlink_quietly(f)
@@ -182,19 +212,21 @@ class TaskRunner:
                 env["CA_TASKS_ROOT"] = str(tasks_root.resolve())
 
             try:
-                with open(log_file, "w", encoding="utf-8") as f:
-                    process = subprocess.Popen(
-                        cmd,
-                        cwd=str(working_dir),
-                        stdout=f,
-                        stderr=subprocess.STDOUT,
-                        stdin=subprocess.DEVNULL,
-                        env=env,
-                        start_new_session=True if sys.platform != "win32" else False,
-                        creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-                        if sys.platform == "win32"
-                        else 0,
-                    )
+                # 先落一个空文件：日志流端点靠「文件存在」判定这个运行可读，
+                # 而内容要等 _pump_stdout 线程开始搬运后才有。
+                log_file.touch()
+                process = subprocess.Popen(
+                    cmd,
+                    cwd=str(working_dir),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    stdin=subprocess.DEVNULL,
+                    env=env,
+                    start_new_session=True if sys.platform != "win32" else False,
+                    creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                    if sys.platform == "win32"
+                    else 0,
+                )
 
                 status = TaskRunStatus(
                     task_id=task_id,
@@ -209,6 +241,7 @@ class TaskRunner:
                 )
                 self.active_runs[task_id] = status
                 self._processes[task_id] = process
+                self._start_pump(task_id, process, log_file)
                 self._persist(status)
                 return status
             except Exception as e:
@@ -313,6 +346,69 @@ class TaskRunner:
                 self.active_runs[turn_id] = status
                 self._persist(status)
             return status
+
+    def _start_pump(
+        self, run_id: str, process: subprocess.Popen, log_file: Path
+    ) -> None:
+        """Starts the thread that drains *process* stdout into its log file.
+
+        stdout is a pipe rather than the log file itself so every chunk is
+        observable the moment it lands: the thread appends it and wakes the
+        streaming clients (``LogBroker``). The draining has to happen in a
+        thread regardless -- an undrained pipe fills and blocks the child
+        part-way through a run.
+        """
+        self._log_broker.register(run_id)
+        thread = threading.Thread(
+            target=self._pump_stdout,
+            args=(run_id, process, log_file),
+            name=f"ca-log-pump-{run_id}",
+            daemon=True,
+        )
+        self._pumps[run_id] = thread
+        thread.start()
+
+    def _pump_stdout(
+        self, run_id: str, process: subprocess.Popen, log_file: Path
+    ) -> None:
+        """Copies the child's stdout to *log_file*, waking subscribers per chunk."""
+        stream = process.stdout
+        try:
+            if stream is None:
+                return
+            with open(log_file, "wb") as fh:
+                while True:
+                    chunk = _read_available(stream)
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+                    fh.flush()
+                    self._log_broker.notify(run_id)
+        except Exception:
+            # 读失败只能放弃：关掉读端后子进程会拿到 EPIPE 自行退出，
+            # 总好过留一个把管道写满后卡死的运行。
+            logger.warning("搬运运行 %s 的日志失败", run_id, exc_info=True)
+        finally:
+            if stream is not None:
+                try:
+                    stream.close()
+                except OSError:
+                    pass
+            self._log_broker.finish(run_id)
+
+    def _await_pump(self, run_id: str) -> None:
+        """Waits for a run's log pump to drain, so its log file is complete.
+
+        ``get_status`` flips a run to completed as soon as the process exits,
+        but the pipe may still hold output written just before that. Callers
+        (the log viewer, the session-id scan) read the file to decide what
+        happened, so the status must not claim completion while the file is
+        still a chunk short.
+        """
+        with self._run_lock:
+            thread = self._pumps.pop(run_id, None)
+        if thread is not None:
+            thread.join(timeout=_PUMP_DRAIN_TIMEOUT)
 
     @staticmethod
     def _status_from_record(record: TaskRunRecord) -> TaskRunStatus:
@@ -522,7 +618,14 @@ class TaskRunner:
 
             proc = self._processes.get(task_id)
             rc = proc.poll() if proc is not None else None
-            if rc is not None:
+
+        if rc is not None:
+            # 进程已退出，但管道里可能还压着它临退出前写的一段输出：先让泵线程
+            # 收尾（不能在锁内 join，否则整个运行表都被它堵住）。
+            self._await_pump(task_id)
+            with self._run_lock:
+                if run.status != "running":
+                    return run
                 run.status = "completed" if rc == 0 else "failed"
                 run.end_time = time.time()
                 run.exit_code = rc
@@ -532,7 +635,10 @@ class TaskRunner:
                         run.engine, Path(run.log_path)
                     )
                 self._persist(run)
-            elif proc is None and not self._is_process_running(run.pid):
+                return run
+
+        with self._run_lock:
+            if proc is None and not self._is_process_running(run.pid):
                 run.status = "failed"
                 run.end_time = time.time()
                 self._persist(run)
@@ -568,6 +674,8 @@ class TaskRunner:
                     proc.wait(timeout=2)
                 except subprocess.TimeoutExpired:
                     pass
+            # 进程没了，管道里最后一段还要落地，否则日志停在半截。
+            self._await_pump(task_id)
         except Exception:
             with self._run_lock:
                 self._stopping_tasks.discard(task_id)
@@ -613,6 +721,8 @@ class TaskRunner:
                     logger.warning(
                         "强制终止任务 %s 的进程失败", _task_id, exc_info=True
                     )
+            # 进程已终止，把管道里最后一段日志收进文件再算结束。
+            self._await_pump(_task_id)
 
     def _is_process_running(self, pid: int) -> bool:
         try:

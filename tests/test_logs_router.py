@@ -218,3 +218,76 @@ async def test_stream_log_file_keeps_polling_while_the_run_is_alive(
         await asyncio.wait_for(anext(body_iterator), timeout=0.5)
 
     await body_iterator.aclose()
+
+
+@pytest.mark.asyncio
+async def test_a_live_runs_output_reaches_the_viewer_before_it_exits(
+    tmp_path, monkeypatch
+):
+    """子进程 → 管道 → 日志文件 → SSE 的完整链路。
+
+    The launcher sleeps for far longer than this test waits, so a chunk can
+    only arrive if the endpoint forwards output while the run is still going.
+    """
+    from core.services.runner_service import TaskRunner
+
+    root = tmp_path / "root"
+    (root / ".ca_task_logs").mkdir(parents=True)
+    (root / "ca_launcher.py").write_text(
+        "import time\n"
+        "for index in range(3):\n"
+        "    print(f'chunk {index}', flush=True)\n"
+        "    time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    runner = TaskRunner(root)
+    monkeypatch.setattr(logs_router, "CA_TASK_LOGS_DIR", runner.log_dir)
+    monkeypatch.setattr(logs_router, "_runner", runner)
+
+    run = runner.run_task("review", "codex", "common", workspace=str(root))
+    try:
+        response = await logs_router.stream_log_file(run.task_id)
+        body_iterator = response.body_iterator
+        try:
+            chunk = await asyncio.wait_for(anext(body_iterator), timeout=10)
+            assert "chunk 0" in chunk
+            status = runner.get_status(run.task_id)
+            assert status is not None and status.status == "running"
+        finally:
+            await body_iterator.aclose()
+    finally:
+        runner.kill_all()
+        runner.close()
+
+
+@pytest.mark.asyncio
+async def test_stream_log_file_is_woken_by_the_write_not_by_a_timer(
+    logs_dir, monkeypatch
+):
+    """本进程启动的运行一写入就推给客户端，不靠定时轮询。
+
+    The idle interval is parked far out of reach, so the chunk can only arrive
+    inside the timeout by the pump's wake-up: a regression back to
+    fixed-interval polling would stall until the interval expired.
+    """
+    path = logs_dir / "task-1.log"
+    path.write_text("first\n", encoding="utf-8")
+    broker = logs_router._runner.log_broker
+    broker.register("task-1")
+    monkeypatch.setattr(logs_router, "_IDLE_POLL_SECONDS", 30.0)
+
+    response = await logs_router.stream_log_file("task-1")
+    body_iterator = response.body_iterator
+    try:
+        pending = asyncio.ensure_future(anext(body_iterator))
+        # 等生成器读完初始大小、挂到等待上再写入。写在前面的内容属于「已有
+        # 内容」，由 GET /{task_id} 一次性提供，本来就不走这条增量流。
+        await asyncio.sleep(0.05)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write("pushed\n")
+        broker.notify("task-1")
+
+        assert "pushed" in await asyncio.wait_for(pending, timeout=2)
+    finally:
+        await body_iterator.aclose()
+        broker.finish("task-1")
