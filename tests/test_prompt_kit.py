@@ -2,7 +2,12 @@
 
 import pytest
 
-from core.prompt_kit import get_prompts_from_directory, prompt_general, prompt_review
+from core.prompt_kit import (
+    get_prompts_from_directory,
+    prompt_general,
+    prompt_review,
+    prompt_standards,
+)
 
 
 @pytest.fixture
@@ -75,3 +80,49 @@ def test_parse_args():
     # 测试指定分组
     parsed_args, parser = parse_args(choices, ["-g", "base", "web"])
     assert parsed_args.groups == ["base", "web"]
+
+
+@pytest.fixture
+def heading_prompt_root(tmp_path):
+    """正文带标题层级和围栏代码块的分组，用来验证拼接。"""
+    base_dir = tmp_path / "prompt" / "base"
+    base_dir.mkdir(parents=True)
+    (base_dir / "general.basic.md").write_text(
+        "# 开发指南\n"
+        "\n"
+        "## 任务状态\n"
+        "\n"
+        "阶段格式：\n"
+        "\n"
+        "```markdown\n"
+        "## 阶段 N: [名称]\n"
+        "**状态**: [未开始]\n"
+        "```\n",
+        encoding="utf-8",
+    )
+    return tmp_path / "prompt"
+
+
+def test_standards_group_heading_is_on_its_own_line(heading_prompt_root):
+    """分组标题后必须换行，否则它的 ``###`` 会和正文首行的 ``#`` 连成一行。"""
+    prompt = prompt_standards(groups=["base"], prompt_root=heading_prompt_root)
+
+    assert "### Base Standards ###\n" in prompt
+    assert "Standards ####" not in prompt
+
+
+def test_standards_body_headings_are_demoted(heading_prompt_root):
+    """正文标题整体降到分组标题（h3）之下，避免 h1 挂在 h3 里面。"""
+    prompt = prompt_standards(groups=["base"], prompt_root=heading_prompt_root)
+
+    assert "#### 开发指南" in prompt
+    assert "##### 任务状态" in prompt
+    assert "\n# 开发指南" not in prompt
+
+
+def test_standards_leaves_fenced_code_untouched(heading_prompt_root):
+    """围栏代码块里的 ``#`` 是正文示例，不能当成标题降级。"""
+    prompt = prompt_standards(groups=["base"], prompt_root=heading_prompt_root)
+
+    assert "## 阶段 N: [名称]" in prompt
+    assert "##### 阶段 N" not in prompt
