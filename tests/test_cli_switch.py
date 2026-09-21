@@ -328,6 +328,24 @@ def test_noninteractive_bare_switch_requires_target_engine(monkeypatch, capsys):
     assert "Target engine is required" in out or "非交互模式下必须指定目标引擎" in out
 
 
+def test_bare_switch_validates_target_before_reading_sessions(monkeypatch, capsys):
+    """缺少 target_engine 时不能先去读会话。
+
+    在没有任何会话历史的环境（CI / 新机器 / 容器）里，先读会话会抛出
+    "No sessions found" 并掩盖真正的原因：用户只是漏了目标引擎。这里用
+    抛错的桩固化顺序——一旦 resolve_session 被调用，本用例立刻失败。
+    """
+    with patch("sys.stdin.isatty", return_value=False):
+        with patch(
+            "core.cli.commands.switch.resolve_session",
+            side_effect=AssertionError("不应在 target_engine 校验之前读取会话"),
+        ):
+            assert _run_cli(monkeypatch, ["-s"]) == 1
+
+    out = capsys.readouterr().out
+    assert "Target engine is required" in out or "非交互模式下必须指定目标引擎" in out
+
+
 def test_switch_yes_flag_skips_prompt(monkeypatch, capsys, sessions):
     completed = MagicMock(returncode=0)
 

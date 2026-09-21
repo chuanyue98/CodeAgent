@@ -69,6 +69,14 @@ def switch(ctx, target_engine, selector, source_engine, yes, no_launch):  # type
     if source_engine:
         source_engine = normalize_engine_name(source_engine)
 
+    # 非交互模式缺少 target_engine 属于参数错误，必须在读取会话之前报出来。
+    # 否则在没有会话历史的环境（CI / 新机器 / 容器）里会被 "No sessions found"
+    # 掩盖，用户看到的提示与实际原因不符。
+    if target_engine is None and not sys.stdin.isatty():
+        print(t("switch.missing_target"))
+        print(t("switch.known_engines", engines=", ".join(sorted(ENGINES))))
+        return 1
+
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.services.resume_commands import resume_command
     from core.session_history import repository
@@ -172,13 +180,9 @@ def switch(ctx, target_engine, selector, source_engine, yes, no_launch):  # type
 
     source = session.engine.value
 
-    # If target_engine was not specified in arguments:
+    # If target_engine was not specified in arguments: we can only be
+    # interactive here (the non-interactive case returned earlier), so ask.
     if target_engine is None:
-        if not sys.stdin.isatty():
-            print(t("switch.missing_target"))
-            print(t("switch.known_engines", engines=", ".join(sorted(ENGINES))))
-            return 1
-
         target_candidates: list[str] = [
             e
             for e in ("codex", "claude", "opencode", "antigravity", "codebuddy")
