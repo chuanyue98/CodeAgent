@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -15,6 +16,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import split_passthrough
+from core.engine_base.marketplace_mixin import MARKETPLACE_NAME, _MarketplaceMixin
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -22,11 +24,12 @@ from core.task_lib import (
 )
 
 
-class CodeBuddyEngine(BaseEngine):
+class CodeBuddyEngine(_MarketplaceMixin, BaseEngine):
     """CodeBuddy 引擎的具体实现。
 
     与 Claude 引擎的主要差异：CodeBuddy 没有项目级 ``.codebuddy/settings.json``
-    概念，因此不注入 Claude 风格的 skills/hooks（CodeBuddy 自带插件体系）。
+    概念，也不认 Claude 风格的 ``skills/`` 目录——技能要经它自己的插件市场分发，
+    见 :mod:`core.engine_base.marketplace_mixin`。
     """
 
     COMMAND = "codebuddy"
@@ -34,17 +37,29 @@ class CodeBuddyEngine(BaseEngine):
     def __init__(self):
         super().__init__("CodeBuddy", "")
 
+    def _get_codebuddy_home(self) -> Path:
+        configured = os.environ.get("CODEBUDDY_CONFIG_DIR", "").strip()
+        return Path(configured) if configured else Path.home() / ".codebuddy"
+
+    def _get_marketplace_root(self) -> Path:
+        return self._get_codebuddy_home() / ".tmp" / "marketplaces" / MARKETPLACE_NAME
+
+    def _get_known_marketplaces_path(self) -> Path:
+        return self._get_codebuddy_home() / "plugins" / "known_marketplaces.json"
+
     def build_command(
         self,
         message: str,
         non_interactive: bool,
         passthrough: Sequence[str] = (),
+        channels: Sequence[str] = (),
     ) -> list[str]:
         # ``auto`` 权限模式下，安全的工具调用自动通过，风险操作被拒绝，
         # 避免交互式授权卡住 ``ca`` 终端启动。
         cmd = [self.COMMAND, "--permission-mode", "auto"]
         if non_interactive:
             cmd.append("-p")
+        cmd.extend(channels)
         cmd.extend(passthrough)
         if message:
             cmd.append(message)
@@ -110,15 +125,26 @@ def main():
     env = engine.env_manager.get_env()
     # 规范不由启动器投递：codebuddy 自己读项目根的 AGENTS.md。
 
+    plugin_names: list[str] = []
+
+    def setup() -> None:
+        nonlocal plugin_names
+        plugin_names = engine.ensure_marketplace()
+
+    def teardown() -> None:
+        engine.cleanup_marketplace()
+
     try:
-        final_command = engine.build_command(
-            engine.first_message(message),
-            args.non_interactive,
-            passthrough=passthrough,
-        )
-        register_signal_handler()
-        print(f"🚀 Launching {engine.name}...")
-        engine.run_shell(final_command, env)
+        with engine.shared_injection(Path.cwd(), setup, teardown):
+            final_command = engine.build_command(
+                engine.first_message(message),
+                args.non_interactive,
+                passthrough=passthrough,
+                channels=engine.channel_args(plugin_names),
+            )
+            register_signal_handler()
+            print(f"🚀 Launching {engine.name}...")
+            engine.run_shell(final_command, env)
     finally:
         engine.cleanup_temp_prompt()
 
