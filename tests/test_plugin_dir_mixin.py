@@ -7,6 +7,7 @@ CodeBuddy 不认 Claude 风格的 ``skills/`` 目录，技能要包成插件；�
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -24,15 +25,24 @@ from core.engine_base.plugin_dir_mixin import (  # noqa: E402
 class FakeEngine(_PluginDirMixin):
     """只带插件挂载能力的最小引擎，避免把整个 BaseEngine 拖进来。"""
 
-    def __init__(self, home: Path, skills: list[tuple[str, Path]]):
+    def __init__(
+        self,
+        home: Path,
+        skills: list[tuple[str, Path]],
+        plugins: list[dict] | None = None,
+    ):
         self._home = home
         self._skills = skills
+        self._plugins = plugins or []
 
     def _get_plugin_dir_root(self) -> Path:
         return self._home / ".tmp" / "plugins"
 
     def resolve_skill_sources(self) -> list[tuple[str, Path]]:
         return self._skills
+
+    def get_plugins_to_mount(self) -> list[dict]:
+        return self._plugins
 
 
 def _make_skill(root: Path, name: str, description: str) -> Path:
@@ -155,6 +165,46 @@ def test_env_points_the_engine_at_the_plugin_dir(engine, project):
     assert engine.plugin_dir_env(root) == {PLUGIN_DIRS_ENV: str(root)}
 
 
-def test_env_is_empty_without_a_plugin_dir(engine):
+def test_env_is_empty_without_anything_to_mount(engine):
     """没挂插件时不能塞个空串，那会被当成一个空目录去加载。"""
+    assert engine.plugin_dir_env(None) == {}
+
+
+def test_group_plugins_follow_the_skills_plugin(tmp_path, project):
+    """项目组声明的插件跟在技能插件后面，顺序决定同名技能谁先被看到。"""
+    home = tmp_path / "home"
+    src = tmp_path / "skills"
+    superpowers = tmp_path / "superpowers"
+    superpowers.mkdir()
+    engine = FakeEngine(
+        home,
+        [("a", _make_skill(src, "a", "d"))],
+        [{"name": "superpowers", "_plugin_dir": str(superpowers)}],
+    )
+    root = engine.ensure_plugin_dir(project)
+
+    assert engine.plugin_dir_env(root) == {
+        PLUGIN_DIRS_ENV: os.pathsep.join([str(root), str(superpowers)])
+    }
+
+
+def test_group_plugins_mount_even_without_skills(tmp_path, project):
+    home = tmp_path / "home"
+    superpowers = tmp_path / "superpowers"
+    superpowers.mkdir()
+    engine = FakeEngine(
+        home, [], [{"name": "superpowers", "_plugin_dir": str(superpowers)}]
+    )
+
+    assert engine.ensure_plugin_dir(project) is None
+    assert engine.plugin_dir_env(None) == {PLUGIN_DIRS_ENV: str(superpowers)}
+
+
+def test_a_plugin_that_no_longer_exists_is_skipped(tmp_path, project):
+    """submodule 没 init 时插件目录是空的甚至不存在，不能把路径原样塞给引擎。"""
+    home = tmp_path / "home"
+    engine = FakeEngine(
+        home, [], [{"name": "superpowers", "_plugin_dir": str(tmp_path / "gone")}]
+    )
+
     assert engine.plugin_dir_env(None) == {}

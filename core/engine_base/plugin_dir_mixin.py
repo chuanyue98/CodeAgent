@@ -1,4 +1,4 @@
-"""把当前项目组的技能打包成 CodeBuddy 的本地插件，按会话挂进去。
+"""把当前项目组的技能和插件挂进 CodeBuddy。
 
 CodeBuddy 不认 Claude 风格的 ``skills/`` 目录，技能得装在插件里。但插件不必
 进市场、也不必安装：``CODEBUDDY_PLUGIN_DIRS`` 里的每个目录都会被当成一个
@@ -8,6 +8,9 @@ CodeBuddy 不认 Claude 风格的 ``skills/`` 目录，技能得装在插件里�
 所以这里把整组技能包成**一个**名叫 ``codeagent`` 的插件，形状是
 ``<root>/.codebuddy-plugin/plugin.json`` + ``<root>/skills/<名>/SKILL.md``。
 manifest 不声明 ``skills``：引擎发现插件没写这个字段时会自己扫 ``skills/``。
+
+项目组自己声明的插件跟在后面一起挂。它们是 Claude 风格的插件，但
+CodeBuddy 认的清单目录里就有 ``.claude-plugin``，可以原样加载。
 
 用环境变量而不是等价的 ``--plugin-dir``：后者必须插在子命令之前，和原生参数
 透传的拼法打架。
@@ -24,9 +27,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from core.logging_config import get_logger
 from core.utils.atomic_write import atomic_write
@@ -49,6 +53,7 @@ class _PluginDirMixin:
     if TYPE_CHECKING:
 
         def resolve_skill_sources(self) -> list[tuple[str, Path]]: ...
+        def get_plugins_to_mount(self) -> list[dict[str, Any]]: ...
 
     def _get_plugin_dir_root(self) -> Path:
         """插件落地目录的父目录。"""
@@ -115,8 +120,29 @@ class _PluginDirMixin:
         shutil.rmtree(project_dir, ignore_errors=True)
         logger.info("Plugin dir removed")
 
+    def resolve_group_plugin_dirs(self) -> list[Path]:
+        """项目组自己声明的插件目录，解析不出目录的条目跳过。"""
+        dirs: list[Path] = []
+        for plugin_meta in self.get_plugins_to_mount():
+            source = plugin_meta.get("_plugin_dir")
+            if not source:
+                continue
+            path = Path(source)
+            if path.is_dir():
+                dirs.append(path)
+            else:
+                logger.warning(
+                    "Skip plugin '%s': %s is not a directory",
+                    plugin_meta.get("name"),
+                    path,
+                )
+        return dirs
+
     def plugin_dir_env(self, plugin_dir: Path | None) -> dict[str, str]:
-        """要并进引擎环境的变量；没挂插件时为空。"""
-        if plugin_dir is None:
+        """要并进引擎环境的变量；没有任何插件可挂时为空。"""
+        dirs = ([plugin_dir] if plugin_dir is not None else []) + (
+            self.resolve_group_plugin_dirs()
+        )
+        if not dirs:
             return {}
-        return {PLUGIN_DIRS_ENV: str(plugin_dir)}
+        return {PLUGIN_DIRS_ENV: os.pathsep.join(str(d) for d in dirs)}
