@@ -157,6 +157,20 @@ def write_codebuddy_session(session: Any) -> str:
 
     previous_id: str | None = None
 
+    def chain(row: dict[str, Any]) -> dict[str, Any]:
+        """Links *row* to the row before it and remembers it as the new tail.
+
+        CodeBuddy 不按文件顺序读 transcript，而是从最后一行顺着 ``parentId``
+        往回走，所以每一条对话行（含 function_call / result）都必须挂在上一
+        条上。漏一条，恢复出来的会话就从那里断掉——2026-09-22 只有 assistant
+        行带 parentId，结果整段记录都读不回来，看起来跟新开会话一样。
+        """
+        nonlocal previous_id
+        if previous_id is not None:
+            row["parentId"] = previous_id
+        previous_id = row["id"]
+        return row
+
     for msg in session.messages:
         ts = _to_codebuddy_ts(getattr(msg, "timestamp", None))
 
@@ -178,8 +192,7 @@ def write_codebuddy_session(session: Any) -> str:
                 "cwd": cwd,
                 "sessionId": new_session_id,
             }
-            lines.append(json.dumps(row, ensure_ascii=False))
-            previous_id = msg_id
+            lines.append(json.dumps(chain(row), ensure_ascii=False))
 
         elif msg.role == "assistant":
             msg_id = str(uuid.uuid4())
@@ -193,16 +206,11 @@ def write_codebuddy_session(session: Any) -> str:
                 "status": "completed",
                 "content": [{"type": "output_text", "text": msg.content}],
                 "providerData": {"model": model} if model else {},
-                # Chains the reply to the turn it answers. CodeBuddy writes
-                # it on every assistant row; without it the transcript is a
-                # flat list of orphans.
-                "parentId": previous_id,
                 "timestamp": ts,
                 "cwd": cwd,
                 "sessionId": new_session_id,
             }
-            lines.append(json.dumps(row, ensure_ascii=False))
-            previous_id = msg_id
+            lines.append(json.dumps(chain(row), ensure_ascii=False))
 
             # Tool calls are emitted as separate function_call / result lines
             # so the parser re-attaches them to this assistant message.
@@ -216,33 +224,37 @@ def write_codebuddy_session(session: Any) -> str:
                     args_obj = tc.args_preview or ""
                 lines.append(
                     json.dumps(
-                        {
-                            "id": str(uuid.uuid4()),
-                            "type": "function_call",
-                            "name": tc.name,
-                            "callId": call_id,
-                            "arguments": args_obj,
-                            "cwd": cwd,
-                            "sessionId": new_session_id,
-                            "timestamp": ts,
-                        },
+                        chain(
+                            {
+                                "id": str(uuid.uuid4()),
+                                "type": "function_call",
+                                "name": tc.name,
+                                "callId": call_id,
+                                "arguments": args_obj,
+                                "cwd": cwd,
+                                "sessionId": new_session_id,
+                                "timestamp": ts,
+                            }
+                        ),
                         ensure_ascii=False,
                     )
                 )
                 result_text = tc.result_preview or ""
                 lines.append(
                     json.dumps(
-                        {
-                            "id": str(uuid.uuid4()),
-                            "type": "function_call_result",
-                            "name": tc.name,
-                            "callId": call_id,
-                            "status": "completed",
-                            "output": {"type": "text", "text": result_text},
-                            "cwd": cwd,
-                            "sessionId": new_session_id,
-                            "timestamp": ts,
-                        },
+                        chain(
+                            {
+                                "id": str(uuid.uuid4()),
+                                "type": "function_call_result",
+                                "name": tc.name,
+                                "callId": call_id,
+                                "status": "completed",
+                                "output": {"type": "text", "text": result_text},
+                                "cwd": cwd,
+                                "sessionId": new_session_id,
+                                "timestamp": ts,
+                            }
+                        ),
                         ensure_ascii=False,
                     )
                 )

@@ -20,6 +20,7 @@ here instead of at the user's first keystroke.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sqlite3
 from pathlib import Path
@@ -209,3 +210,55 @@ def test_zen_models_are_a_fallback_not_a_first_choice(tmp_path, monkeypatch):
             assert data["providerID"] == "agentrouter"
             return
     raise AssertionError("the converted session has no assistant message")
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
+def test_ids_are_written_in_opencodes_own_format(tmp_path, monkeypatch):
+    """随机 uuid 会被 Zen 当成"不是 OpenCode 发出来的"，见 fixture 的 id_format。"""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    db_path = tmp_path / ".local" / "share" / "opencode" / "opencode.db"
+    db_path.parent.mkdir(parents=True)
+    _init_opencode_db(db_path)
+    _seed_native_model(db_path, NATIVE_MODEL)
+
+    worktree = tmp_path / "repo"
+    _make_git_repo(worktree)
+
+    def convert() -> str:
+        return write_opencode_session(
+            UnifiedSession(
+                session_id="orig",
+                engine=EngineType.CLAUDE,
+                project_path=str(worktree),
+                model="claude-opus-4",
+                messages=[
+                    UnifiedMessage(role="user", content="hello"),
+                    UnifiedMessage(role="assistant", content="hi there"),
+                ],
+            )
+        )
+
+    first = convert()
+    second = convert()
+
+    pattern = re.compile(CONTRACT["id_format"]["pattern"])
+    con = sqlite3.connect(str(db_path))
+    message_ids = [
+        row[0]
+        for row in con.execute(
+            "SELECT id FROM message WHERE session_id=? ORDER BY time_created", (first,)
+        )
+    ]
+    part_ids = [
+        row[0]
+        for row in con.execute("SELECT id FROM part WHERE session_id=?", (first,))
+    ]
+    con.close()
+
+    for id_ in [first, second, *message_ids, *part_ids]:
+        assert pattern.match(id_), f"{id_} is not an OpenCode-shaped id"
+
+    # Sessions sort newest-first, messages oldest-first -- OpenCode replays a
+    # transcript in message-id order.
+    assert second < first
+    assert message_ids == sorted(message_ids)

@@ -9,9 +9,11 @@ following OpenCode's native schema.
 from __future__ import annotations
 
 import json
+import secrets
 import shutil
 import sqlite3
 import subprocess
+import threading
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +29,51 @@ _GLOBAL_PROJECT_ID = "global"
 # OpenCode Zen's built-in provider id. Its models run only with Zen
 # credentials, which this install may not have -- see _last_used_model.
 _ZEN_PROVIDER_ID = "opencode"
+
+#: OpenCode 自己的 id 格式（Identifier）：前缀 + 12 位时间戳 hex + 14 位
+#: base62，共 26 个字符；session 用倒序时间戳，message / part 用正序。
+_ID_LENGTH = 26
+_ID_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+_id_lock = threading.Lock()
+_id_last_ms = 0
+_id_counter = 0
+
+
+def _opencode_id(
+    prefix: str, *, descending: bool = False, ts: int | None = None
+) -> str:
+    """Returns an id in OpenCode's own ``Identifier`` format.
+
+    A random uuid would be unique but is not this shape, and the shape is
+    load-bearing twice over: OpenCode orders a transcript by ascending
+    message id, and Zen rejects a prompt whose ``X-Opencode-Session`` header
+    does not parse -- ``403 FreeTierError: OpenCode's free tier can only be
+    used from within OpenCode``, which reads like a login problem and hits
+    only after the converted session has already opened.
+
+    Args:
+        prefix: ``ses`` / ``msg`` / ``prt``.
+        descending: True for sessions, whose ids sort newest-first.
+        ts: Unix milliseconds to stamp in, defaulting to now. Passing each
+            message's own time keeps the ids in transcript order.
+    """
+    global _id_last_ms, _id_counter
+
+    now = _now_ms() if ts is None else ts
+    with _id_lock:
+        if now != _id_last_ms:
+            _id_last_ms = now
+            _id_counter = 0
+        _id_counter += 1
+        counter = _id_counter
+
+    value = now * 4096 + counter
+    if descending:
+        value = ~value
+    stamp = bytes((value >> (40 - 8 * i)) & 0xFF for i in range(6)).hex()
+    tail = "".join(secrets.choice(_ID_ALPHABET) for _ in range(_ID_LENGTH - 12))
+    return f"{prefix}_{stamp}{tail}"
 
 
 def _now_ms() -> int:
@@ -186,7 +233,7 @@ def write_opencode_session(session: UnifiedSession) -> str:
     if not db_path:
         raise FileNotFoundError("OpenCode database not found. Is OpenCode installed?")
 
-    new_session_id = f"ses_{uuid.uuid4().hex[:24]}"
+    new_session_id = _opencode_id("ses", descending=True)
     now_ms = _now_ms()
     worktree = session.project_path.replace("\\", "/")
 
@@ -232,8 +279,8 @@ def write_opencode_session(session: UnifiedSession) -> str:
         # Insert messages and parts
         previous_message_id: str | None = None
         for i, msg in enumerate(session.messages):
-            msg_id = f"msg_{uuid.uuid4().hex[:24]}"
             msg_time = now_ms + i * 1000  # stagger timestamps
+            msg_id = _opencode_id("msg", ts=msg_time)
 
             # ``parentID`` chains each assistant reply to the turn it
             # answered; user messages start a turn and carry no parent.
@@ -297,7 +344,7 @@ def write_opencode_session(session: UnifiedSession) -> str:
                     """INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
                        VALUES (?, ?, ?, ?, ?, ?)""",
                     (
-                        f"prt_{uuid.uuid4().hex[:24]}",
+                        _opencode_id("prt", ts=msg_time),
                         msg_id,
                         new_session_id,
                         msg_time,
@@ -334,7 +381,7 @@ def write_opencode_session(session: UnifiedSession) -> str:
                     """INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
                        VALUES (?, ?, ?, ?, ?, ?)""",
                     (
-                        f"prt_{uuid.uuid4().hex[:24]}",
+                        _opencode_id("prt", ts=msg_time),
                         msg_id,
                         new_session_id,
                         msg_time,

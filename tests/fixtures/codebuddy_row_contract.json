@@ -35,5 +35,27 @@
   "observed_values": {
     "providerData": "on assistant rows carries messageId, and skipRun/error on interrupted turns; on user rows it is present but usually empty",
     "model": "'hy3' -- CodeBuddy model ids follow no prefix pattern, so the source engine is the only reliable test for whether a model may be carried over"
+  },
+  "chain": {
+    "_what": "CodeBuddy 从文件末尾顺着 parentId 往回走来重建 transcript，不按行序读。",
+    "_why": "缺一环，那一环之前的全部记录就丢了：恢复出来的会话看着像新开的。",
+    "row_types": [
+      "message",
+      "function_call",
+      "function_call_result",
+      "reasoning"
+    ],
+    "unchained_row_types": [
+      "ai-title",
+      "file-history-snapshot",
+      "turn-metrics",
+      "summary"
+    ],
+    "_derived_from": {
+      "files": 10,
+      "rows": 1924,
+      "links": 1914,
+      "broken": 0
+    }
   }
 }
