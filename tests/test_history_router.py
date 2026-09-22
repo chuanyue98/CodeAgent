@@ -410,6 +410,67 @@ async def test_delete_opencode_session(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_delete_antigravity_session_removes_orphan_dbs(tmp_path, monkeypatch):
+    """delete_session 对 antigravity/agy 要连 conversations/<sid>.db 一起删，
+    否则会留下孤儿轨迹库，acy --conversation 也无法再找到会话。"""
+    import sqlite3
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    cli_root = tmp_path / ".gemini" / "antigravity-cli"
+    transcript = cli_root / "brain" / "sess-agy" / "transcript.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text("{}\n", encoding="utf-8")
+
+    conv_dir = cli_root / "conversations"
+    conv_dir.mkdir(parents=True)
+    for suffix in ("", "-wal", "-shm"):
+        (conv_dir / f"sess-agy.db{suffix}").write_bytes(b"dummy")
+
+    summaries_path = cli_root / "conversation_summaries.db"
+    with sqlite3.connect(str(summaries_path)) as con:
+        con.execute(
+            "CREATE TABLE conversation_summaries (conversation_id TEXT PRIMARY KEY)"
+        )
+        con.execute(
+            "INSERT INTO conversation_summaries VALUES (?)", ("sess-agy",)
+        )
+
+    import core.session_history.repository as repo
+
+    monkeypatch.setattr(
+        repo,
+        "get_summary",
+        lambda engine, session_id, project=None: {
+            "source_file": str(transcript),
+            "session_id": session_id,
+            "engine": engine,
+        },
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        del_res = await ac.delete(
+            "/api/history/antigravity/sess-agy",
+            params={"project": "E:/demo/project-a"},
+        )
+        assert del_res.status_code == 200
+        assert del_res.json()["status"] == "deleted"
+
+    assert not transcript.exists()
+    for suffix in ("", "-wal", "-shm"):
+        assert not (conv_dir / f"sess-agy.db{suffix}").exists()
+    with sqlite3.connect(str(summaries_path)) as con:
+        assert (
+            con.execute(
+                "SELECT count(*) FROM conversation_summaries"
+            ).fetchone()[0]
+            == 0
+        )
+
+
+@pytest.mark.asyncio
 async def test_convert_session_success(two_project_history, monkeypatch):
     monkeypatch.setattr(
         "core.web.routers.history._resolve_history_workspace", lambda p: p

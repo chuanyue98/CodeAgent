@@ -495,18 +495,19 @@ async def delete_session(
         try:
             if validated_path.is_file():
                 validated_path.unlink(missing_ok=True)
-            db_path = (
-                Path.home()
-                / ".gemini"
-                / "antigravity-cli"
-                / "conversation_summaries.db"
-            ).resolve()
+            cli_root = Path.home() / ".gemini" / "antigravity-cli"
+            db_path = (cli_root / "conversation_summaries.db").resolve()
             if db_path.is_file():
                 with sqlite3.connect(str(db_path)) as con:
                     con.execute(
                         "DELETE FROM conversation_summaries WHERE conversation_id = ?",
                         (session_id,),
                     )
+            for suffix in ("", "-wal", "-shm"):
+                trail_path = (
+                    cli_root / "conversations" / f"{session_id}.db{suffix}"
+                ).resolve()
+                trail_path.unlink(missing_ok=True)
         except (OSError, sqlite3.Error) as e:
             raise HTTPException(
                 status_code=500, detail={"error": f"Failed to delete session file: {e}"}
