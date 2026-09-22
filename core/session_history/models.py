@@ -42,13 +42,24 @@ class ToolCallSummary:
 
     Attributes:
         name: The tool/function name (e.g. 'read_file', 'shell_command').
-        args_preview: A short string preview of the arguments.
-        result_preview: A short string preview of the result, if available.
+        args_preview: The arguments as parseable JSON, values clipped to fit
+            ``previews.ARGS_PREVIEW_LIMIT``; empty when the call had none.
+            Writers feed this straight back through ``json.loads``.
+        result_preview: The result text, clipped to
+            ``previews.RESULT_PREVIEW_LIMIT``. Only meaningful when
+            ``result_captured`` is True.
+        result_captured: Whether the parser actually read a result for this
+            call. False means "we never looked", which is not the same as an
+            empty result and must not be written to the target engine as one
+            -- a model reads ``""`` as "the command returned nothing" and
+            believes it. The Claude and Antigravity parsers capture no
+            results at all, so everything they produce is False.
     """
 
     name: str = ""
     args_preview: str = ""
     result_preview: str = ""
+    result_captured: bool = False
 
 
 @dataclass
@@ -80,6 +91,7 @@ class UnifiedMessage:
                     "name": tc.name,
                     "args_preview": tc.args_preview,
                     "result_preview": tc.result_preview,
+                    "result_captured": tc.result_captured,
                 }
                 for tc in self.tool_calls
             ],

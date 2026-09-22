@@ -31,6 +31,7 @@ from core.session_history.paths import (
     normalize_project_path,
     strip_extended_length_prefix,
 )
+from core.session_history.previews import args_preview
 from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_dirs, long_path
 
@@ -230,17 +231,14 @@ def _extract_tool_calls(tool_calls_raw: list) -> list[ToolCallSummary]:
     for tc in tool_calls_raw:
         if not isinstance(tc, dict):
             continue
-        name = str(tc.get("name") or "")
-        args = tc.get("args")
-        if isinstance(args, (dict, list)):
-            args_preview = json.dumps(args, ensure_ascii=False)
-        elif args is not None:
-            args_preview = str(args)
-        else:
-            args_preview = ""
-        if len(args_preview) > 200:
-            args_preview = args_preview[:200] + "..."
-        tool_calls.append(ToolCallSummary(name=name, args_preview=args_preview))
+        # No result_captured: an Antigravity tool result is not on the call
+        # row, and this parser never goes looking for one.
+        tool_calls.append(
+            ToolCallSummary(
+                name=str(tc.get("name") or ""),
+                args_preview=args_preview(tc.get("args")),
+            )
+        )
     return tool_calls
 
 

@@ -28,6 +28,7 @@ from core.session_history.models import (
 )
 from core.session_history.parse_cache import cached_file_parser
 from core.session_history.paths import normalize_project_path
+from core.session_history.previews import args_preview, result_preview
 from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_files, long_path
 
@@ -262,18 +263,16 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
                     elif sub_type == "function_call":
                         name = payload.get("name", "")
                         args_raw = payload.get("arguments", "")
+                        # Codex stores arguments as a JSON *string*; re-parse
+                        # it so the preview clips values rather than tokens.
                         try:
                             args_obj = json.loads(args_raw) if args_raw else {}
-                            args_str = json.dumps(args_obj, ensure_ascii=False)
                         except (json.JSONDecodeError, TypeError):
-                            args_str = (
-                                args_raw[:200] if isinstance(args_raw, str) else ""
-                            )
+                            args_obj = args_raw if isinstance(args_raw, str) else ""
 
-                        if len(args_str) > 200:
-                            args_str = args_str[:200] + "..."
-
-                        new_tc = ToolCallSummary(name=name, args_preview=args_str)
+                        new_tc = ToolCallSummary(
+                            name=name, args_preview=args_preview(args_obj)
+                        )
                         pending_tool_calls.append(new_tc)
                         call_id = payload.get("call_id", "")
                         if call_id:
@@ -283,9 +282,9 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
                         call_id = payload.get("call_id", "")
                         output = payload.get("output", "")
                         if isinstance(output, str) and call_id in call_id_to_index:
-                            idx = call_id_to_index[call_id]
-                            preview = output[:200] if len(output) > 200 else output
-                            pending_tool_calls[idx].result_preview = preview
+                            pending = pending_tool_calls[call_id_to_index[call_id]]
+                            pending.result_preview = result_preview(output)
+                            pending.result_captured = True
 
     except OSError:
         return None

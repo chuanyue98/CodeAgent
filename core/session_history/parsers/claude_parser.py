@@ -28,6 +28,7 @@ from core.session_history.parsers._subagents import (
 )
 from core.session_history.parsers._synthetic import is_synthetic_user_content
 from core.session_history.paths import strip_extended_length_prefix
+from core.session_history.previews import args_preview
 from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_dirs, list_files, long_path
 
@@ -287,16 +288,13 @@ def _extract_assistant_content(msg: dict) -> tuple[str, list[ToolCallSummary]]:
             text_parts.append(block.get("text", ""))
 
         elif block_type == "tool_use":
-            name = block.get("name", "")
-            input_data = block.get("input", {})
-            # Create a short preview of the arguments
-            args_str = json.dumps(input_data, ensure_ascii=False) if input_data else ""
-            if len(args_str) > 200:
-                args_str = args_str[:200] + "..."
+            # No result_captured: Claude records a tool's result in the *next*
+            # user row, which this parser does not read, so every call here
+            # reports "we never looked".
             tool_calls.append(
                 ToolCallSummary(
-                    name=name,
-                    args_preview=args_str,
+                    name=block.get("name", ""),
+                    args_preview=args_preview(block.get("input", {})),
                 )
             )
 

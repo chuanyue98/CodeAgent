@@ -4,8 +4,10 @@ This is a message/tool-call timeline across engines and sessions — it is
 NOT an approval or permission log. No approval/denial decision is recorded
 anywhere in ``UnifiedMessage``/``ToolCallSummary``, because none of the four
 engine parsers capture one. ``args_preview``/``result_preview`` on tool-call
-events are truncated to 200 chars by the parsers at parse time and cannot be
-recovered here without re-parsing the raw source file.
+events are clipped at parse time (see ``previews``) and cannot be recovered
+here without re-parsing the raw source file. An empty ``result_preview`` is
+ambiguous on its own -- the Claude and Antigravity parsers read no results at
+all -- so read it together with ``result_captured``.
 """
 
 from __future__ import annotations
