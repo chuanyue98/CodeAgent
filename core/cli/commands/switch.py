@@ -28,7 +28,174 @@ from core.i18n import t
 
 from .. import helpers as _helpers
 from ..session_select import SessionSelectorError, resolve_session
+from ..ui_styles import (
+    CLI_QUESTIONARY_STYLE,
+    StyledTitle,
+    format_styled_session_choice,
+    get_engine_theme,
+)
 from .resume import format_relative_time
+
+#: 选择过程里"输错了"与"放弃选择"要分开：前者退出码 1，后者 0。
+_INVALID_CHOICE: dict = {}
+
+
+def _prompt_source_session(summaries: list[dict], target_engine: str | None):
+    """Numbered fallback for terminals questionary cannot drive."""
+    if target_engine:
+        print(t("switch.candidate_title_with_target", target=target_engine))
+    else:
+        print(t("switch.candidate_title"))
+
+    default_marker = t("switch.default_marker")
+    for i, summary in enumerate(summaries, 1):
+        eng = summary.get("engine", "unknown")
+        time_str = format_relative_time(summary.get("started_at", ""))
+        msg_count = summary.get("message_count", 0)
+        title = (
+            summary.get("title")
+            or summary.get("first_user_message")
+            or t("history.no_title")
+        )
+        title = title.replace("\n", " ").strip()
+        if len(title) > 55:
+            title = title[:52] + "..."
+        marker = f"{default_marker:<8s}" if i == 1 else "        "
+        print(
+            f"  [{i:2d}] {marker} [{eng:<10s}]  {time_str:<8s}  ·  {msg_count:3d} msgs  |  {title}"
+        )
+
+    if target_engine:
+        prompt_text = t(
+            "switch.prompt_source", target=target_engine, count=len(summaries)
+        )
+    else:
+        prompt_text = t("switch.prompt_source_no_target", count=len(summaries))
+
+    try:
+        raw = input(f"\n{prompt_text} ").strip()
+    except (KeyboardInterrupt, EOFError):
+        print()
+        return None
+
+    if not raw:
+        return summaries[0]
+    if raw.lower() in ("q", "quit", "exit"):
+        return None
+    try:
+        choice_idx = int(raw)
+    except ValueError:
+        for summary in summaries:
+            if summary["session_id"] == raw:
+                return summary
+        print(t("select.not_found", selector=raw))
+        return _INVALID_CHOICE
+
+    if 1 <= choice_idx <= len(summaries):
+        return summaries[choice_idx - 1]
+    print(t("select.index_out_of_range", index=choice_idx, count=len(summaries)))
+    return _INVALID_CHOICE
+
+
+def _select_source_session(summaries: list[dict], target_engine: str | None):
+    """Arrow-key picker for the session to carry over, newest first.
+
+    ``ca -r`` moved to this in 57c79b2 and ``ca -s`` did not, which left the
+    more involved of the two commands on the older "type a number" prompt.
+    Returns the chosen summary, or None when the picker was dismissed. Raises
+    when questionary cannot own the terminal; the caller then falls back to
+    the numbered prompt.
+    """
+    import questionary
+    from questionary import Choice
+
+    choices = [
+        Choice(
+            title=format_styled_session_choice(
+                index, summary, format_relative_time(summary.get("started_at", ""))
+            ),
+            value=summary,
+        )
+        for index, summary in enumerate(summaries, 1)
+    ]
+    choices.append(Choice(title=t("launcher.exit"), value=None))
+
+    if target_engine:
+        question = t("switch.select_source_with_target", target=target_engine)
+    else:
+        question = t("switch.select_source")
+    return questionary.select(
+        question, choices=choices, style=CLI_QUESTIONARY_STYLE
+    ).ask()
+
+
+#: 同 :data:`_INVALID_CHOICE`，只是这一边的选择结果是引擎名。
+_INVALID_ENGINE = "\x00invalid"
+
+
+def _prompt_target_engine(candidates: list[str]) -> str | None:
+    """Numbered fallback for the target-engine picker."""
+    print(f"\n{t('switch.target_engine_title')}")
+    for idx, eng_name in enumerate(candidates, 1):
+        alias_hint = " (agy)" if eng_name == "antigravity" else ""
+        print(f"  [{idx:2d}] {eng_name}{alias_hint}")
+
+    target_prompt = t("switch.prompt_target", count=len(candidates))
+    try:
+        raw_target = input(f"\n{target_prompt} ").strip()
+    except (KeyboardInterrupt, EOFError):
+        print()
+        return None
+
+    if not raw_target or raw_target.lower() in ("q", "quit", "exit"):
+        return None
+
+    try:
+        index = int(raw_target)
+    except ValueError:
+        engine = normalize_engine_name(raw_target)
+        if engine not in ENGINES:
+            print(t("switch.unknown_engine", engine=raw_target))
+            print(t("switch.known_engines", engines=", ".join(sorted(ENGINES))))
+            return _INVALID_ENGINE
+        return engine
+
+    if 1 <= index <= len(candidates):
+        return candidates[index - 1]
+    print(t("switch.unknown_engine", engine=raw_target))
+    return _INVALID_ENGINE
+
+
+def _select_target_engine(candidates: list[str]) -> str | None:
+    """Arrow-key picker for the engine to continue in, in the same brand colors.
+
+    Same contract as :func:`_select_source_session`.
+    """
+    import questionary
+    from questionary import Choice
+
+    choices = []
+    for engine_name in candidates:
+        theme = get_engine_theme(engine_name)
+        label = (
+            f"{theme.display_name} (agy)"
+            if engine_name == "antigravity"
+            else theme.display_name
+        )
+        choices.append(
+            Choice(
+                title=StyledTitle(
+                    [(f"class:{theme.style_class}", label)],
+                    label,
+                ),
+                value=engine_name,
+            )
+        )
+    choices.append(Choice(title=t("launcher.exit"), value=None))
+
+    return questionary.select(
+        t("switch.select_target"), choices=choices, style=CLI_QUESTIONARY_STYLE
+    ).ask()
 
 
 @click.command()
@@ -103,73 +270,24 @@ def switch(ctx, target_engine, selector, source_engine, yes, no_launch):  # type
             project=project_path,
             engine=source_engine,
             include_subagents=True,
-            limit=5,
+            limit=20,
         )
         if not summaries:
             print(t("select.no_sessions", path=project_path))
             return 1
 
-        if target_engine:
-            print(t("switch.candidate_title_with_target", target=target_engine))
-        else:
-            print(t("switch.candidate_title"))
-
-        default_marker = t("switch.default_marker")
-        for i, s in enumerate(summaries, 1):
-            eng = s.get("engine", "unknown")
-            time_str = format_relative_time(s.get("started_at", ""))
-            msg_count = s.get("message_count", 0)
-            title = (
-                s.get("title") or s.get("first_user_message") or t("history.no_title")
-            )
-            title = title.replace("\n", " ").strip()
-            if len(title) > 55:
-                title = title[:52] + "..."
-            marker = f"{default_marker:<8s}" if i == 1 else "        "
-            print(
-                f"  [{i:2d}] {marker} [{eng:<10s}]  {time_str:<8s}  ·  {msg_count:3d} msgs  |  {title}"
-            )
-
-        if target_engine:
-            prompt_text = t(
-                "switch.prompt_source", target=target_engine, count=len(summaries)
-            )
-        else:
-            prompt_text = t("switch.prompt_source_no_target", count=len(summaries))
-
         try:
-            raw = input(f"\n{prompt_text} ").strip()
-        except (KeyboardInterrupt, EOFError):
-            print()
-            return 0
+            chosen_summary = _select_source_session(summaries, target_engine)
+        except Exception:
+            # questionary 拿不到终端（管道、哑终端、Windows 老控制台）时退回
+            # 编号提示，行为与加方向键选择之前一致。
+            chosen_summary = _prompt_source_session(summaries, target_engine)
 
-        chosen_summary = None
-        if not raw:
-            chosen_summary = summaries[0]
-        elif raw.lower() in ("q", "quit", "exit"):
+        if chosen_summary is None:
+            print(t("cli.cancelled"))
             return 0
-        else:
-            try:
-                choice_idx = int(raw)
-                if 1 <= choice_idx <= len(summaries):
-                    chosen_summary = summaries[choice_idx - 1]
-                else:
-                    print(
-                        t(
-                            "select.index_out_of_range",
-                            index=choice_idx,
-                            count=len(summaries),
-                        )
-                    )
-                    return 1
-            except ValueError:
-                for s in summaries:
-                    if s["session_id"] == raw:
-                        chosen_summary = s
-                        break
-                if chosen_summary is None:
-                    print(t("select.not_found", selector=raw))
-                    return 1
+        if chosen_summary is _INVALID_CHOICE:
+            return 1
 
         session = repository.get_full(
             chosen_summary["engine"], chosen_summary["session_id"], project_path
@@ -195,34 +313,16 @@ def switch(ctx, target_engine, selector, source_engine, yes, no_launch):  # type
         if not target_candidates:
             target_candidates = [e for e in sorted(ENGINES) if e != source]
 
-        print(f"\n{t('switch.target_engine_title')}")
-        for idx, eng_name in enumerate(target_candidates, 1):
-            alias_hint = " (agy)" if eng_name == "antigravity" else ""
-            print(f"  [{idx:2d}] {eng_name}{alias_hint}")
-
-        target_prompt = t("switch.prompt_target", count=len(target_candidates))
         try:
-            raw_target = input(f"\n{target_prompt} ").strip()
-        except (KeyboardInterrupt, EOFError):
-            print()
-            return 0
+            target_engine = _select_target_engine(target_candidates)
+        except Exception:
+            target_engine = _prompt_target_engine(target_candidates)
 
-        if not raw_target or raw_target.lower() in ("q", "quit", "exit"):
+        if target_engine is None:
+            print(t("cli.cancelled"))
             return 0
-
-        try:
-            t_idx = int(raw_target)
-            if 1 <= t_idx <= len(target_candidates):
-                target_engine = target_candidates[t_idx - 1]
-            else:
-                print(t("switch.unknown_engine", engine=raw_target))
-                return 1
-        except ValueError:
-            target_engine = normalize_engine_name(raw_target)
-            if target_engine not in ENGINES:
-                print(t("switch.unknown_engine", engine=raw_target))
-                print(t("switch.known_engines", engines=", ".join(sorted(ENGINES))))
-                return 1
+        if target_engine == _INVALID_ENGINE:
+            return 1
 
     title = session.title or session.first_user_message[:60] or t("history.no_title")
 

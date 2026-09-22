@@ -589,6 +589,18 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Select source session [1-{count}] (Enter for [1], number to change, q to quit):",
         "zh": "请选择要接力的源会话 [1-{count}] (直接回车默认 [1]，输入序号换选，q 退出):",
     },
+    "switch.select_source_with_target": {
+        "en": "Select the session to carry over to {target} (↑/↓ to navigate, Enter to confirm):",
+        "zh": "请选择要接力给 {target} 的会话 (↑/↓ 键选择，Enter 确认):",
+    },
+    "switch.select_source": {
+        "en": "Select the session to carry over (↑/↓ to navigate, Enter to confirm):",
+        "zh": "请选择要接力的会话 (↑/↓ 键选择，Enter 确认):",
+    },
+    "switch.select_target": {
+        "en": "Select the engine to carry it on in (↑/↓ to navigate, Enter to confirm):",
+        "zh": "请选择要接力到的引擎 (↑/↓ 键选择，Enter 确认):",
+    },
     "switch.target_engine_title": {
         "en": "Select target engine to switch to:",
         "zh": "请选择要接力到的目标引擎:",

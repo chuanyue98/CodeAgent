@@ -7,11 +7,15 @@ Each line has ``{timestamp, type, payload}``.  Relevant ``type`` values:
   - ``session_meta``  → session ID, cwd, model
   - ``event_msg``     → user_message / agent_message sub-types
   - ``response_item`` → message / function_call / function_call_output
+
+Codex 从 2026-08 起不再写 ``event_msg``/``user_message``，用户发言只剩
+``response_item``，见 :data:`_SYNTHETIC_USER_PREFIXES` 附近的说明。
 """
 
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,6 +30,29 @@ from core.session_history.parse_cache import cached_file_parser
 from core.session_history.paths import normalize_project_path
 from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_files, long_path
+
+#: ``response_item`` 里 role=user 的那些不是人说的话：Codex 把环境快照、
+#: 子代理回执、插件清单等都塞进 user 角色。老格式靠 ``event_msg`` 区分，新
+#: 格式没有这层，只能按开头认。
+_SYNTHETIC_USER_PREFIXES = (
+    "<environment_context",
+    "<user_instructions",
+    "<recommended_plugins",
+    "<subagent_notification",
+    "<turn_aborted",
+    "<codex_internal_context",
+    "<user_action",
+)
+
+#: ``# AGENTS.md instructions for /path`` —— 项目约定文件的注入，不是用户输入。
+_INSTRUCTIONS_HEADER = re.compile(r"^#\s+\S+\s+instructions for\s+\S")
+
+
+def _is_synthetic_user_text(text: str) -> bool:
+    """True when a ``role=user`` block is Codex's own injection, not a prompt."""
+    if text.startswith(_SYNTHETIC_USER_PREFIXES):
+        return True
+    return bool(_INSTRUCTIONS_HEADER.match(text))
 
 
 def _ms_to_iso(timestamp: object) -> str:
@@ -92,6 +119,11 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
     pending_tool_calls: list[ToolCallSummary] = []
     call_id_to_index: dict[str, int] = {}
 
+    # 老格式同一句用户发言会出现两次（``response_item`` 一次、``event_msg``
+    # 一次），先都收下，末尾发现文件里有 ``event_msg`` 版本时再把这批删掉。
+    response_item_user_indices: list[int] = []
+    saw_event_user_message = False
+
     try:
         # long_path, not a bare open: these files live under a directory named
         # after the whole project path, which passes MAX_PATH on a deep
@@ -132,6 +164,7 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
                     if sub_type == "user_message":
                         text = payload.get("message", "").strip()
                         if text:
+                            saw_event_user_message = True
                             messages.append(
                                 UnifiedMessage(
                                     role="user",
@@ -182,8 +215,19 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
                             continue
 
                         if role == "user":
-                            # Skip developer/system messages
-                            pass  # user_message already captured via event_msg
+                            if _is_synthetic_user_text(text):
+                                continue
+                            response_item_user_indices.append(len(messages))
+                            messages.append(
+                                UnifiedMessage(
+                                    role="user",
+                                    content=text,
+                                    timestamp=timestamp,
+                                )
+                            )
+                            if not started_at:
+                                started_at = timestamp
+                            ended_at = timestamp
                         elif role == "assistant":
                             phase = payload.get("phase", "final")
                             if phase == "final" and text:
@@ -245,6 +289,10 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
 
     except OSError:
         return None
+
+    if saw_event_user_message:
+        for index in reversed(response_item_user_indices):
+            del messages[index]
 
     if not messages:
         return None

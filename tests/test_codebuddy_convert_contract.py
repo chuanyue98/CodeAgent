@@ -13,7 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from core.session_history.models import EngineType, UnifiedMessage, UnifiedSession
+from core.session_history.models import (
+    EngineType,
+    ToolCallSummary,
+    UnifiedMessage,
+    UnifiedSession,
+)
 from core.session_history.writers import codebuddy_writer
 
 CONTRACT = json.loads(
@@ -110,3 +115,51 @@ def test_a_fresh_install_with_no_history_writes_no_model(home):
     # Empty rather than invented: CodeBuddy can fall back to its default,
     # but it cannot serve a model that does not exist.
     assert _row(rows, "assistant")["providerData"] == {}
+
+
+def test_every_conversational_row_chains_to_the_one_before_it(home):
+    # 只给 assistant 行挂 parentId 不够：CodeBuddy 从末尾往回走，而末尾是
+    # 工具结果行，链子在那里就断了，整段记录读不回来。
+    _seed_native_history(home)
+    session_id = codebuddy_writer.write_codebuddy_session(
+        UnifiedSession(
+            session_id="orig",
+            engine=EngineType.CODEX,
+            project_path=PROJECT,
+            title="t",
+            model="gpt-5-codex",
+            messages=[
+                UnifiedMessage(role="user", content="hello"),
+                UnifiedMessage(
+                    role="assistant",
+                    content="looking",
+                    tool_calls=[ToolCallSummary(name="shell", args_preview="{}")],
+                ),
+                UnifiedMessage(role="user", content="and now?"),
+                UnifiedMessage(role="assistant", content="done"),
+            ],
+        )
+    )
+    written = next((home / ".codebuddy" / "projects").glob(f"*/{session_id}.jsonl"))
+    rows = [
+        json.loads(line)
+        for line in written.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+    chained = [r for r in rows if r["type"] in CONTRACT["chain"]["row_types"]]
+    assert [r["type"] for r in chained] == [
+        "message",
+        "message",
+        "function_call",
+        "function_call_result",
+        "message",
+        "message",
+    ]
+    assert "parentId" not in chained[0]
+    broken = [
+        r["type"]
+        for previous, r in zip(chained, chained[1:], strict=False)
+        if r.get("parentId") != previous["id"]
+    ]
+    assert not broken, f"chain breaks at {broken}"

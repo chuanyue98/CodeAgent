@@ -571,12 +571,21 @@ class SessionIndex:
         return int(cursor.rowcount or 0)
 
     def clear_all(self) -> None:
-        """清空全部派生数据，用于 parser 指纹变化后的全量重建。"""
+        """清空全部派生数据，用于 parser 指纹变化后的全量重建。
+
+        连 "同步完成" 的时间戳一起清掉：重建是后台线程干的，而 ``ca history``
+        这种命令清完就退出了，索引会一直停在"空的但 is_ready()"这个状态上，
+        接下来每次查历史都回答"没有任何会话"。清掉时间戳，调用方在重建完成
+        前会退回直接解析——慢，但不会把用户的历史说成不存在。
+        """
         with self._lock, self._connection:
             self._connection.execute("DELETE FROM tool_calls")
             self._connection.execute("DELETE FROM messages")
             self._connection.execute("DELETE FROM sessions")
             self._connection.execute("DELETE FROM sources")
+            self._connection.execute(
+                "DELETE FROM index_meta WHERE key = ?", (LAST_SYNC_KEY,)
+            )
 
     def session_count(self) -> int:
         with self._lock:
