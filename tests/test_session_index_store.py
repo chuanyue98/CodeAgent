@@ -63,6 +63,22 @@ def test_fresh_db_is_not_ready(index):
     assert index.is_ready() is True
 
 
+def test_clearing_for_a_rebuild_takes_readiness_with_it(index):
+    """清空之后不能还说自己就绪，否则重建期间历史一律显示"没有会话"。
+
+    重建跑在后台线程里，而 ``ca history`` 这类命令清完就退出了：留在盘上的
+    就是一个空的、却仍然 is_ready() 的索引。
+    """
+    index.write_session(_session())
+    index.set_meta(LAST_SYNC_KEY, "1700000000")
+    assert index.is_ready() is True
+
+    index.clear_all()
+
+    assert index.session_count() == 0
+    assert index.is_ready() is False
+
+
 def test_newer_schema_rebuilds_instead_of_bricking(index, tmp_path):
     """派生索引遇到更新的 schema 应该"重建"，而不是把服务拦下来。
 
