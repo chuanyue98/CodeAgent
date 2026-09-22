@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 import click
 
@@ -278,7 +279,41 @@ def check_temp_file(section: Section, root: Path) -> None:
         )
 
 
-def check_proxy(section: Section, cfg: dict) -> None:
+#: 环境里代表"这个 shell 正在走代理"的变量，大小写两种写法都认。
+_PROXY_ENV_VARS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+)
+
+
+def _ambient_proxy_targets() -> set[tuple[str, int]]:
+    """环境变量里配着的代理地址。
+
+    ``ca --proxy`` 之外还有一条路：用户在 shell 里自己 export 了代理变量。
+    那种情况下代理确实在用，连不上就是真问题，不该被当成静音掉的噪音。
+    """
+    targets: set[tuple[str, int]] = set()
+    for name in _PROXY_ENV_VARS:
+        raw = os.environ.get(name)
+        if not raw:
+            continue
+        parsed = urlparse(raw if "://" in raw else f"http://{raw}")
+        if parsed.hostname and parsed.port:
+            targets.add((parsed.hostname, parsed.port))
+    return targets
+
+
+def check_proxy(section: Section, cfg: dict, *, requested: bool = False) -> None:
+    """代理连通性。
+
+    代理是可选功能——只有 ``ca --proxy`` 或用户自己 export 的代理变量才会真的
+    用到它。因此"配了地址但没连上"在本次没启用时只是陈述，报成警告会让
+    ``ca doctor`` 常年挂着一盏与本次运行无关的黄灯。
+    """
     proxy_cfg = cfg.get("proxy")
     if not proxy_cfg:
         section.add(INFO, t("doctor.proxy_label"), t("doctor.proxy_unset"))
@@ -293,13 +328,22 @@ def check_proxy(section: Section, cfg: dict) -> None:
         section.add(
             OK, f"{t('doctor.proxy_label')} {h}:{p}", t("doctor.proxy_reachable")
         )
-    else:
-        all_str = ", ".join(f"{h}:{p}" for h, p in candidates)
+        return
+
+    all_str = ", ".join(f"{h}:{p}" for h, p in candidates)
+    in_use = requested or bool(_ambient_proxy_targets() & set(candidates))
+    if in_use:
         section.add(
             WARN,
             t("doctor.proxy_label"),
             t("doctor.proxy_unreachable", addresses=all_str),
             t("doctor.proxy_hint"),
+        )
+    else:
+        section.add(
+            INFO,
+            t("doctor.proxy_label"),
+            t("doctor.proxy_idle", addresses=all_str),
         )
 
 
@@ -708,7 +752,9 @@ def _render(sections: list[Section]) -> int:
 # ── Public entry point ────────────────────────────────────────────────────────
 
 
-def get_doctor_sections(fix: bool = False, dry_run: bool = False) -> list[Section]:
+def get_doctor_sections(
+    fix: bool = False, dry_run: bool = False, proxy_requested: bool = False
+) -> list[Section]:
     """Run all health checks and return structured Section results.
 
     Does NOT print anything. The caller is responsible for rendering or
@@ -736,7 +782,7 @@ def get_doctor_sections(fix: bool = False, dry_run: bool = False) -> list[Sectio
     s4 = Section(t("doctor.section_environment"))
     check_temp_file(s4, root)
     if cfg is not None:
-        check_proxy(s4, cfg)
+        check_proxy(s4, cfg, requested=proxy_requested)
     check_symlink_capability(s4, root)
 
     s5 = Section(t("doctor.section_parity"))
@@ -759,7 +805,9 @@ def get_doctor_sections(fix: bool = False, dry_run: bool = False) -> list[Sectio
     return [s1, s2, s3, s4, s5, s6]
 
 
-def run_doctor(fix: bool = False, dry_run: bool = False) -> int:
+def run_doctor(
+    fix: bool = False, dry_run: bool = False, proxy_requested: bool = False
+) -> int:
     """Run all health checks. Returns exit code (0 = OK, 1 = failures)."""
     click.echo()
     title = t("doctor.title")
@@ -769,7 +817,9 @@ def run_doctor(fix: bool = False, dry_run: bool = False) -> int:
         click.echo(f"  {t('doctor.mode_dry_run')}")
     elif fix:
         click.echo(f"  {t('doctor.mode_fix')}")
-    sections = get_doctor_sections(fix=fix, dry_run=dry_run)
+    sections = get_doctor_sections(
+        fix=fix, dry_run=dry_run, proxy_requested=proxy_requested
+    )
     failures = _render(sections)
     return 1 if failures else 0
 

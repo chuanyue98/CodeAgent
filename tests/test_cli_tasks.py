@@ -239,6 +239,20 @@ def test_batch_run_failure_exits_nonzero(monkeypatch, capsys, runner, batch_env)
     assert "0 started, 0 skipped, 1 failed." in out
 
 
+# ── ca doctor ────────────────────────────────────────────────────────────────
+
+
+def test_doctor_tells_the_proxy_check_whether_this_run_wants_a_proxy(monkeypatch):
+    """``ca --proxy doctor`` 才算"要用代理"，裸 ``ca doctor`` 不算。"""
+    with patch("core.doctor.run_doctor", return_value=0) as run_doctor:
+        assert _run(monkeypatch, "doctor") == 0
+    assert run_doctor.call_args.kwargs["proxy_requested"] is False
+
+    with patch("core.doctor.run_doctor", return_value=0) as run_doctor:
+        assert _run(monkeypatch, "--proxy", "doctor") == 0
+    assert run_doctor.call_args.kwargs["proxy_requested"] is True
+
+
 # ── ca new ───────────────────────────────────────────────────────────────────
 
 

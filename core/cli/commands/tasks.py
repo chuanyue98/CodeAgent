@@ -227,7 +227,9 @@ def doctor(ctx, fix, dry_run):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.doctor import run_doctor
 
-    return run_doctor(fix=fix, dry_run=dry_run)
+    return run_doctor(
+        fix=fix, dry_run=dry_run, proxy_requested=bool(ctx.obj.get("proxy"))
+    )
 
 
 @click.command(help=t("cli.desc.ui"))

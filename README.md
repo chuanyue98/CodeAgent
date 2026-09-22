@@ -316,10 +316,10 @@ CodeAgent uses a `config.json` for project-specific settings. It is gitignored;
 | Field | Description |
 |-------|-------------|
 | `default_mode` | Execution mode (`local`, `remote`) |
-| `language` | Language mode (`hybrid`, `chinese`, `english`) |
+| `language` | CLI language (`auto`, `en`, `zh`) |
 | `groups` | Named configurations mapping skills, prompts, hooks, and plugins |
 | `project_registry` | Maps project paths to configuration groups |
-| `proxy` | Proxy server configurations for network access |
+| `proxy` | Proxy addresses, used only when you pass `--proxy` |
 | `schedules` | Cron-style scheduled task definitions |
 
 See [docs/configuration.md](docs/configuration.md) for detailed reference.
