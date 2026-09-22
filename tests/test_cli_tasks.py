@@ -242,8 +242,21 @@ def test_batch_run_failure_exits_nonzero(monkeypatch, capsys, runner, batch_env)
 # ── ca new ───────────────────────────────────────────────────────────────────
 
 
+@pytest.fixture
+def opencode_on_path(monkeypatch):
+    """让 ``ca new`` 的引擎探测只看见 opencode。
+
+    CI 机器上一个引擎 CLI 都没装，而 ``ca new`` 现在挑的是第一个装好的引擎，
+    所以断言"用 opencode 写任务"的用例必须自己把 PATH 摆好。
+    """
+    monkeypatch.setattr(
+        "core.cli.commands.tasks.shutil.which",
+        lambda name: "/usr/bin/opencode" if name == "opencode" else None,
+    )
+
+
 def test_new_launches_the_authoring_engine_with_the_target_path(
-    monkeypatch, capsys, tmp_path
+    monkeypatch, capsys, tmp_path, opencode_on_path
 ):
     root = tmp_path / "root"
     root.mkdir()
@@ -262,7 +275,54 @@ def test_new_launches_the_authoring_engine_with_the_target_path(
     assert "demo.md" in cmd[2]
 
 
-def test_new_defaults_the_task_name(monkeypatch, capsys, tmp_path):
+def test_new_honours_an_explicit_engine(monkeypatch, capsys, tmp_path):
+    """指定了引擎就用它——哪怕它不在 PATH 上，也由引擎自己去报没装。"""
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setattr("core.cli.helpers._project_root", lambda: root)
+    monkeypatch.setattr("core.cli.helpers.load_config", lambda: {})
+    monkeypatch.setattr("core.cli.commands.tasks.shutil.which", lambda name: None)
+
+    with patch(
+        "core.cli.commands.tasks.subprocess.run", return_value=MagicMock(returncode=0)
+    ) as run:
+        assert _run(monkeypatch, "new", "demo", "--engine", "claude") == 0
+
+    assert run.call_args.args[0][1] == str(root / "engines" / "start_claude_code.py")
+
+
+def test_new_falls_back_to_whichever_engine_is_installed(monkeypatch, tmp_path):
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setattr("core.cli.helpers._project_root", lambda: root)
+    monkeypatch.setattr("core.cli.helpers.load_config", lambda: {})
+    monkeypatch.setattr(
+        "core.cli.commands.tasks.shutil.which",
+        lambda name: "/usr/bin/codex" if name == "codex" else None,
+    )
+
+    with patch(
+        "core.cli.commands.tasks.subprocess.run", return_value=MagicMock(returncode=0)
+    ) as run:
+        assert _run(monkeypatch, "new", "demo") == 0
+
+    assert run.call_args.args[0][1] == str(root / "engines" / "start_codex.py")
+
+
+def test_new_says_so_when_no_engine_is_installed(monkeypatch, capsys, tmp_path):
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setattr("core.cli.helpers._project_root", lambda: root)
+    monkeypatch.setattr("core.cli.helpers.load_config", lambda: {})
+    monkeypatch.setattr("core.cli.commands.tasks.shutil.which", lambda name: None)
+
+    with patch("core.cli.commands.tasks.subprocess.run") as run:
+        assert _run(monkeypatch, "new", "demo") == 1
+    run.assert_not_called()
+    assert "--engine" in capsys.readouterr().err
+
+
+def test_new_defaults_the_task_name(monkeypatch, capsys, tmp_path, opencode_on_path):
     root = tmp_path / "root"
     root.mkdir()
     monkeypatch.setattr("core.cli.helpers._project_root", lambda: root)

@@ -3,8 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from core import i18n
-from core.web.security import reset_token_cache
+# 必须在导入任何 CLI 模块之前落定：Click 的 help 文案是在装饰器求值时
+# 定下来的，等 pinned_language fixture 跑起来已经晚了。
+os.environ.setdefault("CA_LANG", "en")
+
+from core import i18n  # noqa: E402
+from core.web.security import reset_token_cache  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -44,6 +48,9 @@ def pinned_language(monkeypatch):
     switching the Web UI to Chinese -- which writes that same field -- turned
     a dozen unrelated tests red. CA_LANG is the highest-precedence source, so
     setting it here makes those assertions independent of local config.
+
+    模块顶部还会先设一次同样的值——那一次管住导入期求值的 Click help，这里
+    这一次管住用例运行期，并负责重置缓存。
     """
     monkeypatch.setenv(i18n.ENV_VAR, "en")
     monkeypatch.setattr(i18n, "_resolved", None, raising=False)

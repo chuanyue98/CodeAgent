@@ -4,6 +4,11 @@
 selector people reach for first. Accepting only the raw session id -- which
 is what the underlying finders key on -- forced them to copy a UUID out of a
 list that had just offered them ``[1]``.
+
+编号必须与用户看到的那份列表同一口径：``ca -r`` 与 ``ca history list`` 默认
+不列子任务，所以按编号解析时也要先把子任务过滤掉，否则同一个 ``3`` 在列表里
+和在 ``ca -s`` 里指向两个不同的会话。会话 id 是用户明确指定的目标，因此仍在
+全量会话里查找——用 id 点名一个子任务应该照样能命中。
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ def resolve_session(
     project_path: str,
     *,
     engine: str | None = None,
+    include_subagents: bool = False,
 ) -> UnifiedSession:
     """Resolves *selector* against the sessions of *project_path*.
 
@@ -38,6 +44,9 @@ def resolve_session(
             prints, a session id, or None for the most recent session.
         project_path: Project whose sessions are searched.
         engine: Optional engine filter, matching ``ca history --engine``.
+        include_subagents: 子任务会话是否参与编号与"最近一条"的判定。默认
+            False，与 ``ca -r`` / ``ca history list`` 打印的列表一致；调用方
+            若展示了含子任务的列表，传 True 才能保持编号对齐。
 
     Returns:
         UnifiedSession: The selected session.
@@ -54,9 +63,18 @@ def resolve_session(
     if not summaries:
         raise SessionSelectorError("select.no_sessions", path=project_path)
 
+    # 编号与"最近一条"走这份，id 查找走全量：见模块 docstring。
+    listed = (
+        summaries
+        if include_subagents
+        else [s for s in summaries if not s.get("parent_session_id")]
+    )
+
     chosen: dict | None = None
     if selector is None:
-        chosen = summaries[0]
+        if not listed:
+            raise SessionSelectorError("select.no_sessions", path=project_path)
+        chosen = listed[0]
     else:
         # A bare integer is the printed index. Session ids are UUIDs and
         # ``ses_``-style strings, so none of them parse as one.
@@ -65,11 +83,11 @@ def resolve_session(
         except ValueError:
             pass
         else:
-            if not 1 <= index <= len(summaries):
+            if not 1 <= index <= len(listed):
                 raise SessionSelectorError(
-                    "select.index_out_of_range", index=index, count=len(summaries)
+                    "select.index_out_of_range", index=index, count=len(listed)
                 )
-            chosen = summaries[index - 1]
+            chosen = listed[index - 1]
 
     if chosen is None:
         for summary in summaries:

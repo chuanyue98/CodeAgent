@@ -257,21 +257,18 @@ def resume_session_flow(
         return 1
 
 
-@click.command(name="resume")
+@click.command(name="resume", help=t("cli.desc.resume_cmd"))
 @click.argument("selector", required=False, default=None)
-@click.option("--engine", "-e", "engine", default=None, help="Filter by engine")
+@click.option(
+    "--engine", "-e", "engine", default=None, help=t("cli.help.resume_cmd_engine")
+)
 @click.option(
     "--no-launch",
     is_flag=True,
-    help="Print the resume command, but do not start the engine.",
+    help=t("cli.help.resume_cmd_no_launch"),
 )
 @click.pass_context
 def resume(ctx, selector, engine, no_launch):  # type: ignore[no-untyped-def]
-    """Resume a previous session from this project across any engine.
-
-    SELECTOR is an index (1, 2, ...) or session id. Omit it to see an
-    interactive list of recent sessions, or press Enter to resume the most recent.
-    """
     return resume_session_flow(
         ctx, selector=selector, engine=engine, no_launch=no_launch
     )

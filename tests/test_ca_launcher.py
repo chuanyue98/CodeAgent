@@ -8,6 +8,7 @@ import pytest
 
 import ca_launcher
 import core.cli.ui as core_ui
+from core.i18n import t
 
 #: The launcher hands the engine a copy of ``os.environ`` plus whatever it
 #: decides to add, so the proxy assertions below only mean "the launcher set
@@ -126,7 +127,9 @@ def test_main_help(capsys, monkeypatch):
     ca_launcher.main()
     captured = capsys.readouterr()
     assert "Usage:" in captured.out
-    assert "CodeAgent: Professional AI Engineering Shell" in captured.out
+    # 帮助跟随语言设置，所以对着消息表断言，而不是写死某一种语言的字面量。
+    assert t("cli.desc.root") in captured.out
+    assert t("cli.desc.status") in captured.out
 
 
 def test_main_ui_command(monkeypatch):
@@ -298,7 +301,20 @@ def test_frontend_sources_newer_than_dist_ignores_node_modules(tmp_path, monkeyp
     assert core_ui._frontend_sources_newer_than_dist() is True
 
 
-def test_main_new_command(monkeypatch):
+@pytest.fixture
+def opencode_on_path(monkeypatch):
+    """让 ``ca new`` 的引擎探测只看见 opencode。
+
+    CI 机器上一个引擎 CLI 都没装，而 ``ca new`` 现在挑的是第一个装好的引擎，
+    所以断言"用 opencode 写任务"的用例必须自己把 PATH 摆好。
+    """
+    monkeypatch.setattr(
+        "core.cli.commands.tasks.shutil.which",
+        lambda name: "/usr/bin/opencode" if name == "opencode" else None,
+    )
+
+
+def test_main_new_command(monkeypatch, opencode_on_path):
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", "new", "my-task"])
     with patch("subprocess.run") as mock_run:
         ca_launcher.main()
@@ -421,7 +437,9 @@ def test_prompt_without_engine_fails_without_fallback(monkeypatch, capsys):
     assert "Unknown engine or command" in err or "未知的引擎或命令" in err
 
 
-def test_new_command_with_a_real_name_still_dispatches_to_new(monkeypatch):
+def test_new_command_with_a_real_name_still_dispatches_to_new(
+    monkeypatch, opencode_on_path
+):
     # Confirms the reserved-word fallback doesn't break genuine subcommand
     # usage -- "ca new my-task" must still create a task draft, not launch
     # the default engine with "new my-task" as a prompt.
@@ -487,7 +505,9 @@ def test_project_root_survives_a_deleted_cwd(monkeypatch, tmp_path):
         assert ca_launcher._project_root() == tmp_path / "installed"
 
 
-def test_new_command_falls_back_to_absolute_path_on_relpath_failure(monkeypatch):
+def test_new_command_falls_back_to_absolute_path_on_relpath_failure(
+    monkeypatch, opencode_on_path
+):
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", "new", "my-task"])
 
     def raise_value_error(*_args, **_kwargs):

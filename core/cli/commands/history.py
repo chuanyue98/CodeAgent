@@ -47,33 +47,30 @@ def _history_list(ctx, engine, include_subagents=False):  # type: ignore[no-unty
     print(t("history.show_hint"))
 
 
-@click.group(invoke_without_command=True, hidden=True)
+@click.group(invoke_without_command=True, hidden=True, help=t("cli.desc.history"))
 @click.pass_context
 def history(ctx):  # type: ignore[no-untyped-def]
-    """Session history management."""
     if ctx.invoked_subcommand is None:
         _history_list(ctx, engine=None)
 
 
-@history.command(name="list")
-@click.option("--engine", default=None, help="Filter by engine")
+@history.command(name="list", help=t("cli.desc.history_list"))
+@click.option("--engine", default=None, help=t("cli.help.history_engine"))
 @click.option(
     "--include-subagents",
     is_flag=True,
-    help="Also list subagent runs, which belong to the session that spawned them",
+    help=t("cli.help.history_subagents"),
 )
 @click.pass_context
 def history_list(ctx, engine, include_subagents):  # type: ignore[no-untyped-def]
-    """List all sessions for this project."""
     _history_list(ctx, engine=engine, include_subagents=include_subagents)
 
 
-@history.command()
+@history.command(help=t("cli.desc.history_show"))
 @click.argument("engine_name")
 @click.argument("session_id")
 @click.pass_context
 def show(ctx, engine_name, session_id):  # type: ignore[no-untyped-def]
-    """Show full session content."""
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.session_history import repository
 
@@ -111,14 +108,13 @@ def show(ctx, engine_name, session_id):  # type: ignore[no-untyped-def]
         print()
 
 
-@history.command()
+@history.command(help=t("cli.desc.history_convert"))
 @click.argument("source_engine")
 @click.argument("session_id")
 @click.argument("target_engine")
-@click.option("--yes", "-y", is_flag=True, help="Skip the confirmation prompt")
+@click.option("--yes", "-y", is_flag=True, help=t("cli.help.history_yes"))
 @click.pass_context
 def convert(ctx, source_engine, session_id, target_engine, yes):  # type: ignore[no-untyped-def]
-    """Convert session to another engine format."""
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.session_history import repository
     from core.session_history.writers import write_session

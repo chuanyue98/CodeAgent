@@ -168,6 +168,20 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Target location: {path}",
         "zh": "目标位置: {path}",
     },
+    "task.authoring_engine": {
+        "en": "Authoring with: {engine}",
+        "zh": "本次由 {engine} 执笔",
+    },
+    "task.no_engine": {
+        "en": (
+            "No engine CLI found on PATH, so there is nothing to author with.\n"
+            "Install one (see `ca doctor`), or name it with `ca new <task> --engine <name>`."
+        ),
+        "zh": (
+            "PATH 上没有找到任何引擎 CLI，没法写任务。\n"
+            "先装一个 (可看 `ca doctor`)，或用 `ca new <任务名> --engine <引擎>` 指定。"
+        ),
+    },
     "task.authoring_prompt": {
         "en": (
             "Enter 'Task Authoring' mode. Write a new automation task playbook "
@@ -196,6 +210,395 @@ MESSAGES: dict[str, dict[str, str]] = {
     "cli.help.review_pr_url": {
         "en": "PR URL to review",
         "zh": "代码审查 PR URL",
+    },
+    "cli.epilog": {
+        "en": (
+            "Engines: opencode, claude, codex, codebuddy, antigravity (agy)\n\n"
+            "YOLO mode is enabled by default.\n\n"
+            "\b\n"
+            "Examples:\n"
+            "  ca                       Open interactive launcher console (in terminal)\n"
+            "  ca menu                  Same as bare ca\n"
+            "  ca claude                Start Claude Code\n"
+            "  ca codex                 Start OpenAI Codex\n"
+            "  ca opencode              Start OpenCode\n"
+            "  ca agy                   Start Google Antigravity\n"
+            "  ca -r                    List and resume recent sessions across all engines\n"
+            "  ca -r 2                  Resume the 2nd most recent session directly\n"
+            "  ca resume                Same as ca -r (supports --engine <name>)\n"
+            "  ca -s                    Switch a session to another engine interactively\n"
+            "  ca -s codex              Switch current session to Codex (Enter to confirm)\n"
+            "  ca -s codex 2            Switch the 2nd listed session to Codex directly\n"
+            "  ca switch codex          Same as ca -s codex\n"
+            "  ca status                Show current project, group, and standards status\n"
+            "  ca doctor --fix          Run health check and auto-repair\n"
+            "  ca ui                    Start the Web UI\n"
+            "  ca mcp install           Install CodeAgent MCP server into all engines"
+        ),
+        "zh": (
+            "引擎: opencode, claude, codex, codebuddy, antigravity (agy)\n\n"
+            "YOLO 模式默认开启。\n\n"
+            "\b\n"
+            "示例:\n"
+            "  ca                       打开交互式启动菜单\n"
+            "  ca menu                  同上\n"
+            "  ca claude                启动 Claude Code\n"
+            "  ca codex                 启动 OpenAI Codex\n"
+            "  ca opencode              启动 OpenCode\n"
+            "  ca agy                   启动 Google Antigravity\n"
+            "  ca -r                    列出并接力最近的会话 (跨所有引擎)\n"
+            "  ca -r 2                  直接接力列表里的第 2 条\n"
+            "  ca resume                同 ca -r (支持 --engine <引擎>)\n"
+            "  ca -s                    交互式把会话接力到另一个引擎\n"
+            "  ca -s codex              把当前会话接力到 Codex (回车确认)\n"
+            "  ca -s codex 2            直接把列表里的第 2 条接力到 Codex\n"
+            "  ca switch codex          同 ca -s codex\n"
+            "  ca status                看当前项目、资源组与规范的状态\n"
+            "  ca doctor --fix          体检环境并自动修复\n"
+            "  ca ui                    启动 Web UI\n"
+            "  ca mcp install           把 CodeAgent MCP 服务装进所有引擎"
+        ),
+    },
+    # --- ca 自己的 Click 帮助（命令说明与选项说明） ---
+    # 帮助是新用户读得最多的一屏，所以和运行时输出走同一套语言解析；
+    # 这些值在模块导入期就被 Click 装饰器取走，因此必须是纯查表、无副作用。
+    "cli.desc.root": {
+        "en": "CodeAgent: Professional AI Engineering Shell.",
+        "zh": "CodeAgent: 专业的 AI 工程外壳。",
+    },
+    "cli.help.proxy": {
+        "en": "Enable proxy from config.json",
+        "zh": "启用 config.json 中配置的代理",
+    },
+    "cli.help.yolo": {
+        "en": "Enable YOLO mode (bypass sandbox and approvals)",
+        "zh": "开启 YOLO 模式 (跳过沙箱与审批)",
+    },
+    "cli.help.resume": {
+        "en": "Resume a previous session (list sessions or pass index/ID)",
+        "zh": "接力之前的会话 (不带参数列出会话，也可传编号或 ID)",
+    },
+    "cli.help.resume_engine": {
+        "en": "Filter sessions by engine when resuming",
+        "zh": "接力时只看这个引擎的会话",
+    },
+    "cli.help.no_launch": {
+        "en": "Print the command without starting the engine",
+        "zh": "只打印命令，不真的启动引擎",
+    },
+    "cli.help.interactive": {
+        "en": "Launch interactive console menu",
+        "zh": "打开交互式控制台菜单",
+    },
+    "cli.desc.menu": {
+        "en": "Open the interactive launcher console",
+        "zh": "打开交互式启动菜单",
+    },
+    "cli.desc.status": {
+        "en": "Show what CodeAgent is currently doing for you.",
+        "zh": "看一眼 CodeAgent 此刻正在为你做什么。",
+    },
+    "cli.desc.ps": {
+        "en": "List background task runs.",
+        "zh": "列出后台任务的运行情况。",
+    },
+    "cli.help.ps_all": {
+        "en": "Include completed/failed/stopped runs, not just running ones",
+        "zh": "连同已完成/失败/已停止的一起列出，而不只是运行中的",
+    },
+    "cli.desc.stop": {
+        "en": "Stop a running background task.",
+        "zh": "停掉一个正在跑的后台任务。",
+    },
+    "cli.desc.batch_run": {
+        "en": "Run TASK_NAME once in every registered project.",
+        "zh": "把 TASK_NAME 这个任务在所有已登记的项目里各跑一遍。",
+    },
+    "cli.help.batch_engine": {
+        "en": "Engine to run the task with in every target project.",
+        "zh": "在每个目标项目里用哪个引擎跑这个任务。",
+    },
+    "cli.help.batch_group": {
+        "en": (
+            "Only target projects registered under this resource group "
+            "(default: all registered projects)."
+        ),
+        "zh": "只跑登记在这个资源组下的项目 (默认: 所有已登记项目)。",
+    },
+    "cli.help.batch_dry_run": {
+        "en": "List the projects that would run, without starting anything.",
+        "zh": "只列出会被跑到的项目，不真的启动。",
+    },
+    "cli.desc.new": {
+        "en": "Write a new task playbook with an engine's help.",
+        "zh": "让引擎陪你写一个新的任务剧本。",
+    },
+    "cli.help.new_engine": {
+        "en": "Engine to author the task with (default: the first one installed).",
+        "zh": "用哪个引擎来写这个任务 (默认: 第一个装好的引擎)。",
+    },
+    "cli.desc.doctor": {
+        "en": "Check the environment and repair what it can.",
+        "zh": "体检运行环境，能修的顺手修掉。",
+    },
+    "cli.help.doctor_fix": {
+        "en": "Auto-repair issues",
+        "zh": "自动修复发现的问题",
+    },
+    "cli.help.doctor_dry_run": {
+        "en": "Show what --fix would change, without making any changes",
+        "zh": "只展示 --fix 会改什么，不真的改",
+    },
+    "cli.desc.ui": {
+        "en": "Start the Web UI dashboard.",
+        "zh": "启动 Web UI 面板。",
+    },
+    "cli.help.ui_show_token": {
+        "en": "Print the Web UI token and exit, for opening the UI manually.",
+        "zh": "只打印 Web UI 的访问令牌然后退出，方便手动打开页面。",
+    },
+    "cli.help.ui_dev": {
+        "en": (
+            "Serve the frontend from a live-reloading Vite dev server instead "
+            "of the built bundle, so frontend edits need no rebuild."
+        ),
+        "zh": "前端走 Vite 开发服务器热更新，改前端不用重新构建。",
+    },
+    "cli.desc.switch": {
+        "en": (
+            "Continue a session in TARGET_ENGINE (shorthand: `ca -s`).\n\n"
+            "SELECTOR is the number `ca -r` / `ca history` printed, or a session "
+            "id. Omit it to take the most recent session in this project."
+        ),
+        "zh": (
+            "把一条会话接力到 TARGET_ENGINE 继续 (简写: `ca -s`)。\n\n"
+            "SELECTOR 是 `ca -r` / `ca history` 列表里的编号，或会话 ID。"
+            "不写就取这个项目最近的一条会话。"
+        ),
+    },
+    "cli.help.switch_from": {
+        "en": "Only consider sessions from this engine when picking the source.",
+        "zh": "只从这个引擎的会话里挑接力来源。",
+    },
+    "cli.help.switch_yes": {
+        "en": "Confirm the latest session without interactive prompt.",
+        "zh": "不问了，直接用最近的那条会话。",
+    },
+    "cli.help.switch_no_launch": {
+        "en": "Convert and print the resume command, but do not start the engine.",
+        "zh": "转换并打印接力命令，但不启动引擎。",
+    },
+    "cli.desc.resume_cmd": {
+        "en": (
+            "Resume a previous session from this project across any engine.\n\n"
+            "SELECTOR is an index (1, 2, ...) or session id. Omit it to see an "
+            "interactive list of recent sessions, or press Enter to resume the "
+            "most recent."
+        ),
+        "zh": (
+            "接着这个项目之前的会话继续，跨引擎都行。\n\n"
+            "SELECTOR 可以是编号 (1、2 ...) 或会话 ID。不写就会列出最近的会话让你挑，"
+            "直接回车则接力最近的一条。"
+        ),
+    },
+    "cli.help.resume_cmd_engine": {
+        "en": "Filter by engine",
+        "zh": "只看这个引擎的会话",
+    },
+    "cli.help.resume_cmd_no_launch": {
+        "en": "Print the resume command, but do not start the engine.",
+        "zh": "只打印接力命令，不启动引擎。",
+    },
+    "cli.desc.project": {
+        "en": "Manage the project registry (config.json's project_registry).",
+        "zh": "管理项目登记表 (config.json 里的 project_registry)。",
+    },
+    "cli.desc.project_add": {
+        "en": "Register PATH (default: the current directory) into a resource group.",
+        "zh": "把 PATH (默认当前目录) 登记到某个资源组下。",
+    },
+    "cli.desc.project_remove": {
+        "en": "Remove PATH from the project registry.",
+        "zh": "把 PATH 从项目登记表里删掉。",
+    },
+    "cli.desc.project_list": {
+        "en": "List every registered project and the group it is bound to.",
+        "zh": "列出所有已登记的项目，以及各自绑定的资源组。",
+    },
+    "cli.help.project_group": {
+        "en": "Resource group to bind this project to.",
+        "zh": "把这个项目绑定到哪个资源组。",
+    },
+    "cli.desc.resources": {
+        "en": "Discover skills, plugins, hooks, and prompts without opening the Web UI.",
+        "zh": "不开 Web UI 也能查看技能、插件、钩子与规范。",
+    },
+    "cli.desc.resources_list": {
+        "en": "List resources of KIND, marking which ones the group has enabled.",
+        "zh": "列出 KIND 这一类资源，并标出哪些在该分组里已启用。",
+    },
+    "cli.help.resources_group": {
+        "en": "Resource group to check the enabled/active state against.",
+        "zh": "按哪个资源组判断启用状态。",
+    },
+    "cli.desc.mcp": {
+        "en": "Inspect and sync MCP servers across engines.",
+        "zh": "查看并在各引擎之间同步 MCP 服务。",
+    },
+    "cli.desc.mcp_list": {
+        "en": "List configured MCP servers for ENGINE (default: all engines).",
+        "zh": "列出 ENGINE 已配置的 MCP 服务 (默认: 所有引擎)。",
+    },
+    "cli.desc.mcp_add": {
+        "en": "Add an MCP server named NAME to ENGINE.",
+        "zh": "给 ENGINE 添加一个名为 NAME 的 MCP 服务。",
+    },
+    "cli.help.mcp_add_url": {
+        "en": "Remote server URL, instead of a command.",
+        "zh": "远程服务地址，用来替代本地命令。",
+    },
+    "cli.help.mcp_add_env": {
+        "en": "Environment variable for the server; repeatable.",
+        "zh": "传给该服务的环境变量，可重复指定。",
+    },
+    "cli.help.mcp_add_transport": {
+        "en": "Transport for a --url server (e.g. http, sse). Ignored for stdio.",
+        "zh": "--url 服务使用的传输方式 (如 http、sse)；stdio 时忽略。",
+    },
+    "cli.desc.mcp_remove": {
+        "en": "Remove the MCP server named NAME from ENGINE.",
+        "zh": "从 ENGINE 中删除名为 NAME 的 MCP 服务。",
+    },
+    "cli.desc.mcp_sync": {
+        "en": "Copy SOURCE's MCP servers into the other engines.",
+        "zh": "把 SOURCE 的 MCP 服务复制到其他引擎。",
+    },
+    "cli.help.mcp_sync_to": {
+        "en": "Target engine; repeatable. Defaults to every engine but SOURCE.",
+        "zh": "目标引擎，可重复指定；默认是除 SOURCE 外的所有引擎。",
+    },
+    "cli.help.mcp_sync_name": {
+        "en": "Only sync this server; repeatable. Defaults to all of SOURCE's.",
+        "zh": "只同步这个服务，可重复指定；默认同步 SOURCE 的全部。",
+    },
+    "cli.help.mcp_sync_overwrite": {
+        "en": "Replace same-named servers in the targets instead of skipping them.",
+        "zh": "目标里有同名服务时覆盖，而不是跳过。",
+    },
+    "cli.help.mcp_dry_run": {
+        "en": "Show what would change without writing anything.",
+        "zh": "只展示会改什么，不写入任何文件。",
+    },
+    "cli.help.mcp_serve_http": {
+        "en": (
+            "Run in Streamable HTTP mode (default: stdio, which desktop tools "
+            "start as a subprocess)."
+        ),
+        "zh": "以 Streamable HTTP 模式运行 (默认 stdio，桌面工具子进程拉起即用)。",
+    },
+    "cli.help.mcp_serve_port": {
+        "en": "Port for HTTP mode (default: 8525).",
+        "zh": "HTTP 模式端口 (默认 8525)。",
+    },
+    "cli.help.mcp_serve_group": {
+        "en": (
+            "Filter skills by a config.json group, e.g. --group work; "
+            "mounts all of them by default."
+        ),
+        "zh": "按 config.json 的组过滤技能，如 --group work；默认挂载全部。",
+    },
+    "cli.help.mcp_serve_allow_write": {
+        "en": (
+            "Register skill.run / task.run, allowing skill scripts and tasks to "
+            "run (read-only by default)."
+        ),
+        "zh": "注册 skill.run / task.run，允许执行技能脚本与任务 (默认只读)。",
+    },
+    "cli.help.mcp_serve_trust_hooks": {
+        "en": (
+            "Also register hook.fire (arbitrary command execution, the most "
+            "dangerous); implies --allow-write."
+        ),
+        "zh": "再额外注册 hook.fire (任意命令执行，最高危)；隐含 --allow-write。",
+    },
+    "cli.desc.mcp_serve": {
+        "en": (
+            "Serve CodeAgent assets (skills) as an MCP server.\n\n"
+            "Exposes CodeAgent's own skills as MCP tools/resources, so any "
+            "MCP-capable client (CodeBuddy / Trae / Cursor / claude / codex) can "
+            "consume them. Read-only by default and never touches an API key; "
+            "use --allow-write / --trust-hooks to enable the write-side tools.\n\n"
+            "\b\n"
+            "Connect from the client:\n"
+            "  stdio:  uv run python -m core.services.mcp_server_service\n"
+            "          (or the subprocess command of `ca mcp serve`)\n"
+            "  http:   http://127.0.0.1:8525"
+        ),
+        "zh": (
+            "把 CodeAgent 的资产 (技能) 作为 MCP 服务暴露出去。\n\n"
+            "把 CodeAgent 自己的 skills 按 MCP 标准暴露成 tools/resources，"
+            "让任何支持 MCP 的客户端 (CodeBuddy / Trae / Cursor / claude / codex) "
+            "都能直接消费。默认只读，不接触任何 API 密钥；用 --allow-write / "
+            "--trust-hooks 开启写类工具。\n\n"
+            "\b\n"
+            "在客户端里连接:\n"
+            "  stdio:  uv run python -m core.services.mcp_server_service\n"
+            "          (或 ca mcp serve 的子进程命令)\n"
+            "  http:   http://127.0.0.1:8525"
+        ),
+    },
+    "cli.desc.mcp_install": {
+        "en": (
+            "Register CodeAgent's internal MCP server into target engines.\n\n"
+            "Allows engines like Claude, Codex, OpenCode, and Antigravity to "
+            "automatically discover CodeAgent's delegation tools "
+            "(ca_delegate_subtask) and shared skills."
+        ),
+        "zh": (
+            "把 CodeAgent 内置的 MCP 服务注册进目标引擎。\n\n"
+            "让 Claude、Codex、OpenCode、Antigravity 这些引擎能自动发现 CodeAgent "
+            "的委派工具 (ca_delegate_subtask) 与共享技能。"
+        ),
+    },
+    "cli.help.mcp_install_engine": {
+        "en": "Target engine(s) to register CodeAgent MCP server into. Defaults to all.",
+        "zh": "把 CodeAgent MCP 服务注册进哪些引擎，默认全部。",
+    },
+    "cli.help.mcp_install_no_write": {
+        "en": "Register in read-only mode (disable write tools like ca_delegate_subtask).",
+        "zh": "以只读模式注册 (禁用 ca_delegate_subtask 这类写工具)。",
+    },
+    "cli.help.mcp_install_remove": {
+        "en": "Remove CodeAgent MCP server from target engines instead of installing.",
+        "zh": "从目标引擎里卸载 CodeAgent MCP 服务，而不是安装。",
+    },
+    "cli.desc.history": {
+        "en": "Session history management.",
+        "zh": "会话历史管理。",
+    },
+    "cli.desc.history_list": {
+        "en": "List all sessions for this project.",
+        "zh": "列出这个项目的所有会话。",
+    },
+    "cli.desc.history_show": {
+        "en": "Show full session content.",
+        "zh": "展开一条会话的完整内容。",
+    },
+    "cli.desc.history_convert": {
+        "en": "Convert session to another engine format.",
+        "zh": "把会话转换成另一个引擎的格式。",
+    },
+    "cli.help.history_engine": {
+        "en": "Filter by engine",
+        "zh": "只看这个引擎的会话",
+    },
+    "cli.help.history_subagents": {
+        "en": "Also list subagent runs, which belong to the session that spawned them",
+        "zh": "把子任务也列出来 (它们隶属于派生它们的那条会话)",
+    },
+    "cli.help.history_yes": {
+        "en": "Skip the confirmation prompt",
+        "zh": "跳过确认提示",
     },
     # --- config / engine selection ---
     "config.seeded": {

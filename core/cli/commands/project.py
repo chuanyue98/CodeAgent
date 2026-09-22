@@ -14,21 +14,20 @@ from core.services.config_service import ConfigService
 from .. import helpers as _helpers  # noqa: F401 (kept for mirror)
 
 
-@click.group(name="project", invoke_without_command=True)
+@click.group(name="project", invoke_without_command=True, help=t("cli.desc.project"))
 @click.pass_context
 def project(ctx):  # type: ignore[no-untyped-def]
-    """Manage the project registry (config.json's project_registry)."""
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
 
 
-@project.command(name="add")
+@project.command(name="add", help=t("cli.desc.project_add"))
 @click.argument("path", required=False, default=".")
 @click.option(
     "--group",
     default="common",
     show_default=True,
-    help="Resource group to bind this project to.",
+    help=t("cli.help.project_group"),
 )
 @click.pass_context
 def project_add(ctx, path, group):  # type: ignore[no-untyped-def]
@@ -46,7 +45,7 @@ def project_add(ctx, path, group):  # type: ignore[no-untyped-def]
     print(t("project.registry_size", count=len(registry)))
 
 
-@project.command(name="remove")
+@project.command(name="remove", help=t("cli.desc.project_remove"))
 @click.argument("path")
 @click.pass_context
 def project_remove(ctx, path):  # type: ignore[no-untyped-def]
@@ -61,7 +60,7 @@ def project_remove(ctx, path):  # type: ignore[no-untyped-def]
     print(t("project.removed", path=resolved))
 
 
-@project.command(name="list")
+@project.command(name="list", help=t("cli.desc.project_list"))
 @click.pass_context
 def project_list(ctx):  # type: ignore[no-untyped-def]
     config = ctx.obj["config"]
