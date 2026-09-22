@@ -300,6 +300,42 @@ def test_write_antigravity_session_and_roundtrip(tmp_path: Path):
     assert len(parsed.messages[1].tool_calls) == 1
     assert parsed.messages[1].tool_calls[0].name == "test_tool"
 
+    # agy --conversation resolves via conversations/<sid>.db, not the transcript.
+    conv_db = (
+        tmp_path / ".gemini" / "antigravity-cli" / "conversations"
+        / "written-session-uuid.db"
+    )
+    assert conv_db.exists()
+    with sqlite3.connect(conv_db) as conn:
+        meta = conn.execute(
+            "SELECT cascade_id, trajectory_type, source FROM trajectory_meta"
+        ).fetchall()
+        assert len(meta) == 1
+        assert meta[0][0] == "written-session-uuid"
+        assert meta[0][1] == 4
+        assert meta[0][2] == 17
+
+        steps = conn.execute(
+            "SELECT idx, step_type, status FROM steps ORDER BY idx"
+        ).fetchall()
+        assert steps == [(0, 14, 3), (1, 15, 3)]
+        # Protobuf payloads must be non-empty blobs.
+        for (payload,) in conn.execute("SELECT step_payload FROM steps"):
+            assert payload and len(payload) > 0
+
+    # Summary row must exist with last_user_input_time (NOT NULL, no default).
+    summary_db = tmp_path / ".gemini" / "antigravity-cli" / "conversation_summaries.db"
+    assert summary_db.exists()
+    with sqlite3.connect(summary_db) as conn:
+        rows = conn.execute(
+            "SELECT title, last_user_input_time FROM conversation_summaries "
+            "WHERE conversation_id = ?",
+            ("written-session-uuid",),
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0][0] == "跨引擎写入测试"
+        assert rows[0][1]  # non-empty timestamp
+
 
 def test_write_session_dispatcher_antigravity(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
