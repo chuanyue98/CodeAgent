@@ -31,8 +31,12 @@ class _PluginBundleMixin:
     if TYPE_CHECKING:
 
         def resolve_skill_sources(self) -> list[tuple[str, Path]]: ...
-        def _create_skill_link(self, source: Path, target: Path) -> None: ...
-        def _cleanup_link_dir(self, link_path: Path) -> None: ...
+        def _ensure_managed_link(
+            self, source: Path, target: Path, link_path: Path
+        ) -> bool: ...
+        def _remove_stale_managed_links(
+            self, link_path: Path, desired_names: set[str]
+        ) -> None: ...
 
     def _get_plugin_config_dir(self) -> Path:
         """引擎的 customization root，``plugins/`` 和 ``config.json`` 都在这儿。"""
@@ -49,10 +53,18 @@ class _PluginBundleMixin:
         skills_dir = bundle / "skills"
         skills_dir.mkdir(parents=True, exist_ok=True)
 
+        # 上一次挂的、这次不在组里的技能先摘掉，否则换组后旧技能还留着。
+        self._remove_stale_managed_links(skills_dir, {name for name, _ in skills})
+
         linked = 0
         for target_name, skill_src in skills:
             try:
-                self._create_skill_link(skill_src, skills_dir / target_name)
+                # 用托管链接而不是裸 symlink：目标已存在时要按 manifest 判断是
+                # 我们上次挂的（复用）还是用户自己的东西（不动），裸 symlink
+                # 在第二次启动就会 FileExistsError。
+                self._ensure_managed_link(
+                    skill_src, skills_dir / target_name, skills_dir
+                )
             except Exception as exc:
                 logger.warning("Failed to link skill '%s': %s", target_name, exc)
                 continue

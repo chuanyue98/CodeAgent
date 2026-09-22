@@ -126,7 +126,6 @@ def main():
         engine.cleanup_skills_link(".claude/skills")
 
     # 规范不由启动器投递：claude 自己读项目根的 AGENTS.md（已实测）。
-    # 规范与技能的落盘是 `ca sync` 的事，这里只做本次会话需要的注入。
     try:
         final_command = engine.build_command(
             engine.first_message(message),
