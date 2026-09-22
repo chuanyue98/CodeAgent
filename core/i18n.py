@@ -1387,6 +1387,12 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "none of the configured addresses reachable ({addresses})",
         "zh": "配置的地址均无法连通 ({addresses})",
     },
+    "doctor.proxy_idle": {
+        "en": (
+            "configured but not in use this run ({addresses}); `ca --proxy` turns it on"
+        ),
+        "zh": "已配置但本次未启用 ({addresses})；用 ca --proxy 启用",
+    },
     "doctor.proxy_hint": {
         "en": "Start your proxy or update config.json",
         "zh": "请启动代理，或更新 config.json",

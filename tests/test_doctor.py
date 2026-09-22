@@ -468,3 +468,68 @@ def test_every_supported_engine_is_probed():
 
     assert set(ENGINE_BINARIES) == set(ENGINES)
     assert set(ENGINE_INSTALL_HINTS) == set(ENGINES)
+
+
+# ── 代理 ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def no_proxy_env(monkeypatch):
+    for name in doctor._PROXY_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
+def _proxy_section(monkeypatch, *, reachable: bool, requested: bool = False):
+    monkeypatch.setattr(
+        "core.cli.helpers.is_tcp_port_open", lambda host, port, **_: reachable
+    )
+    section = doctor.Section("Environment")
+    doctor.check_proxy(
+        section, {"proxy": [{"host": "127.0.0.1", "port": 1087}]}, requested=requested
+    )
+    return section
+
+
+def test_unreachable_proxy_is_not_a_warning_when_nothing_uses_it(
+    monkeypatch, no_proxy_env
+):
+    """代理是可选功能，没启用时连不上只是陈述，不该常年挂一盏黄灯。"""
+    section = _proxy_section(monkeypatch, reachable=False)
+    assert section.checks[0].status == doctor.INFO
+    assert "127.0.0.1:1087" in section.checks[0].detail
+
+
+def test_unreachable_proxy_warns_when_the_run_asked_for_it(monkeypatch, no_proxy_env):
+    section = _proxy_section(monkeypatch, reachable=False, requested=True)
+    assert section.checks[0].status == doctor.WARN
+
+
+def test_unreachable_proxy_warns_when_the_shell_already_points_at_it(
+    monkeypatch, no_proxy_env
+):
+    """用户自己 export 了代理变量，那代理就在用，连不上是真问题。"""
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:1087")
+    section = _proxy_section(monkeypatch, reachable=False)
+    assert section.checks[0].status == doctor.WARN
+
+
+def test_an_unrelated_shell_proxy_does_not_make_it_a_warning(monkeypatch, no_proxy_env):
+    monkeypatch.setenv("HTTPS_PROXY", "http://10.0.0.9:8080")
+    section = _proxy_section(monkeypatch, reachable=False)
+    assert section.checks[0].status == doctor.INFO
+
+
+def test_a_reachable_proxy_is_reported_green_either_way(monkeypatch, no_proxy_env):
+    assert _proxy_section(monkeypatch, reachable=True).checks[0].status == doctor.OK
+
+
+def test_no_proxy_configured_stays_informational(monkeypatch, no_proxy_env):
+    section = doctor.Section("Environment")
+    doctor.check_proxy(section, {})
+    assert section.checks[0].status == doctor.INFO
+
+
+def test_bare_host_port_in_the_environment_is_understood(monkeypatch, no_proxy_env):
+    """代理变量不带 scheme 也很常见，别因为解析不出来就漏报。"""
+    monkeypatch.setenv("ALL_PROXY", "127.0.0.1:1087")
+    assert doctor._ambient_proxy_targets() == {("127.0.0.1", 1087)}
