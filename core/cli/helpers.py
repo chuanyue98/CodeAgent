@@ -41,6 +41,22 @@ def init_cli_runtime() -> None:
     configure_root_logging()
 
 
+def warm_session_index() -> None:
+    """读会话之前调用：首轮索引没建好就当场建完，并说明这几秒卡在哪。
+
+    ``repository`` 只在这里按需导入——它会把五个引擎的 parser 一并拉进来，
+    而 ``ca claude`` 这类根本不碰历史的命令不该为此付启动时间。
+    """
+    from core.session_history import repository
+
+    def announce() -> None:
+        # 进度信息走 stderr：``ca -r 1 --no-launch`` 的 stdout 是给人直接复制
+        # 的恢复命令，不该混进一行提示。
+        print(t("history.index_building"), file=sys.stderr, flush=True)
+
+    repository.ensure_index_ready(announce)
+
+
 FALLBACK_ENGINE: str | None = None
 
 

@@ -93,6 +93,8 @@ def resume_session_flow(
     from core.services.resume_commands import resume_command
     from core.session_history import repository
 
+    _helpers.warm_session_index()
+
     if engine:
         engine = normalize_engine_name(engine)
 

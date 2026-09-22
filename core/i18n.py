@@ -418,6 +418,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh": "UI token：{token}",
     },
     # --- ca history ---
+    "history.index_building": {
+        "en": "Building the session index (one-off; later runs are instant)...",
+        "zh": "正在建立会话索引（只需一次，之后秒开）...",
+    },
     "history.none": {
         "en": "No sessions found for this project.",
         "zh": "当前项目没有找到任何会话。",

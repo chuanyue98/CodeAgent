@@ -68,10 +68,48 @@ class SessionIndexer:
         self._lock = threading.Lock()
         self._syncing = False
         self._last_finished = 0.0
+        self._first_build_attempted = False
 
     @property
     def index(self) -> SessionIndex:
         return self._index
+
+    def _index_matches_parsers(self) -> bool:
+        """索引里的数据是否出自当前这套解析器。
+
+        指纹对不上说明它是上一版解析器的产物，``_sync_locked`` 会把它整个清掉
+        重建——在那之前它不该被当成"可用的索引"读出去。
+        """
+        return self._index.get_meta(_PARSER_FINGERPRINT_KEY) == _parser_fingerprint()
+
+    def ensure_ready(self, notify: Callable[[], None] | None = None) -> bool:
+        """索引还没建好时**阻塞**建完，返回索引此刻是否可用。
+
+        ``sync_if_stale`` 把同步交给 daemon 线程，那是给长驻进程准备的：服务
+        活得够久，首轮建完之后每个请求都能走索引。一次性的 CLI 进程等不到那
+        一刻——线程随进程一起死，``LAST_SYNC_KEY`` 落不了盘，读路径于是每次
+        都回退到全量解析。全量解析的成本两边一样，差别只在付一次还是付每次，
+        所以 CLI 的读路径要在前台把首轮跑完。
+
+        ``notify`` 在确定要阻塞之后、真正开跑之前调用一次，让调用方有机会解释
+        这几秒钟卡在哪。
+
+        升级换了解析器时同样要在前台重建：后台线程会先 ``clear_all()`` 再慢慢
+        填回去，主线程若同时在读，拿到的就是一份正在被清空的索引。
+
+        失败只试一次：坏文件或被占用的库会让 :meth:`sync` 原地失败，同一条命令
+        里的第二次读不该再赔一轮全量解析——调用方照旧回退到直接解析。
+        """
+        if self._index.is_ready() and self._index_matches_parsers():
+            return True
+        if self._first_build_attempted:
+            return False
+        self._first_build_attempted = True
+        if notify is not None:
+            notify()
+        self.sync()
+        # 与入口同一个判据：sync() 撞上单飞锁时会空跑，那时索引仍不该算可用。
+        return self._index.is_ready() and self._index_matches_parsers()
 
     def sync(self, *, force: bool = False) -> None:
         """跑一次增量同步。已在同步时直接返回（单飞）。"""
