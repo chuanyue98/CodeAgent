@@ -110,10 +110,9 @@ def _engines_section() -> Section:
     return section
 
 
-@click.command(name="status")
+@click.command(name="status", help=t("cli.desc.status"))
 @click.pass_context
 def status(ctx):  # type: ignore[no-untyped-def]
-    """Show what CodeAgent is currently doing for you."""
     config = ctx.obj["config"]
 
     # 用已加载的那份配置，避免二次读盘；ConfigManager 只借用它的组解析逻辑

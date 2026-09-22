@@ -241,6 +241,9 @@ ca history convert claude <session_id> opencode
 # Create a new task draft via interview workflow
 ca new my-automation-task
 
+# Pick which engine conducts the interview (default: the first one installed)
+ca new my-automation-task --engine claude
+
 # Run a pre-defined task
 python ca_launcher.py opencode -t refactor
 ```

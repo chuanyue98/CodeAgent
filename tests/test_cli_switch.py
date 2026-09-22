@@ -9,13 +9,19 @@ from core.cli.session_select import SessionSelectorError, resolve_session
 from core.session_history.models import EngineType, UnifiedMessage, UnifiedSession
 
 
-def _session(session_id: str, engine: EngineType, started_at: str) -> UnifiedSession:
+def _session(
+    session_id: str,
+    engine: EngineType,
+    started_at: str,
+    parent_session_id: str = "",
+) -> UnifiedSession:
     return UnifiedSession(
         session_id=session_id,
         engine=engine,
         project_path="/proj",
         started_at=started_at,
         messages=[UnifiedMessage(role="user", content="hi")],
+        parent_session_id=parent_session_id,
     )
 
 
@@ -79,6 +85,59 @@ def test_empty_project_points_at_starting_a_session():
 def test_engine_filter_reaches_the_finder(find_all):
     resolve_session(None, "/proj", engine="codex")
     assert find_all.call_args.kwargs["engine"] == "codex"
+
+
+@pytest.fixture
+def with_subagents(sessions):
+    """列表里混入子任务：仓储按时间排序，不区分主会话与子任务。"""
+    mixed = [
+        sessions[0],
+        _session(
+            "sub-of-newest",
+            EngineType.CLAUDE,
+            "2026-08-26T20:00:00",
+            parent_session_id="newest",
+        ),
+        sessions[1],
+        sessions[2],
+    ]
+    summaries = [s.to_summary_dict() for s in mixed]
+    by_id = {s.session_id: s for s in mixed}
+    with patch(
+        "core.session_history.repository.list_summaries", return_value=summaries
+    ):
+        with patch(
+            "core.session_history.repository.get_full",
+            side_effect=lambda engine, session_id, project=None: by_id.get(session_id),
+        ):
+            yield
+
+
+def test_index_skips_subagents_like_the_printed_list(with_subagents):
+    """``ca -r`` 的 [2] 与 ``ca -s <engine> 2`` 必须是同一个会话。"""
+    assert resolve_session("2", "/proj").session_id == "middle"
+
+
+def test_index_past_the_end_counts_only_listed_sessions(with_subagents):
+    with pytest.raises(SessionSelectorError) as excinfo:
+        resolve_session("4", "/proj")
+    assert excinfo.value.fields == {"index": 4, "count": 3}
+
+
+def test_subagents_count_when_the_caller_listed_them(with_subagents):
+    assert (
+        resolve_session("2", "/proj", include_subagents=True).session_id
+        == "sub-of-newest"
+    )
+
+
+def test_a_subagent_id_still_resolves(with_subagents):
+    """按编号选不到子任务，但用 id 点名它应该照样能接力。"""
+    assert resolve_session("sub-of-newest", "/proj").session_id == "sub-of-newest"
+
+
+def test_most_recent_session_is_never_a_subagent(with_subagents):
+    assert resolve_session(None, "/proj").session_id == "newest"
 
 
 def _run_switch(monkeypatch, argv):

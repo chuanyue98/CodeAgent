@@ -12,21 +12,22 @@ from .. import helpers as _helpers
 _RESOURCE_KINDS = ("skills", "plugins", "hooks", "prompts")
 
 
-@click.group(name="resources", invoke_without_command=True)
+@click.group(
+    name="resources", invoke_without_command=True, help=t("cli.desc.resources")
+)
 @click.pass_context
 def resources(ctx):  # type: ignore[no-untyped-def]
-    """Discover skills, plugins, hooks, and prompts without opening the Web UI."""
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
 
 
-@resources.command(name="list")
+@resources.command(name="list", help=t("cli.desc.resources_list"))
 @click.argument("kind", type=click.Choice(_RESOURCE_KINDS))
 @click.option(
     "--group",
     default="codeagent",
     show_default=True,
-    help="Resource group to check the enabled/active state against.",
+    help=t("cli.help.resources_group"),
 )
 @click.pass_context
 def resources_list(ctx, kind, group):  # type: ignore[no-untyped-def]

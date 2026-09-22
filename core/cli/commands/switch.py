@@ -198,34 +198,29 @@ def _select_target_engine(candidates: list[str]) -> str | None:
     ).ask()
 
 
-@click.command()
+@click.command(help=t("cli.desc.switch"))
 @click.argument("target_engine", required=False, default=None)
 @click.argument("selector", required=False, default=None)
 @click.option(
     "--engine",
     "source_engine",
     default=None,
-    help="Only consider sessions from this engine when picking the source.",
+    help=t("cli.help.switch_from"),
 )
 @click.option(
     "-y",
     "--yes",
     is_flag=True,
     default=False,
-    help="Confirm the latest session without interactive prompt.",
+    help=t("cli.help.switch_yes"),
 )
 @click.option(
     "--no-launch",
     is_flag=True,
-    help="Convert and print the resume command, but do not start the engine.",
+    help=t("cli.help.switch_no_launch"),
 )
 @click.pass_context
 def switch(ctx, target_engine, selector, source_engine, yes, no_launch):  # type: ignore[no-untyped-def]
-    """Continue a session in TARGET_ENGINE (shorthand: `ca -s`).
-
-    SELECTOR is the number `ca history` printed, or a session id. Omit it to
-    take the most recent session in this project.
-    """
     if target_engine is not None:
         target_engine = normalize_engine_name(target_engine)
         if target_engine not in ENGINES:
@@ -268,10 +263,12 @@ def switch(ctx, target_engine, selector, source_engine, yes, no_launch):  # type
             return 1
     else:
         # Interactive mode without explicit selector: show candidate sessions preview
+        # 口径与 ``ca -r`` 的列表一致：子任务不是用户要接力的对象，编号也因此
+        # 在两个命令之间对得上。
         summaries = repository.list_summaries(
             project=project_path,
             engine=source_engine,
-            include_subagents=True,
+            include_subagents=False,
             limit=20,
         )
         if not summaries:

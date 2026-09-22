@@ -3,24 +3,26 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import click
 
+from core.constants import normalize_engine_name
 from core.engine_registry import ENGINES
 from core.i18n import t
 
 from .. import helpers as _helpers
 
 
-@click.command()
+@click.command(help=t("cli.desc.ps"))
 @click.option(
     "--all",
     "show_all",
     is_flag=True,
-    help="Include completed/failed/stopped runs, not just running ones",
+    help=t("cli.help.ps_all"),
 )
 @click.pass_context
 def ps(ctx, show_all):  # type: ignore[no-untyped-def]
@@ -42,7 +44,7 @@ def ps(ctx, show_all):  # type: ignore[no-untyped-def]
         print(t("ps.hint"))
 
 
-@click.command()
+@click.command(help=t("cli.desc.stop"))
 @click.argument("task_id")
 @click.pass_context
 def stop(ctx, task_id):  # type: ignore[no-untyped-def]
@@ -63,23 +65,23 @@ def stop(ctx, task_id):  # type: ignore[no-untyped-def]
         sys.exit(1)
 
 
-@click.command(name="batch-run")
+@click.command(name="batch-run", help=t("cli.desc.batch_run"))
 @click.argument("task_name")
 @click.option(
     "--engine",
     required=True,
     type=click.Choice(sorted(ENGINES)),
-    help="Engine to run the task with in every target project.",
+    help=t("cli.help.batch_engine"),
 )
 @click.option(
     "--group",
     default=None,
-    help="Only target projects registered under this resource group (default: all registered projects).",
+    help=t("cli.help.batch_group"),
 )
 @click.option(
     "--dry-run",
     is_flag=True,
-    help="List the projects that would run, without starting anything.",
+    help=t("cli.help.batch_dry_run"),
 )
 @click.pass_context
 def batch_run(ctx, task_name, engine, group, dry_run):  # type: ignore[no-untyped-def]
@@ -156,10 +158,34 @@ def batch_run(ctx, task_name, engine, group, dry_run):  # type: ignore[no-untype
         sys.exit(1)
 
 
-@click.command()
+def _pick_authoring_engine(preferred: str | None) -> str | None:
+    """挑一个能用来编写任务的引擎。
+
+    显式指定的引擎即便不在 PATH 上也照样返回——那时该由引擎自己的启动脚本
+    报"没装"，而不是在这里悄悄换成别的引擎。没指定时按注册表顺序取第一个装了
+    的，opencode 优先只是为了保持这个命令一直以来的默认。
+    """
+    if preferred:
+        return normalize_engine_name(preferred)
+
+    order = ["opencode", *(name for name in ENGINES if name != "opencode")]
+    for name in order:
+        spec = ENGINES.get(name)
+        if spec and any(shutil.which(candidate) for candidate in spec.cli_candidates):
+            return name
+    return None
+
+
+@click.command(help=t("cli.desc.new"))
 @click.argument("name", required=False)
+@click.option(
+    "--engine",
+    default=None,
+    type=click.Choice(sorted(ENGINES)),
+    help=t("cli.help.new_engine"),
+)
 @click.pass_context
-def new(ctx, name):  # type: ignore[no-untyped-def]
+def new(ctx, name, engine):  # type: ignore[no-untyped-def]
     config = ctx.obj["config"]
     root = ctx.obj["root"]
     child_env = ctx.obj["child_env"]
@@ -177,19 +203,24 @@ def new(ctx, name):  # type: ignore[no-untyped-def]
     except ValueError:
         rel_tasks_path = str(tasks_dir)
     target_file = os.path.join(rel_tasks_path, f"{task_name}.md").replace("\\", "/")
-    engine_script = str(root / "engines" / "start_opencode.py")
+    engine_name = _pick_authoring_engine(engine)
+    if engine_name is None:
+        print(t("task.no_engine"), file=sys.stderr)
+        return 1
+    engine_script = str(root / "engines" / ENGINES[engine_name].launch_script)
     print(t("task.authoring_start", name=task_name))
     print(t("task.target_location", path=target_file))
+    print(t("task.authoring_engine", engine=ENGINES[engine_name].display_name))
     cmd = [sys.executable, engine_script, t("task.authoring_prompt") + str(target_file)]
     return subprocess.run(cmd, env=child_env).returncode
 
 
-@click.command()
-@click.option("--fix", is_flag=True, help="Auto-repair issues")
+@click.command(help=t("cli.desc.doctor"))
+@click.option("--fix", is_flag=True, help=t("cli.help.doctor_fix"))
 @click.option(
     "--dry-run",
     is_flag=True,
-    help="Show what --fix would change, without making any changes",
+    help=t("cli.help.doctor_dry_run"),
 )
 @click.pass_context
 def doctor(ctx, fix, dry_run):  # type: ignore[no-untyped-def]
@@ -199,19 +230,16 @@ def doctor(ctx, fix, dry_run):  # type: ignore[no-untyped-def]
     return run_doctor(fix=fix, dry_run=dry_run)
 
 
-@click.command()
+@click.command(help=t("cli.desc.ui"))
 @click.option(
     "--show-token",
     is_flag=True,
-    help="Print the Web UI token and exit, for opening the UI manually.",
+    help=t("cli.help.ui_show_token"),
 )
 @click.option(
     "--dev",
     is_flag=True,
-    help=(
-        "Serve the frontend from a live-reloading Vite dev server instead of "
-        "the built bundle, so frontend edits need no rebuild."
-    ),
+    help=t("cli.help.ui_dev"),
 )
 @click.pass_context
 def ui(ctx, show_token, dev):  # type: ignore[no-untyped-def]

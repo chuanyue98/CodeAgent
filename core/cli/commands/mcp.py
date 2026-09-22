@@ -15,19 +15,17 @@ from .. import helpers as _helpers
 _ENGINE_CHOICE = click.Choice(sorted(ENGINES))
 
 
-@click.group(name="mcp", invoke_without_command=True)
+@click.group(name="mcp", invoke_without_command=True, help=t("cli.desc.mcp"))
 @click.pass_context
 def mcp(ctx):  # type: ignore[no-untyped-def]
-    """Inspect and sync MCP servers across engines."""
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
 
 
-@mcp.command(name="list")
+@mcp.command(name="list", help=t("cli.desc.mcp_list"))
 @click.argument("engine", type=_ENGINE_CHOICE, required=False)
 @click.pass_context
 def mcp_list(ctx, engine):  # type: ignore[no-untyped-def]
-    """List configured MCP servers for ENGINE (default: all engines)."""
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.services import mcp_service
 
@@ -50,22 +48,22 @@ def mcp_list(ctx, engine):  # type: ignore[no-untyped-def]
             click.echo(f"  ● {server['name']}  [{server['transport']}]  {target}")
 
 
-@mcp.command(name="add")
+@mcp.command(name="add", help=t("cli.desc.mcp_add"))
 @click.argument("engine", type=_ENGINE_CHOICE)
 @click.argument("name")
 @click.argument("command", nargs=-1)
-@click.option("--url", default=None, help="Remote server URL, instead of a command.")
+@click.option("--url", default=None, help=t("cli.help.mcp_add_url"))
 @click.option(
     "--env",
     "env_pairs",
     multiple=True,
     metavar="KEY=VALUE",
-    help="Environment variable for the server; repeatable.",
+    help=t("cli.help.mcp_add_env"),
 )
 @click.option(
     "--transport",
     default=None,
-    help="Transport for a --url server (e.g. http, sse). Ignored for stdio.",
+    help=t("cli.help.mcp_add_transport"),
 )
 @click.pass_context
 def mcp_add(ctx, engine, name, command, url, env_pairs, transport):  # type: ignore[no-untyped-def]
@@ -99,7 +97,7 @@ def mcp_add(ctx, engine, name, command, url, env_pairs, transport):  # type: ign
     print(t("mcp.sync_targets", targets=", ".join(others)))
 
 
-@mcp.command(name="remove")
+@mcp.command(name="remove", help=t("cli.desc.mcp_remove"))
 @click.argument("engine", type=_ENGINE_CHOICE)
 @click.argument("name")
 @click.pass_context
@@ -118,29 +116,27 @@ def mcp_remove(ctx, engine, name):  # type: ignore[no-untyped-def]
     print(t("mcp.removed", name=name, engine=engine))
 
 
-@mcp.command(name="sync")
+@mcp.command(name="sync", help=t("cli.desc.mcp_sync"))
 @click.argument("source", type=_ENGINE_CHOICE)
 @click.option(
     "--to",
     "targets",
     multiple=True,
     type=_ENGINE_CHOICE,
-    help="Target engine; repeatable. Defaults to every engine but SOURCE.",
+    help=t("cli.help.mcp_sync_to"),
 )
 @click.option(
     "--name",
     "names",
     multiple=True,
-    help="Only sync this server; repeatable. Defaults to all of SOURCE's.",
+    help=t("cli.help.mcp_sync_name"),
 )
 @click.option(
     "--overwrite",
     is_flag=True,
-    help="Replace same-named servers in the targets instead of skipping them.",
+    help=t("cli.help.mcp_sync_overwrite"),
 )
-@click.option(
-    "--dry-run", is_flag=True, help="Show what would change without writing anything."
-)
+@click.option("--dry-run", is_flag=True, help=t("cli.help.mcp_dry_run"))
 @click.pass_context
 def mcp_sync(ctx, source, targets, names, overwrite, dry_run):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
@@ -180,41 +176,30 @@ def mcp_sync(ctx, source, targets, names, overwrite, dry_run):  # type: ignore[n
         sys.exit(1)
 
 
-@mcp.command(name="serve")
+@mcp.command(name="serve", help=t("cli.desc.mcp_serve"))
 @click.option(
     "--http",
     is_flag=True,
-    help="以 Streamable HTTP 模式运行(默认 stdio,桌面工具子进程拉起即用)。",
+    help=t("cli.help.mcp_serve_http"),
 )
-@click.option("--port", default=8525, type=int, help="HTTP 模式端口(默认 8525)。")
+@click.option("--port", default=8525, type=int, help=t("cli.help.mcp_serve_port"))
 @click.option(
     "--group",
     default=None,
-    help="按 config.json 的组过滤技能,如 --group work;默认挂载全部。",
+    help=t("cli.help.mcp_serve_group"),
 )
 @click.option(
     "--allow-write",
     is_flag=True,
-    help="注册 skill.run / task.run,允许执行技能脚本与任务(默认只读)。",
+    help=t("cli.help.mcp_serve_allow_write"),
 )
 @click.option(
     "--trust-hooks",
     is_flag=True,
-    help="再额外注册 hook.fire(任意命令执行,最高危);隐含 --allow-write。",
+    help=t("cli.help.mcp_serve_trust_hooks"),
 )
 @click.pass_context
 def mcp_serve(ctx, http, port, group, allow_write, trust_hooks):  # type: ignore[no-untyped-def]
-    """Serve CodeAgent assets (skills) as an MCP server.
-
-    把 CodeAgent 自己的 skills 按 MCP 标准暴露成 tools/resources,
-    让任何支持 MCP 的客户端(CodeBuddy / Trae / Cursor / claude / codex)
-    都能直接消费。默认只读,不接触任何 API 密钥;用 --allow-write / --trust-hooks
-    开启写类工具。
-
-    在客户端里连接:
-      stdio:  uv run python -m core.services.mcp_server_service(或 ca mcp serve 的子进程命令)
-      http:   http://127.0.0.1:8525
-    """
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.services.mcp_server_service import serve
 
@@ -234,37 +219,31 @@ def mcp_serve(ctx, http, port, group, allow_write, trust_hooks):  # type: ignore
         sys.exit(1)
 
 
-@mcp.command(name="install")
+@mcp.command(name="install", help=t("cli.desc.mcp_install"))
 @click.option(
     "--engine",
     "targets",
     multiple=True,
     type=_ENGINE_CHOICE,
-    help="Target engine(s) to register CodeAgent MCP server into. Defaults to all.",
+    help=t("cli.help.mcp_install_engine"),
 )
 @click.option(
     "--no-write",
     is_flag=True,
-    help="Register in read-only mode (disable write tools like ca_delegate_subtask).",
+    help=t("cli.help.mcp_install_no_write"),
 )
 @click.option(
     "--dry-run",
     is_flag=True,
-    help="Show what would change without writing anything.",
+    help=t("cli.help.mcp_dry_run"),
 )
 @click.option(
     "--remove",
     is_flag=True,
-    help="Remove CodeAgent MCP server from target engines instead of installing.",
+    help=t("cli.help.mcp_install_remove"),
 )
 @click.pass_context
 def mcp_install(ctx, targets, no_write, dry_run, remove):  # type: ignore[no-untyped-def]
-    """Register CodeAgent's internal MCP server into target engines.
-
-    Allows engines like Claude, Codex, OpenCode, and Antigravity to
-    automatically discover CodeAgent's delegation tools (ca_delegate_subtask)
-    and shared skills.
-    """
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.services import mcp_service
 

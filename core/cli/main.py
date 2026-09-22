@@ -22,31 +22,8 @@ from .commands.switch import switch
 from .commands.tasks import batch_run, doctor, new, ps, stop, ui
 from .helpers import init_cli_runtime
 
-EPILOG = """\
-Engines: opencode, claude, codex, codebuddy, antigravity (agy)
-
-YOLO mode is enabled by default.
-
-\b
-Examples:
-  ca                       Open interactive launcher console (in terminal)
-  ca menu                  Same as bare ca
-  ca claude                Start Claude Code
-  ca codex                 Start OpenAI Codex
-  ca opencode              Start OpenCode
-  ca agy                   Start Google Antigravity
-  ca -r                    List and resume recent sessions across all engines
-  ca -r 2                  Resume the 2nd most recent session directly
-  ca resume                Same as ca -r (supports --engine <name>)
-  ca -s                    Switch a session to another engine interactively
-  ca -s codex              Switch current session to Codex (Enter to confirm)
-  ca -s codex 2            Switch 2nd session to Codex directly
-  ca switch codex          Same as ca -s codex
-  ca status                Show current project, group, and standards status
-  ca doctor --fix          Run health check and auto-repair
-  ca ui                    Start the Web UI
-  ca mcp install           Install CodeAgent MCP server into all engines
-"""
+#: 供 ``ca_launcher`` 与测试沿用的老名字；内容现在跟随语言设置。
+EPILOG = t("cli.epilog")
 
 
 def _reserved_command_can_handle(cmd, parent_ctx, cmd_name, rest):  # type: ignore[no-untyped-def]
@@ -98,15 +75,16 @@ class CodeAgentGroup(click.Group):
         allow_extra_args=True,
         allow_interspersed_args=False,
     ),
+    help=t("cli.desc.root"),
     epilog=EPILOG,
 )
-@click.option("--proxy", is_flag=True, help="Enable proxy from config.json")
+@click.option("--proxy", is_flag=True, help=t("cli.help.proxy"))
 @click.option(
     "-y",
     "--yolo",
     is_flag=True,
     default=False,
-    help="Enable YOLO mode (bypass sandbox and approvals)",
+    help=t("cli.help.yolo"),
 )
 @click.option(
     "-r",
@@ -115,27 +93,27 @@ class CodeAgentGroup(click.Group):
     is_flag=False,
     flag_value="",
     default=None,
-    help="Resume a previous session (list sessions or pass index/ID)",
+    help=t("cli.help.resume"),
 )
 @click.option(
     "-e",
     "--engine",
     "resume_engine",
     default=None,
-    help="Filter sessions by engine when resuming",
+    help=t("cli.help.resume_engine"),
 )
 @click.option(
     "--no-launch",
     is_flag=True,
     default=False,
-    help="Print the command without starting the engine",
+    help=t("cli.help.no_launch"),
 )
 @click.option(
     "-i",
     "--interactive",
     is_flag=True,
     default=False,
-    help="Launch interactive console menu",
+    help=t("cli.help.interactive"),
 )
 @click.pass_context
 def cli(ctx, proxy, yolo, resume_selector, resume_engine, no_launch, interactive):  # type: ignore[no-untyped-def]
@@ -197,7 +175,7 @@ def _launch(ctx, args):  # type: ignore[no-untyped-def]
 
 @cli.command(
     name="menu",
-    help="Open the interactive launcher console",
+    help=t("cli.desc.menu"),
 )
 @click.pass_context
 def menu(ctx):  # type: ignore[no-untyped-def]
