@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from core.session_history.previews import result_for_writer
 from core.utils.atomic_write import atomic_write
 
 if TYPE_CHECKING:
@@ -179,17 +180,20 @@ def write_codex_session(session: UnifiedSession) -> str:
                 }
                 lines.append(json.dumps(func_call, ensure_ascii=False))
 
-                if tc.result_preview:
-                    func_output = {
-                        "timestamp": msg.timestamp or now,
-                        "type": "response_item",
-                        "payload": {
-                            "type": "function_call_output",
-                            "call_id": call_id,
-                            "output": tc.result_preview,
-                        },
-                    }
-                    lines.append(json.dumps(func_output, ensure_ascii=False))
+                # Always paired, the way Codex writes its own transcripts: a
+                # function_call with no output is a call still in flight. When
+                # the source engine gave us no result, say so rather than
+                # reporting a successful call that printed nothing.
+                func_output = {
+                    "timestamp": msg.timestamp or now,
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call_output",
+                        "call_id": call_id,
+                        "output": result_for_writer(tc),
+                    },
+                }
+                lines.append(json.dumps(func_output, ensure_ascii=False))
 
     # Write the file atomically to prevent corruption on crash
     atomic_write(file_path, "\n".join(lines) + "\n")

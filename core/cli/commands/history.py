@@ -17,6 +17,8 @@ def _history_list(ctx, engine, include_subagents=False):  # type: ignore[no-unty
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.session_history import repository
 
+    _helpers.warm_session_index()
+
     if engine:
         engine = normalize_engine_name(engine)
     project_path = str(Path.cwd())
@@ -75,6 +77,8 @@ def show(ctx, engine_name, session_id):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.session_history import repository
 
+    _helpers.warm_session_index()
+
     engine_name = normalize_engine_name(engine_name)
     project_path = str(Path.cwd())
     session = repository.get_full(engine_name, session_id, project_path)
@@ -118,6 +122,8 @@ def convert(ctx, source_engine, session_id, target_engine, yes):  # type: ignore
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.session_history import repository
     from core.session_history.writers import write_session
+
+    _helpers.warm_session_index()
 
     source_engine = normalize_engine_name(source_engine)
     target_engine = normalize_engine_name(target_engine)

@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -36,6 +37,19 @@ def force_sync() -> None:
     indexer = get_indexer()
     if indexer is not None:
         indexer.sync(force=True)
+
+
+def ensure_index_ready(notify: Callable[[], None] | None = None) -> bool:
+    """索引没建好就在前台建完，返回之后的读是否走得到索引。
+
+    一次性进程（CLI）在读会话之前调用：见
+    :meth:`core.session_history.index_ingest.SessionIndexer.ensure_ready`。
+    长驻服务不要用，它们该走 :func:`kick_sync` 的后台同步。
+    """
+    indexer = get_indexer()
+    if indexer is None:
+        return False
+    return indexer.ensure_ready(notify)
 
 
 def _ready_index():

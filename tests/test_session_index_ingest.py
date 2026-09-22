@@ -385,3 +385,61 @@ def test_antigravity_subagent_lineage_ingest(store_and_indexer, home_path):
     assert c.agent == "Task 1 Reviewer"
     assert c.title == "Task 1 Reviewer"
     assert c.project_path == "/workspace/demo"
+
+
+def test_ensure_ready_builds_the_index_in_the_foreground(store_and_indexer, home_path):
+    """一次性进程的读路径靠它：返回时索引必须已经可查，而不是刚起了个线程。"""
+    store, indexer = store_and_indexer
+    _write_session(home_path, "s1", _row("s1", "hello"))
+
+    assert store.is_ready() is False
+    assert indexer.ensure_ready() is True
+    assert store.is_ready() is True
+    assert store.get_summary("claude", "s1") is not None
+
+
+def test_ensure_ready_announces_only_when_it_blocks(store_and_indexer, home_path):
+    store, indexer = store_and_indexer
+    _write_session(home_path, "s1", _row("s1", "hello"))
+    notices: list[int] = []
+
+    assert indexer.ensure_ready(lambda: notices.append(1)) is True
+    assert len(notices) == 1
+
+    # 已经建好了：第二次不该再打断用户，也不该再同步一轮。
+    assert indexer.ensure_ready(lambda: notices.append(1)) is True
+    assert len(notices) == 1
+
+
+def test_ensure_ready_gives_up_after_one_failed_build(
+    store_and_indexer, home_path, monkeypatch
+):
+    """建不起来时只赔一轮全量解析：同一条命令里的第二次读直接走回退。"""
+    store, indexer = store_and_indexer
+    _write_session(home_path, "s1", _row("s1", "hello"))
+    syncs: list[int] = []
+
+    def failing_sync(*args, **kwargs):
+        syncs.append(1)
+        # 真实的 sync() 会把异常吞掉并保持索引未就绪，这里等价地模拟。
+
+    monkeypatch.setattr(indexer, "sync", failing_sync)
+
+    assert indexer.ensure_ready() is False
+    assert indexer.ensure_ready() is False
+    assert len(syncs) == 1
+
+
+def test_ensure_ready_rebuilds_when_the_parsers_changed(store_and_indexer, home_path):
+    """升级换了解析器：旧索引还"ready"，但内容出自上一版 parser，必须先重建。"""
+    store, indexer = store_and_indexer
+    _write_session(home_path, "s1", _row("s1", "hello"))
+    indexer.sync()
+    assert store.is_ready() is True
+
+    store.set_meta("parser_fingerprint", "produced-by-an-older-release")
+    notices: list[int] = []
+
+    assert indexer.ensure_ready(lambda: notices.append(1)) is True
+    assert notices == [1], "指纹失配时应该重建，而不是直接把旧索引当可用"
+    assert store.get_summary("claude", "s1") is not None

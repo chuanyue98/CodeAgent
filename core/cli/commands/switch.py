@@ -249,6 +249,8 @@ def switch(ctx, target_engine, selector, source_engine, yes, no_launch):  # type
     from core.session_history import repository
     from core.session_history.writers import write_session
 
+    _helpers.warm_session_index()
+
     project_path = str(Path.cwd())
 
     session = None

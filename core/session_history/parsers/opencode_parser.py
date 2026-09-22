@@ -28,6 +28,7 @@ from core.session_history.models import (
 )
 from core.session_history.parse_cache import cached_parse
 from core.session_history.paths import normalize_project_path
+from core.session_history.previews import args_preview, result_preview
 
 
 def _ms_to_iso(ms: int) -> str:
@@ -195,28 +196,25 @@ def parse_opencode_session(
                     text_parts.append(part_data.get("text", ""))
 
                 elif part_type == "tool":
-                    tool_name = part_data.get("tool", "")
                     state = part_data.get("state", {})
-                    input_data = state.get("input", {})
-                    args_str = (
-                        json.dumps(input_data, ensure_ascii=False) if input_data else ""
-                    )
-                    if len(args_str) > 200:
-                        args_str = args_str[:200] + "..."
-
-                    result_preview = ""
-                    output = state.get("output", "")
-                    if isinstance(output, str):
-                        result_preview = output[:200] if len(output) > 200 else output
-                    elif isinstance(output, dict):
-                        out_str = json.dumps(output, ensure_ascii=False)
-                        result_preview = out_str[:200]
-
+                    status = state.get("status")
+                    # A failed call keeps its message in ``error``, not in
+                    # ``output`` -- carrying it over is the difference between
+                    # "that read failed" and "we have no idea what happened".
+                    # A part still "running" when the session was left has
+                    # neither, which is not the same as an empty result.
+                    if status == "error":
+                        outcome: object = f"Error: {state.get('error')}"
+                        captured = "error" in state
+                    else:
+                        outcome = state.get("output")
+                        captured = "output" in state and status != "running"
                     tool_calls.append(
                         ToolCallSummary(
-                            name=tool_name,
-                            args_preview=args_str,
-                            result_preview=result_preview,
+                            name=part_data.get("tool", ""),
+                            args_preview=args_preview(state.get("input", {})),
+                            result_preview=result_preview(outcome) if captured else "",
+                            result_captured=captured,
                         )
                     )
 

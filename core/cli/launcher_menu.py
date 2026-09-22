@@ -89,6 +89,8 @@ def run_interactive_launcher(ctx: click.Context) -> int:
     configure_console_encoding()
     _helpers._ensure_project_on_path(ctx.obj["root"])
 
+    _helpers.warm_session_index()
+
     project_path = Path.cwd().resolve()
     latest_summary: dict | None = None
     try:

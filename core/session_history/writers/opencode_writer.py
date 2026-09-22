@@ -19,6 +19,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from core.session_history.previews import result_for_writer
+
 if TYPE_CHECKING:
     from core.session_history.models import UnifiedSession
 
@@ -371,7 +373,12 @@ def write_opencode_session(session: UnifiedSession) -> str:
                     "state": {
                         "status": "completed",
                         "input": input_obj,
-                        "output": tc.result_preview or "",
+                        # Never "" for a result we never had: OpenCode replays
+                        # this straight to the model, which reads an empty
+                        # output as "the command printed nothing" and believes
+                        # it -- a converted `grep` then reads as proof the
+                        # string is absent from the repo.
+                        "output": result_for_writer(tc),
                         "title": "",
                         "metadata": {},
                         "time": {"start": msg_time, "end": msg_time},

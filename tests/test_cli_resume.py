@@ -248,3 +248,40 @@ def test_ca_resume_resolves_windows_cli_candidate_on_file_not_found(
     assert calls[0] == ["codex", "resume", "ses-codex-2"]
     assert calls[1][0] == r"C:\npm\codex.cmd"
     assert calls[1][1:] == ["resume", "ses-codex-2"]
+
+
+# ── 会话索引预热 ──────────────────────────────────────────────────────────────
+
+
+def test_resume_builds_the_index_before_reading(monkeypatch, find_all, tmp_path):
+    """CLI 在列会话之前必须先确保索引可用，否则每次都退回全量解析。"""
+    calls: list[str] = []
+
+    def fake_ensure(notify=None):
+        calls.append("ensure")
+        return True
+
+    monkeypatch.setattr(
+        "core.session_history.repository.ensure_index_ready", fake_ensure
+    )
+    find_all.side_effect = lambda **kwargs: calls.append("list") or []
+
+    _run_cli(monkeypatch, ["-r", "--no-launch"])
+
+    assert calls[:2] == ["ensure", "list"]
+
+
+def test_index_warmup_notice_goes_to_stderr(monkeypatch, capsys):
+    """``ca -r 1 --no-launch`` 的 stdout 是给人复制的命令，提示不能混进去。"""
+    from core.cli import helpers
+
+    monkeypatch.setattr(
+        "core.session_history.repository.ensure_index_ready",
+        lambda notify=None: (notify and notify(), False)[1],
+    )
+
+    helpers.warm_session_index()
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "index" in captured.err.lower() or "索引" in captured.err

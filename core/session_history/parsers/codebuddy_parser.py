@@ -50,6 +50,7 @@ from core.session_history.paths import (
     normalize_project_path,
     strip_extended_length_prefix,
 )
+from core.session_history.previews import args_preview, result_preview
 from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_dirs, list_files, long_path
 
@@ -278,16 +279,11 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
                         subagent_titles[agent_id] = launch_descriptions[str(call_id)]
 
                 if row_type == "function_call":
-                    name = row.get("name", "")
-                    args = row.get("arguments")
-                    if isinstance(args, (dict, list)):
-                        args_str = json.dumps(args, ensure_ascii=False)
-                    else:
-                        args_str = str(args) if args is not None else ""
-                    if len(args_str) > 200:
-                        args_str = args_str[:200] + "..."
                     call_id = row.get("callId", "")
-                    tc = ToolCallSummary(name=name, args_preview=args_str)
+                    tc = ToolCallSummary(
+                        name=row.get("name", ""),
+                        args_preview=args_preview(row.get("arguments")),
+                    )
                     tool_calls_by_call_id[call_id] = tc
                     # Attach to the most recent assistant message.
                     for msg in reversed(messages):
@@ -307,12 +303,9 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
                     if pending is not None:
                         out = row.get("output")
                         if isinstance(out, dict):
-                            result_text = out.get("text", "")
-                        else:
-                            result_text = str(out) if out is not None else ""
-                        if len(result_text) > 200:
-                            result_text = result_text[:200] + "..."
-                        pending.result_preview = result_text
+                            out = out.get("text", "")
+                        pending.result_preview = result_preview(out)
+                        pending.result_captured = True
                     if ts:
                         ended_at = ts
                     continue

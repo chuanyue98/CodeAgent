@@ -36,7 +36,7 @@ from core.session_history.paths import normalize_project_path
 
 logger = get_logger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 #: 记录"索引已经完整同步过一次"的元键。没有它就说明首轮构建还没跑完，读路径
 #: 必须回退到原来的解析方式，而不是返回空结果。
@@ -193,6 +193,20 @@ class SessionIndex:
                     f"session index schema {version} is newer than supported "
                     f"{SCHEMA_VERSION}"
                 )
+            if 0 < version < 2:
+                # 派生索引，重建比迁移干净：v2 给 tool_calls 加了
+                # result_captured，而旧行的真值已经无从反推——ALTER 出来的
+                # 默认值会让每条历史调用都自称"结果没带过来"。
+                self._connection.executescript(
+                    """
+                    DROP TABLE IF EXISTS tool_calls;
+                    DROP TABLE IF EXISTS messages;
+                    DROP TABLE IF EXISTS sessions;
+                    DROP TABLE IF EXISTS sources;
+                    DROP TABLE IF EXISTS index_meta;
+                    """
+                )
+                version = 0
             if version < 1:
                 self._connection.executescript(
                     """
@@ -265,6 +279,7 @@ class SessionIndex:
                         name TEXT NOT NULL DEFAULT '',
                         args_preview TEXT NOT NULL DEFAULT '',
                         result_preview TEXT NOT NULL DEFAULT '',
+                        result_captured INTEGER NOT NULL DEFAULT 0,
                         timestamp TEXT NOT NULL DEFAULT '',
                         timestamp_ts INTEGER,
                         role TEXT NOT NULL DEFAULT '',
@@ -445,6 +460,7 @@ class SessionIndex:
                         call.name or "",
                         call.args_preview or "",
                         call.result_preview or "",
+                        1 if call.result_captured else 0,
                         ts,
                         to_epoch(ts),
                         message.role or "",
@@ -460,8 +476,9 @@ class SessionIndex:
         if tool_rows:
             self._connection.executemany(
                 "INSERT INTO tool_calls(session_key, message_ordinal, ordinal, name, "
-                "args_preview, result_preview, timestamp, timestamp_ts, role, model) "
-                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "args_preview, result_preview, result_captured, timestamp, "
+                "timestamp_ts, role, model) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 tool_rows,
             )
 
@@ -671,6 +688,7 @@ class SessionIndex:
                     name=str(r["name"]),
                     args_preview=str(r["args_preview"]),
                     result_preview=str(r["result_preview"]),
+                    result_captured=bool(r["result_captured"]),
                 )
             )
         messages = [

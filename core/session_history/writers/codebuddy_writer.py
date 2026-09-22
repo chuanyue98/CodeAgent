@@ -29,6 +29,7 @@ from core.session_history.models import EngineType
 from core.session_history.parsers.codebuddy_parser import (
     _encode_codebuddy_project_dir,
 )
+from core.session_history.previews import result_for_writer
 from core.utils.atomic_write import atomic_write
 from core.utils.long_paths import list_files, long_path, mtime
 
@@ -239,7 +240,9 @@ def write_codebuddy_session(session: Any) -> str:
                         ensure_ascii=False,
                     )
                 )
-                result_text = tc.result_preview or ""
+                # See opencode_writer: an empty string is a claim about the
+                # command's output, not a gap in the transcript.
+                result_text = result_for_writer(tc)
                 lines.append(
                     json.dumps(
                         chain(
