@@ -23,9 +23,33 @@ def test_the_host_control_channel_and_its_credential_are_dropped():
     assert env == {}
 
 
+def test_opencode_and_codebuddy_session_markers_are_dropped():
+    """A delegation started from these hosts must not inherit their identity."""
+    env = strip_host_markers(
+        {
+            "OPENCODE": "1",
+            "OPENCODE_PID": "42",
+            "AGENT": "1",
+            "CODEBUDDY_SESSION_ID": "host-session",
+            "CODEBUDDY_PROJECT_DIR": "/repo",
+            "CODEBUDDY_SERVICE_PROXY_URL": "http://127.0.0.1:1/invoke",
+            "CLAUDE_PROJECT_DIR": "/repo",
+        }
+    )
+    assert env == {}
+
+
 @pytest.mark.parametrize(
     "name",
-    ["PATH", "HOME", "ANTHROPIC_API_KEY", "CLAUDE_CONFIG_DIR", "HTTP_PROXY"],
+    [
+        "PATH",
+        "HOME",
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CONFIG_DIR",
+        "HTTP_PROXY",
+        "CODEBUDDY_PLUGIN_DIRS",
+        "OPENCODE_CONFIG_CONTENT",
+    ],
 )
 def test_user_configuration_and_credentials_pass_through(name):
     """Stripping these would break auth or the engine's own configuration."""
