@@ -233,7 +233,6 @@ MESSAGES: dict[str, dict[str, str]] = {
             "  ca status                Show current project, group, and standards status\n"
             "  ca doctor --fix          Run health check and auto-repair\n"
             "  ca ui                    Start the Web UI\n"
-            "  ca mcp install           Install CodeAgent MCP server into all engines"
         ),
         "zh": (
             "引擎: opencode, claude, codex, codebuddy, antigravity (agy)\n\n"
@@ -256,7 +255,6 @@ MESSAGES: dict[str, dict[str, str]] = {
             "  ca status                看当前项目、资源组与规范的状态\n"
             "  ca doctor --fix          体检环境并自动修复\n"
             "  ca ui                    启动 Web UI\n"
-            "  ca mcp install           把 CodeAgent MCP 服务装进所有引擎"
         ),
     },
     # --- ca 自己的 Click 帮助（命令说明与选项说明） ---
@@ -546,31 +544,6 @@ MESSAGES: dict[str, dict[str, str]] = {
             "          (或 ca mcp serve 的子进程命令)\n"
             "  http:   http://127.0.0.1:8525"
         ),
-    },
-    "cli.desc.mcp_install": {
-        "en": (
-            "Register CodeAgent's internal MCP server into target engines.\n\n"
-            "Allows engines like Claude, Codex, OpenCode, and Antigravity to "
-            "automatically discover CodeAgent's delegation tools "
-            "(ca_delegate) and shared skills."
-        ),
-        "zh": (
-            "把 CodeAgent 内置的 MCP 服务注册进目标引擎。\n\n"
-            "让 Claude、Codex、OpenCode、Antigravity 这些引擎能自动发现 CodeAgent "
-            "的委派工具 (ca_delegate) 与共享技能。"
-        ),
-    },
-    "cli.help.mcp_install_engine": {
-        "en": "Target engine(s) to register CodeAgent MCP server into. Defaults to all.",
-        "zh": "把 CodeAgent MCP 服务注册进哪些引擎，默认全部。",
-    },
-    "cli.help.mcp_install_no_write": {
-        "en": "Register in read-only mode (disable write tools like ca_delegate).",
-        "zh": "以只读模式注册 (禁用 ca_delegate 这类写工具)。",
-    },
-    "cli.help.mcp_install_remove": {
-        "en": "Remove CodeAgent MCP server from target engines instead of installing.",
-        "zh": "从目标引擎里卸载 CodeAgent MCP 服务，而不是安装。",
     },
     "cli.desc.history": {
         "en": "Session history management.",
@@ -1566,10 +1539,6 @@ MESSAGES: dict[str, dict[str, str]] = {
     "launcher.doctor": {
         "en": "🩺 Health Check & Auto-Repair (ca doctor)",
         "zh": "🩺 环境健康检查与修复 (ca doctor)",
-    },
-    "launcher.mcp_install": {
-        "en": "🔌 Install / Register CodeAgent MCP to engines (ca mcp install)",
-        "zh": "🔌 安装/注册内置 MCP 到各引擎 (ca mcp install)",
     },
     "launcher.help": {
         "en": "❓ View Full Command Help (--help)",
