@@ -552,12 +552,12 @@ MESSAGES: dict[str, dict[str, str]] = {
             "Register CodeAgent's internal MCP server into target engines.\n\n"
             "Allows engines like Claude, Codex, OpenCode, and Antigravity to "
             "automatically discover CodeAgent's delegation tools "
-            "(ca_delegate_subtask) and shared skills."
+            "(ca_delegate) and shared skills."
         ),
         "zh": (
             "把 CodeAgent 内置的 MCP 服务注册进目标引擎。\n\n"
             "让 Claude、Codex、OpenCode、Antigravity 这些引擎能自动发现 CodeAgent "
-            "的委派工具 (ca_delegate_subtask) 与共享技能。"
+            "的委派工具 (ca_delegate) 与共享技能。"
         ),
     },
     "cli.help.mcp_install_engine": {
@@ -565,8 +565,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh": "把 CodeAgent MCP 服务注册进哪些引擎，默认全部。",
     },
     "cli.help.mcp_install_no_write": {
-        "en": "Register in read-only mode (disable write tools like ca_delegate_subtask).",
-        "zh": "以只读模式注册 (禁用 ca_delegate_subtask 这类写工具)。",
+        "en": "Register in read-only mode (disable write tools like ca_delegate).",
+        "zh": "以只读模式注册 (禁用 ca_delegate 这类写工具)。",
     },
     "cli.help.mcp_install_remove": {
         "en": "Remove CodeAgent MCP server from target engines instead of installing.",

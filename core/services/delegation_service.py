@@ -22,6 +22,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.delegation_depth import DEPTH_ENV, current_depth
 from core.engine_registry import ENGINES, get_spec, normalize_engine_name
 from core.host_env import child_environ
 from core.logging_config import get_logger
@@ -117,11 +118,17 @@ def get_git_root(path: Path) -> Path:
 def isolated_worktree(
     workspace: Path,
     branch_prefix: str = "ca/worker",
+    *,
+    carry_changes: bool = False,
+    keep: bool = True,
 ) -> Iterator[dict[str, Any]]:
     """Context manager for running work in an isolated git worktree.
 
     If *workspace* is a git repository, adds a temporary worktree under
     ``.ca_worktrees/`` on a new branch derived from *branch_prefix*.
+
+    ``carry_changes`` 把主工作区尚未提交的改动带进 worktree（review 要审的
+    正是这些）；``keep=False`` 时用完连同分支一起删掉，不留任何痕迹。
 
     Yields:
         dict:
@@ -167,6 +174,8 @@ def isolated_worktree(
             return
 
         created = True
+        if carry_changes:
+            _carry_uncommitted_changes(repo_root, worktree_dir)
         yield {
             "path": worktree_dir,
             "isolated": True,
@@ -194,6 +203,8 @@ def isolated_worktree(
             )
             has_commits = bool(log_proc.stdout.strip())
 
+            if not keep:
+                has_changes = has_commits = False
             if has_changes:
                 # Stage and commit any uncommitted changes so the worker branch preserves them
                 subprocess.run(
@@ -239,37 +250,105 @@ def isolated_worktree(
                     timeout=_GIT_TIMEOUT_SECONDS,
                 )
 
+            # 最后一个 worktree 用完，别在用户仓库里留一个空的 .ca_worktrees/。
+            try:
+                worktree_parent.rmdir()
+            except OSError:
+                pass
 
-def _collect_git_changes(
-    path: Path, base_commit: str | None = None
-) -> tuple[list[str], str]:
-    """Collects changed files and git diff for *path*."""
+
+def _carry_uncommitted_changes(repo_root: Path, worktree_dir: Path) -> None:
+    """把主工作区相对 HEAD 的改动（含已暂存）原样打到 worktree 上。"""
+    diff = subprocess.run(
+        ["git", "-C", str(repo_root), "diff", "HEAD", "--binary"],
+        capture_output=True,
+        timeout=_GIT_TIMEOUT_SECONDS,
+    ).stdout
+    if not diff:
+        return
+    applied = subprocess.run(
+        ["git", "-C", str(worktree_dir), "apply", "--whitespace=nowarn"],
+        input=diff,
+        capture_output=True,
+        timeout=_GIT_TIMEOUT_SECONDS,
+    )
+    if applied.returncode != 0:
+        logger.warning(
+            "Failed to carry uncommitted changes into worktree: %s",
+            applied.stderr.decode(errors="replace").strip(),
+        )
+
+
+REVIEW_PROMPT = """你是代码审查者，只读不写：不要修改、创建或删除任何文件，不要提交。
+
+审查对象是这个仓库里尚未提交的改动（用 `git diff` 查看；需要上下文时直接读文件）。
+只报告真实的问题：会导致错误行为的 bug、遗漏的边界情况、与周边代码不一致之处。
+不要复述改动内容，不要给风格偏好。
+
+输出格式：每个问题一段，第一行是 `[严重|一般|轻微] 文件:行号 — 一句话问题`，
+下面一两句说明触发条件和后果。没有发现问题就只回复「未发现问题」。"""
+
+
+def _snapshot_worktree(path: Path) -> tuple[str | None, set[str]]:
+    """开跑前的工作区快照：(代表当前工作区的提交, 已有的未跟踪文件)。
+
+    就地执行时用户往往已有未提交的改动；不先拍快照，这些改动会被当成子任务
+    的产出报回去。``git stash create`` 只生成提交对象，不动工作区和 stash 列表。
+    """
     if not is_git_repo(path):
-        return [], ""
+        return None, set()
     try:
-        # Porcelain status
-        status_proc = subprocess.run(
-            ["git", "-C", str(path), "status", "--porcelain"],
+        stash = subprocess.run(
+            ["git", "-C", str(path), "stash", "create"],
             capture_output=True,
             text=True,
             timeout=_GIT_TIMEOUT_SECONDS,
-        )
-        files = [
-            line[3:].strip()
-            for line in status_proc.stdout.splitlines()
-            if len(line) > 3
-        ]
+        ).stdout.strip()
+        head = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=_GIT_TIMEOUT_SECONDS,
+        ).stdout.strip()
+        return stash or head or None, _untracked_files(path)
+    except (subprocess.SubprocessError, OSError):
+        return None, set()
 
-        # Diff against base commit if available, else HEAD
-        ref = base_commit if base_commit else "HEAD"
-        diff_proc = subprocess.run(
+
+def _untracked_files(path: Path) -> set[str]:
+    out = subprocess.run(
+        ["git", "-C", str(path), "ls-files", "--others", "--exclude-standard"],
+        capture_output=True,
+        text=True,
+        timeout=_GIT_TIMEOUT_SECONDS,
+    ).stdout
+    return {line for line in out.splitlines() if line}
+
+
+def _collect_git_changes(
+    path: Path,
+    base_commit: str | None = None,
+    untracked_before: set[str] | None = None,
+) -> tuple[list[str], str]:
+    """子任务带来的改动：相对开跑前快照的 diff，加上新出现的未跟踪文件。"""
+    if not is_git_repo(path):
+        return [], ""
+    ref = base_commit or "HEAD"
+    try:
+        changed = subprocess.run(
+            ["git", "-C", str(path), "diff", "--name-only", ref],
+            capture_output=True,
+            text=True,
+            timeout=_GIT_TIMEOUT_SECONDS,
+        ).stdout.splitlines()
+        new_untracked = sorted(_untracked_files(path) - (untracked_before or set()))
+        diff = subprocess.run(
             ["git", "-C", str(path), "diff", ref],
             capture_output=True,
             text=True,
             timeout=_GIT_TIMEOUT_SECONDS,
-        )
-        diff = diff_proc.stdout
-        return files, diff
+        ).stdout
+        return [f for f in changed if f] + new_untracked, diff
     except Exception as exc:
         logger.warning("Failed to collect git changes: %s", exc)
         return [], ""
@@ -284,6 +363,10 @@ def delegate_subtask(
     isolate: bool = False,
     group: str = "common",
     root_dir: Path | None = None,
+    *,
+    mode: str = "write",
+    log_path: Path | None = None,
+    depth: int | None = None,
 ) -> DelegationResult:
     """Delegates a subtask to another engine.
 
@@ -296,6 +379,10 @@ def delegate_subtask(
         isolate: Whether to run in an isolated Git worktree (default: False, in-place).
         group: Resource group to mount (default: "common").
         root_dir: CodeAgent repository root directory.
+        mode: ``"write"`` 就地（或在隔离 worktree 里）改代码；``"review"`` 在
+            带着当前改动的一次性 worktree 里只读审查，主工作区不会被碰到。
+        log_path: 引擎输出实时写到这里（后台委派据此看进度），否则只在内存里收。
+        depth: 发起方所在的委派深度，子引擎拿到的是它加一；缺省取当前进程的。
 
     Returns:
         DelegationResult with exit code, outputs, diff, and branch details.
@@ -352,11 +439,18 @@ def delegate_subtask(
         for p in target_paths:
             prompt_parts.append(f"- {p}")
         prompt_parts.append("")
+    review = mode == "review"
+    if review:
+        prompt_parts = [REVIEW_PROMPT, ""] + (
+            ["审查重点：", *prompt_parts] if instruction.strip() else prompt_parts
+        )
     prompt_parts.append(instruction.strip())
-    full_prompt = "\n".join(prompt_parts)
+    full_prompt = "\n".join(prompt_parts).strip()
 
     worktree_ctx: AbstractContextManager[dict[str, Any]] = (
-        isolated_worktree(ws)
+        isolated_worktree(ws, "ca/review", carry_changes=True, keep=False)
+        if review
+        else isolated_worktree(ws)
         if isolate
         else nullcontext(
             {"path": ws, "isolated": False, "branch": None, "repo_root": None}
@@ -369,25 +463,27 @@ def delegate_subtask(
             effective_dir = ctx["path"]
             isolated = ctx["isolated"]
             branch = ctx["branch"]
+            if review and not isolated:
+                # 非 git 目录或 worktree 建不起来时会退回原地执行，而子引擎是
+                # 带 -y 起的——那就谈不上只读，宁可不审。
+                return DelegationResult(
+                    success=False,
+                    engine=canonical_engine,
+                    instruction=instruction,
+                    exit_code=1,
+                    output="",
+                    error="review 需要在 git 仓库里建隔离 worktree，当前目录做不到",
+                )
 
-            # Record base commit if in git repo
-            base_commit = None
-            if is_git_repo(effective_dir):
-                try:
-                    res = subprocess.run(
-                        ["git", "-C", str(effective_dir), "rev-parse", "HEAD"],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                    )
-                    if res.returncode == 0:
-                        base_commit = res.stdout.strip()
-                except Exception:
-                    pass
+            base_commit, untracked_before = _snapshot_worktree(effective_dir)
 
             env = child_environ()
             env["CA_PROJECT_GROUP"] = group
             env["CA_YOLO"] = "1"
+            # 无头的 claude 会把长命令丢到后台、说一句"在等"就退出，任务根本
+            # 没做完；被委派出去的引擎必须前台跑完。
+            env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] = "1"
+            env[DEPTH_ENV] = str((current_depth() if depth is None else depth) + 1)
 
             cmd = [
                 sys.executable,
@@ -397,20 +493,42 @@ def delegate_subtask(
                 full_prompt,
             ]
 
-            proc = subprocess.run(
-                cmd,
-                cwd=str(effective_dir),
-                env=env,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=timeout,
-            )
+            proc: subprocess.CompletedProcess[Any]
+            if log_path is not None:
+                with open(log_path, "w", encoding="utf-8", errors="replace") as log:
+                    proc = subprocess.run(
+                        cmd,
+                        cwd=str(effective_dir),
+                        env=env,
+                        stdin=subprocess.DEVNULL,
+                        stdout=log,
+                        stderr=subprocess.STDOUT,
+                        timeout=timeout,
+                    )
+                output = log_path.read_text(encoding="utf-8", errors="replace")
+            else:
+                proc = subprocess.run(
+                    cmd,
+                    cwd=str(effective_dir),
+                    env=env,
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=timeout,
+                )
+                output = (proc.stdout or "") + (
+                    "\n" + proc.stderr if proc.stderr else ""
+                )
 
             duration = time.time() - t0
-            output = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
-            files_changed, diff = _collect_git_changes(effective_dir, base_commit)
+            # review 的 worktree 里本来就带着用户的改动，那不是审查者的产出。
+            files_changed, diff = (
+                ([], "")
+                if review
+                else _collect_git_changes(effective_dir, base_commit, untracked_before)
+            )
 
             return DelegationResult(
                 success=proc.returncode == 0,

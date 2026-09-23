@@ -159,6 +159,7 @@ class CodexEngine(BaseEngine):
             bypass = effective_yolo
         if bypass:
             cmd.append(CODEX_SKIP_PERMISSIONS_FLAG)
+        cmd.extend(self.codex_mcp_overrides())
         cmd.extend(rest)
         if message:
             cmd.append(message)

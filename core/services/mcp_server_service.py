@@ -25,6 +25,7 @@ claude / codex ...)都可以连上来直接消费 CodeAgent 的技能(skills)。
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -43,9 +44,20 @@ SERVER_NAME = "codeagent"
 SERVER_INSTRUCTIONS = (
     "CodeAgent 技能库与跨引擎协作服务。默认只读,提供 skill_list / skill_read 两个工具,"
     "以及 ca://skills 与 ca://skill/<name> 资源,所有内容来自磁盘上的 SKILL.md 原文。"
-    "以 --allow-write 启动时额外提供 skill_run / task_run / ca_delegate_subtask / ca_handoff_session;"
+    "以 --allow-write 启动时额外提供 skill_run / task_run 与跨引擎委派工具;"
     "以 --trust-hooks 启动时再额外提供 hook_fire(执行 hook 脚本)。"
 )
+
+#: ``--delegation`` 模式（ca 启动引擎时动态挂载的就是它）交给宿主模型的说明。
+#: 提示词注入已经取消，这是模型得知"怎么委派"的唯一渠道。
+DELEGATION_INSTRUCTIONS = """CodeAgent 跨引擎协作：把子任务交给另一个编码引擎（claude / codex / opencode / codebuddy / antigravity）在后台完成，用法同你自己的后台子代理。
+
+- 用户点名要某个引擎做事（"让 codex review 一下""让 claude 设计这块"），或有边界清晰、可以并行的子任务时，调用 ca_delegate。它立即返回 run_id，不会阻塞你。
+- 发起后继续做你手头的事；需要结果时调用 ca_delegate_wait(run_id)。它最多等 45 秒，还没结束就返回 running，稍后再调。不要在同一个 run 上连续空等。
+- mode="review"：只读审查当前未提交的改动，在带着这些改动的一次性 git worktree 里进行，不会碰主工作区，结果是问题列表。
+- mode="write"：默认在当前工作区就地修改；isolate_worktree=True 则在独立分支上改，结果里会给出分支名。
+- 子引擎看不到你的对话，instruction 要写清背景、目标、验收标准和相关文件。
+- 拿到结果后自己核实（看 diff、跑测试），再向用户汇报。"""
 
 
 def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
@@ -230,6 +242,102 @@ def _append_audit(root_dir: Path | None, tool: str, args: dict) -> None:
         pass
 
 
+def _register_delegation_tools(
+    server: FastMCP, root_dir: Path | None, group: str | None
+) -> None:
+    """跨引擎委派工具。当前已在委派深度上限（本身就是被委派出来的）时一个都不注册。"""
+    from core.delegation_depth import may_delegate
+
+    if not may_delegate():
+        return
+
+    from core.services import delegation_runs
+
+    def workspace() -> Path:
+        return root_dir or Path.cwd()
+
+    @server.tool()
+    def ca_delegate(
+        engine: str,
+        instruction: str,
+        mode: str = "write",
+        target_paths: list[str] | None = None,
+        isolate_worktree: bool = False,
+        timeout_seconds: int = delegation_runs.DEFAULT_TIMEOUT_SECONDS,
+    ) -> str:
+        """把子任务交给另一个引擎在后台执行，立即返回 run_id。
+
+        Args:
+            engine: claude / codex / opencode / codebuddy / antigravity。
+            instruction: 子引擎看不到你的对话：写清背景、目标、验收标准。
+            mode: "write" 改代码；"review" 只读审查当前未提交的改动。
+            target_paths: 相关文件或目录（可选）。
+            isolate_worktree: write 模式下改到独立的 git worktree 分支上。
+            timeout_seconds: 子引擎最长运行时间，默认 1800。
+        """
+        # 不写 .ca_task_logs 审计：这个服务随每次 ca 启动挂进用户项目，委派的
+        # 全部信息已记在 ~/.codeagent/delegations/<run_id>/task.json。
+        try:
+            run_id = delegation_runs.start_delegation(
+                engine,
+                instruction,
+                workspace=workspace(),
+                mode=mode,
+                isolate=isolate_worktree,
+                target_paths=target_paths,
+                timeout=timeout_seconds,
+                group=group or "common",
+            )
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(
+            {
+                "run_id": run_id,
+                "status": "started",
+                "next": "继续你的工作；需要结果时调用 ca_delegate_wait(run_id)",
+            },
+            ensure_ascii=False,
+        )
+
+    @server.tool()
+    def ca_delegate_wait(run_id: str, timeout_seconds: int = 45) -> str:
+        """等待一个委派，最多 timeout_seconds 秒（上限 45）。
+
+        结束了就返回完整结果（summary / files_changed / diff / error），否则返回
+        status=running，稍后再调。
+        """
+        try:
+            run = delegation_runs.wait_run(run_id, timeout=min(timeout_seconds, 45))
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(run, ensure_ascii=False, indent=2)
+
+    @server.tool()
+    def ca_delegate_list() -> str:
+        """列出当前工作区最近的委派及其状态。"""
+        return json.dumps(
+            delegation_runs.list_runs(workspace()), ensure_ascii=False, indent=2
+        )
+
+    @server.tool()
+    def ca_delegate_stop(run_id: str) -> str:
+        """终止一个仍在运行的委派（连同它拉起的子引擎）。"""
+        try:
+            stopped = delegation_runs.stop_run(run_id)
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps({"run_id": run_id, "stopped": stopped}, ensure_ascii=False)
+
+
+def build_delegation_server(root_dir: Path | None = None) -> FastMCP:
+    """ca 启动引擎时动态挂载的服务：只有委派工具，技能已由引擎原生挂载。"""
+    if FastMCP is None:  # pragma: no cover
+        raise RuntimeError("mcp SDK 未安装:请先 uv add mcp")
+    server = FastMCP(SERVER_NAME, instructions=DELEGATION_INSTRUCTIONS)
+    _register_delegation_tools(server, root_dir, os.environ.get("CA_PROJECT_GROUP"))
+    return server
+
+
 def build_server(
     config: dict | None = None,
     group: str | None = None,
@@ -342,46 +450,7 @@ def build_server(
                 ensure_ascii=False,
             )
 
-        @server.tool()
-        def ca_delegate_subtask(
-            engine: str,
-            instruction: str,
-            target_paths: list[str] | None = None,
-            timeout: int = 300,
-            isolate_worktree: bool = False,
-        ) -> str:
-            """向其他专项引擎委派子任务。默认在当前工作区直接就地执行代码改动（修改即刻生效）；若需要沙盒隔离，可指定 isolate_worktree=True 在临时 Git Worktree 分支中运行。
-
-            Args:
-                engine: 目标引擎名称 (claude / codex / opencode / antigravity / codebuddy)。
-                instruction: 具体的子任务描述与验收标准。
-                target_paths: 关注或修改的目标文件列表(可选)。
-                timeout: 最大执行超时时间(秒,默认 300)。
-                isolate_worktree: 是否在独立的 Git Worktree 分支中隔离执行(默认 False 就地执行)。
-            """
-            _append_audit(
-                root_dir,
-                "ca_delegate_subtask",
-                {
-                    "engine": engine,
-                    "instruction": instruction[:200],
-                    "target_paths": target_paths,
-                    "isolate_worktree": isolate_worktree,
-                },
-            )
-            from core.services.delegation_service import delegate_subtask
-
-            res = delegate_subtask(
-                engine=engine,
-                instruction=instruction,
-                workspace=root_dir,
-                target_paths=target_paths,
-                timeout=timeout,
-                isolate=isolate_worktree,
-                group=group or "common",
-                root_dir=root_dir,
-            )
-            return res.to_summary()
+        _register_delegation_tools(server, root_dir, group)
 
         @server.tool()
         def ca_handoff_session(
@@ -516,11 +585,19 @@ def main() -> None:
         help="Register skill.run / task.run (execute skills & tasks)",
     )
     parser.add_argument(
+        "--delegation",
+        action="store_true",
+        help="Only the cross-engine delegation tools (what ca mounts into engines)",
+    )
+    parser.add_argument(
         "--trust-hooks",
         action="store_true",
         help="Also register hook.fire (arbitrary command execution; implies --allow-write)",
     )
     args = parser.parse_args()
+    if args.delegation:
+        build_delegation_server().run(transport="stdio")
+        return
     allow_write = args.allow_write or args.trust_hooks
     serve(
         transport="http" if args.http else "stdio",

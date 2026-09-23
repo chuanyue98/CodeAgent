@@ -127,3 +127,14 @@ def home(tmp_path, monkeypatch):
     home_dir.mkdir()
     monkeypatch.setattr(Path, "home", lambda: home_dir)
     return home_dir
+
+
+@pytest.fixture(autouse=True)
+def no_codeagent_mcp_mount(monkeypatch):
+    """默认不给引擎挂 codeagent MCP：不少用例逐字断言启动命令。
+
+    测挂载本身的用例 ``monkeypatch.delenv(DEPTH_ENV)`` 把它打开。
+    """
+    from core.delegation_depth import DEPTH_ENV, MAX_DELEGATION_DEPTH
+
+    monkeypatch.setenv(DEPTH_ENV, str(MAX_DELEGATION_DEPTH))

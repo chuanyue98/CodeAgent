@@ -49,6 +49,7 @@ class ClaudeEngine(BaseEngine):
             plugin_dir = plugin_meta.get("_plugin_dir")
             if plugin_dir:
                 cmd.extend(["--plugin-dir", plugin_dir])
+        cmd.extend(self.mcp_config_arg())
         if non_interactive:
             cmd.append("-p")
         cmd.extend(passthrough)

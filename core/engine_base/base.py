@@ -2,6 +2,7 @@ from core.config_manager import ConfigManager
 from core.engine_base.config_mixin import _ConfigMixin
 from core.engine_base.environment import EnvironmentManager
 from core.engine_base.links_mixin import _LinksMixin
+from core.engine_base.mcp_mixin import _McpMixin
 from core.engine_base.prompt_mixin import _PromptMixin
 from core.engine_base.settings_mixin import _SettingsMixin
 from core.hook_scanner import HookScanner
@@ -14,7 +15,7 @@ from core.settings_manager import SettingsManager
 from core.skill_scanner import SkillScanner
 
 
-class BaseEngine(_ConfigMixin, _PromptMixin, _LinksMixin, _SettingsMixin):
+class BaseEngine(_ConfigMixin, _PromptMixin, _LinksMixin, _SettingsMixin, _McpMixin):
     """Abstract base class for LLM engines.
 
     Subclasses declare EVENT_MAP to translate canonical hook event names

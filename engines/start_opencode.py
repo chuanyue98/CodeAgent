@@ -545,6 +545,7 @@ def main():
 
     try:
         env = engine.env_manager.get_env()
+        engine.apply_opencode_mcp_env(env)
         final_command = engine.build_command(
             engine.first_message(message), args.non_interactive, passthrough
         )

@@ -178,3 +178,20 @@ def test_a_skill_dropped_from_the_group_is_unlinked(tmp_path):
     assert [p.name for p in skills_dir.iterdir() if not p.name.startswith(".")] == [
         "task-authoring"
     ]
+
+
+def test_bundle_carries_the_delegation_mcp_server(tmp_path, monkeypatch):
+    """agy 没有单会话挂 MCP 的参数，委派服务写进插件目录的 mcp_config.json。"""
+    from core.delegation_depth import DEPTH_ENV
+
+    monkeypatch.delenv(DEPTH_ENV)
+    engine = FakeEngine(tmp_path / "config", skills=[])
+
+    assert engine.ensure_plugin_bundle() is True
+    bundle = tmp_path / "config" / "plugins" / "codeagent"
+    servers = json.loads((bundle / "mcp_config.json").read_text(encoding="utf-8"))
+    assert "codeagent" in servers["mcpServers"]
+
+    monkeypatch.setenv(DEPTH_ENV, "1")
+    assert engine.ensure_plugin_bundle() is False
+    assert not (bundle / "mcp_config.json").exists()

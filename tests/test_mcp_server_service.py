@@ -7,7 +7,12 @@ import json
 
 import pytest
 
-from core.services.mcp_server_service import build_server, discover_skills
+from core.delegation_depth import DEPTH_ENV
+from core.services.mcp_server_service import (
+    build_delegation_server,
+    build_server,
+    discover_skills,
+)
 
 
 def _text(result) -> str:
@@ -124,12 +129,13 @@ def test_write_tools_hidden_by_default(skills_root):
         "skill_run",
         "task_run",
         "hook_fire",
-        "ca_delegate_subtask",
+        "ca_delegate",
         "ca_handoff_session",
     } & names == set()
 
 
-def test_write_tools_visible_with_allow_write(skills_root):
+def test_write_tools_visible_with_allow_write(skills_root, monkeypatch):
+    monkeypatch.delenv(DEPTH_ENV)
     server = build_server(
         config=None, group=None, skills_root=skills_root, allow_write=True
     )
@@ -137,7 +143,10 @@ def test_write_tools_visible_with_allow_write(skills_root):
     assert {
         "skill_run",
         "task_run",
-        "ca_delegate_subtask",
+        "ca_delegate",
+        "ca_delegate_wait",
+        "ca_delegate_list",
+        "ca_delegate_stop",
         "ca_handoff_session",
     } <= names
     assert "hook_fire" not in names  # 需要 trust_hooks
@@ -268,21 +277,17 @@ def test_hook_fire_executes_and_returns_output(skills_root, tmp_path, monkeypatc
     assert "got:" in out and '"a": 1' in out
 
 
-def test_ca_delegate_subtask_tool(skills_root, tmp_path, monkeypatch):
-    from core.services.delegation_service import DelegationResult
+def test_ca_delegate_starts_in_background_and_returns_run_id(
+    skills_root, tmp_path, monkeypatch
+):
+    monkeypatch.delenv(DEPTH_ENV)
+    started: dict = {}
 
-    fake_res = DelegationResult(
-        success=True,
-        engine="codex",
-        instruction="run tests",
-        exit_code=0,
-        output="passed",
-        duration_seconds=1.2,
-    )
-    monkeypatch.setattr(
-        "core.services.delegation_service.delegate_subtask",
-        lambda **kwargs: fake_res,
-    )
+    def fake_start(engine, instruction, **kwargs):
+        started.update(engine=engine, instruction=instruction, **kwargs)
+        return "codex-20260923-120000-abcdef"
+
+    monkeypatch.setattr("core.services.delegation_runs.start_delegation", fake_start)
     server = build_server(
         config=None,
         group=None,
@@ -290,19 +295,42 @@ def test_ca_delegate_subtask_tool(skills_root, tmp_path, monkeypatch):
         allow_write=True,
         root_dir=tmp_path,
     )
-    result = asyncio.run(
-        server.call_tool(
-            "ca_delegate_subtask",
-            {"engine": "codex", "instruction": "run tests"},
+    out = json.loads(
+        _text(
+            asyncio.run(
+                server.call_tool(
+                    "ca_delegate",
+                    {"engine": "codex", "instruction": "review", "mode": "review"},
+                )
+            )
         )
     )
-    out = _text(result)
-    assert "[CODEX] — SUCCESS" in out
+    assert out["run_id"] == "codex-20260923-120000-abcdef"
+    assert started["mode"] == "review"
+    assert started["workspace"] == tmp_path
+    assert not (tmp_path / ".ca_task_logs").exists(), "不往用户项目里写审计日志"
 
-    # Check audit log written
-    audit_file = tmp_path / ".ca_task_logs" / "mcp_audit.log"
-    assert audit_file.exists()
-    assert "ca_delegate_subtask" in audit_file.read_text(encoding="utf-8")
+
+def test_delegation_tools_hidden_at_depth_limit(skills_root, monkeypatch):
+    """被委派出来的子引擎（深度已到上限）看不到任何委派工具。"""
+    monkeypatch.setenv(DEPTH_ENV, "1")
+    server = build_server(
+        config=None, group=None, skills_root=skills_root, allow_write=True
+    )
+    names = {t.name for t in asyncio.run(server.list_tools())}
+    assert not {n for n in names if n.startswith("ca_delegate")}
+    assert not asyncio.run(build_delegation_server().list_tools())
+
+
+def test_delegation_server_exposes_only_delegation_tools(monkeypatch):
+    monkeypatch.delenv(DEPTH_ENV)
+    names = {t.name for t in asyncio.run(build_delegation_server().list_tools())}
+    assert names == {
+        "ca_delegate",
+        "ca_delegate_wait",
+        "ca_delegate_list",
+        "ca_delegate_stop",
+    }
 
 
 def test_ca_handoff_session_tool(skills_root, tmp_path, monkeypatch):

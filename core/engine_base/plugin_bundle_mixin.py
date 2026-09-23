@@ -8,6 +8,9 @@ Antigravity 既不认 Claude 风格的 ``skills/`` 目录，也没有插件市�
 
 所以这里把整组技能包成**一个**名叫 ``codeagent`` 的插件，技能以链接挂进它的
 ``skills/``。启用标志在最后一个会话退出时撤掉，插件目录留着按下次的项目组重写。
+
+codeagent MCP（跨引擎委派）也走这个插件：Antigravity 没有单会话挂 MCP 的参数，
+但会读插件目录下的 ``mcp_config.json``（实测；写在 ``plugin.json`` 里不生效）。
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.delegation_depth import MCP_SERVER_NAME, codeagent_mcp_server
 from core.logging_config import get_logger
 from core.utils.atomic_write import atomic_write
 
@@ -43,15 +47,31 @@ class _PluginBundleMixin:
         raise NotImplementedError
 
     def ensure_plugin_bundle(self) -> bool:
-        """生成插件并在 config 里启用，返回是否真的挂上了技能。"""
+        """生成插件并在 config 里启用，返回是否真的挂上了东西（技能或 MCP）。"""
         skills = self.resolve_skill_sources()
-        if not skills:
+        server = codeagent_mcp_server()
+        bundle = self._get_plugin_config_dir() / "plugins" / BUNDLE_NAME
+        # 被委派出来的会话不挂：删掉上一个会话留下的声明。
+        mcp_config = bundle / "mcp_config.json"
+        if not skills and server is None:
+            mcp_config.unlink(missing_ok=True)
             self.cleanup_plugin_bundle()
             return False
 
-        bundle = self._get_plugin_config_dir() / "plugins" / BUNDLE_NAME
         skills_dir = bundle / "skills"
         skills_dir.mkdir(parents=True, exist_ok=True)
+
+        if server is None:
+            mcp_config.unlink(missing_ok=True)
+        else:
+            atomic_write(
+                mcp_config,
+                json.dumps(
+                    {"mcpServers": {MCP_SERVER_NAME: server}},
+                    indent=2,
+                    ensure_ascii=False,
+                ),
+            )
 
         # 上一次挂的、这次不在组里的技能先摘掉，否则换组后旧技能还留着。
         self._remove_stale_managed_links(skills_dir, {name for name, _ in skills})
@@ -70,7 +90,7 @@ class _PluginBundleMixin:
                 continue
             linked += 1
 
-        if not linked:
+        if not linked and server is None:
             self.cleanup_plugin_bundle()
             return False
 
@@ -79,7 +99,9 @@ class _PluginBundleMixin:
             json.dumps({"name": BUNDLE_NAME}, indent=2, ensure_ascii=False),
         )
         self._set_enabled(True)
-        logger.info("Plugin bundle ready: %d skills", linked)
+        logger.info(
+            "Plugin bundle ready: %d skills, mcp=%s", linked, server is not None
+        )
         return True
 
     def cleanup_plugin_bundle(self) -> None:
