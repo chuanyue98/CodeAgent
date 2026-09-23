@@ -32,6 +32,7 @@ from core.session_history.paths import (
     strip_extended_length_prefix,
 )
 from core.session_history.previews import args_preview, result_preview
+from core.utils.atomic_write import atomic_write
 from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_dirs, long_path
 
@@ -167,6 +168,45 @@ def _read_configured_model(file_path: Path) -> str:
             pass
 
     return "gemini-3.8-flash"
+
+
+def handoff_projects_file(home: Path | None = None) -> Path:
+    """ca 转进 agy 的会话 → 项目路径。
+
+    agy 在转换来的会话里续聊一轮后，会把摘要行的 ``workspace_uris`` 清空，
+    会话随之从项目的会话列表里消失；所以项目路径由 ca 自己记一份。
+    """
+    return (home or Path.home()) / ".codeagent" / "antigravity-handoffs.json"
+
+
+def record_handoff_project(
+    session_id: str, project_path: str, home: Path | None = None
+) -> None:
+    if not project_path:
+        return
+    path = handoff_projects_file(home)
+    projects = _load_handoff_projects(path)
+    projects[session_id] = project_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(path, json.dumps(projects, ensure_ascii=False))
+
+
+def _load_handoff_projects(path: Path) -> dict[str, str]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _home_of(file_path: Path) -> Path | None:
+    """``<home>/.gemini/antigravity-cli/...`` 里的 ``<home>``；认不出时 None。"""
+    parts = file_path.parts
+    if "antigravity-cli" in parts:
+        i = parts.index("antigravity-cli")
+        if i >= 2 and parts[i - 1] == ".gemini":
+            return Path(*parts[: i - 1])
+    return None
 
 
 def _find_summaries_db(file_path: Path, home: Path | None = None) -> Path | None:
@@ -567,7 +607,13 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
     inferred_parent_id = extract_parent_recipient(raw_rows)
     parent_session_id = meta.get("parent_session_id", "") or inferred_parent_id
 
-    resolved_project_path = meta.get("project_path", "") or inferred_project_path
+    resolved_project_path = (
+        meta.get("project_path", "")
+        or _load_handoff_projects(handoff_projects_file(_home_of(file_path))).get(
+            session_id, ""
+        )
+        or inferred_project_path
+    )
     resolved_title = meta.get("title", "")
     if not resolved_title and not parent_session_id:
         resolved_title = computed_title

@@ -729,3 +729,29 @@ def test_antigravity_subagent_lineage_and_parent_session(tmp_path: Path):
     assert c2_usage[0].parent_session_id == parent_id
     assert c2_usage[0].agent == "Dispatch Task 2 Implementer"
     assert c2_usage[0].project_path == project_path
+
+
+def test_converted_session_keeps_its_project_after_agy_clears_the_workspace(
+    tmp_path: Path,
+):
+    """agy 在转换来的会话里续聊后会清空摘要行的 workspace_uris，会话不能因此掉出项目。"""
+    project = "/home/cy/github/chuanyue98/CodeAgent"
+    session = UnifiedSession(
+        session_id="from-opencode",
+        engine=EngineType.OPENCODE,
+        project_path=project,
+        messages=[
+            UnifiedMessage(role="user", content="接力过来"),
+            UnifiedMessage(role="assistant", content="收到"),
+        ],
+    )
+    written_id = write_antigravity_session(session, home=tmp_path)
+
+    summaries_db = (
+        tmp_path / ".gemini" / "antigravity-cli" / "conversation_summaries.db"
+    )
+    with sqlite3.connect(summaries_db) as conn:
+        conn.execute("UPDATE conversation_summaries SET workspace_uris = ''")
+
+    found = find_all_sessions(project, home=tmp_path, engine="antigravity")
+    assert [s.session_id for s in found] == [written_id]
