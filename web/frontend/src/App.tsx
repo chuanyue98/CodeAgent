@@ -29,7 +29,9 @@ const TaskDashboard = lazy(() => import('./components/TaskDashboard'));
 const ResourceHub = lazy(() => import('./components/ResourceHub'));
 const Analytics = lazy(() => import('./components/Analytics'));
 const LaunchPad = lazy(() => import('./components/LaunchPad'));
-const InstancesPage = lazy(() => import('./components/InstancesPage'));const LogViewer = lazy(() => import('./components/LogViewer'));
+const InstancesPage = lazy(() => import('./components/InstancesPage'));
+const DelegationsPage = lazy(() => import('./components/DelegationsPage'));
+const LogViewer = lazy(() => import('./components/LogViewer'));
 const SessionsPage = lazy(() => import('./components/SessionsPage'));
 const CronPage = lazy(() => import('./components/CronPage'));
 const McpPage = lazy(() => import('./components/McpPage'));
@@ -175,6 +177,7 @@ function App() {
                 <Route index element={<Navigate to="terminal" replace />} />
                 <Route path="terminal" element={page(<LaunchPad />)} />
                 <Route path="instances" element={page(<InstancesPage />)} />
+                <Route path="delegations" element={page(<DelegationsPage />)} />
               </Route>
 
               <Route

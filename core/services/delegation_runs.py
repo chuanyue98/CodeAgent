@@ -215,9 +215,10 @@ def list_runs(workspace: Path | str | None = None, limit: int = 20) -> list[dict
         return []
     ws = str(Path(workspace).resolve()) if workspace else None
     runs: list[dict] = []
-    for run_dir in sorted(root.iterdir(), key=lambda p: p.name, reverse=True):
-        if not _RUN_ID_RE.match(run_dir.name):
-            continue
+    run_dirs = [p for p in root.iterdir() if _RUN_ID_RE.match(p.name)]
+    # run id 是 <engine>-<日期>-<时间>-<随机>，按名字排会先按引擎名排。
+    run_dirs.sort(key=lambda p: p.name.split("-", 1)[1], reverse=True)
+    for run_dir in run_dirs:
         task = read_json(run_dir / "task.json")
         if ws is not None and task.get("workspace") != ws:
             continue
