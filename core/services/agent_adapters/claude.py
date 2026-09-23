@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+import time
 from collections.abc import AsyncIterator, Callable
 from typing import Any, Literal
 from uuid import uuid4
@@ -43,6 +44,10 @@ class ClaudeProtocolError(RuntimeError):
     pass
 
 
+# 每个会话一个常驻 ``claude`` 子进程，闲置不回收会一直占着。
+DEFAULT_IDLE_TIMEOUT_SECONDS = 30 * 60
+
+
 class ClaudeAdapter:
     provider_id = "claude"
 
@@ -53,14 +58,20 @@ class ClaudeAdapter:
         client_factory: Callable[
             [ClaudeAgentOptions], ClaudeSDKClient
         ] = ClaudeSDKClient,
+        idle_timeout: float = DEFAULT_IDLE_TIMEOUT_SECONDS,
     ):
         self.executable = executable
+        self.idle_timeout = idle_timeout
         self._client_factory = client_factory
         self._events: asyncio.Queue[AdapterEvent | None] = asyncio.Queue(queue_size)
         self._clients: dict[str, ClaudeSDKClient] = {}
         self._client_tasks: dict[str, asyncio.Task] = {}
         self._active_turns: dict[str, str] = {}
         self._session_cwds: dict[str, str] = {}
+        # 被回收的会话下一轮要按原参数 resume 回来，所以连接参数比 client 活得久。
+        self._session_options: dict[str, tuple[str, str | None, PermissionMode]] = {}
+        self._last_used: dict[str, float] = {}
+        self._reaper: asyncio.Task | None = None
         # Standards injected at session creation. Kept per session so a
         # same-process reconnect (resume after client drop) re-applies them;
         # a resume across a Gateway restart intentionally does not -- the
@@ -90,9 +101,17 @@ class ClaudeAdapter:
             raise RuntimeError(self._unavailable_reason)
         self._started = True
         self._unavailable_reason = None
+        if self.idle_timeout > 0:
+            self._reaper = asyncio.create_task(
+                self._reap_idle_clients(), name="claude-idle-reaper"
+            )
 
     async def stop(self) -> None:
         self._started = False
+        if self._reaper is not None:
+            self._reaper.cancel()
+            await asyncio.gather(self._reaper, return_exceptions=True)
+            self._reaper = None
         for _approval_id, (_session_id, future, _context) in list(
             self._pending_approvals.items()
         ):
@@ -114,6 +133,8 @@ class ClaudeAdapter:
         self._clients.clear()
         self._active_turns.clear()
         self._session_cwds.clear()
+        self._session_options.clear()
+        self._last_used.clear()
         self._session_system_prompts.clear()
         self._current_message_ids.clear()
         self._started_tools.clear()
@@ -186,12 +207,13 @@ class ClaudeAdapter:
         )
 
     async def start_turn(self, provider_session_id: str, turn: TurnInput) -> str:
-        client = self._client(provider_session_id)
+        client = await self._reconnect_if_evicted(provider_session_id)
         active = self._client_tasks.get(provider_session_id)
         if active and not active.done():
             raise ClaudeProtocolError("Claude session already has an active turn")
         turn_id = f"claude-turn-{uuid4().hex}"
         self._active_turns[provider_session_id] = turn_id
+        self._touch(provider_session_id)
         await client.query(
             "\n".join(value.text for value in turn.input),
             session_id=provider_session_id,
@@ -217,7 +239,11 @@ class ClaudeAdapter:
     async def cancel_turn(
         self, provider_session_id: str, provider_turn_id: str
     ) -> None:
-        client = self._client(provider_session_id)
+        self._require_started()
+        client = self._clients.get(provider_session_id)
+        if client is None:
+            # 已被闲置回收：不可能还有进行中的轮次。
+            return
         for approval_id, (session_id, future, _context) in list(
             self._pending_approvals.items()
         ):
@@ -269,6 +295,60 @@ class ClaudeAdapter:
                 "Claude session is not connected; resume it first"
             )
         return client
+
+    async def _reconnect_if_evicted(self, provider_session_id: str) -> ClaudeSDKClient:
+        self._require_started()
+        client = self._clients.get(provider_session_id)
+        if client is not None:
+            return client
+        options = self._session_options.get(provider_session_id)
+        if options is None:
+            raise ClaudeProtocolError(
+                "Claude session is not connected; resume it first"
+            )
+        cwd, model, permission_mode = options
+        return await self._connect_client(
+            provider_session_id,
+            cwd=cwd,
+            model=model,
+            permission_mode=permission_mode,
+            resume=True,
+        )
+
+    def _touch(self, session_id: str) -> None:
+        self._last_used[session_id] = time.monotonic()
+
+    def _is_busy(self, session_id: str) -> bool:
+        task = self._client_tasks.get(session_id)
+        if task is not None and not task.done():
+            return True
+        return any(
+            pending_session == session_id
+            for pending_session, _future, _context in self._pending_approvals.values()
+        )
+
+    async def evict_idle_clients(self, now: float | None = None) -> list[str]:
+        """断开闲置超过 ``idle_timeout`` 的会话，返回被回收的会话 id。"""
+        now = time.monotonic() if now is None else now
+        evicted = [
+            session_id
+            for session_id in list(self._clients)
+            if not self._is_busy(session_id)
+            and now - self._last_used.get(session_id, now) >= self.idle_timeout
+        ]
+        clients = [self._clients.pop(session_id) for session_id in evicted]
+        for session_id in evicted:
+            self._client_tasks.pop(session_id, None)
+        await asyncio.gather(
+            *(client.disconnect() for client in clients), return_exceptions=True
+        )
+        return evicted
+
+    async def _reap_idle_clients(self) -> None:
+        interval = min(60.0, self.idle_timeout)
+        while True:
+            await asyncio.sleep(interval)
+            await self.evict_idle_clients()
 
     async def _connect_client(
         self,
@@ -345,6 +425,8 @@ class ClaudeAdapter:
             raise
         self._clients[session_id] = client
         self._session_cwds[session_id] = cwd
+        self._session_options[session_id] = (cwd, model, permission_mode)
+        self._touch(session_id)
         return client
 
     async def _consume_response(self, session_id: str, turn_id: str) -> None:
@@ -379,6 +461,7 @@ class ClaudeAdapter:
         finally:
             self._active_turns.pop(session_id, None)
             self._current_message_ids.pop(session_id, None)
+            self._touch(session_id)
             self._cleanup_session_tools(session_id)
 
     def _cleanup_session_tools(self, session_id: str) -> None:

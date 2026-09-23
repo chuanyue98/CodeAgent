@@ -216,3 +216,87 @@ async def test_claude_live_two_turn_session():
         assert "CODEAGENT_GATEWAY_ONE" in second
     finally:
         await adapter.stop()
+
+
+class _FakeClient:
+    def __init__(self, options):
+        self.options = options
+        self.disconnected = False
+
+    async def connect(self):
+        pass
+
+    async def disconnect(self):
+        self.disconnected = True
+
+    async def get_server_info(self):
+        return {}
+
+    async def query(self, _prompt, session_id=None):
+        pass
+
+    async def receive_response(self):
+        return
+        yield
+
+
+async def _started_adapter(monkeypatch, clients):
+    monkeypatch.setattr(
+        "core.services.agent_adapters.claude.shutil.which", lambda _name: "/bin/claude"
+    )
+
+    def factory(options):
+        client = _FakeClient(options)
+        clients.append(client)
+        return client
+
+    adapter = ClaudeAdapter(client_factory=factory, idle_timeout=60)
+    await adapter.start()
+    return adapter
+
+
+@pytest.mark.asyncio
+async def test_claude_evicts_idle_client_and_resumes_on_next_turn(monkeypatch):
+    clients: list[_FakeClient] = []
+    adapter = await _started_adapter(monkeypatch, clients)
+    try:
+        session = await adapter.create_session(
+            CreateSessionOptions(project_id="p", cwd="/work", model="sonnet")
+        )
+        now = adapter._last_used[session.id]
+
+        assert await adapter.evict_idle_clients(now + 59) == []
+        assert await adapter.evict_idle_clients(now + 60) == [session.id]
+        assert clients[0].disconnected
+        assert session.id not in adapter._clients
+
+        await adapter.start_turn(session.id, TurnInput(input=[AgentInput(text="hi")]))
+
+        resumed = clients[1].options
+        assert resumed.resume == session.id
+        assert resumed.cwd == "/work"
+        assert resumed.model == "sonnet"
+    finally:
+        await adapter.stop()
+
+
+@pytest.mark.asyncio
+async def test_claude_keeps_client_with_pending_approval(monkeypatch):
+    clients: list[_FakeClient] = []
+    adapter = await _started_adapter(monkeypatch, clients)
+    try:
+        session = await adapter.create_session(
+            CreateSessionOptions(project_id="p", cwd="/work")
+        )
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
+        adapter._pending_approvals["approval-1"] = (
+            session.id,
+            future,
+            ToolPermissionContext(tool_use_id="tool-1"),
+        )
+
+        now = adapter._last_used[session.id]
+        assert await adapter.evict_idle_clients(now + 3600) == []
+        assert not clients[0].disconnected
+    finally:
+        await adapter.stop()
