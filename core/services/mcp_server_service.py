@@ -52,8 +52,9 @@ SERVER_INSTRUCTIONS = (
 #: 提示词注入已经取消，这是模型得知"怎么委派"的唯一渠道。
 DELEGATION_INSTRUCTIONS = """CodeAgent 跨引擎协作：把子任务交给另一个编码引擎（claude / codex / opencode / codebuddy / antigravity）在后台完成，用法同你自己的后台子代理。
 
-- 用户点名要某个引擎做事（"让 codex review 一下""让 claude 设计这块"），或有边界清晰、可以并行的子任务时，调用 ca_delegate。它立即返回 run_id，不会阻塞你。
-- 发起后继续做你手头的事；需要结果时调用 ca_delegate_wait(run_id)。它最多等 45 秒，还没结束就返回 running，稍后再调。不要在同一个 run 上连续空等。
+- 用户点名要某个引擎做事（"让 codex review 一下""让 claude 设计这块"），或有边界清晰、可以并行的子任务时委派。
+- 调用 ca_delegate 发起，它立即返回 run_id。然后不要在主会话里等：开一个在后台运行的子代理（Claude Code / CodeBuddy：Agent 工具加 run_in_background: true；OpenCode：task 工具加 background: true；Antigravity：后台子代理），让它反复调用 ca_delegate_wait(run_id) 直到 status 不再是 running，再原样返回结果。子代理跑完，结果会自动交回给你——期间继续做别的事或结束本轮，不要轮询、不要 sleep。
+- 没有后台子代理可用时，才自己调用 ca_delegate_wait（每次最多等 45 秒）。
 - mode="review"：只读审查当前未提交的改动，在带着这些改动的一次性 git worktree 里进行，不会碰主工作区，结果是问题列表。
 - mode="write"：默认在当前工作区就地修改；isolate_worktree=True 则在独立分支上改，结果里会给出分支名。
 - 子引擎看不到你的对话，instruction 要写清背景、目标、验收标准和相关文件。
@@ -267,6 +268,8 @@ def _register_delegation_tools(
     ) -> str:
         """把子任务交给另一个引擎在后台执行，立即返回 run_id。
 
+        发起后开一个后台子代理用 ca_delegate_wait 等结果，主会话不要自己等。
+
         Args:
             engine: claude / codex / opencode / codebuddy / antigravity。
             instruction: 子引擎看不到你的对话：写清背景、目标、验收标准。
@@ -294,7 +297,15 @@ def _register_delegation_tools(
             {
                 "run_id": run_id,
                 "status": "started",
-                "next": "继续你的工作；需要结果时调用 ca_delegate_wait(run_id)",
+                # 模型对工具结果的注意力远高于服务说明（codebuddy 压根不给模型看
+                # 服务说明），"交给后台子代理去等"必须在这里再说一遍。
+                "next": (
+                    "现在开一个在后台运行的子代理，让它反复调用 "
+                    f'ca_delegate_wait(run_id="{run_id}") 直到 status 不再是 '
+                    "running，再原样返回结果；然后结束本轮，结果会自动交回给你，"
+                    "不要自己等待或轮询。你本身就是被派来等结果的子代理、"
+                    "或者没有后台子代理可用时，才自己调用 ca_delegate_wait。"
+                ),
             },
             ensure_ascii=False,
         )

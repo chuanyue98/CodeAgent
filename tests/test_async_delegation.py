@@ -47,12 +47,20 @@ def test_codex_overrides_are_config_flags(mount_enabled):
     assert args[5].startswith("mcp_servers.codeagent.env={PYTHONPATH = ")
 
 
+def test_codebuddy_delegation_agent_runs_in_background(mount_enabled):
+    [arg] = _McpMixin().delegation_agent_arg()
+    flag, _, payload = arg.partition("=")
+    assert flag == "--agents"
+    assert json.loads(payload)["ca-delegate"]["background"] is True
+
+
 def test_opencode_env_keeps_existing_config_content(mount_enabled):
     env = {"OPENCODE_CONFIG_CONTENT": json.dumps({"model": "x/y"})}
     _McpMixin().apply_opencode_mcp_env(env)
     content = json.loads(env["OPENCODE_CONFIG_CONTENT"])
     assert content["model"] == "x/y"
     assert content["mcp"]["codeagent"]["type"] == "local"
+    assert env["OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS"] == "true"
 
 
 def test_nothing_is_mounted_at_the_depth_limit(monkeypatch):
@@ -62,6 +70,7 @@ def test_nothing_is_mounted_at_the_depth_limit(monkeypatch):
     mixin.apply_opencode_mcp_env(env)
     assert mixin.mcp_config_arg() == []
     assert mixin.codex_mcp_overrides() == []
+    assert mixin.delegation_agent_arg() == []
     assert env == {}
 
 

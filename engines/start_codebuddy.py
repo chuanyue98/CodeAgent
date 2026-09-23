@@ -81,7 +81,13 @@ class CodeBuddyEngine(_PluginDirMixin, BaseEngine):
     ) -> list[str]:
         # ``auto`` 权限模式下，安全的工具调用自动通过，风险操作被拒绝，
         # 避免交互式授权卡住 ``ca`` 终端启动。
-        cmd = [self.COMMAND, "--permission-mode", "auto", *self.mcp_config_arg()]
+        cmd = [
+            self.COMMAND,
+            "--permission-mode",
+            "auto",
+            *self.mcp_config_arg(),
+            *self.delegation_agent_arg(),
+        ]
         if non_interactive:
             cmd.append("-p")
         cmd.extend(passthrough)
