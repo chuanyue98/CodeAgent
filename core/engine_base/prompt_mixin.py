@@ -72,12 +72,18 @@ class _PromptMixin:
             temp_file_path.unlink(missing_ok=True)
             paths.discard(temp_file_path)
 
-    def run_shell(self, cmd: list[str], env: dict):
+    def chat_stdin(self, message: str) -> str | None:
+        """``build_chat_command`` 没放进参数、要改从 stdin 送的消息。"""
+        return None
+
+    def run_shell(self, cmd: list[str], env: dict, stdin_text: str | None = None):
         """Executes a command in a subprocess with the given environment.
 
         Args:
             cmd (List[str]): The command and its arguments as a list of strings.
             env (dict): A dictionary of environment variables.
+            stdin_text: If given, sent to the command's stdin as UTF-8 instead of
+                letting it inherit ours.
 
         Raises:
             FileNotFoundError: If the command executable cannot be found.
@@ -89,7 +95,12 @@ class _PromptMixin:
             resolved_cmd[0] = executable
 
         try:
-            result = subprocess.run(resolved_cmd, env=env, check=False)
+            result = subprocess.run(
+                resolved_cmd,
+                env=env,
+                check=False,
+                input=None if stdin_text is None else stdin_text.encode("utf-8"),
+            )
         except FileNotFoundError:
             print(f"❌ Command not found: {cmd[0]}", file=sys.stderr)
             raise

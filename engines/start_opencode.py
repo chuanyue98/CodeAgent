@@ -465,8 +465,10 @@ export default async () => {{
         self, message: str, non_interactive: bool, passthrough: Sequence[str] = ()
     ) -> list[str]:
         if non_interactive:
-            # 非交互模式使用 run
-            return [self.OPENCODE_COMMAND, "run", *passthrough, message]
+            # 消息不进参数，由调用方从 stdin 送：opencode run 会把带空格的
+            # 位置参数包一层引号、内部 " 转成 \"，模型收到的是 "只回复 OK"。
+            # 走 stdin 原样送达，也不经过 Windows .cmd 包装，多行不必绕临时文件。
+            return [self.OPENCODE_COMMAND, "run", *passthrough]
 
         # 交互模式：在当前目录启动 TUI 并注入初始提示词
         cmd = [self.OPENCODE_COMMAND, ".", *passthrough]
@@ -483,10 +485,13 @@ export default async () => {{
         ``-s/--session <id>`` resumes with full prior context. Legacy Web Chat
         intentionally keeps OpenCode's default permission policy.
         """
-        cmd = [self.OPENCODE_COMMAND, "run", message, "--format", "json"]
+        cmd = [self.OPENCODE_COMMAND, "run", "--format", "json"]
         if session_id:
             cmd.extend(["-s", session_id])
         return cmd
+
+    def chat_stdin(self, message: str) -> str | None:
+        return message
 
 
 def main():
@@ -546,14 +551,19 @@ def main():
     try:
         env = engine.env_manager.get_env()
         engine.apply_opencode_mcp_env(env)
-        final_command = engine.build_command(
-            engine.first_message(message), args.non_interactive, passthrough
-        )
+        if args.non_interactive:
+            final_command = engine.build_command(message, True, passthrough)
+            stdin_text: str | None = message
+        else:
+            final_command = engine.build_command(
+                engine.first_message(message), False, passthrough
+            )
+            stdin_text = None
         register_signal_handler()
 
         with engine.shared_injection(Path.cwd() / ".opencode", setup, teardown):
             print(f"🚀 Launching {engine.name}...")
-            engine.run_shell(final_command, env)
+            engine.run_shell(final_command, env, stdin_text=stdin_text)
     finally:
         engine.cleanup_temp_prompt()
 

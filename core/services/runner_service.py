@@ -73,6 +73,20 @@ def _read_available(stream: IO[bytes], size: int = 65536) -> bytes:
     return stream.read(size)
 
 
+def _feed_stdin(process: subprocess.Popen, text: str) -> None:
+    """把 *text* 写进 *process* 的 stdin 后关掉；引擎先退出了就算了。"""
+    assert process.stdin is not None
+    try:
+        process.stdin.write(text.encode("utf-8"))
+    except OSError:
+        pass
+    finally:
+        try:
+            process.stdin.close()
+        except OSError:
+            pass
+
+
 def _unlink_quietly(path: Path) -> None:
     """Deletes *path*, tolerating a handle still holding it open.
 
@@ -291,6 +305,7 @@ class TaskRunner:
 
         engine_obj = self._build_engine(engine)
         cmd = engine_obj.build_chat_command(message, session_id=session_id)
+        stdin_text = engine_obj.chat_stdin(message)
 
         turn_id = f"chat_{engine}_{time.time_ns()}"
         log_file = self.log_dir / f"{turn_id}.jsonl"
@@ -312,13 +327,20 @@ class TaskRunner:
                     cwd=str(working_dir),
                     stdout=f,
                     stderr=subprocess.STDOUT,
-                    stdin=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL if stdin_text is None else subprocess.PIPE,
                     env=env,
                     start_new_session=True if sys.platform != "win32" else False,
                     creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
                     if sys.platform == "win32"
                     else 0,
                 )
+            if stdin_text is not None:
+                # 放线程里写：消息超过管道缓冲时，写会一直等到引擎开始读。
+                threading.Thread(
+                    target=_feed_stdin,
+                    args=(process, stdin_text),
+                    daemon=True,
+                ).start()
 
             status = TaskRunStatus(
                 task_id=turn_id,

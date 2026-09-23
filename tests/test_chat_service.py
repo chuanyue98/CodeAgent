@@ -12,9 +12,9 @@ from tests._helpers import write_fake_chat_cli
 
 
 class _FakeChatEngine:
-    """Stands in for a real Engine subclass: only build_chat_command() and
-    env_manager.get_env() are exercised by run_chat_turn(), so the fake
-    only needs those two — mirroring how test_runner_service.py fakes the
+    """Stands in for a real Engine subclass: only build_chat_command(),
+    chat_stdin() and env_manager.get_env() are exercised by run_chat_turn(),
+    so the fake only needs those — mirroring how test_runner_service.py fakes the
     ca_launcher.py subprocess target rather than the whole launch pipeline.
     """
 
@@ -28,6 +28,24 @@ class _FakeChatEngine:
         if session_id:
             cmd.append(session_id)
         return cmd
+
+    def chat_stdin(self, message: str) -> str | None:
+        return None
+
+
+class _StdinChatEngine(_FakeChatEngine):
+    """像 opencode 那样：消息不进参数，从 stdin 送。"""
+
+    def build_chat_command(self, message: str, session_id: str | None = None):
+        script = (
+            "import json, sys; "
+            "text = sys.stdin.buffer.read().decode('utf-8'); "
+            "print(json.dumps({'session_id': 's1', 'echo': text}))"
+        )
+        return [sys.executable, "-c", script]
+
+    def chat_stdin(self, message: str) -> str | None:
+        return message
 
 
 def _wait_for_completion(runner: TaskRunner, task_id: str, timeout: float = 5.0):
@@ -57,6 +75,21 @@ def test_run_chat_turn_writes_jsonl_log_and_extracts_session_id(tmp_path, monkey
 
     payload = json.loads(Path(status.log_path).read_text(encoding="utf-8"))
     assert payload["echo"] == "hello there"
+
+
+def test_run_chat_turn_can_send_the_message_on_stdin(tmp_path, monkeypatch):
+    fake_engine = _StdinChatEngine(tmp_path, "session_id")
+    runner = TaskRunner(tmp_path)
+    monkeypatch.setattr(runner, "_build_engine", lambda engine: fake_engine)
+    message = '第一行 "引号"\n第二行'
+
+    run = runner.run_chat_turn("opencode", message, project_path=str(tmp_path))
+    status = _wait_for_completion(runner, run.task_id)
+
+    assert status is not None
+    assert status.status == "completed"
+    payload = json.loads(Path(status.log_path).read_text(encoding="utf-8"))
+    assert payload["echo"] == message
 
 
 def test_run_chat_turn_resume_passes_session_id_through(tmp_path, monkeypatch):
@@ -178,3 +211,12 @@ def test_legacy_chat_commands_use_restricted_defaults():
 
     opencode = OpenCodeEngine().build_chat_command("hello")
     assert "--auto" not in opencode
+
+
+def test_opencode_chat_message_goes_on_stdin_not_argv():
+    """opencode run 会给带空格的参数包引号，模型收到的是 "hello world"。"""
+    from engines.start_opencode import OpenCodeEngine
+
+    engine = OpenCodeEngine()
+    assert "hello world" not in engine.build_chat_command("hello world")
+    assert engine.chat_stdin("hello world") == "hello world"

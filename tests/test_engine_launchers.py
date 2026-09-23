@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -42,9 +43,10 @@ def _stub_resources(monkeypatch, module, engine_cls):
 def _capture_run(monkeypatch, engine_cls, on_run=None):
     seen: dict = {}
 
-    def fake_run(self, cmd, env):
+    def fake_run(self, cmd, env, stdin_text=None):
         seen["cmd"] = list(cmd)
         seen["env"] = dict(env)
+        seen["stdin"] = stdin_text
         if on_run:
             on_run(seen)
 
@@ -216,6 +218,27 @@ def test_opencode_session_flag_is_passed_through(isolated, monkeypatch):
     seen = _run_opencode(monkeypatch, ["-s", "ses_1"])
 
     assert seen["cmd"] == ["opencode", ".", "-s", "ses_1"]
+
+
+def test_opencode_headless_message_goes_on_stdin(isolated, monkeypatch):
+    """opencode run 会给带空格的参数包引号、内部 " 转义，所以消息不进参数。"""
+    message = '第一行 "引号"\n第二行'
+    seen = _run_opencode(monkeypatch, ["-ni", message])
+
+    assert seen["cmd"] == ["opencode", "run"]
+    assert seen["stdin"] == message
+
+
+def test_run_shell_sends_stdin_text_as_utf8(isolated):
+    engine = opencode_mod.OpenCodeEngine()
+    message = '中文 "引号"\n第二行'
+    check = (
+        f"import sys; sys.exit(sys.stdin.buffer.read().decode('utf-8') != {message!r})"
+    )
+
+    engine.run_shell(
+        [sys.executable, "-c", check], dict(os.environ), stdin_text=message
+    )
 
 
 # --- antigravity ---------------------------------------------------------
