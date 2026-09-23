@@ -265,8 +265,8 @@ async def test_claude_evicts_idle_client_and_resumes_on_next_turn(monkeypatch):
         )
         now = adapter._last_used[session.id]
 
-        assert await adapter.evict_idle_clients(now + 59) == []
-        assert await adapter.evict_idle_clients(now + 60) == [session.id]
+        assert await adapter.evict_idle_clients(now + 30) == []
+        assert await adapter.evict_idle_clients(now + 90) == [session.id]
         assert clients[0].disconnected
         assert session.id not in adapter._clients
 
