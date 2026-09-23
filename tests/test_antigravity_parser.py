@@ -302,7 +302,10 @@ def test_write_antigravity_session_and_roundtrip(tmp_path: Path):
 
     # agy --conversation resolves via conversations/<sid>.db, not the transcript.
     conv_db = (
-        tmp_path / ".gemini" / "antigravity-cli" / "conversations"
+        tmp_path
+        / ".gemini"
+        / "antigravity-cli"
+        / "conversations"
         / "written-session-uuid.db"
     )
     assert conv_db.exists()

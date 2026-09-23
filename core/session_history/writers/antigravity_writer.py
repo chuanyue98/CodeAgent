@@ -204,7 +204,9 @@ def _create_conversations_db(db_path: Path) -> None:
         )
 
 
-def _write_conversations_db(db_path: Path, session: UnifiedSession, session_id: str) -> None:
+def _write_conversations_db(
+    db_path: Path, session: UnifiedSession, session_id: str
+) -> None:
     """Creates ``conversations/<sid>.db`` with trajectory_meta + message steps."""
     _create_conversations_db(db_path)
     trajectory_id = str(uuid.uuid4())
@@ -217,7 +219,9 @@ def _write_conversations_db(db_path: Path, session: UnifiedSession, session_id: 
             text = msg.content or ""
             if not text:
                 continue
-            metadata = _step_metadata(step_uuid, trajectory_id, session_id, _ROLE_USER, ts)
+            metadata = _step_metadata(
+                step_uuid, trajectory_id, session_id, _ROLE_USER, ts
+            )
             payload = _user_step_payload(text, metadata)
             steps.append(
                 (
@@ -239,7 +243,9 @@ def _write_conversations_db(db_path: Path, session: UnifiedSession, session_id: 
             text = _assistant_step_text(msg.content or "", msg.tool_calls)
             if not text:
                 continue
-            metadata = _step_metadata(step_uuid, trajectory_id, session_id, _ROLE_MODEL, ts)
+            metadata = _step_metadata(
+                step_uuid, trajectory_id, session_id, _ROLE_MODEL, ts
+            )
             payload = _planner_step_payload(text, metadata)
             steps.append(
                 (
@@ -339,7 +345,9 @@ def _upsert_summary(db_path: Path, session: UnifiedSession, session_id: str) -> 
 
             now = datetime.now(tz=UTC)
             db_now = now.strftime("%Y-%m-%d %H:%M:%S+00:00")
-            last_modified = _format_sqlite_ts(session.ended_at) if session.ended_at else db_now
+            last_modified = (
+                _format_sqlite_ts(session.ended_at) if session.ended_at else db_now
+            )
             last_user_time = (
                 _format_sqlite_ts(last_user_ts) if last_user_ts else last_modified
             )

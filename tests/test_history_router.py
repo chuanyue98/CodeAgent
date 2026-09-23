@@ -432,9 +432,7 @@ async def test_delete_antigravity_session_removes_orphan_dbs(tmp_path, monkeypat
         con.execute(
             "CREATE TABLE conversation_summaries (conversation_id TEXT PRIMARY KEY)"
         )
-        con.execute(
-            "INSERT INTO conversation_summaries VALUES (?)", ("sess-agy",)
-        )
+        con.execute("INSERT INTO conversation_summaries VALUES (?)", ("sess-agy",))
 
     import core.session_history.repository as repo
 
@@ -463,9 +461,7 @@ async def test_delete_antigravity_session_removes_orphan_dbs(tmp_path, monkeypat
         assert not (conv_dir / f"sess-agy.db{suffix}").exists()
     with sqlite3.connect(str(summaries_path)) as con:
         assert (
-            con.execute(
-                "SELECT count(*) FROM conversation_summaries"
-            ).fetchone()[0]
+            con.execute("SELECT count(*) FROM conversation_summaries").fetchone()[0]
             == 0
         )
 
