@@ -418,9 +418,23 @@ async def test_delete_antigravity_session_removes_orphan_dbs(tmp_path, monkeypat
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     cli_root = tmp_path / ".gemini" / "antigravity-cli"
-    transcript = cli_root / "brain" / "sess-agy" / "transcript.jsonl"
+    transcript = (
+        cli_root
+        / "brain"
+        / "sess-agy"
+        / ".system_generated"
+        / "logs"
+        / "transcript.jsonl"
+    )
     transcript.parent.mkdir(parents=True)
     transcript.write_text("{}\n", encoding="utf-8")
+
+    def cache_entry(session_id: str) -> bytes:
+        key = b"\x0a" + bytes([len(session_id)]) + session_id.encode()
+        return b"\x0a" + bytes([len(key)]) + key
+
+    cache = cli_root / "jetbox_summaries_proto.pb"
+    cache.write_bytes(cache_entry("sess-agy") + cache_entry("other"))
 
     conv_dir = cli_root / "conversations"
     conv_dir.mkdir(parents=True)
@@ -456,7 +470,8 @@ async def test_delete_antigravity_session_removes_orphan_dbs(tmp_path, monkeypat
         assert del_res.status_code == 200
         assert del_res.json()["status"] == "deleted"
 
-    assert not transcript.exists()
+    assert not (cli_root / "brain" / "sess-agy").exists()
+    assert cache.read_bytes() == cache_entry("other"), "agy 会用这份缓存把会话复活"
     for suffix in ("", "-wal", "-shm"):
         assert not (conv_dir / f"sess-agy.db{suffix}").exists()
     with sqlite3.connect(str(summaries_path)) as con:

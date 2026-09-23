@@ -22,6 +22,7 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
+import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
@@ -36,6 +37,7 @@ from core.services.workspace_service import (
     resolve_registered_workspace,
 )
 from core.session_history import repository
+from core.session_history.antigravity_cache import remove_from_summaries_cache
 from core.web.case_convert import ProtocolModel, camelize, wire
 from core.web.routers.config import get_config_path
 
@@ -493,9 +495,18 @@ async def delete_session(
                 con.close()
     elif engine in ("antigravity", "agy"):
         try:
-            if validated_path.is_file():
-                validated_path.unlink(missing_ok=True)
             cli_root = Path.home() / ".gemini" / "antigravity-cli"
+            brain = (cli_root / "brain").resolve()
+            session_dir = (brain / session_id).resolve()
+            if session_dir.parent == brain and validated_path.is_relative_to(
+                session_dir
+            ):
+                # transcript 只是 brain/<sid>/ 里的一个文件，整个会话目录一起删。
+                shutil.rmtree(session_dir, ignore_errors=True)
+            elif validated_path.is_file():
+                validated_path.unlink(missing_ok=True)
+            # agy 会用这份缓存把 sqlite 里删掉的行重新生成出来。
+            remove_from_summaries_cache(cli_root, session_id)
             db_path = (cli_root / "conversation_summaries.db").resolve()
             if db_path.is_file():
                 with sqlite3.connect(str(db_path)) as con:
