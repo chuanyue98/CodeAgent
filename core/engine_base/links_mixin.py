@@ -37,17 +37,25 @@ class _LinksMixin:
 
         每个会话都会跑一次 *setup*（注入是幂等的），*teardown* 只在最后一个
         会话退出时执行，避免先退出的会话把别人还在用的链接和钩子拆掉。
+        *scope* 目录若是注入时才建出来的，拆完后变空就一并删掉。
         """
         registry = SessionRegistry(scope, lock_manager=self.lock_manager)
         try:
             with registry.exclusive():
                 registry.join()
+                if not scope.exists():
+                    registry.note_scope_created()
                 setup()
             yield
         finally:
             with registry.exclusive():
                 if registry.leave():
                     teardown()
+                    if registry.take_scope_created():
+                        try:
+                            scope.rmdir()
+                        except OSError:
+                            pass
 
     def resolve_skill_sources(self) -> list[tuple[str, Path]]:
         """当前组要挂载的技能，按 (链接名, 源目录) 返回；重名时保留优先级高的来源。"""

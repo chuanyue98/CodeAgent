@@ -115,6 +115,41 @@ def test_teardown_still_runs_when_the_session_fails(isolated):
     assert calls == ["teardown"]
 
 
+def test_a_scope_dir_ca_created_is_removed_once_empty(isolated):
+    """用一次 ca codex，项目里不该多出一个空的 .codex/。"""
+    engine = claude_mod.ClaudeEngine()
+    scope = isolated / ".claude"
+
+    with engine.shared_injection(scope, lambda: scope.mkdir(), lambda: None):
+        with engine.shared_injection(scope, lambda: None, lambda: None):
+            pass
+        assert scope.is_dir()
+    assert not scope.exists()
+
+
+def test_a_scope_dir_the_user_had_is_kept(isolated):
+    engine = claude_mod.ClaudeEngine()
+    scope = isolated / ".claude"
+    scope.mkdir()
+
+    with engine.shared_injection(scope, lambda: None, lambda: None):
+        pass
+    assert scope.is_dir()
+
+
+def test_a_created_scope_dir_that_gained_content_is_kept(isolated):
+    engine = claude_mod.ClaudeEngine()
+    scope = isolated / ".claude"
+
+    def setup():
+        scope.mkdir()
+        (scope / "settings.local.json").write_text("{}", encoding="utf-8")
+
+    with engine.shared_injection(scope, setup, lambda: None):
+        pass
+    assert (scope / "settings.local.json").exists()
+
+
 # --- claude --------------------------------------------------------------
 
 

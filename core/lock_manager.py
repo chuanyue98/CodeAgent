@@ -149,6 +149,18 @@ class SessionRegistry:
             raise OSError(f"Cannot lock session file: {path}")
         self._own = (path, handle)
 
+    def note_scope_created(self) -> None:
+        """记下注入范围目录是这批会话建出来的。调用方须持有 :meth:`exclusive`。"""
+        (self.directory / "scope-created").touch()
+
+    def take_scope_created(self) -> bool:
+        """取出并清掉 :meth:`note_scope_created` 的记录。调用方须持有 :meth:`exclusive`。"""
+        marker = self.directory / "scope-created"
+        if not marker.exists():
+            return False
+        marker.unlink(missing_ok=True)
+        return True
+
     def leave(self) -> bool:
         """注销当前会话，返回是否已经没有其他存活会话。调用方须持有 :meth:`exclusive`。"""
         if self._own is not None:
