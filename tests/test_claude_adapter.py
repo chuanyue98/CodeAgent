@@ -300,3 +300,28 @@ async def test_claude_keeps_client_with_pending_approval(monkeypatch):
         assert not clients[0].disconnected
     finally:
         await adapter.stop()
+
+
+@pytest.mark.asyncio
+async def test_claude_keeps_the_claude_code_system_prompt(monkeypatch):
+    """字符串 system_prompt 会被 SDK 翻成 --system-prompt，整个换掉 Claude Code
+    自带的提示词；None 则翻成空提示词。组里的规范只能追加。"""
+    clients: list[_FakeClient] = []
+    adapter = await _started_adapter(monkeypatch, clients)
+    try:
+        await adapter.create_session(
+            CreateSessionOptions(project_id="p", cwd="/work", system_prompt="规范")
+        )
+        await adapter.create_session(CreateSessionOptions(project_id="p", cwd="/work"))
+
+        assert clients[0].options.system_prompt == {
+            "type": "preset",
+            "preset": "claude_code",
+            "append": "规范",
+        }
+        assert clients[1].options.system_prompt == {
+            "type": "preset",
+            "preset": "claude_code",
+        }
+    finally:
+        await adapter.stop()

@@ -23,6 +23,7 @@ from claude_agent_sdk import (
     ToolResultBlock,
     ToolUseBlock,
 )
+from claude_agent_sdk.types import SystemPromptPreset
 
 from core.services.agent_adapters._event_queue import (
     iter_events,
@@ -46,6 +47,18 @@ class ClaudeProtocolError(RuntimeError):
 
 # 每个会话一个常驻 ``claude`` 子进程，闲置不回收会一直占着。
 DEFAULT_IDLE_TIMEOUT_SECONDS = 30 * 60
+
+
+def _claude_code_system_prompt(extra: str | None) -> SystemPromptPreset:
+    """保留 Claude Code 自带的系统提示词，组里的规范追加在后面。
+
+    SDK 把字符串 ``system_prompt`` 翻成 ``--system-prompt``（整个替换），
+    ``None`` 翻成 ``--system-prompt ""``（清空）；只有 preset 才保留默认提示词。
+    """
+    preset: SystemPromptPreset = {"type": "preset", "preset": "claude_code"}
+    if extra:
+        preset["append"] = extra
+    return preset
 
 
 class ClaudeAdapter:
@@ -412,7 +425,9 @@ class ClaudeAdapter:
             include_partial_messages=True,
             include_hook_events=True,
             setting_sources=["user", "project", "local"],
-            system_prompt=self._session_system_prompts.get(session_id),
+            system_prompt=_claude_code_system_prompt(
+                self._session_system_prompts.get(session_id)
+            ),
             resume=session_id if resume else None,
             session_id=None if resume else session_id,
             stderr=lambda _line: None,
