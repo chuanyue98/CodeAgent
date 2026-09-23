@@ -411,6 +411,21 @@ def test_ensure_ready_announces_only_when_it_blocks(store_and_indexer, home_path
     assert len(notices) == 1
 
 
+def test_ensure_ready_picks_up_sessions_written_after_the_first_build(
+    store_and_indexer, home_path
+):
+    """索引早就建好了，新进程里 ensure_ready 仍要前台补一次增量：
+    刚在引擎里聊完、紧接着 ``ca -s`` 的那个会话必须能被选到。"""
+    store, indexer = store_and_indexer
+    _write_session(home_path, "s1", _row("s1", "hello"))
+    indexer.sync()
+    _write_session(home_path, "s2", _row("s2", "just finished"))
+
+    fresh_process = SessionIndexer(store, home=home_path)
+    assert fresh_process.ensure_ready() is True
+    assert store.get_summary("claude", "s2") is not None
+
+
 def test_ensure_ready_gives_up_after_one_failed_build(
     store_and_indexer, home_path, monkeypatch
 ):

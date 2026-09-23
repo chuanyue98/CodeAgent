@@ -101,6 +101,10 @@ class SessionIndexer:
         里的第二次读不该再赔一轮全量解析——调用方照旧回退到直接解析。
         """
         if self._index.is_ready() and self._index_matches_parsers():
+            # 增量同步只 stat 文件，远不到一秒，所以也放前台：交给后台线程的话
+            # 本次读先拿走旧快照，刚退出的会话在 ``ca -s`` / ``ca -r`` 里看不到。
+            if time.monotonic() - self._last_finished >= DEFAULT_STALE_SECONDS:
+                self.sync()
             return True
         if self._first_build_attempted:
             return False
