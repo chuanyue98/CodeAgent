@@ -116,9 +116,24 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
     started_at = ""
     ended_at = ""
 
-    # Collect function calls and outputs to attach to the preceding assistant message
+    # 调用发生在两段助手文本之间：先攒着，下一段文本到来前单独成一条消息插在
+    # 它前面。挂到那段文本上会让目标引擎读成"先给答案、再去调用工具"。
     pending_tool_calls: list[ToolCallSummary] = []
-    call_id_to_index: dict[str, int] = {}
+    call_id_to_call: dict[str, ToolCallSummary] = {}
+
+    def flush_tool_calls(timestamp: str) -> None:
+        if not pending_tool_calls:
+            return
+        messages.append(
+            UnifiedMessage(
+                role="assistant",
+                content="",
+                timestamp=timestamp,
+                tool_calls=pending_tool_calls[:],
+                model=model,
+            )
+        )
+        pending_tool_calls.clear()
 
     # 老格式同一句用户发言会出现两次（``response_item`` 一次、``event_msg``
     # 一次），先都收下，末尾发现文件里有 ``event_msg`` 版本时再把这批删掉。
@@ -182,6 +197,7 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
                         phase = payload.get("phase", "final")
                         text = payload.get("message", "").strip()
                         if text and phase == "final":
+                            flush_tool_calls(timestamp)
                             messages.append(
                                 UnifiedMessage(
                                     role="assistant",
@@ -232,32 +248,23 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
                         elif role == "assistant":
                             phase = payload.get("phase", "final")
                             if phase == "final" and text:
-                                # Attach any pending tool calls
-                                tc = pending_tool_calls[:] if pending_tool_calls else []
+                                flush_tool_calls(timestamp)
                                 # Codex records one assistant turn twice: an
                                 # ``event_msg``/``agent_message`` for the UI and
-                                # this ``response_item`` for the transcript. Only
-                                # this one carries tool calls, so it replaces the
-                                # earlier copy instead of doubling the turn.
-                                if (
+                                # this ``response_item`` for the transcript.
+                                if not (
                                     messages
                                     and messages[-1].role == "assistant"
                                     and messages[-1].content == text
-                                    and not messages[-1].tool_calls
                                 ):
-                                    messages[-1].tool_calls = tc
-                                else:
                                     messages.append(
                                         UnifiedMessage(
                                             role="assistant",
                                             content=text,
                                             timestamp=timestamp,
-                                            tool_calls=tc,
                                             model=model,
                                         )
                                     )
-                                pending_tool_calls.clear()
-                                call_id_to_index.clear()
                                 ended_at = timestamp
 
                     elif sub_type == "function_call":
@@ -276,18 +283,21 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
                         pending_tool_calls.append(new_tc)
                         call_id = payload.get("call_id", "")
                         if call_id:
-                            call_id_to_index[call_id] = len(pending_tool_calls) - 1
+                            call_id_to_call[call_id] = new_tc
 
                     elif sub_type == "function_call_output":
                         call_id = payload.get("call_id", "")
                         output = payload.get("output", "")
-                        if isinstance(output, str) and call_id in call_id_to_index:
-                            pending = pending_tool_calls[call_id_to_index[call_id]]
+                        pending = call_id_to_call.pop(call_id, None)
+                        if isinstance(output, str) and pending is not None:
                             pending.result_preview = result_preview(output)
                             pending.result_captured = True
 
     except OSError:
         return None
+
+    # 轮次被打断时调用后面没有文本，调用本身仍要留下。
+    flush_tool_calls(ended_at)
 
     if saw_event_user_message:
         for index in reversed(response_item_user_indices):

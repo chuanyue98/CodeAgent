@@ -1044,7 +1044,9 @@ def test_codex_parser_does_not_double_assistant_turns(tmp_path):
     assert session is not None
     assert [(m.role, m.content) for m in session.messages] == [
         ("user", "后台启动"),
+        ("assistant", ""),
         ("assistant", "已启动"),
     ]
-    # The surviving copy keeps the tool call, which only the response_item has.
+    # 调用排在回答之前，而不是挂在回答上。
     assert [tc.name for tc in session.messages[1].tool_calls] == ["shell"]
+    assert session.messages[2].tool_calls == []
