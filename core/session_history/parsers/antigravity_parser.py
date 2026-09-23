@@ -31,7 +31,7 @@ from core.session_history.paths import (
     normalize_project_path,
     strip_extended_length_prefix,
 )
-from core.session_history.previews import args_preview
+from core.session_history.previews import args_preview, result_preview
 from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_dirs, long_path
 
@@ -225,21 +225,43 @@ def _get_metadata_from_db(db_path: Path, session_id: str) -> dict[str, str]:
     return res
 
 
+def _unquote_arg(value: object) -> object:
+    """transcript.jsonl 把每个字符串参数再 JSON 编码了一层（``'"/a/b"'``）。"""
+    if isinstance(value, str) and len(value) >= 2 and value[0] == value[-1] == '"':
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            return value
+        if isinstance(decoded, str):
+            return decoded
+    return value
+
+
 def _extract_tool_calls(tool_calls_raw: list) -> list[ToolCallSummary]:
     """Converts Antigravity raw tool calls to ToolCallSummary objects."""
     tool_calls: list[ToolCallSummary] = []
     for tc in tool_calls_raw:
         if not isinstance(tc, dict):
             continue
-        # No result_captured: an Antigravity tool result is not on the call
-        # row, and this parser never goes looking for one.
+        args = tc.get("args")
+        if isinstance(args, dict):
+            args = {key: _unquote_arg(value) for key, value in args.items()}
         tool_calls.append(
             ToolCallSummary(
                 name=str(tc.get("name") or ""),
-                args_preview=args_preview(tc.get("args")),
+                args_preview=args_preview(args),
             )
         )
     return tool_calls
+
+
+_STEP_TIMING_RE = re.compile(r"^(?:Created|Completed) At: .*\n?", re.M)
+
+
+def _step_result_text(row: dict) -> str:
+    """工具步骤的输出，去掉每步都带的 Created/Completed 时间戳头。"""
+    text = row.get("content") or row.get("error") or ""
+    return _STEP_TIMING_RE.sub("", str(text)).strip()
 
 
 def _extract_user_content(content: str) -> str:
@@ -423,6 +445,8 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
     inferred_project_path = ""
     computed_title = ""
     subagent_titles: dict[str, str] = {}
+    # 上一条 PLANNER_RESPONSE 发出、还没等到结果的调用；结果是其后按序出现的步骤。
+    awaiting_results: list[ToolCallSummary] = []
     for row in raw_rows:
         row_type = row.get("type", "")
         # 1. Infer project path
@@ -483,7 +507,12 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
                     model = _normalize_model_name(m_match.group(1).strip("`'\" ()"))
 
         if row_type not in ("USER_INPUT", "PLANNER_RESPONSE"):
+            if awaiting_results and row.get("source") == "MODEL":
+                call = awaiting_results.pop(0)
+                call.result_preview = result_preview(_step_result_text(row))
+                call.result_captured = True
             continue
+        awaiting_results = []
 
         ts = row.get("created_at") or ""
         if not started_at and ts:
@@ -512,6 +541,7 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
                 if isinstance(tool_calls_raw, list)
                 else []
             )
+            awaiting_results = list(tool_calls)
             if content or tool_calls:
                 messages.append(
                     UnifiedMessage(

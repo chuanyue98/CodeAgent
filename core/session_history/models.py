@@ -52,8 +52,7 @@ class ToolCallSummary:
             call. False means "we never looked", which is not the same as an
             empty result and must not be written to the target engine as one
             -- a model reads ``""`` as "the command returned nothing" and
-            believes it. The Claude and Antigravity parsers capture no
-            results at all, so everything they produce is False.
+            believes it.
     """
 
     name: str = ""

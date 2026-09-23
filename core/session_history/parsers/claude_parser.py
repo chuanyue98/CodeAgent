@@ -28,7 +28,7 @@ from core.session_history.parsers._subagents import (
 )
 from core.session_history.parsers._synthetic import is_synthetic_user_content
 from core.session_history.paths import strip_extended_length_prefix
-from core.session_history.previews import args_preview
+from core.session_history.previews import args_preview, result_preview
 from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_dirs, list_files, long_path
 
@@ -124,6 +124,8 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
     cwd = ""
     agent = ""
     subagent_titles: dict[str, str] = {}
+    # tool_use_id -> 调用；结果记在紧随其后的 user 行的 tool_result 块里。
+    pending_tools: dict[str, ToolCallSummary] = {}
 
     try:
         # long_path, not a bare open: these files live under a directory named
@@ -182,6 +184,7 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
                     ended_at = timestamp
 
                 if row_type == "user":
+                    _attach_tool_results(msg, pending_tools)
                     content = _extract_user_content(msg)
                     if content and is_synthetic_user_content(content):
                         continue
@@ -195,7 +198,7 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
                         )
 
                 elif row_type == "assistant":
-                    text, tool_calls = _extract_assistant_content(msg)
+                    text, tool_calls = _extract_assistant_content(msg, pending_tools)
                     if msg.get("model") and not model:
                         model = msg["model"]
                     if text or tool_calls:
@@ -259,7 +262,31 @@ def _extract_user_content(msg: dict) -> str:
     return ""
 
 
-def _extract_assistant_content(msg: dict) -> tuple[str, list[ToolCallSummary]]:
+def _attach_tool_results(msg: dict, pending: dict[str, ToolCallSummary]) -> None:
+    """把 user 行里的 ``tool_result`` 块填回对应的调用。"""
+    content = msg.get("content")
+    if not isinstance(content, list):
+        return
+    for block in content:
+        if not isinstance(block, dict) or block.get("type") != "tool_result":
+            continue
+        call = pending.pop(str(block.get("tool_use_id", "")), None)
+        if call is None:
+            continue
+        output = block.get("content")
+        if isinstance(output, list):
+            output = "\n".join(
+                part.get("text", "")
+                for part in output
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
+        call.result_preview = result_preview(output)
+        call.result_captured = True
+
+
+def _extract_assistant_content(
+    msg: dict, pending: dict[str, ToolCallSummary] | None = None
+) -> tuple[str, list[ToolCallSummary]]:
     """Extracts text and tool calls from a Claude assistant message dict.
 
     Assistant messages have a ``content`` list with block types:
@@ -288,15 +315,13 @@ def _extract_assistant_content(msg: dict) -> tuple[str, list[ToolCallSummary]]:
             text_parts.append(block.get("text", ""))
 
         elif block_type == "tool_use":
-            # No result_captured: Claude records a tool's result in the *next*
-            # user row, which this parser does not read, so every call here
-            # reports "we never looked".
-            tool_calls.append(
-                ToolCallSummary(
-                    name=block.get("name", ""),
-                    args_preview=args_preview(block.get("input", {})),
-                )
+            call = ToolCallSummary(
+                name=block.get("name", ""),
+                args_preview=args_preview(block.get("input", {})),
             )
+            tool_calls.append(call)
+            if pending is not None and block.get("id"):
+                pending[str(block["id"])] = call
 
     return "\n".join(text_parts).strip(), tool_calls
 
