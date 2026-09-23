@@ -211,7 +211,9 @@ def write_codebuddy_session(session: Any) -> str:
                 "cwd": cwd,
                 "sessionId": new_session_id,
             }
-            lines.append(json.dumps(chain(row), ensure_ascii=False))
+            # 只有工具调用的那一步没有文本，空消息行不写。
+            if msg.content:
+                lines.append(json.dumps(chain(row), ensure_ascii=False))
 
             # Tool calls are emitted as separate function_call / result lines
             # so the parser re-attaches them to this assistant message.
@@ -231,7 +233,10 @@ def write_codebuddy_session(session: Any) -> str:
                                 "type": "function_call",
                                 "name": tc.name,
                                 "callId": call_id,
-                                "arguments": args_obj,
+                                # 原生格式是 JSON 字符串，写成对象引擎读不出这次调用。
+                                "arguments": args_obj
+                                if isinstance(args_obj, str)
+                                else json.dumps(args_obj, ensure_ascii=False),
                                 "cwd": cwd,
                                 "sessionId": new_session_id,
                                 "timestamp": ts,

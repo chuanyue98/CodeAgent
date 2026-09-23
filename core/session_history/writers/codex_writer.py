@@ -139,31 +139,33 @@ def write_codex_session(session: UnifiedSession) -> str:
             lines.append(json.dumps(user_resp, ensure_ascii=False))
 
         elif msg.role == "assistant":
-            # event_msg: agent_message
-            agent_event = {
-                "timestamp": msg.timestamp or now,
-                "type": "event_msg",
-                "payload": {
-                    "type": "agent_message",
-                    "message": msg.content,
-                    "phase": "final",
-                    "memory_citation": None,
-                },
-            }
-            lines.append(json.dumps(agent_event, ensure_ascii=False))
+            # 只有工具调用的那一步没有文本，空消息不写。
+            if msg.content:
+                # event_msg: agent_message
+                agent_event = {
+                    "timestamp": msg.timestamp or now,
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "agent_message",
+                        "message": msg.content,
+                        "phase": "final",
+                        "memory_citation": None,
+                    },
+                }
+                lines.append(json.dumps(agent_event, ensure_ascii=False))
 
-            # response_item: message (assistant)
-            assistant_resp = {
-                "timestamp": msg.timestamp or now,
-                "type": "response_item",
-                "payload": {
-                    "type": "message",
-                    "role": "assistant",
-                    "content": [{"type": "output_text", "text": msg.content}],
-                    "phase": "final",
-                },
-            }
-            lines.append(json.dumps(assistant_resp, ensure_ascii=False))
+                # response_item: message (assistant)
+                assistant_resp = {
+                    "timestamp": msg.timestamp or now,
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": msg.content}],
+                        "phase": "final",
+                    },
+                }
+                lines.append(json.dumps(assistant_resp, ensure_ascii=False))
 
             # Write tool calls as function_call + function_call_output
             for tc in msg.tool_calls:

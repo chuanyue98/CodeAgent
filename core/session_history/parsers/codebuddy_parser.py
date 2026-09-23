@@ -150,13 +150,19 @@ def _codebuddy_dir_matches(dir_name: str, target_path: str) -> bool:
 _AGENT_ID_MARKER = re.compile(r"\[Agent ID:\s*(agent-[0-9a-f]+)\]")
 
 
-def _agent_launch_description(arguments: object) -> str:
-    """The one-line description an ``Agent`` call was given, if any."""
+def _decode_arguments(arguments: object) -> object:
+    """CodeBuddy 把调用参数存成 JSON 字符串；解不开就原样返回。"""
     if isinstance(arguments, str):
         try:
-            arguments = json.loads(arguments)
+            return json.loads(arguments)
         except json.JSONDecodeError:
-            return ""
+            return arguments
+    return arguments
+
+
+def _agent_launch_description(arguments: object) -> str:
+    """The one-line description an ``Agent`` call was given, if any."""
+    arguments = _decode_arguments(arguments)
     if isinstance(arguments, dict):
         return str(arguments.get("description") or "").strip()
     return ""
@@ -282,14 +288,25 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
                     call_id = row.get("callId", "")
                     tc = ToolCallSummary(
                         name=row.get("name", ""),
-                        args_preview=args_preview(row.get("arguments")),
+                        args_preview=args_preview(
+                            _decode_arguments(row.get("arguments"))
+                        ),
                     )
                     tool_calls_by_call_id[call_id] = tc
-                    # Attach to the most recent assistant message.
-                    for msg in reversed(messages):
-                        if msg.role == "assistant":
-                            msg.tool_calls.append(tc)
-                            break
+                    # 挂到本轮最近的助手消息；本轮还没有助手文本时单独成一条，
+                    # 不能越过用户消息挂到上一轮去。
+                    if messages and messages[-1].role == "assistant":
+                        messages[-1].tool_calls.append(tc)
+                    else:
+                        messages.append(
+                            UnifiedMessage(
+                                role="assistant",
+                                content="",
+                                timestamp=ts,
+                                tool_calls=[tc],
+                                model=model,
+                            )
+                        )
                     if ts:
                         ended_at = ts
                     continue
