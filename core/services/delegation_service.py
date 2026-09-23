@@ -25,7 +25,7 @@ from typing import Any
 from core.delegation_depth import DEPTH_ENV, current_depth
 from core.engine_registry import ENGINES, get_spec, normalize_engine_name
 from core.host_env import child_environ
-from core.logging_config import get_logger
+from core.logging_config import QUIET_ENV, get_logger
 from core.resource_locator import CODE_ROOT
 
 logger = get_logger(__name__)
@@ -483,6 +483,8 @@ def delegate_subtask(
             # 无头的 claude 会把长命令丢到后台、说一句"在等"就退出，任务根本
             # 没做完；被委派出去的引擎必须前台跑完。
             env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] = "1"
+            # 输出会被截成结果交给发起方模型，启动器自己的日志和横幅不能混进去。
+            env[QUIET_ENV] = "1"
             env[DEPTH_ENV] = str((current_depth() if depth is None else depth) + 1)
 
             cmd = [

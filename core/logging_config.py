@@ -5,9 +5,18 @@ import sys
 _CA_ROOT_LOGGER_NAME = "codeagent"
 _configured = False
 
+#: 启动器的输出会被别人当结果读时（委派）设上：只留警告和错误，不打启动横幅。
+QUIET_ENV = "CA_QUIET"
+
+
+def quiet() -> bool:
+    return bool(os.environ.get(QUIET_ENV))
+
 
 def _default_level() -> int:
-    return logging.DEBUG if os.environ.get("CA_DEBUG") else logging.INFO
+    if os.environ.get("CA_DEBUG"):
+        return logging.DEBUG
+    return logging.WARNING if quiet() else logging.INFO
 
 
 def configure_root_logging(level: int | None = None) -> None:

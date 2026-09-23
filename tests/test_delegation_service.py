@@ -265,6 +265,27 @@ with open("inplace.txt", "w", encoding="utf-8") as f:
     assert (git_repo / "inplace.txt").read_text(encoding="utf-8") == "inplace result\n"
 
 
+def test_delegated_launcher_runs_quiet(tmp_path: Path):
+    """委派的输出会成为交给发起方模型的结果，启动器的日志不能混进去。"""
+    root = tmp_path / "ca_root"
+    engines_dir = root / "engines"
+    engines_dir.mkdir(parents=True)
+    (engines_dir / "start_claude_code.py").write_text(
+        "import os\nprint('CA_QUIET=' + os.environ.get('CA_QUIET', ''))\n",
+        encoding="utf-8",
+    )
+
+    res = delegate_subtask(
+        engine="claude",
+        instruction="anything",
+        workspace=tmp_path,
+        root_dir=root,
+        isolate=False,
+    )
+
+    assert "CA_QUIET=1" in res.output
+
+
 def test_delegate_subtask_timeout(tmp_path: Path, monkeypatch):
     root = tmp_path / "ca_root"
     engines_dir = root / "engines"

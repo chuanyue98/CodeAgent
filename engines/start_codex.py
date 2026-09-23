@@ -20,7 +20,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
-from core.engine_base.launch_args import split_passthrough
+from core.engine_base.launch_args import announce_launch, split_passthrough
 from core.i18n import t
 from core.logging_config import get_logger
 from core.task_lib import (
@@ -928,7 +928,7 @@ def main() -> None:
             yolo=args.yolo,
             passthrough=passthrough,
         )
-        print(f"Launching {engine.name}...")
+        announce_launch(engine.name)
         try:
             engine.run_shell(final_command, env)
         finally:

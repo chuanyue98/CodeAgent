@@ -26,6 +26,15 @@ def test_configure_root_logging_respects_ca_debug(monkeypatch):
     _reset()
 
 
+def test_quiet_keeps_only_warnings(monkeypatch):
+    _reset()
+    monkeypatch.delenv("CA_DEBUG", raising=False)
+    monkeypatch.setenv(logging_config.QUIET_ENV, "1")
+    logging_config.configure_root_logging()
+    assert logging.getLogger().level == logging.WARNING
+    _reset()
+
+
 def test_configure_root_logging_explicit_level_overrides_env(monkeypatch):
     _reset()
     monkeypatch.setenv("CA_DEBUG", "1")

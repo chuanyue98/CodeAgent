@@ -130,6 +130,14 @@ def home(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def not_quiet(monkeypatch):
+    """测试本身可能跑在一次委派里，继承来的 CA_QUIET 会改掉日志级别和启动横幅。"""
+    from core.logging_config import QUIET_ENV
+
+    monkeypatch.delenv(QUIET_ENV, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def no_codeagent_mcp_mount(monkeypatch):
     """默认不给引擎挂 codeagent MCP：不少用例逐字断言启动命令。
 

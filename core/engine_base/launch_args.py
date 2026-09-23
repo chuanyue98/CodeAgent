@@ -1,13 +1,20 @@
-"""ca 启动器与原生引擎 CLI 之间的参数约定。"""
+"""ca 启动器与原生引擎 CLI 之间的约定：参数怎么拆、启动时说什么。"""
 
 from __future__ import annotations
 
 from collections.abc import Collection
 
+from core.logging_config import quiet
+
 
 def is_native_flag(arg: str) -> bool:
     # 含空白的参数是整段提示词（例如委派传进来的多行指令），不是 flag。
     return len(arg) > 1 and arg.startswith("-") and not any(c.isspace() for c in arg)
+
+
+def announce_launch(name: str) -> None:
+    if not quiet():
+        print(f"🚀 Launching {name}...")
 
 
 def split_passthrough(

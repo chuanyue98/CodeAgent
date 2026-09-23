@@ -17,7 +17,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
-from core.engine_base.launch_args import split_passthrough
+from core.engine_base.launch_args import announce_launch, split_passthrough
 from core.engine_base.plugin_dir_mixin import _PluginDirMixin
 from core.task_lib import (
     TASK_FILE_SUFFIX,
@@ -174,7 +174,7 @@ def main():
                 passthrough=passthrough,
             )
             register_signal_handler()
-            print(f"🚀 Launching {engine.name}...")
+            announce_launch(engine.name)
             engine.run_shell(
                 final_command, {**env, **engine.plugin_dir_env(plugin_dir)}
             )

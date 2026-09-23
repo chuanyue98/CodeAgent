@@ -70,6 +70,18 @@ def test_first_message_moves_multiline_text_into_a_file(isolated):
         engine.cleanup_temp_prompt()
 
 
+def test_launch_banner_is_silent_when_quiet(monkeypatch, capsys):
+    from core.engine_base.launch_args import announce_launch
+    from core.logging_config import QUIET_ENV
+
+    announce_launch("Claude")
+    assert "Launching Claude" in capsys.readouterr().out
+
+    monkeypatch.setenv(QUIET_ENV, "1")
+    announce_launch("Claude")
+    assert capsys.readouterr().out == ""
+
+
 # --- shared injection ----------------------------------------------------
 
 

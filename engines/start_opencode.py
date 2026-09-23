@@ -15,7 +15,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
-from core.engine_base.launch_args import split_passthrough
+from core.engine_base.launch_args import announce_launch, split_passthrough
 from core.i18n import t
 from core.logging_config import get_logger
 from core.task_lib import (
@@ -562,7 +562,7 @@ def main():
         register_signal_handler()
 
         with engine.shared_injection(Path.cwd() / ".opencode", setup, teardown):
-            print(f"🚀 Launching {engine.name}...")
+            announce_launch(engine.name)
             engine.run_shell(final_command, env, stdin_text=stdin_text)
     finally:
         engine.cleanup_temp_prompt()
