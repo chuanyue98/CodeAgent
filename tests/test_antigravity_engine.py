@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from core.constants import ENGINES, HEADLESS_ENGINES, MCP_ENGINES
 from engines.start_antigravity import AntigravityEngine
 
@@ -18,6 +20,8 @@ def test_antigravity_engine_build_command():
     cmd_ni = engine.build_command("test message", non_interactive=True, yolo=True)
     assert cmd_ni == [
         "agy",
+        "--add-dir",
+        str(Path.cwd()),
         "-p",
         "test message",
         "--output-format",
@@ -120,3 +124,13 @@ def test_start_antigravity_main(monkeypatch):
     cmd, env = mock_run.call_args[0]
     assert "agy" in cmd
     assert any("task content" in arg for arg in cmd)
+
+
+def test_headless_agy_keeps_a_user_supplied_workspace():
+    """无头模式默认补 --add-dir 当前目录；用户自己给了就不再加。"""
+    engine = AntigravityEngine()
+    cmd = engine.build_command(
+        "m", non_interactive=True, passthrough=["--add-dir", "/elsewhere"]
+    )
+    assert cmd.count("--add-dir") == 1
+    assert "/elsewhere" in cmd

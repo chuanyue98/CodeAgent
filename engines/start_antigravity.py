@@ -49,6 +49,11 @@ class AntigravityEngine(_PluginBundleMixin, BaseEngine):
     ) -> list[str]:
         cmd = [self.COMMAND, *passthrough]
         if non_interactive:
+            # agy 只在 settings.json 的 trustedWorkspaces 里的目录自动取工作区；
+            # 交互模式会问要不要信任，无头模式不问，直接在没有工作区的状态下跑，
+            # 读文件靠猜路径，会话也记不到项目下。委派与后台任务都走这条路。
+            if not any(arg.startswith("--add-dir") for arg in passthrough):
+                cmd.extend(["--add-dir", str(Path.cwd())])
             cmd.extend(["-p", message, "--output-format", "json"])
         else:
             if message:
