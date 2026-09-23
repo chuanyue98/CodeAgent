@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import uuid
 from pathlib import Path
 
 from core.session_history.models import (
@@ -274,14 +275,14 @@ def test_write_antigravity_session_and_roundtrip(tmp_path: Path):
     )
 
     written_id = write_antigravity_session(session, home=tmp_path)
-    assert written_id == "written-session-uuid"
+    assert str(uuid.UUID(written_id)) == written_id
 
     expected_file = (
         tmp_path
         / ".gemini"
         / "antigravity-cli"
         / "brain"
-        / "written-session-uuid"
+        / written_id
         / ".system_generated"
         / "logs"
         / "transcript.jsonl"
@@ -291,7 +292,7 @@ def test_write_antigravity_session_and_roundtrip(tmp_path: Path):
     # Read back
     parsed = parse_antigravity_session(expected_file)
     assert parsed is not None
-    assert parsed.session_id == "written-session-uuid"
+    assert parsed.session_id == written_id
     assert len(parsed.messages) == 2
     assert parsed.messages[0].role == "user"
     assert parsed.messages[0].content == "测试写入"
@@ -302,11 +303,7 @@ def test_write_antigravity_session_and_roundtrip(tmp_path: Path):
 
     # agy --conversation resolves via conversations/<sid>.db, not the transcript.
     conv_db = (
-        tmp_path
-        / ".gemini"
-        / "antigravity-cli"
-        / "conversations"
-        / "written-session-uuid.db"
+        tmp_path / ".gemini" / "antigravity-cli" / "conversations" / f"{written_id}.db"
     )
     assert conv_db.exists()
     with sqlite3.connect(conv_db) as conn:
@@ -314,7 +311,7 @@ def test_write_antigravity_session_and_roundtrip(tmp_path: Path):
             "SELECT cascade_id, trajectory_type, source FROM trajectory_meta"
         ).fetchall()
         assert len(meta) == 1
-        assert meta[0][0] == "written-session-uuid"
+        assert meta[0][0] == written_id
         assert meta[0][1] == 4
         assert meta[0][2] == 17
 
@@ -333,7 +330,7 @@ def test_write_antigravity_session_and_roundtrip(tmp_path: Path):
         rows = conn.execute(
             "SELECT title, last_user_input_time FROM conversation_summaries "
             "WHERE conversation_id = ?",
-            ("written-session-uuid",),
+            (written_id,),
         ).fetchall()
         assert len(rows) == 1
         assert rows[0][0] == "跨引擎写入测试"
@@ -351,8 +348,11 @@ def test_write_session_dispatcher_antigravity(tmp_path: Path, monkeypatch):
             UnifiedMessage(role="assistant", content="调度成功"),
         ],
     )
-    res_id = write_session(session, "antigravity")
-    assert res_id == "dispatcher-sess-1"
+    first = write_session(session, "antigravity")
+    second = write_session(session, "antigravity")
+    # 同一个会话接力两次是两份独立副本，后一次不能覆盖前一次之后续聊的内容。
+    assert first != "dispatcher-sess-1"
+    assert first != second
 
 
 def test_session_finder_find_all_sessions_includes_antigravity(tmp_path: Path):

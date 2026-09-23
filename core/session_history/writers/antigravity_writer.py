@@ -403,7 +403,9 @@ def write_antigravity_session(session: UnifiedSession, home: Path | None = None)
     Returns:
         str: The session ID written.
     """
-    session_id = session.session_id or str(uuid.uuid4())
+    # 总是新 id：沿用源 id 会让 opencode 的 ``ses_…`` 进了 agy（它只认 UUID），
+    # 同一个会话再接力一次还会覆盖掉上次接力后在 agy 里续聊的内容。
+    session_id = str(uuid.uuid4())
     cli_dir = (home or Path.home()) / ".gemini" / "antigravity-cli"
     target_dir = cli_dir / "brain" / session_id / ".system_generated" / "logs"
     target_dir.mkdir(parents=True, exist_ok=True)
