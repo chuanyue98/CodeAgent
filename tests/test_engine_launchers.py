@@ -15,7 +15,6 @@ import engines.start_claude_code as claude_mod
 import engines.start_codebuddy as codebuddy_mod
 import engines.start_codex as codex_mod
 import engines.start_opencode as opencode_mod
-from core.prompt_kit import prompt_general, prompt_standards
 
 BYPASS = codex_mod.CODEX_SKIP_PERMISSIONS_FLAG
 
@@ -53,20 +52,7 @@ def _capture_run(monkeypatch, engine_cls, on_run=None):
     return seen
 
 
-# --- prompt assembly -----------------------------------------------------
-
-
-def test_prompt_standards_has_no_task_or_waiting_mode_section(tmp_path):
-    (tmp_path / "base").mkdir()
-    (tmp_path / "base" / "rules.md").write_text("RULE_BODY", encoding="utf-8")
-
-    standards = prompt_standards(groups=["base"], prompt_root=tmp_path)
-
-    assert standards == "### Base Standards ###\n\nRULE_BODY"
-    assert prompt_general(groups=["base"], prompt_root=tmp_path).startswith(standards)
-    assert "WAITING FOR INSTRUCTION" in prompt_general(
-        groups=["base"], prompt_root=tmp_path
-    )
+# --- first message ------------------------------------------------------
 
 
 def test_first_message_moves_multiline_text_into_a_file(isolated):

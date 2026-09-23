@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from core.logging_config import get_logger
 from core.project_groups import resolve_project_group
+from core.prompt_scanner import EXCLUDED_PROMPT_FILES
 from core.resource_locator import (
     CODE_ROOT,
     get_bundled_resource_root,
@@ -30,9 +31,6 @@ logger = get_logger(__name__)
 # Resource kinds a group can declare; "prompts" is the only kind the Gateway
 # currently injects (via adapters that declare supports_resource_injection).
 INJECTED_KINDS = ("prompts",)
-# Mirrors prompt_kit.EXCLUDED_PROMPT_FILES: non-standards docs that happen to
-# live in a prompt group directory.
-EXCLUDED_PROMPT_FILES = {"README.md", "IMPLEMENTATION_PLAN.md"}
 
 
 def registered_workspace(gateway: AgentGateway, project_id: str) -> tuple[str, str]:
@@ -146,8 +144,8 @@ def assemble_system_prompt(
 ) -> tuple[str, list[dict]] | None:
     """Reads every markdown file behind the group's prompt names.
 
-    Mirrors prompt_kit's per-group assembly (sorted ``*.md``, README and
-    IMPLEMENTATION_PLAN excluded) but returns per-file segments so the
+    Sorted ``*.md`` per group, README and IMPLEMENTATION_PLAN excluded;
+    returns per-file segments so the
     receipt can name exactly which content entered the model, and omits
     the task / waiting-mode tail -- a system prompt is standing
     instruction, not a one-shot kickoff message.

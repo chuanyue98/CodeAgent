@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any
 from core.hook_scanner import get_hooks_to_inject
 from core.logging_config import get_logger
 from core.plugin_scanner import get_plugins_to_mount
-from core.prompt_scanner import get_prompts_to_inject
 from core.skill_scanner import get_skills_to_mount
 
 if TYPE_CHECKING:
@@ -133,19 +132,6 @@ class _ConfigMixin:
         )
         self._print_scan_warnings("Plugin Scanner", warnings)
         return plugins
-
-    def get_prompts_to_inject(self) -> list[str]:
-        """Retrieves the list of prompt groups to be injected for the current project.
-
-        Returns:
-            List[str]: A list of prompt group names.
-        """
-        project_type = self.get_current_project_group()
-        prompts, warnings = get_prompts_to_inject(
-            self.full_config, self.prompt_scanner, project_type=project_type
-        )
-        self._print_scan_warnings("Prompt Scanner", warnings)
-        return prompts
 
     def get_hooks_to_inject(self) -> list[dict[str, Any]]:
         """Retrieves the list of hooks to be injected for the current project.

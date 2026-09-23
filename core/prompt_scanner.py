@@ -4,6 +4,9 @@ import os
 import traceback
 from pathlib import Path
 
+# 放在分组目录里、但不是规范正文的文档。
+EXCLUDED_PROMPT_FILES = {"README.md", "IMPLEMENTATION_PLAN.md"}
+
 DEFAULT_GROUP_PROMPTS: dict[str, list[str]] = {
     "common": ["base", "engineering", "coding"],
     "work": ["base", "engineering", "coding", "work"],
@@ -44,7 +47,7 @@ class PromptScanner:
                 prompts = []
                 try:
                     for md_file in group_dir.glob("*.md"):
-                        if md_file.stem not in ("README", "IMPLEMENTATION_PLAN"):
+                        if md_file.name not in EXCLUDED_PROMPT_FILES:
                             prompts.append(md_file.stem)
                 except Exception as e:
                     warnings.append(f"Failed to scan directory {group_dir}: {e}")
@@ -60,56 +63,3 @@ class PromptScanner:
                 traceback.print_exc()
 
         return result, warnings
-
-
-def get_prompts_to_inject(
-    config: dict,
-    scanner: PromptScanner,
-    project_type: str = "common",
-    extra_prompts: list[str] | None = None,
-) -> tuple[list[str], list[str]]:
-    """Determines which prompt groups should be injected based on configuration.
-
-    Args:
-        config: The application configuration dictionary.
-        scanner: An instance of PromptScanner.
-        project_type: The type of project (e.g., 'common', 'web').
-        extra_prompts: Additional prompt groups to inject.
-
-    Returns:
-        A tuple of prompt group names to inject and warning messages.
-    """
-    scanned, scan_warnings = scanner.scan()
-    result: list[str] = []
-    groups_cfg = config.get("groups", {})
-    project_group_cfg = groups_cfg.get(project_type, {})
-    group_prompts_configured = (
-        project_type in groups_cfg and "prompts" in project_group_cfg
-    )
-
-    def add_items(items: list[str] | None) -> None:
-        if not items:
-            return
-        for item in items:
-            if item not in result:
-                result.append(item)
-
-    # 1. Read from config.groups[project_type].prompts (Configuration managed by Web UI)
-    group_prompts = config.get("groups", {}).get(project_type, {}).get("prompts", [])
-    add_items(group_prompts)
-
-    # 2. Compatibility with legacy config.prompts.project_prompts format
-    legacy = config.get("prompts", {}).get("project_prompts", {}).get(project_type, [])
-    add_items(legacy)
-
-    # 3. Use default mappings only if no explicit configuration exists
-    if not result and not group_prompts_configured and not legacy:
-        defaults = DEFAULT_GROUP_PROMPTS.get(
-            project_type, DEFAULT_GROUP_PROMPTS["common"]
-        )
-        add_items([group for group in defaults if group in scanned])
-
-    # 4. Extra prompts passed by the caller
-    add_items(extra_prompts)
-
-    return result, scan_warnings

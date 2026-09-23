@@ -1,7 +1,6 @@
 from pathlib import Path
 
-from core.prompt_kit import EXCLUDED_PROMPT_FILES
-from core.prompt_scanner import PromptScanner
+from core.prompt_scanner import EXCLUDED_PROMPT_FILES, PromptScanner
 
 
 class PromptService:

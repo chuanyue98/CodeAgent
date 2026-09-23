@@ -3,14 +3,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from core.constants import TEMP_PROMPT_DIRNAME
 from core.engine_base.environment import EngineExecutionError
 from core.logging_config import get_logger
-from core.prompt_kit import prompt_general, prompt_review, prompt_standards
 
 if TYPE_CHECKING:
     from core.prompt_scanner import PromptScanner
@@ -24,36 +22,6 @@ class _PromptMixin:
     # Provided by _ConfigMixin / BaseEngine.__init__.
     if TYPE_CHECKING:
         prompt_scanner: "PromptScanner"
-
-        def get_prompts_to_inject(self) -> list[str]: ...
-
-    def assemble_prompt(self, task: str | None = None, is_review: bool = False) -> str:
-        """Assembles the final system prompt by combining base prompts and injected groups.
-
-        Args:
-            task (str | None): The current task description.
-            is_review (bool): Whether to assemble a review-specific prompt.
-
-        Returns:
-            str: The assembled prompt string.
-        """
-        groups = self.get_prompts_to_inject()
-        prompt_fn = cast(
-            Callable[..., str], prompt_review if is_review else prompt_general
-        )
-
-        return prompt_fn(
-            task=task,
-            groups=groups,
-            prompt_root=self.prompt_scanner.prompt_root,
-        )
-
-    def assemble_standards(self) -> str:
-        """当前项目要注入的规范正文，交给引擎原生的系统提示参数。"""
-        return prompt_standards(
-            groups=self.get_prompts_to_inject(),
-            prompt_root=self.prompt_scanner.prompt_root,
-        )
 
     def first_message(self, message: str) -> str:
         """单行消息原样作为首条消息；多行内容改成让模型去读临时文件。
