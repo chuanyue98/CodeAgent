@@ -8,7 +8,7 @@ Leave the project registered in `config.json` under a resource group whose skill
 
 ## Context
 
-- Read `docs/configuration.md` for what a resource group and `project_registry` entry are before changing either.
+- Read the configuration section of `README.md` for what a resource group and `project_registry` entry are before changing either.
 - Prefer reusing an existing group (`common`, `work`, `web`, ...) over creating a new one unless the project's stack is genuinely distinct from every existing group.
 - Do not invent skills/hooks/plugins that don't exist in `skills/`, `hooks/`, `plugins/` — only reference what `ca resources list` actually shows.
 

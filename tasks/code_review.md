@@ -10,7 +10,7 @@ Produce a focused review of the uncommitted and unpushed changes in this reposit
 
 - Run `git status` and `git diff` (plus `git diff --staged`) to see the working changes.
 - If the branch is clean, compare against the default branch instead: `git diff origin/HEAD...HEAD`.
-- Respect the standards injected from this project's prompt group; they take precedence over generic style preferences.
+- Follow the project's own conventions (`AGENTS.md` / `CLAUDE.md` at the repo root); they take precedence over generic style preferences.
 
 ## Instructions
 
