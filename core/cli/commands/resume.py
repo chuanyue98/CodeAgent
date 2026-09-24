@@ -86,7 +86,6 @@ def resume_session_flow(
     ctx: click.Context,
     selector: str | None = None,
     engine: str | None = None,
-    no_launch: bool = False,
 ) -> int:
     """Core logic to select and resume a session."""
     _helpers._ensure_project_on_path(ctx.obj["root"])
@@ -225,10 +224,6 @@ def resume_session_flow(
         print(t("resume.no_resume_command", error=exc))
         return 1
 
-    if no_launch:
-        print(t("resume.command_preview", command=" ".join(argv)))
-        return 0
-
     try:
         return subprocess.run(
             argv, cwd=project_path, env=ctx.obj.get("child_env")
@@ -262,13 +257,6 @@ def resume_session_flow(
 @click.option(
     "--engine", "-e", "engine", default=None, help=t("cli.help.resume_cmd_engine")
 )
-@click.option(
-    "--no-launch",
-    is_flag=True,
-    help=t("cli.help.resume_cmd_no_launch"),
-)
 @click.pass_context
-def resume(ctx, selector, engine, no_launch):  # type: ignore[no-untyped-def]
-    return resume_session_flow(
-        ctx, selector=selector, engine=engine, no_launch=no_launch
-    )
+def resume(ctx, selector, engine):  # type: ignore[no-untyped-def]
+    return resume_session_flow(ctx, selector=selector, engine=engine)

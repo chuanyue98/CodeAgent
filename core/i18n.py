@@ -280,10 +280,6 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Filter sessions by engine when resuming",
         "zh": "接力时只看这个引擎的会话",
     },
-    "cli.help.no_launch": {
-        "en": "With -r: print the resume command without starting the engine",
-        "zh": "配合 -r：只打印恢复命令，不真的启动引擎",
-    },
     "cli.help.interactive": {
         "en": "Launch interactive console menu",
         "zh": "打开交互式控制台菜单",
@@ -405,10 +401,6 @@ MESSAGES: dict[str, dict[str, str]] = {
     "cli.help.resume_cmd_engine": {
         "en": "Filter by engine",
         "zh": "只看这个引擎的会话",
-    },
-    "cli.help.resume_cmd_no_launch": {
-        "en": "Print the resume command, but do not start the engine.",
-        "zh": "只打印接力命令，不启动引擎。",
     },
     "cli.desc.project": {
         "en": "Manage the project registry (config.json's project_registry).",
@@ -937,10 +929,6 @@ MESSAGES: dict[str, dict[str, str]] = {
     "resume.no_resume_command": {
         "en": "[X] Cannot build resume command: {error}",
         "zh": "[X] 无法生成恢复命令: {error}",
-    },
-    "resume.command_preview": {
-        "en": "Resume command: {command}",
-        "zh": "恢复命令: {command}",
     },
     "time.just_now": {"en": "just now", "zh": "刚刚"},
     "time.minutes_ago": {"en": "{minutes}m ago", "zh": "{minutes} 分钟前"},

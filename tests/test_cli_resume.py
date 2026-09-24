@@ -66,6 +66,19 @@ def find_all(mock_sessions):
             yield list_mock
 
 
+@pytest.fixture
+def launched():
+    """拦下真正的启动，记录每次要执行的命令。"""
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(list(argv))
+        return MagicMock(returncode=0)
+
+    with patch("subprocess.run", side_effect=fake_run):
+        yield calls
+
+
 def _run_cli(monkeypatch, argv):
     monkeypatch.setattr("sys.argv", ["ca_launcher.py", *argv])
     return ca_launcher.main()
@@ -112,63 +125,55 @@ def test_unknown_command_or_engine_fails_without_fallback(monkeypatch, capsys):
     assert "Available engines" in err or "可用引擎" in err
 
 
-def test_ca_dash_r_non_interactive_resumes_most_recent(find_all, monkeypatch, capsys):
-    completed = MagicMock(returncode=0)
-    with patch("subprocess.run", return_value=completed):
-        ret = _run_cli(monkeypatch, ["-r", "--no-launch"])
-        assert ret == 0
-
-    out = capsys.readouterr().out
-    assert "Claude Task" in out
-    assert "claude --resume ses-claude-1" in out
+def test_ca_dash_r_non_interactive_resumes_most_recent(
+    find_all, launched, monkeypatch, capsys
+):
+    assert _run_cli(monkeypatch, ["-r"]) == 0
+    assert "Claude Task" in capsys.readouterr().out
+    assert launched == [["claude", "--resume", "ses-claude-1"]]
 
 
-def test_ca_dash_r_selector_may_follow_other_flags(find_all, monkeypatch, capsys):
-    """``-r`` 的值可省略；``ca -r --no-launch 2`` 里的 2 仍是它的选择。"""
-    ret = _run_cli(monkeypatch, ["-r", "--no-launch", "2"])
-    assert ret == 0
-    assert "codex resume ses-codex-2" in capsys.readouterr().out
+def test_ca_dash_r_selector_may_follow_other_flags(find_all, launched, monkeypatch):
+    """``-r`` 的值可省略；``ca -r -e codex 1`` 里的 1 仍是它的选择。"""
+    assert _run_cli(monkeypatch, ["-r", "-e", "codex", "1"]) == 0
+    assert find_all.call_args.kwargs["engine"] == "codex"
+    assert len(launched) == 1
 
 
-def test_ca_dash_r_with_index_resumes_that_session(find_all, monkeypatch, capsys):
-    completed = MagicMock(returncode=0)
-    with patch("subprocess.run", return_value=completed):
-        ret = _run_cli(monkeypatch, ["-r", "2", "--no-launch"])
-        assert ret == 0
-
-    out = capsys.readouterr().out
-    assert "Codex Task" in out
-    assert "codex resume ses-codex-2" in out
+def test_ca_dash_r_with_index_resumes_that_session(
+    find_all, launched, monkeypatch, capsys
+):
+    assert _run_cli(monkeypatch, ["-r", "2"]) == 0
+    assert "Codex Task" in capsys.readouterr().out
+    assert launched == [["codex", "resume", "ses-codex-2"]]
 
 
-def test_ca_resume_command_works_identically(find_all, monkeypatch, capsys):
-    completed = MagicMock(returncode=0)
-    with patch("subprocess.run", return_value=completed):
-        ret = _run_cli(monkeypatch, ["resume", "3", "--no-launch"])
-        assert ret == 0
-
-    out = capsys.readouterr().out
-    assert "OpenCode Task" in out
-    assert "opencode" in out
-    assert "-s ses-opencode-3" in out
+def test_ca_resume_command_works_identically(find_all, launched, monkeypatch, capsys):
+    assert _run_cli(monkeypatch, ["resume", "3"]) == 0
+    assert "OpenCode Task" in capsys.readouterr().out
+    assert launched[0][0] == "opencode"
+    assert launched[0][-2:] == ["-s", "ses-opencode-3"]
 
 
-def test_ca_dash_r_with_session_id(find_all, monkeypatch, capsys):
-    completed = MagicMock(returncode=0)
-    with patch("subprocess.run", return_value=completed):
-        ret = _run_cli(monkeypatch, ["-r", "ses-codex-2", "--no-launch"])
-        assert ret == 0
-
-    out = capsys.readouterr().out
-    assert "Codex Task" in out
-    assert "codex resume ses-codex-2" in out
+def test_ca_dash_r_with_session_id(find_all, launched, monkeypatch, capsys):
+    assert _run_cli(monkeypatch, ["-r", "ses-codex-2"]) == 0
+    assert "Codex Task" in capsys.readouterr().out
+    assert launched == [["codex", "resume", "ses-codex-2"]]
 
 
-def test_ca_dash_r_invalid_index(find_all, monkeypatch, capsys):
-    ret = _run_cli(monkeypatch, ["-r", "99", "--no-launch"])
+def test_ca_dash_r_invalid_index(find_all, launched, monkeypatch, capsys):
+    ret = _run_cli(monkeypatch, ["-r", "99"])
     assert ret == 1
     out = capsys.readouterr().out
     assert "99" in out
+    assert launched == []
+
+
+def test_no_launch_is_gone(find_all, launched, monkeypatch, capsys):
+    """``--no-launch`` 已删除：明确报错，而不是悄悄当成别的意思。"""
+    assert _run_cli(monkeypatch, ["-r", "--no-launch"]) == 1
+    assert "--no-launch" in capsys.readouterr().err
+    assert launched == []
 
 
 def test_ca_dash_r_no_sessions(monkeypatch, capsys):
@@ -179,11 +184,8 @@ def test_ca_dash_r_no_sessions(monkeypatch, capsys):
     assert "没有找到任何历史会话" in out or "No session history found" in out
 
 
-def test_ca_resume_engine_filter(find_all, monkeypatch):
-    completed = MagicMock(returncode=0)
-    with patch("subprocess.run", return_value=completed):
-        ret = _run_cli(monkeypatch, ["resume", "-e", "codex", "1", "--no-launch"])
-        assert ret == 0
+def test_ca_resume_engine_filter(find_all, launched, monkeypatch):
+    assert _run_cli(monkeypatch, ["resume", "-e", "codex", "1"]) == 0
     find_all.assert_called_with(
         project=unittest_cwd(),
         engine="codex",
@@ -198,7 +200,9 @@ def unittest_cwd() -> str:
     return str(Path.cwd())
 
 
-def test_ca_dash_r_interactive_questionary_select(find_all, monkeypatch, capsys):
+def test_ca_dash_r_interactive_questionary_select(
+    find_all, launched, monkeypatch, capsys
+):
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     mock_select = MagicMock()
     mock_select.ask.return_value = {
@@ -206,25 +210,24 @@ def test_ca_dash_r_interactive_questionary_select(find_all, monkeypatch, capsys)
         "session_id": "ses-opencode-3",
         "title": "OpenCode Task",
     }
-    completed = MagicMock(returncode=0)
     with patch("questionary.select", return_value=mock_select):
-        with patch("subprocess.run", return_value=completed):
-            ret = _run_cli(monkeypatch, ["-r", "--no-launch"])
-            assert ret == 0
+        assert _run_cli(monkeypatch, ["-r"]) == 0
 
-    out = capsys.readouterr().out
-    assert "OpenCode Task" in out
-    assert "opencode" in out
-    assert "-s ses-opencode-3" in out
+    assert "OpenCode Task" in capsys.readouterr().out
+    assert launched[0][0] == "opencode"
+    assert launched[0][-2:] == ["-s", "ses-opencode-3"]
 
 
-def test_ca_dash_r_interactive_questionary_exit(find_all, monkeypatch, capsys):
+def test_ca_dash_r_interactive_questionary_exit(
+    find_all, launched, monkeypatch, capsys
+):
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     mock_select = MagicMock()
     mock_select.ask.return_value = "exit"
     with patch("questionary.select", return_value=mock_select):
-        ret = _run_cli(monkeypatch, ["-r", "--no-launch"])
+        ret = _run_cli(monkeypatch, ["-r"])
         assert ret == 0
+    assert launched == []
 
     out = capsys.readouterr().out
     assert "操作已取消" in out or "cancelled" in out.lower()
@@ -273,13 +276,13 @@ def test_resume_builds_the_index_before_reading(monkeypatch, find_all, tmp_path)
     )
     find_all.side_effect = lambda **kwargs: calls.append("list") or []
 
-    _run_cli(monkeypatch, ["-r", "--no-launch"])
+    _run_cli(monkeypatch, ["-r"])
 
     assert calls[:2] == ["ensure", "list"]
 
 
 def test_index_warmup_notice_goes_to_stderr(monkeypatch, capsys):
-    """``ca -r 1 --no-launch`` 的 stdout 是给人复制的命令，提示不能混进去。"""
+    """进度提示走 stderr，不混进命令的正常输出。"""
     from core.cli import helpers
 
     monkeypatch.setattr(

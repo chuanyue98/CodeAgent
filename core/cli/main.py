@@ -50,7 +50,7 @@ class CodeAgentGroup(click.Group):
             elif not arg.startswith("-"):
                 break
         super().parse_args(ctx, new_args)
-        # ``-r`` 的值可省略，``ca -r --no-launch 2`` 里它紧跟着一个选项，于是
+        # ``-r`` 的值可省略，``ca -r -e codex 2`` 里它紧跟着一个选项，于是
         # 拿到空值，``2`` 落进子命令位。不是已知子命令的，就还给 ``-r``。
         if ctx.params.get("resume_selector") == "" and ctx._protected_args:
             first = ctx._protected_args[0]
@@ -111,12 +111,6 @@ class CodeAgentGroup(click.Group):
     help=t("cli.help.resume_engine"),
 )
 @click.option(
-    "--no-launch",
-    is_flag=True,
-    default=False,
-    help=t("cli.help.no_launch"),
-)
-@click.option(
     "-i",
     "--interactive",
     is_flag=True,
@@ -124,7 +118,7 @@ class CodeAgentGroup(click.Group):
     help=t("cli.help.interactive"),
 )
 @click.pass_context
-def cli(ctx, proxy, yolo, resume_selector, resume_engine, no_launch, interactive):  # type: ignore[no-untyped-def]
+def cli(ctx, proxy, yolo, resume_selector, resume_engine, interactive):  # type: ignore[no-untyped-def]
     """CodeAgent: Professional AI Engineering Shell."""
     init_cli_runtime()
     ctx.ensure_object(dict)
@@ -159,7 +153,6 @@ def cli(ctx, proxy, yolo, resume_selector, resume_engine, no_launch, interactive
                 ctx,
                 selector=resume_selector,
                 engine=resume_engine,
-                no_launch=no_launch,
             )
         if interactive or (sys.stdin.isatty() and sys.stdout.isatty()):
             from .launcher_menu import run_interactive_launcher

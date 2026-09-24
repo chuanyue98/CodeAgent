@@ -50,8 +50,7 @@ def warm_session_index() -> None:
     from core.session_history import repository
 
     def announce() -> None:
-        # 进度信息走 stderr：``ca -r 1 --no-launch`` 的 stdout 是给人直接复制
-        # 的恢复命令，不该混进一行提示。
+        # 进度信息走 stderr，不混进命令的正常输出。
         print(t("history.index_building"), file=sys.stderr, flush=True)
 
     repository.ensure_index_ready(announce)
