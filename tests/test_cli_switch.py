@@ -426,3 +426,28 @@ def test_switch_yes_flag_skips_prompt(monkeypatch, capsys, sessions):
                         return_value=completed,
                     ):
                         assert _run_cli(monkeypatch, ["-s", "codex", "-y"]) == 0
+
+
+def _pick_exit(*_args, choices, **_kwargs):
+    """模拟用户在 questionary 列表里选中最后一项「退出」，返回其真实取值。"""
+    question = MagicMock()
+    question.ask.return_value = choices[-1].value
+    return question
+
+
+@pytest.mark.parametrize(
+    ("picker", "arg"),
+    [
+        ("_select_source_session", ([{"session_id": "s1", "engine": "claude"}], None)),
+        ("_select_target_engine", (["codex"],)),
+    ],
+)
+def test_switch_pickers_exit_returns_none(picker, arg):
+    """选「退出」必须得到 None；``Choice(value=None)`` 会退回成标题字符串。"""
+    from core.cli.commands import switch as switch_cmd
+
+    with (
+        patch("questionary.select", side_effect=_pick_exit),
+        patch.object(switch_cmd, "format_styled_session_choice", return_value="s1"),
+    ):
+        assert getattr(switch_cmd, picker)(*arg) is None

@@ -97,6 +97,11 @@ def _prompt_source_session(summaries: list[dict], target_engine: str | None):
     return _INVALID_CHOICE
 
 
+#: 「退出」选项的取值。questionary 的 ``Choice(value=None)`` 会退回用标题当值，
+#: 所以不能直接用 None。
+_EXIT = "\x00exit"
+
+
 def _select_source_session(summaries: list[dict], target_engine: str | None):
     """Arrow-key picker for the session to carry over, newest first.
 
@@ -118,15 +123,16 @@ def _select_source_session(summaries: list[dict], target_engine: str | None):
         )
         for index, summary in enumerate(summaries, 1)
     ]
-    choices.append(Choice(title=t("launcher.exit"), value=None))
+    choices.append(Choice(title=t("launcher.exit"), value=_EXIT))
 
     if target_engine:
         question = t("switch.select_source_with_target", target=target_engine)
     else:
         question = t("switch.select_source")
-    return questionary.select(
+    selected = questionary.select(
         question, choices=choices, style=CLI_QUESTIONARY_STYLE
     ).ask()
+    return None if selected == _EXIT else selected
 
 
 #: 同 :data:`_INVALID_CHOICE`，只是这一边的选择结果是引擎名。
@@ -191,11 +197,12 @@ def _select_target_engine(candidates: list[str]) -> str | None:
                 value=engine_name,
             )
         )
-    choices.append(Choice(title=t("launcher.exit"), value=None))
+    choices.append(Choice(title=t("launcher.exit"), value=_EXIT))
 
-    return questionary.select(
+    selected = questionary.select(
         t("switch.select_target"), choices=choices, style=CLI_QUESTIONARY_STYLE
     ).ask()
+    return None if selected == _EXIT else selected
 
 
 @click.command(help=t("cli.desc.switch"))
