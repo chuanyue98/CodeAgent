@@ -458,3 +458,73 @@ def test_ensure_ready_rebuilds_when_the_parsers_changed(store_and_indexer, home_
     assert indexer.ensure_ready(lambda: notices.append(1)) is True
     assert notices == [1], "指纹失配时应该重建，而不是直接把旧索引当可用"
     assert store.get_summary("claude", "s1") is not None
+
+
+def _write_codex(home: Path, session_id: str, text: str) -> None:
+    session_dir = home / ".codex" / "sessions" / "2026" / "09" / "24"
+    session_dir.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {
+            "timestamp": "2026-09-24T10:00:00.000Z",
+            "type": "session_meta",
+            "payload": {"id": session_id, "cwd": "/repo"},
+        },
+        {
+            "timestamp": "2026-09-24T10:00:01.000Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": text}],
+            },
+        },
+    ]
+    (session_dir / f"rollout-2026-09-24T10-00-00-{session_id}.jsonl").write_text(
+        "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8"
+    )
+
+
+def _write_codex_names(home: Path, *entries: tuple[str, str]) -> None:
+    (home / ".codex" / "session_index.jsonl").write_text(
+        "".join(
+            json.dumps({"id": sid, "thread_name": name}) + "\n" for sid, name in entries
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_codex_thread_name_becomes_the_title(store_and_indexer, home_path):
+    """Codex 的线程名只在 session_index.jsonl 里；改名不动 rollout 也要跟上。"""
+    store, indexer = store_and_indexer
+    _write_codex(home_path, "c1", "hello")
+    _write_codex(home_path, "c2", "untitled")
+    _write_codex_names(home_path, ("c1", "旧名字"))
+    indexer.sync()
+    assert store.get_summary("codex", "c1").title == "旧名字"
+    assert store.get_summary("codex", "c2").title == "untitled"
+
+    _write_codex_names(home_path, ("c1", "旧名字"), ("c1", "新名字"))
+    indexer.sync()
+    assert store.get_summary("codex", "c1").title == "新名字"
+
+
+def test_codex_finder_reads_thread_names(home_path):
+    from core.session_history.parsers.codex_parser import find_codex_sessions
+
+    _write_codex(home_path, "c1", "hello")
+    _write_codex_names(home_path, ("c1", "起好的名字"))
+
+    [session] = find_codex_sessions(home=home_path)
+    assert session.title == "起好的名字"
+
+
+def test_deleting_a_codex_session_drops_its_thread_name(home_path):
+    from core.session_history.parsers.codex_parser import _thread_names
+    from core.session_history.writers.codex_writer import remove_from_session_index
+
+    (home_path / ".codex").mkdir()
+    _write_codex_names(home_path, ("c1", "a"), ("c2", "b"), ("c1", "a2"))
+
+    assert remove_from_session_index("c1", home=home_path) is True
+    assert _thread_names(home_path) == {"c2": "b"}
+    assert remove_from_session_index("c1", home=home_path) is False

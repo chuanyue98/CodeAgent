@@ -49,7 +49,15 @@ class CodeAgentGroup(click.Group):
                 break
             elif not arg.startswith("-"):
                 break
-        return super().parse_args(ctx, new_args)
+        super().parse_args(ctx, new_args)
+        # ``-r`` 的值可省略，``ca -r --no-launch 2`` 里它紧跟着一个选项，于是
+        # 拿到空值，``2`` 落进子命令位。不是已知子命令的，就还给 ``-r``。
+        if ctx.params.get("resume_selector") == "" and ctx._protected_args:
+            first = ctx._protected_args[0]
+            if not first.startswith("-") and self.get_command(ctx, first) is None:
+                ctx.params["resume_selector"] = first
+                ctx._protected_args, ctx.args = ctx.args[:1], ctx.args[1:]
+        return ctx.args
 
     def resolve_command(self, ctx, args):  # type: ignore[no-untyped-def]
         if args:

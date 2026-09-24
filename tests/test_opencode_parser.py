@@ -386,3 +386,32 @@ def test_a_database_without_the_subagent_columns_still_parses(db):
     assert session is not None
     assert session.parent_session_id == ""
     assert session.agent == ""
+
+
+@pytest.mark.parametrize(
+    "placeholder",
+    [
+        "New session - 2026-09-23T07:02:42.733Z",
+        "Child session - 2026-09-23T07:02:42.733Z",
+    ],
+)
+def test_opencode_placeholder_title_falls_back_to_first_message(db, placeholder):
+    """OpenCode 还没起名时的占位标题不算标题，列表里该显示第一句话。"""
+    path, con = db
+    _session(con, title=placeholder)
+    _message(con, "m_u")
+    _part(con, "p1", "m_u", data={"type": "text", "text": "hello"})
+
+    parsed = parse_opencode_session("ses_1", path)
+
+    assert parsed.title == ""
+    assert parsed.to_summary_dict()["title"] == "hello"
+
+
+def test_opencode_real_title_is_kept(db):
+    path, con = db
+    _session(con, title="New session handling")
+    _message(con, "m_u")
+    _part(con, "p1", "m_u", data={"type": "text", "text": "hello"})
+
+    assert parse_opencode_session("ses_1", path).title == "New session handling"

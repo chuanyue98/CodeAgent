@@ -321,7 +321,7 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
         started_at=started_at,
         ended_at=ended_at,
         messages=messages,
-        title="",  # Codex doesn't store titles in the session file
+        title="",  # 标题在 session_index.jsonl 里，由调用方补上
         model=model,
         source_file=str(file_path),
     )
@@ -364,6 +364,31 @@ def _thread_lineage(home: Path | None = None) -> dict[str, tuple[str, str]]:
     return {child: (parent, agents.get(child, "")) for child, parent in edges.items()}
 
 
+def _thread_names(home: Path | None = None) -> dict[str, str]:
+    """``thread id -> 名字``，取自 ``~/.codex/session_index.jsonl``。
+
+    Codex 的 ``/rename`` 和 ca 接力写进去的标题都只在这里，rollout 文件里没有。
+    同一 id 可能出现多行，以最后一行为准。
+    """
+    path = (home or Path.home()) / ".codex" / "session_index.jsonl"
+    names: dict[str, str] = {}
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return names
+    for line in text.splitlines():
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        thread_id, name = row.get("id"), row.get("thread_name")
+        if isinstance(thread_id, str) and isinstance(name, str) and name.strip():
+            names[thread_id] = name.strip()
+    return names
+
+
 def find_codex_sessions(
     project_path: str | None = None, home: Path | None = None
 ) -> list[UnifiedSession]:
@@ -389,6 +414,7 @@ def find_codex_sessions(
     )
     sessions: list[UnifiedSession] = []
     lineage = _thread_lineage(home)
+    names = _thread_names(home)
 
     for jsonl_file in list_files(base, ".jsonl", recursive=True):
         session = parse_codex_session(jsonl_file)
@@ -396,6 +422,7 @@ def find_codex_sessions(
             session.parent_session_id, session.agent = lineage.get(
                 session.session_id, ("", "")
             )
+            session.title = names.get(session.session_id, "")
             if normalized_target is not None:
                 normalized_cwd = normalize_project_path(session.project_path or "")
                 if normalized_cwd != normalized_target:

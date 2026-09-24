@@ -38,6 +38,7 @@ from core.services.workspace_service import (
 )
 from core.session_history import repository
 from core.session_history.antigravity_cache import remove_from_summaries_cache
+from core.session_history.writers.codex_writer import remove_from_session_index
 from core.web.case_convert import ProtocolModel, camelize, wire
 from core.web.routers.config import get_config_path
 
@@ -526,6 +527,8 @@ async def delete_session(
     else:
         try:
             validated_path.unlink()
+            if engine == "codex":
+                remove_from_session_index(session_id)
         except OSError as e:
             raise HTTPException(
                 status_code=500, detail={"error": f"Failed to delete session file: {e}"}

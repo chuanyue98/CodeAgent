@@ -27,6 +27,7 @@ from core.session_history.parsers.claude_parser import parse_claude_session
 from core.session_history.parsers.codebuddy_parser import parse_codebuddy_session
 from core.session_history.parsers.codex_parser import (
     _thread_lineage,
+    _thread_names,
     parse_codex_session,
 )
 from core.session_history.parsers.opencode_parser import (
@@ -238,6 +239,11 @@ ENGINE_PARSERS = {
 def codex_lineage(home: Path | None = None) -> dict[str, tuple[str, str]]:
     """``thread id -> (parent, agent)``；无库时为空。"""
     return _thread_lineage(home)
+
+
+def codex_thread_names(home: Path | None = None) -> dict[str, str]:
+    """``thread id -> 名字``；没改过名的线程不在其中。"""
+    return _thread_names(home)
 
 
 def codex_lineage_version(home: Path | None = None) -> str:

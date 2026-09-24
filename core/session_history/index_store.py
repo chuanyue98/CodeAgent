@@ -512,6 +512,14 @@ class SessionIndex:
                 "UPDATE sessions SET title = ? WHERE session_key = ?", (title, key)
             )
 
+    def set_engine_title(self, key: str, title: str) -> None:
+        """记下引擎在会话文件之外给的标题，视同引擎自己给的（raw_title）。"""
+        with self._lock, self._connection:
+            self._connection.execute(
+                "UPDATE sessions SET title = ?, raw_title = ? WHERE session_key = ?",
+                (title, title, key),
+            )
+
     def unresolved_subagents(self) -> list[tuple[str, str, str, str, str]]:
         """等待父会话给出标题的子代理行。
 

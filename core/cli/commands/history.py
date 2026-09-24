@@ -12,8 +12,11 @@ from core.i18n import t
 
 from .. import helpers as _helpers
 
+#: 不加 ``-n`` 时列出的条数；与 ``ca -r`` 的列表一样长。
+DEFAULT_LIMIT = 20
 
-def _history_list(ctx, engine, include_subagents=False):  # type: ignore[no-untyped-def]
+
+def _history_list(ctx, engine, include_subagents=False, limit=DEFAULT_LIMIT):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
     from core.session_history import repository
 
@@ -34,16 +37,23 @@ def _history_list(ctx, engine, include_subagents=False):  # type: ignore[no-unty
     if not rows:
         print(t("history.none"))
         return
-    print(t("history.found", count=len(rows), path=project_path))
+    total = len(rows)
+    if limit and limit > 0:
+        rows = rows[:limit]
+    print(t("history.found", count=total, path=project_path))
     if hidden:
         print(t("history.subagents_hidden", count=hidden))
-    for i, s in enumerate(rows):
-        title = s["title"][:60] or t("history.no_title")
+    index_width = len(str(len(rows)))
+    engine_width = max(len(s["engine"]) for s in rows)
+    for i, s in enumerate(rows, 1):
+        title = " ".join(s["title"].split())[:60] or t("history.no_title")
         print(
-            f"  [{i + 1}] {s['engine']:8s} | {s['started_at'][:19]:19s} | "
-            f"{s['message_count']:3d} msgs | {title}"
+            f"  [{i:>{index_width}}] {s['engine']:<{engine_width}} | "
+            f"{s['started_at'][:19]:19s} | {s['message_count']:4d} msgs | {title}"
         )
-        print(f"       ID: {s['session_id']}")
+        print(f"  {'':>{index_width + 2}} ID: {s['session_id']}")
+    if len(rows) < total:
+        print(t("history.more", shown=len(rows), count=total))
     print(t("history.show_hint"))
 
 
@@ -61,9 +71,17 @@ def history(ctx):  # type: ignore[no-untyped-def]
     is_flag=True,
     help=t("cli.help.history_subagents"),
 )
+@click.option(
+    "-n",
+    "--limit",
+    type=int,
+    default=DEFAULT_LIMIT,
+    show_default=True,
+    help=t("cli.help.history_limit"),
+)
 @click.pass_context
-def history_list(ctx, engine, include_subagents):  # type: ignore[no-untyped-def]
-    _history_list(ctx, engine=engine, include_subagents=include_subagents)
+def history_list(ctx, engine, include_subagents, limit):  # type: ignore[no-untyped-def]
+    _history_list(ctx, engine=engine, include_subagents=include_subagents, limit=limit)
 
 
 @history.command(help=t("cli.desc.history_show"))

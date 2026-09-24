@@ -65,6 +65,41 @@ def test_bare_history_lists_sessions(monkeypatch, capsys):
     assert "ca history show" in out
 
 
+def test_history_lists_recent_sessions_and_says_how_many_are_left(monkeypatch, capsys):
+    sessions = [
+        _session(
+            f"s{i}",
+            engine=EngineType.CODEBUDDY if i % 2 else EngineType.CLAUDE,
+            started_at=f"2026-08-{i:02d}T10:00:00",
+        )
+        for i in range(1, 26)
+    ]
+    with patch(
+        "core.session_history.repository.find_all_sessions", return_value=sessions
+    ):
+        _run(monkeypatch, "history", "list")
+    out = capsys.readouterr().out
+    rows = [line for line in out.splitlines() if line.startswith("  [")]
+    assert len(rows) == 20
+    assert "Found 25 session(s)" in out
+    assert "-n 0" in out
+    # 编号和引擎列等宽，"|" 在每一行都落在同一列。
+    assert len({row.index("|") for row in rows}) == 1
+
+
+def test_history_limit_zero_lists_everything(monkeypatch, capsys):
+    sessions = [
+        _session(f"s{i}", started_at=f"2026-08-{i:02d}T10:00:00") for i in range(1, 26)
+    ]
+    with patch(
+        "core.session_history.repository.find_all_sessions", return_value=sessions
+    ):
+        _run(monkeypatch, "history", "list", "-n", "0")
+    out = capsys.readouterr().out
+    assert len([line for line in out.splitlines() if line.startswith("  [")]) == 25
+    assert "-n 0" not in out
+
+
 def test_history_empty_project(monkeypatch, capsys):
     with patch("core.session_history.repository.find_all_sessions", return_value=[]):
         _run(monkeypatch, "history", "list")

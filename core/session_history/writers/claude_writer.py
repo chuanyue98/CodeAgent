@@ -187,6 +187,18 @@ def write_claude_session(session: UnifiedSession) -> str:
     cli_version = native_version or CLI_VERSION_FALLBACK
     git_branch = _git_branch(session.project_path)
 
+    if session.title:
+        lines.append(
+            json.dumps(
+                {
+                    "type": "ai-title",
+                    "aiTitle": session.title,
+                    "sessionId": new_session_id,
+                },
+                ensure_ascii=False,
+            )
+        )
+
     # Write messages as JSONL rows
     prev_uuid = None
 

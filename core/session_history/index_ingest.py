@@ -32,6 +32,7 @@ from core.session_history.session_finder import _deduplicate_sessions
 from core.session_history.sources import (
     ENGINE_PARSERS,
     codex_lineage,
+    codex_thread_names,
 )
 
 logger = get_logger(__name__)
@@ -157,7 +158,7 @@ class SessionIndexer:
         stored = self._index.get_meta(_PARSER_FINGERPRINT_KEY)
         if force or stored != fingerprint:
             if stored is not None and stored != fingerprint:
-                logger.info("Parser fingerprint changed; rebuilding session index")
+                logger.debug("Parser fingerprint changed; rebuilding session index")
             self._index.clear_all()
             self._index.set_meta(_PARSER_FINGERPRINT_KEY, fingerprint)
 
@@ -175,6 +176,7 @@ class SessionIndexer:
         if self._index.closed:
             return
         self._apply_codex_lineage()
+        self._apply_codex_thread_names()
         self._apply_antigravity_lineage()
         self._inherit_parent_projects()
         self._reconcile_subagent_titles()
@@ -275,6 +277,11 @@ class SessionIndexer:
             self._index.set_session_parent(
                 session_key("codex", session_id), parent, agent
             )
+
+    def _apply_codex_thread_names(self) -> None:
+        """Codex 的线程名在 ``session_index.jsonl`` 里，改名不会动 rollout 文件。"""
+        for session_id, name in codex_thread_names(self._home).items():
+            self._index.set_engine_title(session_key("codex", session_id), name)
 
     def _apply_antigravity_lineage(self) -> None:
         """antigravity 的子代理在物理目录上平铺，从父会话的 subagent_titles 恢复父子关系。"""

@@ -133,5 +133,30 @@ def test_list_marks_missing_directories(monkeypatch, capsys, tmp_path):
     }
     _run(monkeypatch, "project", "list", config=config)
     out = capsys.readouterr().out
-    assert f"v  {existing}  (group: work)" in out
-    assert "x (missing)  /definitely/gone  (group: common)" in out
+    lines = out.splitlines()
+    assert any(
+        line.startswith("  [OK]") and str(existing) in line and "group: work" in line
+        for line in lines
+    )
+    gone = next(line for line in lines if "/definitely/gone" in line)
+    assert gone.startswith("  [X]")
+    assert "group: common" in gone
+    assert "directory no longer exists" in gone
+
+
+def test_list_marks_the_current_directory(monkeypatch, capsys, tmp_path):
+    here = tmp_path / "here"
+    other = tmp_path / "other"
+    here.mkdir()
+    other.mkdir()
+    monkeypatch.chdir(here)
+    config = {
+        "project_registry": [
+            {"path": str(other), "group": "g"},
+            {"path": str(here), "group": "g"},
+        ]
+    }
+    _run(monkeypatch, "project", "list", config=config)
+    lines = capsys.readouterr().out.splitlines()
+    assert "you are here" in next(line for line in lines if str(here) in line)
+    assert "you are here" not in next(line for line in lines if str(other) in line)

@@ -226,3 +226,29 @@ def _update_session_index(session_id: str, session: UnifiedSession) -> None:
     # Append to the index file
     with open(index_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def remove_from_session_index(session_id: str, home: Path | None = None) -> bool:
+    """删会话时把它在 ``session_index.jsonl`` 里的行一起去掉，返回是否删了。
+
+    不删的话线程名会一直留在文件里，跟已经不存在的会话对不上。
+    """
+    index_path = (home or Path.home()) / ".codex" / "session_index.jsonl"
+    try:
+        lines = index_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    except OSError:
+        return False
+    kept = []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            kept.append(line)
+            continue
+        if isinstance(row, dict) and row.get("id") == session_id:
+            continue
+        kept.append(line)
+    if len(kept) == len(lines):
+        return False
+    atomic_write(index_path, "".join(kept))
+    return True

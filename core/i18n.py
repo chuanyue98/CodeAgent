@@ -281,8 +281,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh": "接力时只看这个引擎的会话",
     },
     "cli.help.no_launch": {
-        "en": "Print the command without starting the engine",
-        "zh": "只打印命令，不真的启动引擎",
+        "en": "With -r: print the resume command without starting the engine",
+        "zh": "配合 -r：只打印恢复命令，不真的启动引擎",
     },
     "cli.help.interactive": {
         "en": "Launch interactive console menu",
@@ -383,8 +383,11 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh": "不问了，直接用最近的那条会话。",
     },
     "cli.help.switch_no_launch": {
-        "en": "Convert and print the resume command, but do not start the engine.",
-        "zh": "转换并打印接力命令，但不启动引擎。",
+        "en": (
+            "Still converts (a new session is written), then prints the resume "
+            "command instead of starting the engine."
+        ),
+        "zh": "照常转换（会写出一条新会话），只是不启动引擎，改为打印接力命令。",
     },
     "cli.desc.resume_cmd": {
         "en": (
@@ -550,8 +553,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh": "会话历史管理。",
     },
     "cli.desc.history_list": {
-        "en": "List all sessions for this project.",
-        "zh": "列出这个项目的所有会话。",
+        "en": "List this project's sessions, most recent first.",
+        "zh": "列出这个项目的会话，最新的在前。",
     },
     "cli.desc.history_show": {
         "en": "Show full session content.",
@@ -568,6 +571,10 @@ MESSAGES: dict[str, dict[str, str]] = {
     "cli.help.history_subagents": {
         "en": "Also list subagent runs, which belong to the session that spawned them",
         "zh": "把子任务也列出来 (它们隶属于派生它们的那条会话)",
+    },
+    "cli.help.history_limit": {
+        "en": "How many recent sessions to list (0 lists them all)",
+        "zh": "列出最近多少条会话 (0 表示全部)",
     },
     "cli.help.history_yes": {
         "en": "Skip the confirmation prompt",
@@ -809,6 +816,10 @@ MESSAGES: dict[str, dict[str, str]] = {
     "history.subagents_hidden": {
         "en": "  ({count} subagent run(s) hidden -- use --include-subagents)\n",
         "zh": "  (已隐藏 {count} 个子任务，加 --include-subagents 查看)\n",
+    },
+    "history.more": {
+        "en": "\n  (showing the {shown} most recent of {count}; -n 0 lists them all)",
+        "zh": "\n  (只显示了最近 {shown} 条，共 {count} 条；加 -n 0 全部列出)",
     },
     "history.show_hint": {
         "en": (
@@ -1135,10 +1146,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh": "尚未注册任何项目。",
     },
     "project.list_row": {
-        "en": "  {mark}  {path}  (group: {group})",
-        "zh": "  {mark}  {path}  (组: {group})",
+        "en": "  {mark}  {path}  group: {group}  {note}",
+        "zh": "  {mark}  {path}  组: {group}  {note}",
     },
-    "project.missing_marker": {"en": "x (missing)", "zh": "x (已丢失)"},
+    "project.missing_marker": {
+        "en": "<- directory no longer exists",
+        "zh": "← 目录已不存在",
+    },
+    "project.current_marker": {"en": "<- you are here", "zh": "← 当前目录"},
     # --- ca resources ---
     "resources.none": {"en": "No {kind} found.", "zh": "没有找到任何{kind}。"},
     "resources.header": {

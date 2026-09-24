@@ -55,7 +55,9 @@ def _seed_native_history(home: Path) -> None:
     )
 
 
-def _convert(tmp_path: Path, monkeypatch, *, seed: bool = True) -> list[dict]:
+def _convert(
+    tmp_path: Path, monkeypatch, *, seed: bool = True, title: str = ""
+) -> list[dict]:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     # _git_branch has its own tests below; pinning it here keeps these focused
     # on what lands in the row.
@@ -69,6 +71,7 @@ def _convert(tmp_path: Path, monkeypatch, *, seed: bool = True) -> list[dict]:
             engine=EngineType.CODEX,
             project_path=PROJECT,
             model="gpt-5-codex",
+            title=title,
             messages=[
                 UnifiedMessage(role="user", content="hello"),
                 UnifiedMessage(role="assistant", content="hi there"),
@@ -190,3 +193,20 @@ def test_a_detached_head_reports_HEAD_like_claude_does(tmp_path):
 
 def test_a_non_repo_gets_an_empty_branch_rather_than_a_crash(tmp_path):
     assert claude_writer._git_branch(str(tmp_path / "nowhere")) == ""
+
+
+def test_the_source_title_is_carried_as_an_ai_title_row(tmp_path, monkeypatch):
+    """接力过来的会话要保留原标题，``claude -r`` 列表和 ca 都从 ai-title 读。"""
+    rows = _convert(tmp_path, monkeypatch, title="使用体验改进")
+    titles = [r for r in rows if r["type"] == "ai-title"]
+    assert [t["aiTitle"] for t in titles] == ["使用体验改进"]
+
+    from core.session_history.parsers.claude_parser import parse_claude_session
+
+    written = next((tmp_path / ".claude" / "projects").glob("E--x/*.jsonl"))
+    assert parse_claude_session(written).title == "使用体验改进"
+
+
+def test_an_untitled_source_writes_no_ai_title_row(tmp_path, monkeypatch):
+    rows = _convert(tmp_path, monkeypatch)
+    assert not [r for r in rows if r["type"] == "ai-title"]

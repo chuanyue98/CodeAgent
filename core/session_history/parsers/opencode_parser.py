@@ -15,6 +15,7 @@ Message ``data`` contains ``role`` (user/assistant), and parts contain
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import UTC, datetime
 from functools import partial
@@ -29,6 +30,9 @@ from core.session_history.models import (
 from core.session_history.parse_cache import cached_parse
 from core.session_history.paths import normalize_project_path
 from core.session_history.previews import args_preview, result_preview
+
+#: OpenCode 还没自动起名时给的占位标题，形如 ``New session - 2026-09-23T07:02:42.733Z``。
+_PLACEHOLDER_TITLE = re.compile(r"^(New|Child) session - \d{4}-\d{2}-\d{2}T")
 
 
 def _ms_to_iso(ms: int) -> str:
@@ -127,6 +131,8 @@ def parse_opencode_session(
 
         project_path = sess_row["directory"] or ""
         title = sess_row["title"] or ""
+        if _PLACEHOLDER_TITLE.match(title):
+            title = ""
         started_ms = sess_row["time_created"] or 0
         ended_ms = sess_row["time_updated"] or started_ms
 

@@ -123,6 +123,13 @@ def test_ca_dash_r_non_interactive_resumes_most_recent(find_all, monkeypatch, ca
     assert "claude --resume ses-claude-1" in out
 
 
+def test_ca_dash_r_selector_may_follow_other_flags(find_all, monkeypatch, capsys):
+    """``-r`` 的值可省略；``ca -r --no-launch 2`` 里的 2 仍是它的选择。"""
+    ret = _run_cli(monkeypatch, ["-r", "--no-launch", "2"])
+    assert ret == 0
+    assert "codex resume ses-codex-2" in capsys.readouterr().out
+
+
 def test_ca_dash_r_with_index_resumes_that_session(find_all, monkeypatch, capsys):
     completed = MagicMock(returncode=0)
     with patch("subprocess.run", return_value=completed):
