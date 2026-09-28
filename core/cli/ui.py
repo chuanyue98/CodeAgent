@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -238,6 +239,17 @@ def _open_browser(url: str) -> bool:
     return True
 
 
+def _drop_forced_exit_traceback(record: logging.LogRecord) -> bool:
+    """连按两次 Ctrl+C 时 uvicorn 跳过收尾、取消 lifespan 任务；Starlette 把这个
+    取消格式化成 traceback 文本报成 shutdown failed。服务已经正常停了，不给用户看。"""
+    lines = str(record.getMessage()).rstrip().splitlines()
+    return not (
+        lines
+        and lines[0].startswith("Traceback")
+        and lines[-1] == "asyncio.exceptions.CancelledError"
+    )
+
+
 def _wait_for_api_then_open_browser(api_host: str, api_port: int, url: str) -> None:
     deadline = time.time() + UI_DEV_SERVER_START_TIMEOUT
     while time.time() < deadline:
@@ -330,8 +342,9 @@ def run_ui_command(dev: bool = False) -> int:
         daemon=True,
     ).start()
 
+    logging.getLogger("uvicorn.error").addFilter(_drop_forced_exit_traceback)
     try:
-        uvicorn.run(app, host=api_host, port=port, log_level="info")
+        uvicorn.run(app, host=api_host, port=port, log_level="info", access_log=False)
     except KeyboardInterrupt:
         pass
     finally:

@@ -159,7 +159,11 @@ def test_run_ui_command_uses_existing_vite_server(capsys, monkeypatch):
 
     mock_open_browser.assert_called_once_with("http://127.0.0.1:5173")
     mock_uvicorn.run.assert_called_once_with(
-        mock_server.app, host="127.0.0.1", port=8524, log_level="info"
+        mock_server.app,
+        host="127.0.0.1",
+        port=8524,
+        log_level="info",
+        access_log=False,
     )
     captured = capsys.readouterr()
     assert "Detected Vite dev server" in captured.out
@@ -191,7 +195,11 @@ def test_run_ui_command_starts_vite_server_when_available(capsys, monkeypatch):
 
     mock_open_browser.assert_called_once_with("http://127.0.0.1:5173")
     mock_uvicorn.run.assert_called_once_with(
-        mock_server.app, host="127.0.0.1", port=8524, log_level="info"
+        mock_server.app,
+        host="127.0.0.1",
+        port=8524,
+        log_level="info",
+        access_log=False,
     )
     captured = capsys.readouterr()
     assert "Starting Vite dev server" in captured.out
@@ -225,7 +233,11 @@ def test_run_ui_command_falls_back_to_dist_when_vite_start_fails(capsys, monkeyp
 
     mock_open_browser.assert_called_once_with("http://127.0.0.1:8123")
     mock_uvicorn.run.assert_called_once_with(
-        mock_server.app, host="127.0.0.1", port=8123, log_level="info"
+        mock_server.app,
+        host="127.0.0.1",
+        port=8123,
+        log_level="info",
+        access_log=False,
     )
     captured = capsys.readouterr()
     assert "falling back to built UI" in captured.out
@@ -245,7 +257,11 @@ def test_run_ui_command_dev_flag_starts_vite_without_the_env_var(capsys, monkeyp
                         assert ca_launcher.run_ui_command(dev=True) == 0
 
     mock_uvicorn.run.assert_called_once_with(
-        mock_server.app, host="127.0.0.1", port=8524, log_level="info"
+        mock_server.app,
+        host="127.0.0.1",
+        port=8524,
+        log_level="info",
+        access_log=False,
     )
     assert "Detected Vite dev server" in capsys.readouterr().out
 
@@ -1093,3 +1109,25 @@ def test_default_engine_is_none():
         ca_launcher._resolve_default_engine({"default_engine": "claude"}, _ENGINE_MAP)
         is None
     )
+
+
+def test_ui_hides_the_forced_exit_traceback_but_keeps_real_errors():
+    """连按两次 Ctrl+C 时 Starlette 报的 CancelledError 不显示，别的错误照常。"""
+    import logging
+
+    from core.cli.ui import _drop_forced_exit_traceback
+
+    def record(msg: str) -> logging.LogRecord:
+        return logging.LogRecord("uvicorn.error", logging.ERROR, "", 0, msg, None, None)
+
+    cancelled = (
+        "Traceback (most recent call last):\n"
+        '  File "queues.py", line 186, in get\n'
+        "    await getter\n"
+        "asyncio.exceptions.CancelledError\n"
+    )
+    assert _drop_forced_exit_traceback(record(cancelled)) is False
+    assert _drop_forced_exit_traceback(
+        record("Traceback (most recent call last):\nValueError: boom")
+    )
+    assert _drop_forced_exit_traceback(record("Application startup failed."))
