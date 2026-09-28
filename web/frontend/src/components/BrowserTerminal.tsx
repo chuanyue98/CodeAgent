@@ -18,6 +18,13 @@ export interface BrowserTerminalProps {
   sessionId?: string;
   /** Attach to a live browser terminal by its /api/pty/sessions id. */
   attachId?: string;
+  /** The tab's own id: a reconnect of this tab reattaches its engine. */
+  tabKey?: string;
+  /**
+   * Whether the terminal is on screen. The socket -- and with it the engine
+   * -- only starts once it is, at the size it is actually shown at.
+   */
+  active?: boolean;
   fontSize?: number;
   copyOnSelect?: boolean;
   onExit?: (code: number | null) => void;
@@ -58,6 +65,8 @@ export default function BrowserTerminal({
   cwd,
   sessionId,
   attachId,
+  tabKey,
+  active = true,
   fontSize = 13,
   copyOnSelect = true,
   onExit,
@@ -71,13 +80,15 @@ export default function BrowserTerminal({
   const [copiedToast, setCopiedToast] = useState(false);
   const [state, setState] = useState<ConnectionState>('connecting');
   const [message, setMessage] = useState<string | null>(null);
-  // Bumping this tears the effect down and starts a fresh session. The PTY
-  // endpoint spawns a process per connection and issues its own session id,
-  // so there is nothing to reconnect *to* -- reconnecting silently would hand
-  // back a different shell wearing the old one's scrollback. Until the server
-  // keeps sessions alive across sockets, this stays a deliberate button that
-  // says what it does.
+  // Bumping this tears the effect down and connects again: back to the same
+  // engine if it is still running, a fresh one if it exited.
   const [attempt, setAttempt] = useState(0);
+  const activeRef = useRef(active);
+  const connectRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    activeRef.current = active;
+    if (active) connectRef.current?.();
+  }, [active]);
   const onExitRef = useRef(onExit);
   useEffect(() => {
     onExitRef.current = onExit;
@@ -174,13 +185,11 @@ export default function BrowserTerminal({
     setState('connecting');
     setMessage(null);
     let exitHandled = false;
+    let socket: WebSocket | null = null;
     // A socket this effect has torn down still fires `onclose` afterwards, and
     // by then a later run owns the state -- its "connection closed" would sit
     // over a terminal that is connected and typing fine.
     let superseded = false;
-    const socket = new WebSocket(ptyWebSocketUrl(engine, cwd, sessionId, attachId));
-    socketRef.current = socket;
-
     const handleVisibilityChange = () => {
       if (typeof document !== 'undefined' && !document.hidden) {
         restoreTitle();
@@ -198,74 +207,87 @@ export default function BrowserTerminal({
     }
 
     const sendResize = () => {
-      if (socket.readyState === WebSocket.OPEN) {
+      if (socket?.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
       }
     };
 
-    socket.onopen = () => {
-      if (superseded) return;
-      setState('open');
-      setMessage(null);
-      if (fitIfVisible()) sendResize();
-      if (isVisible()) term.focus();
-    };
-    socket.onmessage = (event) => {
-      if (superseded) return;
-      let payload: { type?: string; data?: string; code?: number };
-      try {
-        payload = JSON.parse(event.data);
-      } catch {
-        return;
-      }
-      if (payload.type === 'output' && typeof payload.data === 'string') {
-        term.write(payload.data);
-
-        const chunk = payload.data;
-        const detected = detectTerminalEvent(chunk);
-        if (detected) {
-          onTerminalEventRef.current?.(detected, chunk);
-          if (typeof document !== 'undefined' && document.hidden) {
-            if (originalTitleRef.current === null) {
-              originalTitleRef.current = document.title;
-            }
-            const alertTitle = getAlertTitle(detected, engine);
-            document.title = alertTitle;
-            sendDesktopNotification(
-              alertTitle,
-              { body: getNotificationBody(detected, chunk) },
-              () => {
-                if (typeof window !== 'undefined') {
-                  window.focus();
-                }
-                termRef.current?.focus();
-                restoreTitle();
-              },
-            );
-          }
+    const connect = () => {
+      if (socket || superseded) return;
+      fitIfVisible();
+      const opened = new WebSocket(ptyWebSocketUrl(engine, cwd, sessionId, attachId, {
+        tabKey,
+        cols: term.cols,
+        rows: term.rows,
+      }));
+      socket = opened;
+      socketRef.current = opened;
+      opened.onopen = () => {
+        if (superseded) return;
+        setState('open');
+        setMessage(null);
+        if (fitIfVisible()) sendResize();
+        if (isVisible()) term.focus();
+      };
+      opened.onmessage = (event) => {
+        if (superseded) return;
+        let payload: { type?: string; data?: string; code?: number };
+        try {
+          payload = JSON.parse(event.data);
+        } catch {
+          return;
         }
-      } else if (payload.type === 'exit') {
-        exitHandled = true;
+        if (payload.type === 'output' && typeof payload.data === 'string') {
+          term.write(payload.data);
+
+          const chunk = payload.data;
+          const detected = detectTerminalEvent(chunk);
+          if (detected) {
+            onTerminalEventRef.current?.(detected, chunk);
+            if (typeof document !== 'undefined' && document.hidden) {
+              if (originalTitleRef.current === null) {
+                originalTitleRef.current = document.title;
+              }
+              const alertTitle = getAlertTitle(detected, engine);
+              document.title = alertTitle;
+              sendDesktopNotification(
+                alertTitle,
+                { body: getNotificationBody(detected, chunk) },
+                () => {
+                  if (typeof window !== 'undefined') {
+                    window.focus();
+                  }
+                  termRef.current?.focus();
+                  restoreTitle();
+                },
+              );
+            }
+          }
+        } else if (payload.type === 'exit') {
+          exitHandled = true;
+          setState('closed');
+          setMessage(tRef.current('terminal.sessionEnded', { code: String(payload.code ?? 'unknown') }));
+          onExitRef.current?.(typeof payload.code === 'number' ? payload.code : null);
+        }
+      };
+      opened.onerror = () => {
+        if (superseded) return;
+        setState('error');
+        setMessage(tRef.current('terminal.connectionError'));
+      };
+      opened.onclose = (event) => {
+        if (superseded || exitHandled) return;
         setState('closed');
-        setMessage(tRef.current('terminal.sessionEnded', { code: String(payload.code ?? 'unknown') }));
-        onExitRef.current?.(typeof payload.code === 'number' ? payload.code : null);
-      }
+        setMessage(event.reason || tRef.current('terminal.connectionClosed'));
+      };
     };
-    socket.onerror = () => {
-      if (superseded) return;
-      setState('error');
-      setMessage(tRef.current('terminal.connectionError'));
-    };
-    socket.onclose = (event) => {
-      if (superseded || exitHandled) return;
-      setState('closed');
-      setMessage(event.reason || tRef.current('terminal.connectionClosed'));
-    };
+    connectRef.current = connect;
+    if (activeRef.current) connect();
 
     const dataDisposable = term.onData((data) => {
       restoreTitle();
       requestPermissionOnInteraction();
-      if (socket.readyState === WebSocket.OPEN) {
+      if (socket?.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'input', data }));
       }
     });
@@ -326,10 +348,10 @@ export default function BrowserTerminal({
       }
       // 4. Ctrl+Shift+V: paste from clipboard
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'v' || e.key === 'V')) {
-        if (typeof navigator !== 'undefined' && navigator.clipboard?.readText && socket.readyState === WebSocket.OPEN) {
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.readText && socket?.readyState === WebSocket.OPEN) {
           void navigator.clipboard.readText().then((text) => {
             if (text) {
-              socket.send(JSON.stringify({ type: 'input', data: text }));
+              socket?.send(JSON.stringify({ type: 'input', data: text }));
             }
           }).catch(() => {});
           return false;
@@ -371,13 +393,14 @@ export default function BrowserTerminal({
       selectionDisposable.dispose();
       resizeObserver.disconnect();
       dataDisposable.dispose();
-      socket.close();
+      socket?.close();
+      connectRef.current = null;
       fitRef.current = null;
       socketRef.current = null;
       termRef.current = null;
       term.dispose();
     };
-  }, [engine, cwd, sessionId, attachId, attempt, copyOnSelect, restoreTitle, requestPermissionOnInteraction]);
+  }, [engine, cwd, sessionId, attachId, tabKey, attempt, copyOnSelect, restoreTitle, requestPermissionOnInteraction]);
 
   const canRestart = state === 'closed' || state === 'error';
 

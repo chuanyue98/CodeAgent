@@ -236,6 +236,7 @@ async def lifespan(app: FastAPI):
     # 浏览器终端的 tmux server：清掉上次异常退出残留的会话（正常关闭时
     # lifespan 自己会 kill-server），避免引擎进程孤儿化。
     await asyncio.to_thread(pty.kill_tmux_server)
+    pty.start_tmux_watchdog()
     from core.services.agent_adapters.base import AgentAdapter
     from core.services.agent_adapters.claude import ClaudeAdapter
     from core.services.agent_adapters.codebuddy import CodeBuddyAdapter

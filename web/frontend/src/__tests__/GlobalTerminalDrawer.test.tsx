@@ -289,5 +289,32 @@ describe('GlobalTerminalDrawer', () => {
     expect(screen.getByTestId('dock-bar')).not.toHaveClass('hidden');
     expect(screen.getByTestId('drawer-expanded')).toHaveClass('invisible');
   });
+
+  it('closing a tab stops its engine instead of leaving it running in tmux', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => '{"success":true}',
+      json: async () => ({ success: true }),
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    render(
+      <TerminalProvider>
+        <TestWrapper addTab engine="claude">
+          <GlobalTerminalDrawer />
+        </TestWrapper>
+      </TerminalProvider>
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Close terminal'));
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('/api/pty/close?');
+    expect(String(url)).toContain('engine=claude');
+    expect(String(url)).toMatch(/tab_key=\w+/);
+    expect(init.method).toBe('POST');
+  });
 });
 

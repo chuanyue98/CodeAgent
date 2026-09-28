@@ -148,12 +148,17 @@ export default function GlobalTerminalDrawer() {
 
   let frame: string;
   let frameStyle: CSSProperties | undefined;
+  // Whether the active terminal is actually on screen, measured. Until it is,
+  // its engine isn't started: it would start at a size nobody sees.
+  let showing = true;
   if (zenMode && (docked || isDrawerOpen)) {
     frame = 'fixed inset-0 z-[100] h-screen';
   } else if (docked) {
     frame = 'fixed z-40 overflow-hidden rounded-2xl border border-slate-200 shadow-sm';
     frameStyle = slotBox ?? { visibility: 'hidden' };
+    showing = Boolean(slotBox);
   } else if (!isDrawerOpen || onTerminalPage) {
+    showing = false;
     // Still rendered: every tab's terminal must stay mounted to keep its PTY.
     frame = 'fixed bottom-0 left-0 right-0 invisible h-0 overflow-hidden';
   } else {
@@ -448,6 +453,8 @@ export default function GlobalTerminalDrawer() {
                 cwd={tab.cwd}
                 sessionId={tab.sessionId}
                 attachId={tab.attachId}
+                tabKey={tab.id}
+                active={showing && tab.id === activeTabId}
                 fontSize={fontSize}
                 copyOnSelect={copyOnSelect}
                 // 引擎自己退出时不关标签页：BrowserTerminal 会就地显示退出码

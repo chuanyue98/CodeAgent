@@ -17,6 +17,7 @@ import codecs
 import contextlib
 import hashlib
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -29,7 +30,7 @@ from pathlib import Path
 from typing import Any, Protocol
 from uuid import uuid4
 
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 try:
     # POSIX-only; core/web/server.py imports this router unconditionally,
@@ -96,6 +97,12 @@ _DEFAULT_TMUX_SOCKET = "codeagent"
 # 只在事件循环内读写，普通 dict 即可。
 _ACTIVE_SESSIONS: dict[str, dict[str, Any]] = {}
 
+# The browser tab id that names a fresh terminal's tmux session. It is only
+# hashed, never passed to a shell, but a bounded charset keeps it a key.
+_TAB_KEY_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+_MIN_COLS, _MAX_COLS = 2, 1000
+_MIN_ROWS, _MAX_ROWS = 2, 500
+
 
 def _tmux_binary() -> str | None:
     """The tmux path, or None when POSIX-without-tmux / Windows."""
@@ -128,23 +135,41 @@ def _run_tmux(*args: str, timeout: float = 10) -> subprocess.CompletedProcess[st
     )
 
 
-def _tmux_session_name(engine: str, working_dir: Path, session_id: str | None) -> str:
+def _tmux_session_name(
+    engine: str,
+    working_dir: Path,
+    session_id: str | None,
+    tab_key: str | None = None,
+) -> str:
     """The tmux session name for one browser terminal.
 
     Resumed engine sessions hash (engine, cwd, session id) so reopening the
-    same deep link lands on the same running engine; fresh terminals get a
-    unique name so two tabs never share one engine.
+    same deep link lands on the same running engine. A fresh terminal hashes
+    the browser tab's own key instead: a reload or reconnect of that tab must
+    land on the engine it already started, or every reconnect spawns another
+    engine and strands the previous one in tmux. With neither, the name is
+    unique so two tabs never share one engine.
     """
     if session_id:
         digest = hashlib.sha256(
             f"{engine}\0{working_dir}\0{session_id}".encode()
+        ).hexdigest()[:12]
+    elif tab_key:
+        digest = hashlib.sha256(
+            f"{engine}\0{working_dir}\0tab\0{tab_key}".encode()
         ).hexdigest()[:12]
     else:
         digest = uuid4().hex[:12]
     return f"ca-{engine}-{digest}"
 
 
-def _tmux_ensure_session(name: str, engine_argv: list[str], working_dir: Path) -> None:
+def _tmux_ensure_session(
+    name: str,
+    engine_argv: list[str],
+    working_dir: Path,
+    cols: int = 80,
+    rows: int = 24,
+) -> None:
     """Creates the tmux session running *engine_argv* if it doesn't exist.
 
     The session is first created *without* a command (a default shell holds
@@ -170,9 +195,9 @@ def _tmux_ensure_session(name: str, engine_argv: list[str], working_dir: Path) -
         "-s",
         name,
         "-x",
-        "80",
+        str(cols),
         "-y",
-        "24",
+        str(rows),
         "-c",
         str(working_dir),
     )
@@ -261,6 +286,39 @@ def kill_tmux_server() -> None:
         return
     with contextlib.suppress(Exception):
         _run_tmux("kill-server", timeout=5)
+
+
+# 看门狗：轮询服务进程，一消失就 kill-server。lifespan 的收尾只在一次
+# Ctrl+C 这种体面退出时才跑；连按两次 Ctrl+C、关终端窗口（SIGHUP）、被
+# kill 都会跳过它，而 tmux server 是独立守护进程，引擎会一直占着内存。
+_TMUX_WATCHDOG_SCRIPT = (
+    'while kill -0 "$1" 2>/dev/null; do sleep 2; done; '
+    '"$2" -L "$3" kill-server 2>/dev/null'
+)
+
+
+def start_tmux_watchdog(pid: int | None = None) -> None:
+    """Takes the tmux server down once *pid* (this process) is gone, however it died."""
+    binary = _tmux_binary()
+    if binary is None:
+        return
+    with contextlib.suppress(OSError):
+        subprocess.Popen(
+            [
+                "/bin/sh",
+                "-c",
+                _TMUX_WATCHDOG_SCRIPT,
+                "ca-tmux-watchdog",
+                str(pid or os.getpid()),
+                binary,
+                _tmux_socket(),
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            # 自成会话：关终端窗口时发给整个进程组的 SIGHUP 不能把它也带走。
+            start_new_session=True,
+        )
 
 
 def list_active_sessions() -> list[dict[str, Any]]:
@@ -386,6 +444,41 @@ async def list_pty_sessions() -> dict:
 @router.post("/sessions/{session_id}/stop")
 async def stop_pty_session(session_id: str) -> dict:
     return {"success": await stop_active_session(session_id)}
+
+
+@router.post("/close")
+async def close_pty_terminal(
+    engine: str = Query(...),
+    cwd: str = Query(...),
+    session_id: str | None = Query(None),
+    tab_key: str | None = Query(None),
+) -> dict:
+    """Stops the engine behind a browser terminal tab the user closed.
+
+    Dropping the websocket only detaches (a reload must not kill work in
+    progress), so without this every closed tab left its engine running in
+    tmux until the server stopped -- a few hundred MB each.
+    """
+    if tab_key is not None and not _TAB_KEY_RE.fullmatch(tab_key):
+        raise HTTPException(status_code=400, detail="Malformed tab key")
+    if session_id is None and tab_key is None:
+        # A unique-named terminal can't be found again by its parameters.
+        return {"success": False}
+    if _tmux_binary() is None:
+        return {"success": False}
+    try:
+        working_dir = _resolve_registered_workspace(cwd)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    name = _tmux_session_name(engine, working_dir, session_id, tab_key)
+    entry = _entry_for_tmux_name(name)
+    if entry is not None:
+        return {"success": await stop_active_session(entry["id"])}
+    probe = await asyncio.to_thread(_run_tmux, "has-session", "-t", name)
+    if probe.returncode != 0:
+        return {"success": False}
+    await asyncio.to_thread(_tmux_kill_session, name)
+    return {"success": True}
 
 
 def _resolve_registered_workspace(cwd: str) -> Path:
@@ -538,6 +631,9 @@ async def _spawn_posix(
     session_id: str | None = None,
     *,
     tmux_name: str | None = None,
+    tab_key: str | None = None,
+    cols: int = 80,
+    rows: int = 24,
 ) -> _PosixSession:
     """Spawns what the browser terminal drives.
 
@@ -551,7 +647,10 @@ async def _spawn_posix(
     import pty  # POSIX-only; imported lazily so the module still loads on Windows.
 
     master_fd, slave_fd = pty.openpty()  # type: ignore[attr-defined]
-    _resize_fd(master_fd, cols=80, rows=24)
+    # The engine starts at this size. Starting at 80x24 and resizing once the
+    # socket opens races the engine's own startup: a TUI that draws before
+    # its SIGWINCH handler is in place stays drawn at 80x24.
+    _resize_fd(master_fd, cols=cols, rows=rows)
     env = {
         **child_environ(),
         "TERM": "xterm-256color",
@@ -572,10 +671,17 @@ async def _spawn_posix(
                 argv = engine_argv
             else:
                 if tmux_name is None:
-                    tmux_name = _tmux_session_name(engine, working_dir, session_id)
+                    tmux_name = _tmux_session_name(
+                        engine, working_dir, session_id, tab_key
+                    )
                     created_tmux_name = tmux_name
                     await asyncio.to_thread(
-                        _tmux_ensure_session, tmux_name, engine_argv, working_dir
+                        _tmux_ensure_session,
+                        tmux_name,
+                        engine_argv,
+                        working_dir,
+                        cols,
+                        rows,
                     )
                 argv = [binary, "-L", _tmux_socket(), "attach-session", "-t", tmux_name]
             process = await asyncio.create_subprocess_exec(
@@ -736,6 +842,8 @@ async def _spawn_windows(  # pragma: no cover - exercised only on Windows
     working_dir: Path,
     output_queue: asyncio.Queue[bytes | str | None],
     session_id: str | None = None,
+    cols: int = 80,
+    rows: int = 24,
 ) -> _WindowsSession:
     loop = asyncio.get_running_loop()
     env = {**child_environ(), "TERM": "xterm-256color"}
@@ -749,7 +857,7 @@ async def _spawn_windows(  # pragma: no cover - exercised only on Windows
             argv,
             cwd=str(working_dir),
             env=env,
-            dimensions=(24, 80),
+            dimensions=(rows, cols),
         )
     except Exception as exc:
         raise SpawnError(str(exc)) from exc
@@ -769,6 +877,12 @@ async def pty_websocket(
         None,
         description="Attach to a live browser terminal from /api/pty/sessions",
     ),
+    tab_key: str | None = Query(
+        None,
+        description="The browser tab's own id; reconnects of it reattach",
+    ),
+    cols: int = Query(80, ge=_MIN_COLS, le=_MAX_COLS),
+    rows: int = Query(24, ge=_MIN_ROWS, le=_MAX_ROWS),
 ) -> None:
     # Authenticate before anything else: this endpoint hands the caller an
     # interactive shell, and a WebSocket handshake is not subject to the
@@ -802,6 +916,9 @@ async def pty_websocket(
         if not is_safe_session_id(session_id):
             await websocket.close(code=4400, reason="Malformed session id")
             return
+    if tab_key is not None and not _TAB_KEY_RE.fullmatch(tab_key):
+        await websocket.close(code=4400, reason="Malformed tab key")
+        return
     attach_tmux_name: str | None = None
     if attach_id is not None:
         entry = _ACTIVE_SESSIONS.get(attach_id)
@@ -835,7 +952,7 @@ async def pty_websocket(
     try:
         if sys.platform == "win32":  # pragma: no cover - exercised only on Windows
             session: PtySession = await _spawn_windows(
-                engine, working_dir, output_queue, session_id
+                engine, working_dir, output_queue, session_id, cols, rows
             )
         else:
             session = await _spawn_posix(
@@ -844,6 +961,9 @@ async def pty_websocket(
                 output_queue,
                 session_id,
                 tmux_name=attach_tmux_name,
+                tab_key=tab_key,
+                cols=cols,
+                rows=rows,
             )
     except SpawnError as exc:
         with contextlib.suppress(Exception):
@@ -993,9 +1113,9 @@ async def pty_websocket(
                 if isinstance(data, str):
                     session.write(data)
             elif kind == "resize":
-                cols, rows = message.get("cols"), message.get("rows")
-                if isinstance(cols, int) and isinstance(rows, int):
-                    session.resize(cols, rows)
+                new_cols, new_rows = message.get("cols"), message.get("rows")
+                if isinstance(new_cols, int) and isinstance(new_rows, int):
+                    session.resize(new_cols, new_rows)
     except WebSocketDisconnect:
         pass
     finally:

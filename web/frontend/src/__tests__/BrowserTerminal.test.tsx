@@ -414,3 +414,26 @@ test('unmounting restores original title if modified', () => {
   expect(document.title).toBe('CodeAgent Test');
 });
 
+
+test('an off-screen terminal does not start its engine until it is shown', () => {
+  // Starting it hidden meant starting it at 80x24; a TUI that drew before the
+  // resize arrived stayed drawn at that size in a full-width box.
+  const { rerender } = render(
+    <BrowserTerminal engine="claude" cwd="/w" tabKey="tab1" active={false} />,
+  );
+  expect(sockets).toHaveLength(0);
+
+  terminals[0].cols = 132;
+  terminals[0].rows = 43;
+  rerender(<BrowserTerminal engine="claude" cwd="/w" tabKey="tab1" active />);
+  expect(sockets).toHaveLength(1);
+  const query = new URL(sockets[0].url).searchParams;
+  expect(query.get('tab_key')).toBe('tab1');
+  expect(query.get('cols')).toBe('132');
+  expect(query.get('rows')).toBe('43');
+
+  // Hiding and showing it again is the same engine, not another one.
+  rerender(<BrowserTerminal engine="claude" cwd="/w" tabKey="tab1" active={false} />);
+  rerender(<BrowserTerminal engine="claude" cwd="/w" tabKey="tab1" active />);
+  expect(sockets).toHaveLength(1);
+});

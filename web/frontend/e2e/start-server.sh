@@ -26,6 +26,9 @@ cleanup() {
   local ec=$?
   kill "${SERVER_PID:-}" 2>/dev/null || true
   wait "${SERVER_PID:-}" 2>/dev/null || true
+  if [ -n "${CA_PTY_TMUX_SOCKET:-}" ] && command -v tmux >/dev/null 2>&1; then
+    tmux -L "$CA_PTY_TMUX_SOCKET" kill-server 2>/dev/null || true
+  fi
   rm -rf "$SCRATCH"
   exit "$ec"
 }
@@ -56,6 +59,10 @@ export CA_PLUGINS_ROOT="$SCRATCH/plugins"
 # Tells core/web/server.py to mount the /api/__e2e_reset route so per-test
 # Playwright cleanup can restore a clean baseline (see core/web/routers/e2e.py).
 export CA_E2E=1
+# The server kills its whole tmux server at startup and shutdown. On the
+# default socket that is the developer's own `ca ui` terminals -- every e2e
+# worker would take them down, and its own terminals would land among them.
+export CA_PTY_TMUX_SOCKET="codeagent-e2e-$$"
 export CA_AGENT_GATEWAY_FAKE=1
 
 # Pin the Web UI token instead of letting the server mint a random one per

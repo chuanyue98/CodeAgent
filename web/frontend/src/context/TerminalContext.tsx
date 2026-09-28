@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
+import { closePtyTerminal } from '../api/pty';
 
 export interface TerminalTab {
   id: string;
@@ -150,6 +151,11 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, [tabs]);
 
   const closeTab = useCallback((id: string) => {
+    const closing = tabs.find(tab => tab.id === id);
+    // An attach tab is a guest on a terminal the instances page owns.
+    if (closing && !closing.attachId) {
+      closePtyTerminal(closing.engine, closing.cwd, closing.sessionId, closing.id).catch(() => {});
+    }
     setTabs(prev => prev.filter(tab => tab.id !== id));
     setRateLimitedTabIds(prev => {
       const newSet = new Set(prev);

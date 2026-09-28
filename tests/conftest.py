@@ -7,8 +7,30 @@ import pytest
 # 定下来的，等 pinned_language fixture 跑起来已经晚了。
 os.environ.setdefault("CA_LANG", "en")
 
+# 服务 lifespan 启停都会 kill-server 浏览器终端的 tmux server。默认 socket
+# 是开发者正在用的 `ca ui`：不隔离的话，跑一次测试就把他开着的终端全杀了。
+# 直接覆盖而不是 setdefault：环境里若指着真实 socket，照样得换掉。
+_PYTEST_TMUX_SOCKET = f"ca-pytest-{os.getpid()}"
+os.environ["CA_PTY_TMUX_SOCKET"] = _PYTEST_TMUX_SOCKET
+
 from core import i18n  # noqa: E402
 from core.web.security import reset_token_cache  # noqa: E402
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _reap_pytest_tmux_server():
+    """测试结束时收掉本次测试专用的 tmux server。"""
+    yield
+    import shutil
+    import subprocess
+
+    if shutil.which("tmux"):
+        subprocess.run(
+            ["tmux", "-L", _PYTEST_TMUX_SOCKET, "kill-server"],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
 
 
 @pytest.fixture(autouse=True)

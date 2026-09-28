@@ -393,6 +393,126 @@ def test_resume_deep_link_reattaches_the_same_engine(tmp_path, monkeypatch):
 
 
 @requires_tmux
+def test_reconnecting_the_same_tab_reattaches_instead_of_spawning(
+    tmp_path, monkeypatch
+):
+    """同一个浏览器 tab 重连（刷新页面等）接回原引擎，不再另起一个把旧的丢在 tmux 里。"""
+    app = _app(tmp_path, monkeypatch)
+    params = {"engine": "claude", "cwd": app.state.workspace, "tab_key": "tab123"}
+    with TestClient(app) as client:
+        with client.websocket_connect("/api/pty/ws", params=params) as ws:
+            _read_until(ws, lambda s: "READY" in s)
+            ws.send_json({"type": "input", "data": "pid one\n"})
+            first_pid = _parse_pid(_read_until(ws, lambda s: "PID:" in s))
+
+        _wait_for(
+            lambda: (
+                pty_router.list_active_sessions()
+                and pty_router.list_active_sessions()[0]["detached"] is True
+            )
+        )
+
+        with client.websocket_connect("/api/pty/ws", params=params) as ws:
+            ws.send_json({"type": "input", "data": "pid two\n"})
+            second_pid = _parse_pid(_read_until(ws, lambda s: ":two" in s))
+
+        assert first_pid == second_pid
+        _wait_for(
+            lambda: (
+                pty_router.list_active_sessions()
+                and pty_router.list_active_sessions()[0]["detached"] is True
+            )
+        )
+        assert len(pty_router.list_active_sessions()) == 1
+        listed = pty_router._run_tmux("list-sessions", "-F", "#{session_name}")
+        assert len(listed.stdout.split()) == 1
+
+        # 用户点 × 关掉这个 tab：引擎要真的停掉，而不是继续挂在 tmux 里
+        response = client.post("/api/pty/close", params=params)
+        assert response.json() == {"success": True}
+        assert pty_router.list_active_sessions() == []
+
+    for _ in range(50):
+        try:
+            os.kill(int(first_pid), 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail("关闭 tab 之后引擎进程仍在运行")
+
+
+@requires_tmux
+def test_engine_starts_at_the_size_the_browser_asked_for(tmp_path, monkeypatch):
+    """引擎一启动就是浏览器的尺寸：先 80x24 再 resize 会和 TUI 的启动赛跑。"""
+    app = _app(tmp_path, monkeypatch)
+    params = {
+        "engine": "claude",
+        "cwd": app.state.workspace,
+        "tab_key": "sized",
+        "cols": 132,
+        "rows": 43,
+    }
+    with TestClient(app) as client:
+        with client.websocket_connect("/api/pty/ws", params=params) as ws:
+            _read_until(ws, lambda s: "READY" in s)
+            name = pty_router.list_active_sessions()[0]["tmux_name"]
+            size = pty_router._run_tmux(
+                "display-message", "-p", "-t", name, "#{window_width}x#{window_height}"
+            )
+            assert size.stdout.strip() == "132x43"
+            ws.send_json({"type": "input", "data": "exit\n"})
+
+
+def test_close_without_a_way_to_find_the_terminal_is_a_no_op(tmp_path, monkeypatch):
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/pty/close", params={"engine": "claude", "cwd": app.state.workspace}
+        )
+    assert response.json() == {"success": False}
+
+
+def test_pty_websocket_rejects_a_malformed_tab_key(tmp_path, monkeypatch):
+    if sys.platform == "win32":
+        pytest.skip("PTY sessions are POSIX-only")
+    app = _app(tmp_path, monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/api/pty/ws",
+            params={"engine": "claude", "cwd": app.state.workspace, "tab_key": "a b"},
+        ) as ws:
+            with pytest.raises(WebSocketDisconnect) as excinfo:
+                ws.receive_json()
+    assert excinfo.value.code == 4400
+
+
+@requires_tmux
+def test_watchdog_takes_the_engines_down_when_the_server_dies_abruptly():
+    """服务被 kill / 关终端窗口时 lifespan 收尾不会跑，看门狗兜底收掉 tmux。"""
+    socket_name = os.environ[pty_router._TMUX_SOCKET_ENV]
+    pty_router._run_tmux("new-session", "-d", "-s", "survivor", "sleep 300")
+    assert pty_router._run_tmux("has-session", "-t", "survivor").returncode == 0
+
+    server = subprocess.Popen(["sleep", "300"])
+    pty_router.start_tmux_watchdog(server.pid)
+    server.kill()
+    server.wait()
+
+    _wait_for(
+        lambda: (
+            subprocess.run(
+                ["tmux", "-L", socket_name, "has-session", "-t", "survivor"],
+                capture_output=True,
+                check=False,
+            ).returncode
+            != 0
+        ),
+        timeout=10,
+    )
+
+
+@requires_tmux
 def test_attach_after_engine_exit_is_rejected(tmp_path, monkeypatch):
     """引擎已退出的终端不能再接回（4404），注册表条目随之清除。"""
     app = _app(tmp_path, monkeypatch)
