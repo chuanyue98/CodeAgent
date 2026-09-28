@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { useT } from '../i18n/context';
+import { useTerminalFocus } from '../hooks/useTerminalFocus';
 import type { TranslationKey } from '../i18n/locales/en';
 import { ACTIVE_CHIP } from './shared/activeChip';
 
@@ -27,6 +28,7 @@ export default function SectionLayout({
 }: SectionLayoutProps) {
   const { pathname, search } = useLocation();
   const t = useT();
+  const focused = useTerminalFocus();
 
   const carried = (() => {
     if (!preserveParams?.length) return '';
@@ -45,6 +47,7 @@ export default function SectionLayout({
       {/* The section's one-line description lives in the app header, under the
           title. Parked out here at the far right of a wide row it sat a screen
           away from the words it explained, in the lightest grey on the page. */}
+      {!focused && (
       <div className="animate-fade-rise stagger-1 border-b border-slate-200 px-1 pb-2">
         <nav aria-label={t('section.nav', { label: t(labelKey) })} className="custom-scrollbar flex max-w-full gap-1 overflow-x-auto">
           {tabs.map(tab => {
@@ -68,6 +71,7 @@ export default function SectionLayout({
           })}
         </nav>
       </div>
+      )}
 
       {/* key on pathname so each route transition re-triggers the entrance
           animation — gives a clear "you arrived somewhere new" beat. */}

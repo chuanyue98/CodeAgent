@@ -12,6 +12,7 @@ import ErrorBoundary from './components/shared/ErrorBoundary';
 import ErrorBar from './components/shared/ErrorBar';
 import { useProject } from './context/ProjectContext';
 import { useT } from './i18n/context';
+import { useTerminalFocus } from './hooks/useTerminalFocus';
 import {
   ACTIVITY_FILTER_PARAMS,
   ACTIVITY_TABS,
@@ -64,7 +65,19 @@ function KeepQuery({ to }: { to: string }) {
 }
 
 function App() {
+  return (
+    <TerminalProvider>
+      <AppShell />
+    </TerminalProvider>
+  );
+}
+
+function AppShell() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  // An open session narrows the nav to icons and drops the header, without
+  // touching the user's own expand/collapse choice for the other pages.
+  const focused = useTerminalFocus();
+  const sidebarWide = isSidebarOpen && !focused;
   const { pathname } = useLocation();
   const { error: ctxError } = useProject();
   const t = useT();
@@ -84,18 +97,18 @@ function App() {
   }, [pageLabel]);
 
   return (
-    <TerminalProvider>
     <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-transparent font-sans text-foreground">
       <div data-testid="app-shell" className="flex min-h-0 flex-1 gap-2 p-2 md:gap-4 md:p-4">
         <aside
           className={`animate-fade-in stagger-1 ${
-            isSidebarOpen ? 'w-20 xl:w-64' : 'w-20 xl:w-24'
+            sidebarWide ? 'w-20 xl:w-64' : 'w-20 xl:w-24'
           } glass-card flex shrink-0 flex-col overflow-hidden transition-[width] duration-300`}
         >
           <div className="flex items-center justify-center border-b border-slate-100 p-4 lg:justify-between lg:p-8">
-            {isSidebarOpen && (
+            {sidebarWide && (
               <span className="hidden text-2xl font-black uppercase tracking-tighter text-primary lg:inline">CodeAgent</span>
             )}
+            {!focused && (
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               aria-label={isSidebarOpen ? t('nav.collapse') : t('nav.expand')}
@@ -104,7 +117,8 @@ function App() {
             >
               {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
-            <span className="text-xl font-black text-primary lg:hidden" aria-label="CodeAgent">CA</span>
+            )}
+            <span className={`text-xl font-black text-primary ${focused ? '' : 'lg:hidden'}`} aria-label="CodeAgent">CA</span>
           </div>
 
           <nav aria-label={t('nav.primary')} className="custom-scrollbar mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto p-2 lg:mt-4 lg:p-4">
@@ -125,7 +139,7 @@ function App() {
                   }`}
                 >
                   <item.icon size={22} className={`shrink-0 ${active ? 'opacity-100' : 'opacity-70'}`} />
-                  {isSidebarOpen && (
+                  {sidebarWide && (
                     <span className="hidden text-sm font-medium tracking-wide lg:inline">{t(item.labelKey)}</span>
                   )}
                 </NavLink>
@@ -141,6 +155,7 @@ function App() {
         </aside>
 
         <main className="relative flex min-w-0 flex-1 flex-col gap-3 overflow-hidden md:gap-4">
+          {!focused && (
           <header className="animate-fade-in stagger-2 relative z-50 flex min-w-0 items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="truncate text-lg font-bold text-slate-800 md:text-xl">
@@ -162,6 +177,7 @@ function App() {
               <WorkspaceSwitcher />
             </div>
           </header>
+          )}
           {ctxError && (
             <ErrorBar message={t('app.configError', { message: ctxError })} />
           )}
@@ -264,7 +280,6 @@ function App() {
         <GlobalTerminalDrawer />
       </div>
     </div>
-    </TerminalProvider>
   );
 }
 

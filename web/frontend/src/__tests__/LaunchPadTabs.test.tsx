@@ -223,40 +223,31 @@ describe('LaunchPad terminal tabs', () => {
     await screen.findByTestId('term-opencode:ses_abc');
   });
 
-  test('the launcher offers recent work in the current workspace', async () => {
-    // The launcher used to be an engine picker on a mostly empty screen, with
-    // resuming reachable only through the 256px sidebar.
+  test('an open session fills the page instead of the bottom drawer', async () => {
     renderLaunchPad();
-    fireEvent.click(await screen.findByRole('button', { name: /resume 修复登录/i }));
-    await screen.findByTestId('term-opencode:ses_abc');
+    await openEngine('Claude');
+    await screen.findByTestId('term-claude:new');
+
+    expect(screen.getByTestId('terminal-slot')).toBeInTheDocument();
+    const frame = screen.getByTestId('drawer-expanded');
+    expect(frame).not.toHaveClass('h-[60vh]');
+    // Drawer sizing has nothing to size once the session is the page.
+    expect(screen.queryByTitle('Minimize Drawer')).toBeNull();
+    expect(screen.queryByTitle('Maximize')).toBeNull();
   });
 
-  test('an unworked workspace falls back to recent work anywhere', async () => {
-    // Scoping the list to the current workspace is the point of it, but
-    // answering "nothing here yet" leaves the launcher staring at the blank
-    // half of the screen this block exists to fill.
-    globalThis.fetch = vi.fn().mockImplementation((url: string) => { console.log("FETCH_MOCK", url);
-      if (url.includes('/api/pty/status')) return jsonResponse({ available: true, reason: null });
-      if (url.includes('/api/projects')) {
-        return jsonResponse([{ path: '/workspace/fresh', group: 'codeagent', available: true }]);
-      }
-      if (url.includes('/api/analytics/sessions')) {
-        // Scoped to /workspace/fresh: nothing. Unscoped: the session below,
-        // which lives in a different project.
-        return jsonResponse({
-          sessions: url.includes('project=') ? [] : SIDEBAR_SESSIONS,
-          nextCursor: null,
-        });
-      }
-      return jsonResponse({});
-    });
+  test('the launcher leads back to a terminal that has no session id yet', async () => {
     renderLaunchPad();
+    await openEngine('Claude');
+    await screen.findByTestId('term-claude:new');
 
-    const card = await screen.findByRole('button', { name: /resume 修复登录/i });
-    // Whose project it is only matters once the list stops being about one.
-    expect(card.textContent).toContain('proj');
-    fireEvent.click(card);
-    await screen.findByTestId('term-opencode:ses_abc');
+    fireEvent.click(screen.getByRole('button', { name: 'New terminal' }));
+    expect(screen.queryByTestId('terminal-slot')).toBeNull();
+    // Back on the launcher, but the terminal is still alive behind it.
+    expect(unmounted).toEqual([]);
+
+    fireEvent.click(await screen.findByRole('button', { name: /^claude/i }));
+    expect(await screen.findByTestId('terminal-slot')).toBeInTheDocument();
   });
 
   test('the sidebar is there before any terminal is open', async () => {

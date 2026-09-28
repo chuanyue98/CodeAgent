@@ -18,6 +18,9 @@ export interface TerminalContextValue {
   fontSize: number;
   copyOnSelect: boolean;
   zenMode: boolean;
+  /** Where the active terminal should sit instead of the bottom drawer. */
+  terminalSlot: HTMLElement | null;
+  setTerminalSlot: (el: HTMLElement | null) => void;
   openTab: (engine: string, cwd: string, sessionId?: string, attachId?: string) => void;
   closeTab: (id: string) => void;
   setActiveTabId: (id: string | null) => void;
@@ -45,6 +48,8 @@ const defaultTerminalContext: TerminalContextValue = {
   fontSize: 13,
   copyOnSelect: true,
   zenMode: false,
+  terminalSlot: null,
+  setTerminalSlot: () => {},
   openTab: () => {},
   closeTab: () => {},
   setActiveTabId: () => {},
@@ -87,6 +92,7 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [zenMode, setZenMode] = useState(false);
+  const [terminalSlot, setTerminalSlot] = useState<HTMLElement | null>(null);
   const [fontSize, setFontSize] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('codeagent.terminalFontSize');
@@ -232,6 +238,8 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
     fontSize,
     copyOnSelect,
     zenMode,
+    terminalSlot,
+    setTerminalSlot,
     openTab,
     closeTab,
     setActiveTabId,

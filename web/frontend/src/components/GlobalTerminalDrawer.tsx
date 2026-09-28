@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, type CSSProperties } from 'react';
+import { useLocation } from 'react-router';
 import {
   Terminal, Plus, X, Maximize2, Minimize2, ChevronDown, ChevronUp, Zap, Loader2,
-  ZoomIn, ZoomOut, Copy, Check, Expand, Shrink, HelpCircle,
+  ZoomIn, ZoomOut, Copy, Check, Expand, Shrink, MoreHorizontal,
 } from 'lucide-react';
 import { useTerminal } from '../context/TerminalContext';
 import BrowserTerminal from './BrowserTerminal';
@@ -9,6 +10,39 @@ import SmartHandoffBanner from './SmartHandoffBanner';
 import { useT } from '../i18n/context';
 import { AGENT_ENGINES, findEngine } from './terminalEngines';
 import { convertAndLaunchSession } from '../api/audit';
+
+interface Box { top: number; left: number; width: number; height: number }
+
+/**
+ * Viewport box of `el`, kept current. ResizeObserver misses pure moves, so
+ * the entrance animations and the nav's width transition re-measure too.
+ */
+function useElementBox(el: HTMLElement | null): Box | null {
+  const [box, setBox] = useState<Box | null>(null);
+  useLayoutEffect(() => {
+    if (!el) return;
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      setBox(prev => (
+        prev && prev.top === r.top && prev.left === r.left
+          && prev.width === r.width && prev.height === r.height
+      ) ? prev : { top: r.top, left: r.left, width: r.width, height: r.height });
+    };
+    update();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    observer?.observe(el);
+    window.addEventListener('resize', update);
+    document.addEventListener('animationend', update, true);
+    document.addEventListener('transitionend', update, true);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', update);
+      document.removeEventListener('animationend', update, true);
+      document.removeEventListener('transitionend', update, true);
+    };
+  }, [el]);
+  return el ? box : null;
+}
 
 export default function GlobalTerminalDrawer() {
   const {
@@ -20,11 +54,13 @@ export default function GlobalTerminalDrawer() {
     fontSize,
     copyOnSelect,
     zenMode,
+    terminalSlot,
     openTab,
     closeTab,
     setActiveTabId,
     toggleDrawer,
     openDrawer,
+    closeDrawer,
     toggleMaximize,
     increaseFontSize,
     decreaseFontSize,
@@ -41,6 +77,34 @@ export default function GlobalTerminalDrawer() {
   const [handoffError, setHandoffError] = useState<string | null>(null);
   const [showHandoffMenu, setShowHandoffMenu] = useState(false);
   const handoffMenuRef = useRef<HTMLDivElement | null>(null);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
+  const { pathname } = useLocation();
+  const onTerminalPage = pathname === '/agent/terminal';
+  const activeTab = tabs.find(tab => tab.id === activeTabId);
+  // On the terminal page the session is the page: it fills the slot LaunchPad
+  // leaves for it. Everywhere else it is the bottom drawer.
+  const docked = onTerminalPage && Boolean(activeTab) && Boolean(terminalSlot);
+  const slotBox = useElementBox(docked ? terminalSlot : null);
+
+  // Leaving the terminal page must not drop the session on top of the next
+  // page as a 60vh drawer; it goes to the dock bar instead.
+  const wasOnTerminalPage = useRef(onTerminalPage);
+  useEffect(() => {
+    if (wasOnTerminalPage.current && !onTerminalPage) closeDrawer();
+    wasOnTerminalPage.current = onTerminalPage;
+  }, [onTerminalPage, closeDrawer]);
+
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMoreMenu]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -58,7 +122,6 @@ export default function GlobalTerminalDrawer() {
 
   if (tabs.length === 0) return null;
 
-  const activeTab = tabs.find(tab => tab.id === activeTabId);
   const isAgentEngine = Boolean(activeTab && AGENT_ENGINES.some(e => e.id === activeTab.engine));
 
   const handleHandoff = async (targetEngineId: string) => {
@@ -83,6 +146,22 @@ export default function GlobalTerminalDrawer() {
     }
   };
 
+  let frame: string;
+  let frameStyle: CSSProperties | undefined;
+  if (zenMode && (docked || isDrawerOpen)) {
+    frame = 'fixed inset-0 z-[100] h-screen';
+  } else if (docked) {
+    frame = 'fixed z-40 overflow-hidden rounded-2xl border border-slate-200 shadow-sm';
+    frameStyle = slotBox ?? { visibility: 'hidden' };
+  } else if (!isDrawerOpen || onTerminalPage) {
+    // Still rendered: every tab's terminal must stay mounted to keep its PTY.
+    frame = 'fixed bottom-0 left-0 right-0 invisible h-0 overflow-hidden';
+  } else {
+    frame = `fixed bottom-0 left-0 right-0 z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] transition-all duration-300 ${
+      isMaximized ? 'top-0' : 'h-[60vh] min-h-[300px]'
+    }`;
+  }
+
   const handleDismissBanner = () => {
     if (activeTabId) clearRateLimited(activeTabId);
   };
@@ -91,7 +170,7 @@ export default function GlobalTerminalDrawer() {
     <>
       {/* Minimized state dock bar */}
       <div 
-        className={`fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between border-t border-slate-200 bg-white/95 px-4 py-2 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] backdrop-blur transition-transform hover:bg-slate-50 cursor-pointer ${isDrawerOpen ? 'hidden' : ''}`}
+        className={`fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between border-t border-slate-200 bg-white/95 px-4 py-2 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] backdrop-blur transition-transform hover:bg-slate-50 cursor-pointer ${isDrawerOpen || onTerminalPage ? 'hidden' : ''}`}
         onClick={openDrawer}
         data-testid="dock-bar"
       >
@@ -123,15 +202,8 @@ export default function GlobalTerminalDrawer() {
 
       {/* Expanded State */}
       <div 
-        className={`fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.1)] transition-all duration-300 ${
-          !isDrawerOpen
-            ? 'invisible h-0 overflow-hidden'
-            : zenMode
-            ? 'top-0 z-[100] h-screen'
-            : isMaximized
-            ? 'top-0'
-            : 'h-[60vh] min-h-[300px]'
-        }`}
+        className={`flex flex-col bg-white ${frame}`}
+        style={frameStyle}
         data-testid="drawer-expanded"
         onTransitionEnd={() => {
           window.dispatchEvent(new Event('resize'));
@@ -230,117 +302,118 @@ export default function GlobalTerminalDrawer() {
               </div>
             )}
 
-            {/* Font size zoom controls */}
-            <div className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5 text-slate-500">
+            {/* Settings you change once and forget; kept off the bar so the
+                session's own title and actions are what it shows. */}
+            <div ref={moreMenuRef} className="relative">
               <button
                 type="button"
-                data-testid="terminal-zoom-out"
-                onClick={decreaseFontSize}
-                disabled={fontSize <= 10}
-                className="rounded p-1 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 transition-colors"
-                title={t('terminal.zoomOut')}
-                aria-label={t('terminal.zoomOut')}
-              >
-                <ZoomOut size={13} />
-              </button>
-              <button
-                type="button"
-                data-testid="terminal-font-size-btn"
-                onClick={resetFontSize}
-                className="px-1 text-[11px] font-mono font-medium hover:text-primary transition-colors"
-                title={t('terminal.resetZoom')}
-                aria-label={t('terminal.resetZoom')}
-              >
-                {fontSize}px
-              </button>
-              <button
-                type="button"
-                data-testid="terminal-zoom-in"
-                onClick={increaseFontSize}
-                disabled={fontSize >= 24}
-                className="rounded p-1 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 transition-colors"
-                title={t('terminal.zoomIn')}
-                aria-label={t('terminal.zoomIn')}
-              >
-                <ZoomIn size={13} />
-              </button>
-            </div>
-
-            {/* Copy on select toggle */}
-            <button
-              type="button"
-              data-testid="copy-on-select-toggle"
-              onClick={toggleCopyOnSelect}
-              className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition-colors ${
-                copyOnSelect
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                  : 'border-slate-200 bg-white text-slate-400 hover:bg-slate-50'
-              }`}
-              title={copyOnSelect ? t('terminal.copyOnSelectEnabled') : t('terminal.copyOnSelectDisabled')}
-              aria-label={t('terminal.copyOnSelect')}
-            >
-              {copyOnSelect ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
-              <span className="hidden xl:inline text-[11px]">{t('terminal.copyOnSelect')}</span>
-            </button>
-
-            {/* Shortcuts guide tooltip */}
-            <div className="relative group">
-              <button
-                type="button"
-                data-testid="shortcuts-guide-btn"
+                data-testid="terminal-more-button"
+                onClick={() => setShowMoreMenu(prev => !prev)}
                 className="rounded p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
-                title={t('terminal.shortcuts')}
-                aria-label={t('terminal.shortcuts')}
+                title={t('terminal.more')}
+                aria-label={t('terminal.more')}
+                aria-expanded={showMoreMenu}
               >
-                <HelpCircle size={15} />
+                <MoreHorizontal size={16} />
               </button>
-              <div className="pointer-events-none absolute right-0 top-full z-50 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="font-semibold text-slate-800 mb-1.5">{t('terminal.shortcuts')}</div>
-                <ul className="space-y-1 text-[11px] text-slate-500">
-                  <li className="flex justify-between"><span>切换终端抽屉</span><kbd className="rounded bg-slate-100 px-1 font-mono text-[10px]">Ctrl+`</kbd></li>
-                  <li className="flex justify-between"><span>选中文本复制</span><kbd className="rounded bg-slate-100 px-1 font-mono text-[10px]">Ctrl+C</kbd></li>
-                  <li className="flex justify-between"><span>从剪贴板粘贴</span><kbd className="rounded bg-slate-100 px-1 font-mono text-[10px]">Ctrl+Shift+V</kbd></li>
-                  <li className="flex justify-between"><span>放大/缩小字体</span><kbd className="rounded bg-slate-100 px-1 font-mono text-[10px]">Ctrl + / -</kbd></li>
-                  <li className="flex justify-between"><span>重置字体大小</span><kbd className="rounded bg-slate-100 px-1 font-mono text-[10px]">Ctrl+0</kbd></li>
-                </ul>
-              </div>
+              {showMoreMenu && (
+                <div
+                  data-testid="terminal-more-menu"
+                  className="absolute right-0 top-full z-50 mt-1 w-64 space-y-1 rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-600 shadow-xl"
+                >
+                  <div className="flex items-center justify-between px-1 py-1">
+                    <span>{t('terminal.fontSize')}</span>
+                    <div className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5 text-slate-500">
+                      <button
+                        type="button"
+                        data-testid="terminal-zoom-out"
+                        onClick={decreaseFontSize}
+                        disabled={fontSize <= 10}
+                        className="rounded p-1 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 transition-colors"
+                        title={t('terminal.zoomOut')}
+                        aria-label={t('terminal.zoomOut')}
+                      >
+                        <ZoomOut size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="terminal-font-size-btn"
+                        onClick={resetFontSize}
+                        className="px-1 text-[11px] font-mono font-medium hover:text-primary transition-colors"
+                        title={t('terminal.resetZoom')}
+                        aria-label={t('terminal.resetZoom')}
+                      >
+                        {fontSize}px
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="terminal-zoom-in"
+                        onClick={increaseFontSize}
+                        disabled={fontSize >= 24}
+                        className="rounded p-1 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 transition-colors"
+                        title={t('terminal.zoomIn')}
+                        aria-label={t('terminal.zoomIn')}
+                      >
+                        <ZoomIn size={13} />
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="copy-on-select-toggle"
+                    onClick={toggleCopyOnSelect}
+                    aria-pressed={copyOnSelect}
+                    className="flex w-full items-center justify-between rounded-lg px-1 py-1.5 text-left hover:bg-slate-100"
+                    title={copyOnSelect ? t('terminal.copyOnSelectEnabled') : t('terminal.copyOnSelectDisabled')}
+                  >
+                    <span>{t('terminal.copyOnSelect')}</span>
+                    {copyOnSelect ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} className="text-slate-400" />}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="zen-mode-toggle"
+                    onClick={() => { toggleZenMode(); setShowMoreMenu(false); }}
+                    className="flex w-full items-center justify-between rounded-lg px-1 py-1.5 text-left hover:bg-slate-100"
+                  >
+                    <span>{zenMode ? t('terminal.zenModeExit') : t('terminal.zenMode')}</span>
+                    {zenMode ? <Shrink size={13} /> : <Expand size={13} />}
+                  </button>
+                  <div className="border-t border-slate-100 px-1 pt-2">
+                    <div className="mb-1.5 font-semibold text-slate-800">{t('terminal.shortcuts')}</div>
+                    <ul className="space-y-1 text-[11px] text-slate-500">
+                      <li className="flex justify-between"><span>{t('terminal.shortcutCopy')}</span><kbd className="rounded bg-slate-100 px-1 font-mono text-[10px]">Ctrl+C</kbd></li>
+                      <li className="flex justify-between"><span>{t('terminal.shortcutPaste')}</span><kbd className="rounded bg-slate-100 px-1 font-mono text-[10px]">Ctrl+Shift+V</kbd></li>
+                      <li className="flex justify-between"><span>{t('terminal.shortcutZoom')}</span><kbd className="rounded bg-slate-100 px-1 font-mono text-[10px]">Ctrl + / - / 0</kbd></li>
+                      {!docked && (
+                        <li className="flex justify-between"><span>{t('terminal.shortcutDrawer')}</span><kbd className="rounded bg-slate-100 px-1 font-mono text-[10px]">Ctrl+`</kbd></li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Zen mode toggle */}
-            <button
-              type="button"
-              data-testid="zen-mode-toggle"
-              onClick={toggleZenMode}
-              className={`rounded p-1.5 transition-colors ${
-                zenMode
-                  ? 'bg-primary/10 text-primary hover:bg-primary/20'
-                  : 'text-slate-400 hover:bg-slate-200 hover:text-slate-600'
-              }`}
-              title={zenMode ? t('terminal.zenModeExit') : t('terminal.zenMode')}
-              aria-label={t('terminal.zenMode')}
-            >
-              {zenMode ? <Shrink size={15} /> : <Expand size={15} />}
-            </button>
-
-            <button
-              onClick={toggleMaximize}
-              className="rounded p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-              title="Maximize"
-              aria-label="Maximize"
-            >
-              {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            </button>
-            <button
-              onClick={toggleDrawer}
-              className="rounded p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-              title="Minimize Drawer"
-              aria-label="Minimize Drawer"
-            >
-              <ChevronDown size={16} />
-            </button>
-            <button onClick={() => isMaximized ? toggleMaximize() : toggleDrawer()} className="hidden">
-              <X size={16} />
-            </button>
+            {/* Sizing a drawer means nothing once the session is the page. */}
+            {!docked && (
+              <>
+                <button
+                  onClick={toggleMaximize}
+                  className="rounded p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                  title="Maximize"
+                  aria-label="Maximize"
+                >
+                  {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                </button>
+                <button
+                  onClick={toggleDrawer}
+                  className="rounded p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                  title="Minimize Drawer"
+                  aria-label="Minimize Drawer"
+                >
+                  <ChevronDown size={16} />
+                </button>
+              </>
+            )}
           </div>
         </div>
 

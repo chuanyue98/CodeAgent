@@ -5,13 +5,13 @@ import { AlertTriangle, Terminal, TerminalSquare } from 'lucide-react';
 import { fetchPtyStatus } from '../api/pty';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
-import RecentSessions from './RecentSessions';
 import SectionLabel from './shared/SectionLabel';
 import TerminalSessionSidebar from './TerminalSessionSidebar';
 import {
   AGENT_ENGINES,
   SHELL_ENGINE,
   SHELL_ENGINE_ID,
+  findEngine,
   type Engine,
 } from './terminalEngines';
 
@@ -26,7 +26,7 @@ export default function LaunchPad() {
   // Unmounting a tab to switch away would close its socket, and the PTY
   // endpoint spawns a process per connection -- the session would be gone,
   // not backgrounded.
-  const { tabs, activeTabId, openTab, setActiveTabId } = useTerminal();
+  const { activeTabId, openTab, setActiveTabId, setTerminalSlot, tabs } = useTerminal();
   const [searchParams] = useSearchParams();
   const effectiveProject = (validProjects.some(project => project.path === selectedWorkspace) ? selectedWorkspace : (selectedWorkspace.trim() || validProjects[0]?.path || "")).trim();
   const activeTab = tabs.find(tab => tab.id === activeTabId);
@@ -86,15 +86,9 @@ export default function LaunchPad() {
   };
 
   const launcher = (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6 py-2">
       <div className="space-y-1">
-        <p className="text-sm text-slate-600">{t('launch.intro')}</p>
-        {/* The long explanation is first-run material: it stops once a
-            terminal has been opened, rather than sitting above the only
-            control on the page forever. */}
-        {tabs.length === 0 && (
-          <p className="text-xs text-slate-500">{t('launch.introDetail')}</p>
-        )}
+        <h2 className="text-lg font-semibold text-slate-800">{t('launch.newChat')}</h2>
         {/* The header switcher shows only the trailing directory name, and
             which directory a terminal opens in is the one thing you must be
             able to check before launching one. */}
@@ -130,6 +124,32 @@ export default function LaunchPad() {
         </p>
       )}
 
+      {/* A fresh session has no id yet, so the sidebar's history can't
+          lead back to it; these can. */}
+      {tabs.length > 0 && (
+        <section className="space-y-2">
+          <SectionLabel as="h2">{t('launch.openTabs')}</SectionLabel>
+          <div className="flex flex-wrap gap-2">
+            {tabs.map(tab => {
+              const engine = findEngine(tab.engine);
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTabId(tab.id)}
+                  title={tab.cwd}
+                  className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                >
+                  <span className={`h-2 w-2 rounded-full ${engine?.dot ?? 'bg-slate-400'}`} />
+                  {engine?.nameKey ? t(engine.nameKey) : (engine?.name ?? tab.engine)}
+                  <span className="max-w-[12rem] truncate font-normal text-slate-400">{tab.cwd.split(/[\\/]/).filter(Boolean).pop()}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* The card is the button. A small button parked at the far edge of a
           wide card left the label stranded from what it acts on, and it was
           the one target that had to survive every column width. */}
@@ -144,33 +164,31 @@ export default function LaunchPad() {
         {/* And, separately, no agent at all. */}
         <div className="pt-1">{engineCard(SHELL_ENGINE)}</div>
       </section>
-
-      <RecentSessions
-        workspace={effectiveProject}
-        activeSessionId={activeTab?.sessionId}
-        onOpen={openTab}
-      />
     </div>
   );
 
 
-  const workspace = (
-    <div className="flex min-w-0 flex-1 flex-col gap-2">
-      <div className="min-h-0 flex-1">
-        <div className="custom-scrollbar h-full overflow-y-auto pr-1">{launcher}</div>
-      </div>
-    </div>
+  // The terminal itself stays mounted in GlobalTerminalDrawer (unmounting
+  // would kill its PTY); this empty box only tells it where to sit.
+  const workspace = activeTab ? (
+    <div ref={setTerminalSlot} data-testid="terminal-slot" className="min-w-0 flex-1" />
+  ) : (
+    <div className="custom-scrollbar min-w-0 flex-1 overflow-y-auto pr-1">{launcher}</div>
   );
 
   return (
-    <div className="flex h-full min-h-0 gap-3 pb-12">
-      <TerminalSessionSidebar
-        currentWorkspace={effectiveProject}
-        activeSessionId={activeTab?.sessionId}
-        launcherActive={activeTabId === null}
-        onOpenSession={openTab}
-        onNewSession={() => setActiveTabId(null)}
-      />
+    <div className="flex h-full min-h-0 gap-3">
+      {/* On a phone the list would squeeze an open session to a sliver; the
+          tab strip's "+" brings it back along with the launcher. */}
+      <div className={`min-h-0 ${activeTab ? 'hidden md:flex' : 'flex'}`}>
+        <TerminalSessionSidebar
+          currentWorkspace={effectiveProject}
+          activeSessionId={activeTab?.sessionId}
+          launcherActive={activeTabId === null}
+          onOpenSession={openTab}
+          onNewSession={() => setActiveTabId(null)}
+        />
+      </div>
       {workspace}
     </div>
   );

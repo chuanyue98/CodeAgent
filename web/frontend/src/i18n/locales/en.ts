@@ -638,8 +638,8 @@ export const en = {
   'launch.shellDescription': 'System shell (Git Bash / PowerShell), no agent started',
   'launch.detectFailed': 'Failed to detect browser terminal support',
   'launch.closeTerminal': 'Close terminal',
-  'launch.intro': 'Opens the provider CLI in an in-browser terminal, running on the machine hosting CodeAgent.',
-  'launch.introDetail': "The CLI must already be installed and signed in on this machine. The terminal shows the provider's own interface — CodeAgent only sets the working directory and injects your configured resources.",
+  'launch.newChat': 'New chat',
+  'launch.openTabs': 'Open terminals',
   'launch.engines': 'Engines',
   'launch.recent': 'Recent in this workspace',
   'launch.recentElsewhere': 'Recent in other workspaces',
@@ -689,6 +689,12 @@ export const en = {
   'terminal.zenMode': 'Zen / Fullscreen mode',
   'terminal.zenModeExit': 'Exit Zen mode',
   'terminal.shortcuts': 'Shortcuts guide',
+  'terminal.more': 'More',
+  'terminal.fontSize': 'Font size',
+  'terminal.shortcutCopy': 'Copy selection',
+  'terminal.shortcutPaste': 'Paste from clipboard',
+  'terminal.shortcutZoom': 'Zoom in / out / reset',
+  'terminal.shortcutDrawer': 'Toggle terminal drawer',
   'terminal.shortcutHelp':
     'Shortcuts: Ctrl+` Toggle drawer · Ctrl+C (with selection) / Ctrl+Shift+C Copy · Ctrl+Shift+V Paste · Ctrl++/Ctrl+- Font zoom',
 

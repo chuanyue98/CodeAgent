@@ -624,8 +624,8 @@ export const zh: Record<TranslationKey, string> = {
   'launch.shellDescription': '系统 Shell（Git Bash / PowerShell），不启动任何智能体',
   'launch.detectFailed': '检测浏览器终端支持失败',
   'launch.closeTerminal': '关闭终端',
-  'launch.intro': '在浏览器终端中打开引擎 CLI，运行在托管 CodeAgent 的本机上。',
-  'launch.introDetail': '命令行工具需要已经装好并登录。终端里显示的是引擎自己的界面 —— CodeAgent 只负责设定工作目录并注入你配置的资源。',
+  'launch.newChat': '新对话',
+  'launch.openTabs': '已打开的终端',
   'launch.engines': '引擎',
   'launch.recent': '这个工作区的最近会话',
   'launch.recentElsewhere': '其他工作区的最近会话',
@@ -674,6 +674,12 @@ export const zh: Record<TranslationKey, string> = {
   'terminal.zenMode': '全屏沉浸模式',
   'terminal.zenModeExit': '退出全屏沉浸',
   'terminal.shortcuts': '快捷键提示',
+  'terminal.more': '更多',
+  'terminal.fontSize': '字号',
+  'terminal.shortcutCopy': '复制选中文本',
+  'terminal.shortcutPaste': '从剪贴板粘贴',
+  'terminal.shortcutZoom': '放大 / 缩小 / 重置字号',
+  'terminal.shortcutDrawer': '唤起 / 收起终端抽屉',
   'terminal.shortcutHelp': '快捷键：Ctrl+` 唤起/收起抽屉 · 选中文本按 Ctrl+C / Ctrl+Shift+C 复制 · Ctrl+Shift+V 粘贴 · Ctrl++/Ctrl+- 缩放字号',
 
   // ── Logs ──────────────────────────────────────────────────────────────────

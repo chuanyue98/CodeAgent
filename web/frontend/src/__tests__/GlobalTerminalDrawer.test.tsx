@@ -1,5 +1,6 @@
 import React, { type ReactNode } from 'react';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, act, fireEvent } from '@testing-library/react';
+import { MemoryRouter, useNavigate } from 'react-router';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import GlobalTerminalDrawer from '../components/GlobalTerminalDrawer';
 import type { BrowserTerminalProps } from '../components/BrowserTerminal';
@@ -45,6 +46,10 @@ const TestWrapper = ({
 
   return <>{children}</>;
 };
+
+// Off the terminal page, so the drawer is a drawer rather than docked.
+const render = (ui: React.ReactElement) =>
+  rtlRender(<MemoryRouter initialEntries={['/activity/sessions']}>{ui}</MemoryRouter>);
 
 describe('GlobalTerminalDrawer', () => {
   beforeEach(() => {
@@ -200,6 +205,7 @@ describe('GlobalTerminalDrawer', () => {
       </TerminalProvider>
     );
 
+    fireEvent.click(screen.getByTestId('terminal-more-button'));
     const zoomInBtn = screen.getByTestId('terminal-zoom-in');
     const zoomOutBtn = screen.getByTestId('terminal-zoom-out');
     const fontBtn = screen.getByTestId('terminal-font-size-btn');
@@ -238,6 +244,7 @@ describe('GlobalTerminalDrawer', () => {
       </TerminalProvider>
     );
 
+    fireEvent.click(screen.getByTestId('terminal-more-button'));
     const copyToggle = screen.getByTestId('copy-on-select-toggle');
     expect(copyToggle).toBeInTheDocument();
 
@@ -254,10 +261,33 @@ describe('GlobalTerminalDrawer', () => {
     });
     expect(drawer).toHaveClass('h-screen');
 
+    fireEvent.click(screen.getByTestId('terminal-more-button'));
     act(() => {
-      zenToggle.click();
+      screen.getByTestId('zen-mode-toggle').click();
     });
     expect(drawer).not.toHaveClass('h-screen');
+  });
+
+  it('goes to the dock bar when leaving the terminal page', () => {
+    const Leave = () => {
+      const navigate = useNavigate();
+      return <button onClick={() => navigate('/settings/workspace')}>leave</button>;
+    };
+    rtlRender(
+      <MemoryRouter initialEntries={['/agent/terminal']}>
+        <TerminalProvider>
+          <TestWrapper addTab>
+            <Leave />
+            <GlobalTerminalDrawer />
+          </TestWrapper>
+        </TerminalProvider>
+      </MemoryRouter>
+    );
+    expect(screen.getByTestId('dock-bar')).toHaveClass('hidden');
+
+    fireEvent.click(screen.getByText('leave'));
+    expect(screen.getByTestId('dock-bar')).not.toHaveClass('hidden');
+    expect(screen.getByTestId('drawer-expanded')).toHaveClass('invisible');
   });
 });
 
