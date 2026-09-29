@@ -3,7 +3,8 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from core.logging_config import configure_root_logging, get_logger
@@ -321,6 +322,16 @@ app = FastAPI(title="CodeAgent Web UI", lifespan=lifespan)
 # Applies to every route -- including static assets -- because rebinding
 # does not care which path it targets. See core/web/security.py.
 app.add_middleware(HostHeaderMiddleware)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Logs unexpected exceptions and returns a consistent JSON 500 error response."""
+    logger.exception("Unhandled server exception on %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc) or "Internal server error"},
+    )
 
 # Every /api router requires the local UI token. Deliberately NOT applied
 # to /api/health (defined on `app` below, so it is not covered by these

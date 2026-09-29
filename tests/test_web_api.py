@@ -602,3 +602,25 @@ async def test_server_lifespan_cleanup_exceptions(monkeypatch):
     # Verify both kill_all were called despite the exception in chat_runner.kill_all()
     mock_chat_runner.kill_all.assert_called_once()
     mock_tasks_runner.kill_all.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_unhandled_exception_handler():
+    from fastapi.routing import APIRoute
+
+    async def _failing_endpoint():
+        raise RuntimeError("Something unexpectedly blew up")
+
+    test_route = APIRoute("/api/test-unhandled-error", _failing_endpoint)
+    app.routes.insert(0, test_route)
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app, raise_app_exceptions=False),
+            base_url="http://test",
+        ) as ac:
+            response = await ac.get("/api/test-unhandled-error")
+        assert response.status_code == 500
+        assert "Something unexpectedly blew up" in response.json()["detail"]
+    finally:
+        if test_route in app.routes:
+            app.routes.remove(test_route)
