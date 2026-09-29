@@ -17,17 +17,13 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
-from collections.abc import AsyncIterator
 from typing import Any
 from uuid import uuid4
 
 from core.logging_config import get_logger
-from core.services.agent_adapters._event_queue import (
-    iter_events,
-    put_event_dropping_oldest,
-)
 from core.services.agent_adapters._jsonrpc_transport import JsonRpcStdioTransport
 from core.services.agent_adapters._process_lifecycle import graceful_terminate
+from core.services.agent_adapters._rpc_adapter_base import RpcAdapterBase
 from core.services.agent_protocol import (
     AdapterEvent,
     ApprovalDecision,
@@ -45,8 +41,10 @@ class CodeBuddyProtocolError(RuntimeError):
     pass
 
 
-class CodeBuddyAdapter:
+class CodeBuddyAdapter(RpcAdapterBase):
     provider_id = "codebuddy"
+    _adapter_label = "CodeBuddy"
+    _default_request_timeout = 120.0
 
     def __init__(self, executable: str = "codebuddy", queue_size: int = 1024):
         self.executable = executable
@@ -367,41 +365,6 @@ class CodeBuddyAdapter:
             raise
         self._pending_approvals.pop(approval_id, None)
         self._cancel_approval_timeout(approval_id)
-
-    def events(self) -> AsyncIterator[AdapterEvent]:
-        return iter_events(self._events)
-
-    def _put_event(self, event: AdapterEvent) -> None:
-        put_event_dropping_oldest(self._events, event, label="CodeBuddy")
-
-    async def _emit_crash_event(self, error: Exception) -> None:
-        self._put_event(
-            AdapterEvent(
-                type="error",
-                provider_session_id="",
-                data={
-                    "code": "provider_crashed",
-                    "message": str(error),
-                    "retryable": True,
-                },
-            )
-        )
-
-    async def _request(
-        self, method: str, params: dict[str, Any], timeout: float = 120
-    ) -> dict[str, Any]:
-        return await self._transport.request(method, params, timeout=timeout)
-
-    async def _notify(self, method: str, params: dict[str, Any]) -> None:
-        await self._transport.notify(method, params)
-
-    async def _write(self, message: dict[str, Any]) -> None:
-        await self._transport.write(message)
-
-    def _cancel_approval_timeout(self, approval_id: str) -> None:
-        task = self._approval_timeouts.pop(approval_id, None)
-        if task is not None:
-            task.cancel()
 
     async def _timeout_approval(self, approval_id: str) -> None:
         try:
