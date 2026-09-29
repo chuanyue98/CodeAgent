@@ -110,7 +110,9 @@ class ConfigService:
             registry = config.get("project_registry", [])
             updated = False
             for item in registry:
-                if item["path"] == path:
+                # 注册表是用户可手改的文件：条目缺 path 或不是对象时跳过，
+                # 而不是拿 KeyError 把 ca project 崩掉。
+                if isinstance(item, dict) and item.get("path") == path:
                     item["group"] = group
                     updated = True
                     break
@@ -128,8 +130,12 @@ class ConfigService:
 
         def _modifier(config):
             registry = config.get("project_registry", [])
+            # 只删除 path 匹配的条目；缺 path / 非对象（用户手改留下的脏数据）
+            # 原样保留，避免 item["path"] 抛 KeyError。
             config["project_registry"] = [
-                item for item in registry if item["path"] != path
+                item
+                for item in registry
+                if not (isinstance(item, dict) and item.get("path") == path)
             ]
             return config
 
