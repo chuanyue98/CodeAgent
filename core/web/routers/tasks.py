@@ -3,6 +3,7 @@ import asyncio
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from core.constants import ENGINES, normalize_engine_name
+from core.logging_config import get_logger
 from core.services.config_service import ConfigService
 from core.services.git_service import describe_run_changes
 from core.services.runner_service import (
@@ -26,6 +27,7 @@ from core.web.resource_paths import ROOT_DIR, resolve_resource_path
 from core.web.routers.config import get_config_path
 
 router = APIRouter(prefix="/api")
+logger = get_logger(__name__)
 
 # Singleton runner for the session
 _runner = TaskRunner(ROOT_DIR)
@@ -263,16 +265,30 @@ async def delete_task(name: str):
         raise HTTPException(status_code=404, detail="Task not found")
 
     disabled_schedules = 0
+    disable_warning: str | None = None
     try:
         schedule_svc = ScheduleService(ConfigService(get_config_path()))
         for schedule in schedule_svc.list_schedules():
             if schedule.get("task_name") == name and schedule.get("enabled", False):
-                schedule_svc.update_schedule(schedule["id"], enabled=False)
-                disabled_schedules += 1
-    except Exception:
-        pass
+                try:
+                    schedule_svc.update_schedule(schedule["id"], enabled=False)
+                    disabled_schedules += 1
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to disable schedule %s for deleted task %s: %s",
+                        schedule.get("id"),
+                        name,
+                        exc,
+                    )
+                    disable_warning = str(exc)
+    except Exception as exc:
+        logger.warning("Failed to query schedules for deleted task %s: %s", name, exc)
+        disable_warning = str(exc)
 
-    return {"status": "deleted", "name": name, "disabledSchedules": disabled_schedules}
+    result = {"status": "deleted", "name": name, "disabledSchedules": disabled_schedules}
+    if disable_warning:
+        result["disableSchedulesWarning"] = disable_warning
+    return result
 
 
 @router.get("/tasks/{name}/runs")

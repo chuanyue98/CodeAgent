@@ -528,3 +528,14 @@ def test_inject_plugins_to_settings(mock_engine, tmp_path, monkeypatch):
     # Test restore
     mock_engine.restore_settings("settings.json")
     assert not settings_file.exists()
+
+
+def test_load_manifest_corrupted_json_returns_empty(tmp_path):
+    from core.link_manager import LINK_MANIFEST, LinkManager
+
+    mgr = LinkManager()
+    manifest_file = tmp_path / LINK_MANIFEST
+    manifest_file.write_text("{ corrupt json: ...", encoding="utf-8")
+    result = mgr.load_manifest(tmp_path)
+    assert result == {}
+

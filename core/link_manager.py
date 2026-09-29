@@ -56,8 +56,12 @@ class LinkManager:
                         continue
                     result[name] = target
                 return result
-        except (OSError, json.JSONDecodeError):
+        except FileNotFoundError:
             pass
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "Failed to load link manifest from %s: %s", manifest_path, exc
+            )
         return {}
 
     def save_manifest(self, link_path: Path, manifest: dict[str, str]) -> None:
