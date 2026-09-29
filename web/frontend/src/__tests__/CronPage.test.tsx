@@ -40,18 +40,25 @@ const SCHEDULES: Schedule[] = [
 ];
 
 let schedulesFixture: Schedule[];
+// When true, the next `/api/schedules` call rejects — used to drive the
+// transient-failure scenario the poll has to recover from.
+let schedulesFailNext = false;
 
 beforeEach(() => {
   taskLibrary = [{ name: 'code_review', title: 'Code Review' }];
   createdTasks = [];
   schedulesFixture = SCHEDULES;
+  schedulesFailNext = false;
   globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     if (url.includes('/api/config')) return jsonResponse({});
     if (url.includes('/api/projects')) {
       return jsonResponse([{ path: '/workspace/proj', group: 'codeagent', available: true }]);
     }
     if (url.includes('/api/groups')) return jsonResponse({});
-    if (url === '/api/schedules') return jsonResponse(schedulesFixture);
+    if (url === '/api/schedules') {
+      if (schedulesFailNext) return Promise.reject(new Error('temporary outage'));
+      return jsonResponse(schedulesFixture);
+    }
     if (url.startsWith('/api/schedules/preview')) return jsonResponse({ valid: true, nextRuns: [] });
     if (url.endsWith('/api/tasks') && init?.method === 'POST') {
       const body = JSON.parse(String(init.body)) as Record<string, unknown>;
@@ -296,5 +303,65 @@ describe('CronPage schedule card enhancements', () => {
     await waitFor(() => {
       expect(taskSelect.value).toBe('custom_task');
     });
+  });
+});
+
+describe('CronPage schedules polling', () => {
+  test('a transient poll failure does not leave a permanent error banner', async () => {
+    // Fail the first schedules load (the immediate poll tick).
+    schedulesFailNext = true;
+    renderCronPage();
+
+    expect(await screen.findByText('Failed to load schedules')).toBeVisible();
+
+    // The next poll succeeds. A visibilitychange drives one tick without
+    // having to fake the 10s timer.
+    schedulesFailNext = false;
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'visible',
+      configurable: true,
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    await waitFor(() =>
+      expect(screen.queryByText('Failed to load schedules')).not.toBeInTheDocument(),
+    );
+  });
+
+  test('a successful load never wipes a tasks-load failure it does not own', async () => {
+    // tasks fails once; schedules always succeeds. The schedules poll must not
+    // clear the task error just because schedules happen to be fine.
+    schedulesFixture = SCHEDULES;
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/config')) return jsonResponse({});
+      if (url.includes('/api/projects')) {
+        return jsonResponse([{ path: '/workspace/proj', group: 'codeagent', available: true }]);
+      }
+      if (url.includes('/api/groups')) return jsonResponse({});
+      if (url === '/api/schedules') return jsonResponse(schedulesFixture);
+      if (url.startsWith('/api/schedules/preview')) {
+        return jsonResponse({ valid: true, nextRuns: [] });
+      }
+      if (url.endsWith('/api/tasks')) {
+        return Promise.reject(new Error('tasks down'));
+      }
+      if (url.includes('/api/engines')) {
+        return jsonResponse([{ id: 'claude', name: 'Claude' }]);
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    }) as unknown as typeof fetch;
+
+    renderCronPage();
+    expect(await screen.findByText('Failed to load tasks')).toBeVisible();
+
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'visible',
+      configurable: true,
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    // Still there: schedules succeeding must not hide the tasks failure.
+    await waitFor(() => expect(screen.getByText('code_review')).toBeVisible());
+    expect(screen.getByText('Failed to load tasks')).toBeVisible();
   });
 });

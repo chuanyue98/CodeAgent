@@ -98,6 +98,10 @@ export default function CronPage() {
   const isMounted = useIsMounted();
   const formRef = useRef<HTMLElement>(null);
   const appliedParamsRef = useRef(false);
+  // The exact schedules-poll error message we last put on screen, so a later
+  // successful poll can clear *that* error without wiping one set by the
+  // one-shot tasks/engines loads (which do not retry).
+  const schedulesErrorRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (appliedParamsRef.current) return;
@@ -154,10 +158,18 @@ export default function CronPage() {
       .then(list => {
         if (!isMounted()) return;
         setSchedules(list);
+        // This runs on a 10s poll: a single transient failure must not leave
+        // the error banner up until someone clicks retry. Clear only the
+        // error this poll owns, so a real tasks/engines failure stays visible.
+        setError(prev =>
+          prev !== null && prev === schedulesErrorRef.current ? null : prev,
+        );
       })
       .catch(() => {
         if (!isMounted()) return;
-        setError(t('cron.loadSchedulesFailed'));
+        const message = t('cron.loadSchedulesFailed');
+        schedulesErrorRef.current = message;
+        setError(message);
       });
   }, [isMounted, t]);
 

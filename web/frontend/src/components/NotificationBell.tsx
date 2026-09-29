@@ -113,10 +113,16 @@ export default function NotificationBell() {
       }
     }
     setOpen(false);
-    if (item.taskId) {
-      navigate(`/activity/sessions?session=${encodeURIComponent(item.taskId)}`);
+    // taskId is a *run* id (`<task-name>_<suffix>`), not a session id — the
+    // sessions page matches on session.sessionId, so linking there never
+    // opened anything. `taskName` is what the task dashboard's `?task=`
+    // deep link (and the command palette) resolves against.
+    if (item.taskName) {
+      navigate(`/automations/tasks?task=${encodeURIComponent(item.taskName)}`);
     } else if (item.scheduleId) {
       navigate('/automations/schedules');
+    } else if (item.taskId) {
+      navigate('/automations/tasks');
     }
   };
 

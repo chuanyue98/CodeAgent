@@ -42,6 +42,7 @@ const TestWrapper = ({
     if (addTab && ctx.tabs.length === 0) {
       ctx.openTab(engine, '/test');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return <>{children}</>;

@@ -115,7 +115,7 @@ describe('NotificationBell', () => {
     expect(screen.getByText(/Build finished in 45s/)).toBeVisible();
   });
 
-  test('clicking an unread item marks it as read and navigates to session', async () => {
+  test('clicking an unread item marks it as read and opens its task detail', async () => {
     renderBell();
 
     const button = screen.getByTestId('notification-bell-button');
@@ -127,7 +127,12 @@ describe('NotificationBell', () => {
     await waitFor(() => {
       expect(markedIds).toContain(1);
     });
-    expect(mockNavigate).toHaveBeenCalledWith('/activity/sessions?session=run-123');
+    // `taskId` is a run id, not a session id -- the old
+    // `/activity/sessions?session=<runId>` never matched anything. The task
+    // dashboard's `?task=` deep link keys on taskName.
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/automations/tasks?task=daily-build',
+    );
     expect(screen.queryByTestId('notification-dropdown')).not.toBeInTheDocument();
   });
 

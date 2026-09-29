@@ -138,6 +138,8 @@ export default function BrowserTerminal({
     tRef.current = t;
   }, [t]);
 
+  const initialFontSizeRef = useRef(fontSize);
+
   const restart = useCallback(() => setAttempt(previous => previous + 1), []);
 
   // Dynamic font size update without reconnecting socket
@@ -168,7 +170,7 @@ export default function BrowserTerminal({
     const term = new Terminal({
       cursorBlink: true,
       convertEol: true,
-      fontSize: fontSize || 13,
+      fontSize: initialFontSizeRef.current || 13,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
       theme: { background: '#0a0c0f', foreground: '#d5d9e0' },
       screenReaderMode: true,
