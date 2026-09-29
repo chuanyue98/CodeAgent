@@ -218,3 +218,34 @@ def test_a_users_own_settings_are_still_backed_up_and_restored(tmp_path, monkeyp
     engine.restore_settings(".opencode/settings.json")
 
     assert json.loads(settings.read_text(encoding="utf-8")) == {"theme": "dark"}
+
+
+def test_corrupted_settings_file_is_not_overwritten(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    settings = tmp_path / ".opencode" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    corrupted_content = "{ invalid json content: true"
+    settings.write_text(corrupted_content, encoding="utf-8")
+
+    engine = BaseEngine("Dummy", "dummy-model")
+    engine.inject_hooks_to_settings(
+        ".opencode/settings.json", [{"name": "h", "event": "X", "command": "c"}]
+    )
+
+    assert settings.read_text(encoding="utf-8") == corrupted_content
+
+
+def test_array_root_settings_file_is_not_overwritten(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    settings = tmp_path / ".opencode" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    array_content = "[\"item1\", \"item2\"]"
+    settings.write_text(array_content, encoding="utf-8")
+
+    engine = BaseEngine("Dummy", "dummy-model")
+    engine.inject_hooks_to_settings(
+        ".opencode/settings.json", [{"name": "h", "event": "X", "command": "c"}]
+    )
+
+    assert settings.read_text(encoding="utf-8") == array_content
+

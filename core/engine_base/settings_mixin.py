@@ -49,6 +49,20 @@ class _SettingsMixin:
             logger.info("Created safety backup: %s", backup_path.name)
 
         data = self._load_config(settings_path)
+        if data is None:
+            logger.warning(
+                "Skipping plugin injection into %s: file exists but could not be read or parsed",
+                settings_rel_path,
+            )
+            return
+        if not isinstance(data, dict):
+            logger.warning(
+                "Skipping plugin injection into %s: expected dict/object root, got %s",
+                settings_rel_path,
+                type(data).__name__,
+            )
+            return
+
         data["_ca_injected"] = True
 
         data = self._format_plugins_for_settings(data, plugins)
@@ -73,8 +87,9 @@ class _SettingsMixin:
         try:
             with open(path, encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
-            return {}
+        except Exception as exc:
+            logger.warning("Failed to load settings config from %s: %s", path, exc)
+            return None
 
     def _save_config(self, path: Path, data: Any):
         """Saves configuration data to a file.

@@ -29,16 +29,18 @@ class SettingsFile:
             return {}
         try:
             text = self.path.read_text(encoding="utf-8")
-        except Exception:
-            return {}
+        except Exception as exc:
+            logger.warning("Failed to read settings file %s: %s", self.path, exc)
+            return None
         try:
             if self.is_toml:
                 import tomlkit
 
                 return tomlkit.parse(text)
             return json.loads(text)
-        except Exception:
-            return {}
+        except Exception as exc:
+            logger.warning("Failed to parse settings file %s: %s", self.path, exc)
+            return None
 
     def save(self, data: Any):
         if self.is_toml:
@@ -107,6 +109,19 @@ class SettingsManager:
             logger.info("Created safety backup: %s", backup.name)
 
         data = sf.load()
+        if data is None:
+            logger.warning(
+                "Skipping hook injection into %s: file exists but could not be read or parsed",
+                settings_path,
+            )
+            return
+        if not isinstance(data, dict):
+            logger.warning(
+                "Skipping hook injection into %s: expected dict/object root, got %s",
+                settings_path,
+                type(data).__name__,
+            )
+            return
 
         if "hooks" not in data:
             data["hooks"] = {}

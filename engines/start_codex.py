@@ -210,8 +210,9 @@ class CodexEngine(BaseEngine):
         try:
             content = path.read_text(encoding="utf-8")
             return tomlkit.parse(content)
-        except Exception:
-            return tomlkit.parse("")
+        except Exception as exc:
+            logger.warning("Failed to parse TOML config from %s: %s", path, exc)
+            return None
 
     def _save_config(self, path: Path, data: Any):
         """重写：支持 TOML 格式保存"""
