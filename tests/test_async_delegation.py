@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -158,7 +159,7 @@ def test_worker_failure_is_still_reported(runs_home, tmp_path, monkeypatch):
 def test_dead_worker_without_result_reads_as_failed(runs_home, tmp_path):
     run_id = "codex-20260923-120000-cccccc"
     run_dir = _new_run(runs_home, run_id, {"engine": "codex"})
-    proc = subprocess.Popen(["true"])
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
     proc.wait()
     (run_dir / "status.json").write_text(
         json.dumps({"status": "running", "pid": proc.pid, "started_at": time.time()}),

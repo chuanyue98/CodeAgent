@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
+import sys
 from pathlib import Path
 
 from core.session_history.antigravity_cache import (
@@ -33,7 +34,8 @@ def test_removes_only_the_matching_entry_byte_for_byte(tmp_path):
 
     assert remove_from_summaries_cache(tmp_path, "gone") is True
     assert path.read_bytes() == keep_a + keep_b
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    if sys.platform != "win32":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_unknown_id_or_missing_file_changes_nothing(tmp_path):
