@@ -7,7 +7,7 @@ import os
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.logging_config import get_logger
 
@@ -16,6 +16,16 @@ logger = get_logger(__name__)
 
 class CodexPluginMixin:
     """Plugin and marketplace lifecycle mixin for CodexEngine."""
+
+    # Provided by BaseEngine and its mixins (_LinksMixin, _SettingsMixin, _ConfigMixin).
+    if TYPE_CHECKING:
+
+        def _is_windows_link(self, path: Path) -> bool: ...
+        def _safe_remove_link(self, path: Path) -> None: ...
+        def _create_skill_link(self, source: Path, target: Path) -> None: ...
+        def get_plugins_to_mount(self) -> list[dict[str, Any]]: ...
+        def _load_config(self, path: Path) -> Any: ...
+        def _save_config(self, path: Path, data: Any) -> None: ...
 
     MARKETPLACE_NAME: str
 

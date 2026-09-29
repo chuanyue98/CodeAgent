@@ -96,6 +96,7 @@ async def _spawn_posix(
     initial_prompt: str | None = None,
     engine_argv_fn: Callable[[str, Path, str | None, str | None], list[str]]
     | None = None,
+    tmux_binary_fn: Callable[[], str | None] | None = None,
 ) -> _PosixSession:
     """Spawns what the browser terminal drives."""
     import pty
@@ -122,7 +123,15 @@ async def _spawn_posix(
                 engine_argv = _engine_argv(
                     engine, working_dir, session_id, initial_prompt
                 )
-            binary = _tmux_binary()
+            if tmux_binary_fn is not None:
+                binary = tmux_binary_fn()
+            else:
+                try:
+                    from core.web.routers import pty as pty_router
+
+                    binary = getattr(pty_router, "_tmux_binary", _tmux_binary)()
+                except Exception:
+                    binary = _tmux_binary()
             if binary is None:
                 tmux_name = None
                 argv = engine_argv

@@ -428,6 +428,7 @@ async def pty_websocket(
                 cols=cols,
                 rows=rows,
                 initial_prompt=initial_prompt,
+                tmux_binary_fn=_tmux_binary,
             )
     except SpawnError as exc:
         with contextlib.suppress(Exception):

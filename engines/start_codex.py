@@ -114,7 +114,7 @@ logger = get_logger(__name__)
 set_additional_template_search_paths([Path(__file__).resolve().parent.parent])
 
 
-class CodexEngine(BaseEngine, CodexPluginMixin):
+class CodexEngine(CodexPluginMixin, BaseEngine):
     """Codex engine adapter using shared CodeAgent base behavior."""
 
     MARKETPLACE_NAME = "codeagent-local"
@@ -129,6 +129,11 @@ class CodexEngine(BaseEngine, CodexPluginMixin):
 
     def __init__(self) -> None:
         super().__init__("Codex", "codex-default")
+
+    def _format_plugins_for_settings(
+        self, data: Any, plugins: list[dict[str, Any]]
+    ) -> Any:
+        return CodexPluginMixin._format_plugins_for_settings(self, data, plugins)
 
     def warn_if_project_untrusted(self) -> None:
         """Warns when codex will silently ignore the hooks just injected.

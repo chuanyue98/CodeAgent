@@ -264,3 +264,14 @@ def test_codex_build_command_non_interactive_bypasses():
     assert "--dangerously-bypass-approvals-and-sandbox" in cmd
     assert "exec" in cmd
     assert "test prompt" in cmd
+
+
+def test_codex_format_plugins_for_settings_resolves_to_plugin_mixin():
+    engine = CodexEngine()
+    data = {}
+    plugins = [
+        {"name": "test-plugin", "path": "/path/to/plugin"},
+    ]
+    res = engine._format_plugins_for_settings(data, plugins)
+    assert "plugins" in res
+    assert "marketplaces" in res
