@@ -315,7 +315,6 @@ export const en = {
   'config.pathsRequired': 'Workspace path and resource group are required. Complete or remove empty rows.',
   'config.duplicatePath': 'Each workspace path can only be registered once.',
   'config.genericError': 'An error occurred',
-  'config.subtitle': 'Manage projects, groups, and system settings in one place',
   'config.draftNoticePrefix': 'Edits here are a draft — nothing is written to',
   'config.draftNoticeSuffix': 'until you save.',
   'config.error': 'Error: {message}',

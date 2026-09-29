@@ -328,14 +328,7 @@ const ConfigHub: React.FC = () => {
     <div className="flex h-full min-h-0 flex-col gap-8 md:flex-row">
       {/* ── Left Navigation Rail ────────────────────────────────────────── */}
       <div className="w-full md:w-64 shrink-0 flex flex-col gap-3 overflow-y-auto custom-scrollbar">
-        <div>
-          <h2 className="text-base font-bold tracking-tight text-slate-800">
-            {t('config.workspacesTitle')}
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">{t('config.subtitle')}</p>
-        </div>
-
-        <nav aria-label={t('nav.settings')} className="space-y-1 pt-1">
+        <nav aria-label={t('nav.settings')} className="space-y-1">
           {/* Workspaces */}
           <button
             type="button"

@@ -21,6 +21,10 @@ const SLATE_DARK = {
   500: '#8f97a5', 600: '#a6adb9', 700: '#c1c6cf', 800: '#dfe2e8', 900: '#eceef2', 950: '#f5f6f8',
 }
 
+// Tailwind's stock slate-400 reads at 2.6:1 on white (2.3:1 on the page ground); the pages use
+// it for helper text, so the light scale darkens 400 and 500 to stay above 4.5:1.
+const SLATE_LIGHT = { 400: '#5f6c81', 500: '#4d5a70' }
+
 const channels = hex => {
   const n = parseInt(hex.slice(1), 16)
   return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`
@@ -33,7 +37,7 @@ const themeScales = plugin(({ addBase }) => {
   const light = { '--c-white': '255 255 255' }
   const dark = { '--c-white': '19 22 27' }
   for (const step of STEPS) {
-    light[`--c-slate-${step}`] = channels(colors.slate[step])
+    light[`--c-slate-${step}`] = channels(SLATE_LIGHT[step] ?? colors.slate[step])
     dark[`--c-slate-${step}`] = channels(SLATE_DARK[step])
   }
   for (const hue of HUES) {

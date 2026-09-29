@@ -310,7 +310,6 @@ export const zh: Record<TranslationKey, string> = {
   'config.pathsRequired': '工作区路径和资源组为必填项。请补全或删除空行。',
   'config.duplicatePath': '每个工作区路径只能注册一次。',
   'config.genericError': '发生错误',
-  'config.subtitle': '在一个地方管理项目、资源组和系统设置',
   'config.draftNoticePrefix': '此处的修改都是草稿——保存之前不会写入',
   'config.draftNoticeSuffix': '。',
   'config.error': '错误：{message}',
