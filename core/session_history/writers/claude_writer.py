@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.session_history.previews import result_for_writer
 from core.utils.atomic_write import atomic_write
 from core.utils.long_paths import list_files, long_path, mtime
 
@@ -230,8 +231,10 @@ def write_claude_session(session: UnifiedSession) -> str:
             prev_uuid = msg_uuid
 
         elif msg.role == "assistant":
-            # Build content blocks: text + tool_use
+            # Build content blocks: text + tool_use, plus the matching
+            # tool_result blocks we have to emit in the *next* user row.
             content_blocks = []
+            tool_result_blocks = []
             if msg.content:
                 content_blocks.append({"type": "text", "text": msg.content})
             for tc in msg.tool_calls:
@@ -241,12 +244,23 @@ def write_claude_session(session: UnifiedSession) -> str:
                     )
                 except (json.JSONDecodeError, TypeError):
                     input_obj = {}
+                # One id, used by both halves: Claude pairs a tool_result with
+                # its tool_use by id, and a dangling tool_use is what makes the
+                # Anthropic API reject a transcript.
+                tool_use_id = f"toolu_{uuid.uuid4().hex[:24]}"
                 content_blocks.append(
                     {
                         "type": "tool_use",
-                        "id": f"toolu_{uuid.uuid4().hex[:24]}",
+                        "id": tool_use_id,
                         "name": tc.name,
                         "input": input_obj,
+                    }
+                )
+                tool_result_blocks.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_use_id,
+                        "content": result_for_writer(tc),
                     }
                 )
 
@@ -289,6 +303,31 @@ def write_claude_session(session: UnifiedSession) -> str:
             }
             lines.append(json.dumps(row, ensure_ascii=False))
             prev_uuid = msg_uuid
+
+            # Claude records every tool_result in the following *user* row.
+            # Without it the tool_use blocks above are dangling -- the parser
+            # drops the results and Claude itself rejects the session.
+            if tool_result_blocks:
+                result_uuid = str(uuid.uuid4())
+                result_row: dict[str, Any] = {
+                    "parentUuid": prev_uuid,
+                    "isSidechain": False,
+                    "type": "user",
+                    "message": {
+                        "role": "user",
+                        "content": tool_result_blocks,
+                    },
+                    "uuid": result_uuid,
+                    "timestamp": msg.timestamp or now,
+                    "sessionId": new_session_id,
+                    "cwd": cwd,
+                    "version": cli_version,
+                    "entrypoint": "cli",
+                    "userType": "external",
+                    "gitBranch": git_branch,
+                }
+                lines.append(json.dumps(result_row, ensure_ascii=False))
+                prev_uuid = result_uuid
 
     # Write the file atomically to prevent corruption on crash
     atomic_write(file_path, "\n".join(lines) + "\n")

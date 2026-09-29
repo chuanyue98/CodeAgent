@@ -21,7 +21,13 @@ from pathlib import Path
 
 import pytest
 
-from core.session_history.models import EngineType, UnifiedMessage, UnifiedSession
+from core.session_history import previews
+from core.session_history.models import (
+    EngineType,
+    ToolCallSummary,
+    UnifiedMessage,
+    UnifiedSession,
+)
 from core.session_history.writers import claude_writer
 
 CONTRACT = json.loads(
@@ -210,3 +216,80 @@ def test_the_source_title_is_carried_as_an_ai_title_row(tmp_path, monkeypatch):
 def test_an_untitled_source_writes_no_ai_title_row(tmp_path, monkeypatch):
     rows = _convert(tmp_path, monkeypatch)
     assert not [r for r in rows if r["type"] == "ai-title"]
+
+
+# ── tool results must be paired with their tool_use ──────────────────────────
+def _write_with_tool(tmp_path, monkeypatch, call: ToolCallSummary):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(claude_writer, "_git_branch", lambda _path: BRANCH)
+    _seed_native_history(tmp_path)
+
+    session_id = claude_writer.write_claude_session(
+        UnifiedSession(
+            session_id="orig",
+            engine=EngineType.CODEX,
+            project_path=PROJECT,
+            messages=[
+                UnifiedMessage(role="user", content="run it"),
+                UnifiedMessage(role="assistant", content="on it", tool_calls=[call]),
+            ],
+        )
+    )
+    written = next((tmp_path / ".claude" / "projects").glob(f"*/{session_id}.jsonl"))
+    rows = [
+        json.loads(line)
+        for line in written.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    return written, rows
+
+
+def _result_block(rows: list[dict]) -> dict:
+    row = next(
+        r
+        for r in rows
+        if r["type"] == "user"
+        and isinstance(r["message"]["content"], list)
+        and r["message"]["content"][0].get("type") == "tool_result"
+    )
+    return row["message"]["content"][0]
+
+
+def test_a_tool_result_is_written_and_paired_with_its_tool_use(tmp_path, monkeypatch):
+    """不写结果的 tool_use 是悬空的：Claude 本身会拒绝这种会话。"""
+    written, rows = _write_with_tool(
+        tmp_path,
+        monkeypatch,
+        ToolCallSummary(
+            name="bash",
+            args_preview='{"command": "ls"}',
+            result_preview="a.py\nb.py",
+            result_captured=True,
+        ),
+    )
+
+    assistant = next(r for r in rows if r["type"] == "assistant")
+    tool_use = next(
+        b for b in assistant["message"]["content"] if b["type"] == "tool_use"
+    )
+    block = _result_block(rows)
+    assert block["tool_use_id"] == tool_use["id"]
+    assert block["content"] == "a.py\nb.py"
+
+    # 解析回来必须能重新挂上，才说明接力是闭环的。
+    from core.session_history.parsers.claude_parser import parse_claude_session
+
+    parsed = parse_claude_session(written)
+    call = next(m for m in parsed.messages if m.role == "assistant").tool_calls[0]
+    assert call.result_captured is True
+    assert "a.py" in call.result_preview
+
+
+def test_an_uncaptured_result_is_an_explicit_placeholder_not_an_empty_string(
+    tmp_path, monkeypatch
+):
+    # 空串会被模型读成"命令确实没有输出"，占位句才会让它重跑。
+    _, rows = _write_with_tool(
+        tmp_path, monkeypatch, ToolCallSummary(name="bash", args_preview="{}")
+    )
+    assert _result_block(rows)["content"] == previews.RESULT_NOT_CAPTURED
