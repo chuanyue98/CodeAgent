@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { fetchDelegations, type DelegationRun } from '../api/delegations';
+import { fetchDelegations } from '../api/delegations';
 import { useT } from '../i18n/context';
 import type { TerminalTab } from '../context/TerminalContext';
+import { queryClient as defaultQueryClient } from '../utils/queryClient';
 import { findEngine } from './terminalEngines';
 
 const POLL_MS = 5000;
@@ -25,19 +26,16 @@ const STATUS_TONE: Record<string, string> = {
 export default function SessionInspector({ tab }: { tab: TerminalTab }) {
   const t = useT();
   const engine = findEngine(tab.engine);
-  const [runs, setRuns] = useState<DelegationRun[] | null>(null);
+  const { data: allDelegations } = useQuery(
+    {
+      queryKey: ['delegations'],
+      queryFn: async () => (await fetchDelegations()) ?? [],
+      refetchInterval: POLL_MS,
+    },
+    defaultQueryClient,
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = () => {
-      fetchDelegations()
-        .then(all => { if (!cancelled) setRuns(all.filter(run => run.workspace === tab.cwd)); })
-        .catch(() => { if (!cancelled) setRuns([]); });
-    };
-    load();
-    const timer = setInterval(load, POLL_MS);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [tab.cwd]);
+  const runs = allDelegations ? allDelegations.filter(run => run.workspace === tab.cwd) : null;
 
   const row = (label: string, value: string) => (
     <div className="flex items-baseline justify-between gap-4 text-sm">

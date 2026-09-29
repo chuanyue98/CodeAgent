@@ -159,10 +159,18 @@ class SessionIndex:
         self._connection.execute("PRAGMA busy_timeout=5000")
         # 派生索引，不值当为每次提交 fsync：首次全量构建有近千个会话事务，
         # NORMAL 能把构建时间砍掉一大截，代价只是断电时可能丢最后一次写入
-        # ——而那本来就能从引擎文件重新同步出来。
         self._connection.execute("PRAGMA synchronous=NORMAL")
         self._closed = False
         self._migrate()
+        if str(self.path) == ":memory:" or "mode=memory" in str(self.path):
+            self._read_connection = self._connection
+            self._read_lock = self._lock
+        else:
+            self._read_lock = threading.RLock()
+            self._read_connection = sqlite3.connect(self.path, check_same_thread=False)
+            self._read_connection.row_factory = sqlite3.Row
+            self._read_connection.execute("PRAGMA busy_timeout=5000")
+            self._read_connection.execute("PRAGMA query_only=ON")
 
     @property
     def closed(self) -> bool:
@@ -303,17 +311,35 @@ class SessionIndex:
                     )
 
     def close(self) -> None:
-        with self._lock:
+        with self._lock, self._read_lock:
+            if getattr(self, "_closed", True):
+                return
             self._closed = True
-            self._connection.close()
+            if getattr(self, "_read_connection", None) is not getattr(
+                self, "_connection", None
+            ):
+                try:
+                    self._read_connection.close()
+                except Exception:
+                    pass
+            try:
+                self._connection.close()
+            except Exception:
+                pass
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # index_meta
     # ------------------------------------------------------------------
 
     def get_meta(self, key: str) -> str | None:
-        with self._lock:
-            row = self._connection.execute(
+        with self._read_lock:
+            row = self._read_connection.execute(
                 "SELECT value FROM index_meta WHERE key = ?", (key,)
             ).fetchone()
         return str(row["value"]) if row else None
@@ -613,8 +639,8 @@ class SessionIndex:
             )
 
     def session_count(self) -> int:
-        with self._lock:
-            row = self._connection.execute(
+        with self._read_lock:
+            row = self._read_connection.execute(
                 "SELECT COUNT(*) AS n FROM sessions"
             ).fetchone()
         return int(row["n"]) if row else 0
@@ -644,8 +670,8 @@ class SessionIndex:
             params.append(normalize_project_path(project))
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         params.append(max(1, limit))
-        with self._lock:
-            rows = self._connection.execute(
+        with self._read_lock:
+            rows = self._read_connection.execute(
                 f"SELECT * FROM sessions {where} "
                 "ORDER BY started_at DESC, session_key DESC LIMIT ?",
                 params,
@@ -653,8 +679,8 @@ class SessionIndex:
         return [_row_to_summary(r) for r in rows]
 
     def get_summary(self, engine: str, session_id: str) -> SessionSummary | None:
-        with self._lock:
-            row = self._connection.execute(
+        with self._read_lock:
+            row = self._read_connection.execute(
                 "SELECT * FROM sessions WHERE engine = ? AND session_id = ?",
                 (engine, session_id),
             ).fetchone()
@@ -662,8 +688,8 @@ class SessionIndex:
 
     def get_title_map(self) -> dict[tuple[str, str], str]:
         """``(engine, session_id) -> 已解析标题``，替代每请求重建的 title 表。"""
-        with self._lock:
-            rows = self._connection.execute(
+        with self._read_lock:
+            rows = self._read_connection.execute(
                 "SELECT engine, session_id, title FROM sessions"
             ).fetchall()
         return {(str(r["engine"]), str(r["session_id"])): str(r["title"]) for r in rows}
@@ -674,17 +700,17 @@ class SessionIndex:
         if summary is None:
             return None
         key = summary.session_key
-        with self._lock:
-            message_rows = self._connection.execute(
+        with self._read_lock:
+            message_rows = self._read_connection.execute(
                 "SELECT * FROM messages WHERE session_key = ? ORDER BY ordinal",
                 (key,),
             ).fetchall()
-            tool_rows = self._connection.execute(
+            tool_rows = self._read_connection.execute(
                 "SELECT * FROM tool_calls WHERE session_key = ? "
                 "ORDER BY message_ordinal, ordinal",
                 (key,),
             ).fetchall()
-            titles_row = self._connection.execute(
+            titles_row = self._read_connection.execute(
                 "SELECT subagent_titles_json FROM sessions WHERE session_key = ?",
                 (key,),
             ).fetchone()
@@ -786,8 +812,8 @@ class SessionIndex:
             LIMIT ?
         """
         params.append(max(1, min(limit, _MAX_AUDIT_LIMIT)))
-        with self._lock:
-            rows = self._connection.execute(sql, params).fetchall()
+        with self._read_lock:
+            rows = self._read_connection.execute(sql, params).fetchall()
         return [_row_to_audit_event(r) for r in rows]
 
     def tool_usage(
@@ -811,14 +837,14 @@ class SessionIndex:
             params.append(since)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
-        with self._lock:
-            rows = self._connection.execute(
+        with self._read_lock:
+            rows = self._read_connection.execute(
                 f"SELECT t.name AS name, s.engine AS engine, COUNT(*) AS n "
                 f"FROM tool_calls t JOIN sessions s ON s.session_key = t.session_key "
                 f"{where} GROUP BY t.name, s.engine",
                 params,
             ).fetchall()
-            session_row = self._connection.execute(
+            session_row = self._read_connection.execute(
                 f"SELECT COUNT(*) AS n FROM sessions s {where}",
                 params,
             ).fetchone()

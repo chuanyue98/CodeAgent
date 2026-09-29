@@ -34,7 +34,7 @@ MARKERS: dict[str, dict[str, tuple[str, ...]]] = {
     "plugins": {
         "claude": ("get_plugins_to_mount",),
         "opencode": ("get_plugins_to_mount",),
-        "codex": ("get_plugins_to_mount",),
+        "codex": ("get_plugins_to_mount", "ensure_plugins_available"),
         "codebuddy": ("plugin_dir_env",),
         "antigravity": ("get_plugins_to_mount", "plugin_dir_env"),
     },

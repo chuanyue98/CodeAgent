@@ -189,22 +189,43 @@ const ConfigHub: React.FC = () => {
         body: JSON.stringify(fullConfig),
       });
 
-      await refreshConfig();
-      // Backfill local editable state with normalized values so draftSnapshot matches savedSnapshot
-      setLocalConfig(fullConfig);
-      setLocalProjects(
-        normalizedProjects.map(project => ({
-          ...project,
-          uiId: createEditableRowId('project'),
-        })),
-      );
-      setLocalProxies(
-        (fullConfig.proxy || []).map(proxy => ({
-          ...proxy,
-          uiId: createEditableRowId('proxy'),
-        })),
-      );
-      setLocalGroups(deepClone(localGroups));
+      const serverData = await refreshConfig();
+      if (serverData) {
+        const cloned = deepClone(serverData.config);
+        if (!cloned.proxy) cloned.proxy = [];
+        else if (!Array.isArray(cloned.proxy)) cloned.proxy = [cloned.proxy];
+        if (!cloned.paths) cloned.paths = {};
+
+        setLocalConfig(cloned);
+        setLocalProjects(
+          deepClone(serverData.projects).map(project => ({
+            ...project,
+            uiId: createEditableRowId('project'),
+          })),
+        );
+        setLocalProxies(
+          (cloned.proxy || []).map(proxy => ({
+            ...proxy,
+            uiId: createEditableRowId('proxy'),
+          })),
+        );
+        setLocalGroups(deepClone(serverData.groups));
+      } else {
+        setLocalConfig(fullConfig);
+        setLocalProjects(
+          normalizedProjects.map(project => ({
+            ...project,
+            uiId: createEditableRowId('project'),
+          })),
+        );
+        setLocalProxies(
+          (fullConfig.proxy || []).map(proxy => ({
+            ...proxy,
+            uiId: createEditableRowId('proxy'),
+          })),
+        );
+        setLocalGroups(deepClone(localGroups));
+      }
       setError(null);
       setSaved(true);
     } catch (err) {

@@ -5,13 +5,11 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import shutil
 import subprocess
 import sys
 from collections.abc import Sequence
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -25,17 +23,58 @@ from core.i18n import t
 from core.logging_config import get_logger
 from core.task_lib import (
     TASK_FILE_SUFFIX,
-    get_tasks_dir,
     handle_task_mode,
-    list_tasks,
-    parse_range_expression,
     set_additional_template_search_paths,
     show_tasks,
 )
+from engines.code_plans import (
+    CODE_PLAN_DIR_PATTERN,
+    CODE_PLAN_FILE_SUFFIX,
+    CODE_PLAN_HISTORY_FILENAME,
+    find_directories_for_plan,
+    get_code_plan_history_path,
+    list_code_plan_directories,
+    load_code_plan_history,
+    save_code_plan_history,
+    select_code_plan_directory_interactively,
+    split_code_plan_argument,
+    update_code_plan_history,
+)
+from engines.codex_plugins import CodexPluginMixin
+from engines.shell_first import (
+    SHELL_FIRST_ALLOW_ENV,
+    SHELL_FIRST_MARKER,
+    _resolve_shell,
+    _shell_first_allowed_via_override,
+    extract_shell_first_blocks,
+    run_prelaunch_commands,
+)
 
-CODE_PLAN_DIR_PATTERN = "code_plan*"
-CODE_PLAN_FILE_SUFFIX = ".md"
-CODE_PLAN_HISTORY_FILENAME = "history.json"
+__all__ = [
+    "CodexEngine",
+    "subprocess",
+    "shutil",
+    "SHELL_FIRST_ALLOW_ENV",
+    "SHELL_FIRST_MARKER",
+    "_resolve_shell",
+    "_shell_first_allowed_via_override",
+    "extract_shell_first_blocks",
+    "run_prelaunch_commands",
+    "CODE_PLAN_DIR_PATTERN",
+    "CODE_PLAN_FILE_SUFFIX",
+    "CODE_PLAN_HISTORY_FILENAME",
+    "find_directories_for_plan",
+    "get_code_plan_history_path",
+    "list_code_plan_directories",
+    "load_code_plan_history",
+    "save_code_plan_history",
+    "select_code_plan_directory_interactively",
+    "split_code_plan_argument",
+    "update_code_plan_history",
+    "parse_arguments",
+    "main",
+]
+
 CODEX_COMMAND = "codex"
 CODEX_EXEC_SUBCOMMAND = "exec"
 CODEX_SKIP_PERMISSIONS_FLAG = "--dangerously-bypass-approvals-and-sandbox"
@@ -68,22 +107,14 @@ CODEX_OTHER_SUBCOMMANDS = frozenset(
         "help",
     }
 )
-SHELL_FIRST_MARKER = "```shell:first"
-# ``shell:first`` blocks let a prompt/task/code-plan markdown file specify shell
-# commands that this script executes automatically before Codex launches. Those
-# markdown files are not always something the current user personally wrote --
-# they can come from shared code plans, downloaded skills, or marketplace
-# plugins -- so this must never be silent. Setting this env var to a truthy
-# value is an explicit, auditable opt-in to skip the confirmation gate (e.g.
-# for trusted CI pipelines); it is off by default.
-SHELL_FIRST_ALLOW_ENV = "CODEAGENT_ALLOW_SHELL_FIRST"
+
 
 logger = get_logger(__name__)
 
 set_additional_template_search_paths([Path(__file__).resolve().parent.parent])
 
 
-class CodexEngine(BaseEngine):
+class CodexEngine(BaseEngine, CodexPluginMixin):
     """Codex engine adapter using shared CodeAgent base behavior."""
 
     MARKETPLACE_NAME = "codeagent-local"
@@ -220,532 +251,8 @@ class CodexEngine(BaseEngine):
 
         path.write_text(tomlkit.dumps(data), encoding="utf-8")
 
-    def _get_codex_home(self) -> Path:
-        return (Path.home() / ".codex").resolve()
 
-    def _get_user_config_path(self) -> Path:
-        return self._get_codex_home() / "config.toml"
-
-    def _get_marketplace_root(self) -> Path:
-        return (
-            self._get_codex_home() / ".tmp" / "marketplaces" / self.MARKETPLACE_NAME
-        ).resolve()
-
-    def _get_plugin_cache_root(self) -> Path:
-        return (
-            self._get_codex_home() / "plugins" / "cache" / self.MARKETPLACE_NAME
-        ).resolve()
-
-    def _format_codex_local_path(self, path: Path) -> str:
-        resolved = path.resolve()
-        if os.name == "nt":
-            raw = str(resolved)
-            if not raw.startswith("\\\\?\\"):
-                return f"\\\\?\\{raw}"
-            return raw
-        return resolved.as_posix()
-
-    def _prepare_local_marketplace(self, plugins: list[dict]) -> Path:
-        marketplace_root = self._get_marketplace_root()
-        plugins_root = marketplace_root / "plugins"
-        marketplace_plugins_dir = marketplace_root / ".agents" / "plugins"
-        plugins_root.mkdir(parents=True, exist_ok=True)
-        marketplace_plugins_dir.mkdir(parents=True, exist_ok=True)
-
-        marketplace_entries: list[dict[str, Any]] = []
-        for plugin_meta in plugins:
-            plugin_name = plugin_meta["name"]
-            plugin_src = plugin_meta.get("_plugin_dir")
-            if not plugin_src:
-                continue
-
-            plugin_src_path = Path(plugin_src).resolve()
-            target_link = plugins_root / plugin_name
-
-            if target_link.exists():
-                try:
-                    if self._is_windows_link(target_link) or target_link.is_symlink():
-                        if target_link.resolve() != plugin_src_path:
-                            self._safe_remove_link(target_link)
-                    else:
-                        continue
-                except Exception:
-                    self._safe_remove_link(target_link)
-
-            if not target_link.exists():
-                self._create_skill_link(plugin_src_path, target_link)
-
-            category = (
-                plugin_meta.get("interface", {}).get("category")
-                or plugin_meta.get("category")
-                or "Custom"
-            )
-            marketplace_entries.append(
-                {
-                    "name": plugin_name,
-                    "source": {
-                        "source": "local",
-                        "path": f"./plugins/{plugin_name}",
-                    },
-                    "policy": {
-                        "installation": "AVAILABLE",
-                        "authentication": "ON_INSTALL",
-                    },
-                    "category": category,
-                }
-            )
-
-        marketplace_payload = {
-            "name": self.MARKETPLACE_NAME,
-            "interface": {"displayName": "CodeAgent Local"},
-            "plugins": marketplace_entries,
-        }
-        marketplace_path = marketplace_plugins_dir / "marketplace.json"
-        marketplace_path.write_text(
-            json.dumps(marketplace_payload, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        return marketplace_root
-
-    def _ensure_cached_plugin_install(
-        self, plugin_name: str, plugin_src_path: Path
-    ) -> None:
-        cache_root = self._get_plugin_cache_root() / plugin_name
-        cache_root.mkdir(parents=True, exist_ok=True)
-        installed_path = cache_root / "local"
-
-        if installed_path.exists():
-            try:
-                if self._is_windows_link(installed_path) or installed_path.is_symlink():
-                    if installed_path.resolve() == plugin_src_path.resolve():
-                        return
-                    self._safe_remove_link(installed_path)
-                elif installed_path.is_dir():
-                    shutil.rmtree(installed_path)
-                else:
-                    installed_path.unlink()
-            except Exception:
-                if installed_path.is_dir():
-                    shutil.rmtree(installed_path, ignore_errors=True)
-                else:
-                    installed_path.unlink(missing_ok=True)
-
-        self._create_skill_link(plugin_src_path, installed_path)
-
-    def _format_plugins_for_settings(self, data: Any, plugins: list[dict]) -> Any:
-        """实现 Codex 特有的插件注册逻辑 (marketplace + cache install + enabled 状态)"""
-        import tomlkit
-
-        marketplace_root = self._prepare_local_marketplace(plugins)
-
-        if "marketplaces" not in data:
-            data["marketplaces"] = tomlkit.table()
-        if "plugins" not in data:
-            data["plugins"] = tomlkit.table()
-
-        if self.MARKETPLACE_NAME not in data["marketplaces"]:
-            data["marketplaces"][self.MARKETPLACE_NAME] = tomlkit.table()
-        data["marketplaces"][self.MARKETPLACE_NAME]["last_updated"] = datetime.now(
-            UTC
-        ).strftime("%Y-%m-%dT%H:%M:%SZ")
-        data["marketplaces"][self.MARKETPLACE_NAME]["source_type"] = "local"
-        data["marketplaces"][self.MARKETPLACE_NAME]["source"] = (
-            self._format_codex_local_path(marketplace_root)
-        )
-
-        allowed_plugin_ids = {
-            f"{plugin_meta['name']}@{self.MARKETPLACE_NAME}" for plugin_meta in plugins
-        }
-        for ext_id in list(data["plugins"].keys()):
-            if (
-                ext_id.endswith(f"@{self.MARKETPLACE_NAME}")
-                and ext_id not in allowed_plugin_ids
-            ):
-                if isinstance(data["plugins"][ext_id], dict):
-                    data["plugins"][ext_id]["enabled"] = False
-
-        for plugin_meta in plugins:
-            plugin_name = plugin_meta["name"]
-            plugin_src = plugin_meta.get("_plugin_dir")
-            if not plugin_src:
-                continue
-
-            self._ensure_cached_plugin_install(plugin_name, Path(plugin_src).resolve())
-            ext_id = f"{plugin_name}@{self.MARKETPLACE_NAME}"
-
-            if ext_id not in data["plugins"]:
-                data["plugins"][ext_id] = tomlkit.table()
-
-            data["plugins"][ext_id]["enabled"] = True
-
-        return data
-
-    def ensure_plugins_available(self) -> None:
-        plugins = self.get_plugins_to_mount()
-        if not plugins:
-            return
-
-        config_path = self._get_user_config_path()
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # 备份全局配置。不再依赖 ``not backup_path.exists()`` 仅首次创建：
-        # 每次都刷新备份（覆盖旧的），确保即使上一轮崩溃导致备份缺失也能
-        # 重新建立。但若 config 已带有本工具的注入痕迹（说明上次崩溃未还
-        # 原），则保留现有干净备份，避免把脏 config 覆盖掉干净备份导致后续
-        # 永久无法还原。
-        backup_path = config_path.with_suffix(".toml.bak")
-        if config_path.exists():
-            try:
-                current_content = config_path.read_text(encoding="utf-8")
-            except Exception:
-                current_content = ""
-            if self.MARKETPLACE_NAME not in current_content:
-                shutil.copy2(config_path, backup_path)
-                logger.info(
-                    "Created safety backup of global config: %s", backup_path.name
-                )
-
-        data = self._load_config(config_path)
-        if data is None:
-            logger.warning(
-                "Skipping plugin injection into %s: file exists but could not be read or parsed",
-                config_path,
-            )
-            return
-        if not isinstance(data, dict):
-            logger.warning(
-                "Skipping plugin injection into %s: expected dict/table root, got %s",
-                config_path,
-                type(data).__name__,
-            )
-            return
-        data = self._format_plugins_for_settings(data, plugins)
-        self._save_config(config_path, data)
-        logger.info("Registered Codex plugins in %s", config_path)
-
-    def cleanup_plugins_available(self) -> None:
-        """还原全局配置并清理临时市场/缓存"""
-        config_path = self._get_user_config_path()
-        backup_path = config_path.with_suffix(".toml.bak")
-
-        if backup_path.exists():
-            # 使用 copy 而非 move(os.replace) 还原，保留备份副本，确保下一轮
-            # 仍可从干净备份还原（即使本轮再次崩溃）。
-            shutil.copy2(str(backup_path), str(config_path))
-            logger.info("Restored global config.toml from backup")
-        elif config_path.exists():
-            # 如果没有备份但文件存在，检查是否由 CodeAgent 创建
-            try:
-                content = config_path.read_text(encoding="utf-8")
-                if self.MARKETPLACE_NAME in content:
-                    config_path.unlink()
-                    logger.info("Removed temporary global config.toml")
-            except Exception:
-                pass
-
-        # 清理临时市场目录
-        marketplace_root = self._get_marketplace_root()
-        if marketplace_root.exists():
-            # 仅在非 Linux 或确认是链接时移除 plugins 链接，避免 rmtree 报错
-            plugins_link = marketplace_root / "plugins"
-            if plugins_link.exists() and (
-                self._is_windows_link(plugins_link) or plugins_link.is_symlink()
-            ):
-                self._safe_remove_link(plugins_link)
-            shutil.rmtree(marketplace_root, ignore_errors=True)
-
-        # 清理插件缓存 (CodeAgent 专有部分)
-        cache_root = self._get_plugin_cache_root()
-        if cache_root.exists():
-            shutil.rmtree(cache_root, ignore_errors=True)
-            logger.info("Cleaned up local Codex plugin cache")
-
-
-def extract_shell_first_blocks(text: str) -> tuple[str, list[str]]:
-    """Extract and remove shell:first blocks, returning text and commands."""
-    if not text:
-        return text, []
-
-    commands: list[str] = []
-    lines = text.splitlines()
-    sanitized_lines: list[str] = []
-    i = 0
-
-    while i < len(lines):
-        line = lines[i]
-        if line.strip() == SHELL_FIRST_MARKER:
-            i += 1
-            block_lines: list[str] = []
-            while i < len(lines) and lines[i].strip() != "```":
-                block_lines.append(lines[i])
-                i += 1
-            if i == len(lines):
-                sanitized_lines.append(line)
-                sanitized_lines.extend(block_lines)
-                break
-            script = "\n".join(block_lines).strip()
-            if script:
-                commands.append(script)
-            i += 1
-            continue
-
-        sanitized_lines.append(line)
-        i += 1
-
-    sanitized = "\n".join(sanitized_lines).strip()
-    return sanitized, commands
-
-
-def _shell_first_allowed_via_override() -> bool:
-    """Checks the explicit opt-in env var that skips the shell:first confirmation gate."""
-    return os.environ.get(SHELL_FIRST_ALLOW_ENV, "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-    )
-
-
-def _resolve_shell(env: dict) -> tuple[str, list[str]] | None:
-    """Finds the shell for one shell:first command; ``None`` if none exists.
-
-    参数风格跟着解析到的二进制走，而不是跟着操作系统走：Windows 上虽然优先
-    找 pwsh/powershell，但 which 完全可能解析出 Git Bash 的 bash —— 给
-    bash 塞 PowerShell 参数是必然失败的，反之亦然。
-    """
-    path = env.get("PATH")
-    candidates = (
-        ("pwsh", "powershell", "bash", "sh") if os.name == "nt" else ("bash", "sh")
-    )
-    for name in candidates:
-        found = shutil.which(name, path=path)
-        if not found:
-            continue
-        binary = Path(found).stem.lower()
-        if binary in ("pwsh", "powershell"):
-            return found, [found, "-NoProfile", "-Command"]
-        if binary == "bash":
-            return found, [found, "-lc"]
-        return found, [found, "-c"]
-    return None
-
-
-def run_prelaunch_commands(
-    commands: list[str],
-    env: dict,
-    codex_non_interactive: bool = False,
-    allow_override: bool | None = None,
-) -> None:
-    """Run shell:first commands before invoking Codex.
-
-    These commands come from markdown text (prompts/tasks/code plans) that may
-    originate from shared files, downloaded skills, or marketplace plugins --
-    not necessarily something the current user wrote or reviewed. This must
-    never execute silently:
-
-    - Non-interactive / no-TTY sessions fail closed: they refuse to run
-      shell:first commands unless ``SHELL_FIRST_ALLOW_ENV`` is explicitly set.
-    - Interactive sessions print the full command text and require a "y"
-      confirmation before each command runs.
-    """
-    if not commands:
-        return
-
-    allow_override = (
-        _shell_first_allowed_via_override()
-        if allow_override is None
-        else allow_override
-    )
-    interactive = (
-        sys.stdin.isatty() and sys.stdout.isatty() and not codex_non_interactive
-    )
-
-    print()
-    print(
-        "⚠️  This prompt/task/code-plan file contains 'shell:first' "
-        "command(s) that would run automatically on this machine before "
-        "Codex launches."
-    )
-    print(
-        "⚠️  Only proceed if you trust where this file came from -- "
-        "shared code plans, skills, and plugins can embed arbitrary shell "
-        "commands."
-    )
-
-    if not interactive and not allow_override:
-        print(
-            "❌ Refusing to run shell:first commands in a non-interactive "
-            f"session. Re-run interactively, or set {SHELL_FIRST_ALLOW_ENV}=1 "
-            "(or pass --allow-shell-first) to explicitly allow this.",
-            file=sys.stderr,
-        )
-        for script in commands:
-            command = script.strip()
-            if not command:
-                continue
-            preview = command.splitlines()[0]
-            suffix = " ..." if "\n" in command else ""
-            print(f"    would run: {preview}{suffix}", file=sys.stderr)
-        sys.exit(1)
-
-    if allow_override:
-        print(
-            f"✅ {SHELL_FIRST_ALLOW_ENV} override active -- running "
-            "shell:first commands without per-command confirmation."
-        )
-
-    for script in commands:
-        command = script.strip()
-        if not command:
-            continue
-
-        print("----- shell:first command -----")
-        print(command)
-        print("--------------------------------")
-
-        if interactive and not allow_override:
-            answer = input("Run this command? [y/N]: ").strip().lower()
-            if answer not in ("y", "yes"):
-                print("Skipped by user.")
-                continue
-
-        preview = command.splitlines()[0]
-        suffix = " ..." if "\n" in command else ""
-        print(f"Running prelaunch command: {preview}{suffix}")
-
-        try:
-            resolved = _resolve_shell(env)
-            if resolved is None:
-                print(
-                    "No suitable shell (pwsh/powershell/bash/sh) found for shell:first",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-            _shell, shell_args = resolved
-            subprocess.run(
-                [*shell_args, command],
-                check=True,
-                env=env,
-            )
-        except subprocess.CalledProcessError as exc:
-            print(f"Prelaunch command failed: {exc}", file=sys.stderr)
-            sys.exit(1)
-
-
-def get_code_plan_history_path(directory: str | Path) -> Path:
-    return get_tasks_dir(directory) / CODE_PLAN_HISTORY_FILENAME
-
-
-def load_code_plan_history(directory: str | Path) -> dict[str, str]:
-    history_path = get_code_plan_history_path(directory)
-
-    if not history_path.exists():
-        return {}
-
-    try:
-        with open(history_path, encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, dict):
-                return {str(key): str(value) for key, value in data.items()}
-    except json.JSONDecodeError as exc:
-        print(f"Failed to parse code plan history: {exc}", file=sys.stderr)
-
-    return {}
-
-
-def save_code_plan_history(directory: str | Path, history: dict[str, str]) -> None:
-    history_path = get_code_plan_history_path(directory)
-    history_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(history_path, "w", encoding="utf-8") as f:
-        json.dump(history, f, indent=2)
-
-
-def update_code_plan_history(
-    plan_file: Path,
-    history: dict[str, str] | None = None,
-) -> dict[str, str]:
-    directory = plan_file.parent
-
-    if history is None:
-        history = load_code_plan_history(directory)
-
-    history[plan_file.stem] = datetime.now().isoformat(timespec="seconds")
-    save_code_plan_history(directory, history)
-    return history
-
-
-def list_code_plan_directories(pattern: str = CODE_PLAN_DIR_PATTERN) -> list[str]:
-    script_dir = Path(__file__).resolve().parent
-    directories = [path.name for path in script_dir.glob(pattern) if path.is_dir()]
-    return sorted(directories)
-
-
-def split_code_plan_argument(
-    argument: str,
-    directories: list[str],
-) -> tuple[str | None, str]:
-    trimmed = argument.strip()
-
-    if not trimmed:
-        return None, ""
-
-    if trimmed in directories:
-        return trimmed, ""
-
-    for separator in (":", "/"):
-        if separator in trimmed:
-            dir_candidate, plan_part = trimmed.split(separator, 1)
-            dir_candidate = dir_candidate.strip()
-            plan_part = plan_part.strip()
-            if dir_candidate in directories:
-                return dir_candidate, plan_part
-
-    return None, trimmed
-
-
-def find_directories_for_plan(plan_name: str, directories: list[str]) -> list[str]:
-    normalized = plan_name.strip()
-    if not normalized:
-        return []
-
-    if parse_range_expression(normalized) is not None:
-        return directories.copy()
-
-    if normalized.endswith(CODE_PLAN_FILE_SUFFIX):
-        normalized = normalized[: -len(CODE_PLAN_FILE_SUFFIX)]
-
-    matches: list[str] = []
-
-    for directory in directories:
-        plans = list_tasks(directory, file_suffix=CODE_PLAN_FILE_SUFFIX)
-        if normalized in plans:
-            matches.append(directory)
-
-    return matches
-
-
-def select_code_plan_directory_interactively(directories: list[str]) -> str:
-    print("Available code plan directories:")
-    for i, directory in enumerate(directories, 1):
-        print(f"  {i}. {directory}")
-
-    while True:
-        choice = input("Choose directory by index or name: ").strip()
-        if not choice:
-            print("Input cannot be empty")
-            continue
-
-        if choice.isdigit():
-            index = int(choice) - 1
-            if 0 <= index < len(directories):
-                return directories[index]
-            print(f"Index out of range (1-{len(directories)})")
-            continue
-
-        if choice in directories:
-            return choice
-
-        print(f"Directory not found: {choice}")
+# ── shell:first 与 code_plan 实现已拆分至 engines.shell_first 与 engines.code_plans ──
 
 
 def parse_arguments() -> tuple[argparse.Namespace, list[str]]:

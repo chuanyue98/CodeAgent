@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { LanguageContext } from './context';
 import {
   DEFAULT_LANGUAGE,
@@ -49,6 +49,12 @@ export function LanguageProvider({
       initialLanguage ??
       resolveInitialLanguage(readCache(), typeof navigator === 'undefined' ? [] : navigator.languages),
   );
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = language;
+    }
+  }, [language]);
 
   const setLanguage = useCallback((next: Language) => {
     setLanguageState(next);

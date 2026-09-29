@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import request from '../utils/request';
+import { queryClient as defaultQueryClient } from '../utils/queryClient';
 
 interface ResourceDataResult<T> {
   data: T | null;
@@ -8,55 +9,28 @@ interface ResourceDataResult<T> {
   refetch: () => void;
 }
 
-function isAbort(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError';
-}
-
 /**
  * Shared hook for fetching resource data (skills, plugins, hooks, prompts).
- * Provides loading/error states and a refetch callback for error recovery
- * without page reload.
- *
- * In-flight requests are aborted on unmount and whenever `endpoint` changes
- * or `refetch` fires, so a slow response for an old endpoint can never
- * overwrite the data of the one now on screen.
+ * Backed by TanStack Query for caching, automatic deduplication, and
+ * safe abort on unmount/endpoint change.
  */
 function useResourceData<T>(endpoint: string): ResourceDataResult<T> {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [nonce, setNonce] = useState(0);
+  const { data, isLoading, isError, error, refetch } = useQuery<T>(
+    {
+      queryKey: [endpoint],
+      queryFn: ({ signal }) => request<T>(endpoint, { signal }),
+    },
+    defaultQueryClient,
+  );
 
-  const refetch = useCallback(() => {
-    setNonce((n) => n + 1);
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-    setError(null);
-
-    request<T>(endpoint, { signal: controller.signal })
-      .then((result) => {
-        if (controller.signal.aborted) return;
-        setData(result);
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted || isAbort(err)) return;
-        setError(err instanceof Error ? err.message : 'Failed to fetch data');
-      })
-      .finally(() => {
-        // A superseded request must not clear the spinner its successor
-        // just turned on.
-        if (controller.signal.aborted) return;
-        setLoading(false);
-      });
-
-    return () => controller.abort();
-  }, [endpoint, nonce]);
-
-  return { data, loading, error, refetch };
+  return {
+    data: data ?? null,
+    loading: isLoading,
+    error: isError ? (error instanceof Error ? error.message : 'Failed to fetch data') : null,
+    refetch: () => {
+      void refetch();
+    },
+  };
 }
 
 export default useResourceData;

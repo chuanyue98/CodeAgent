@@ -101,7 +101,11 @@ interface ProjectContextType {
   /** Recently used directories that are not in the registry, most recent first. */
   customWorkspaces: string[];
   groups: Record<string, GroupDefinition>;
-  refreshConfig: () => Promise<void>;
+  refreshConfig: () => Promise<{
+    config: Config;
+    projects: Project[];
+    groups: Record<string, GroupDefinition>;
+  } | null>;
   updateConfig: (newConfig: Config) => Promise<void>;
   availableGroups: string[];
   error: string | null;
@@ -195,11 +199,13 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
       if (groupList.length > 0 && !groupSet.has(currentGroupRef.current)) {
         setCurrentGroup(groupList[0]);
       }
+      return { config: configData || {}, projects: projectsArr, groups: groupsObj };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load configuration';
       setError(msg);
       console.error('Failed to refresh project context:', err);
       setConfig({});
+      return null;
     }
     // Stable identity (no currentGroup dependency) -- refreshConfig must not
     // change identity on every group switch, or the mount-only effect below

@@ -186,7 +186,7 @@ export default function NotificationBell() {
           <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
             {loading && notifications.length === 0 ? (
               <div className="p-6 text-center text-xs text-slate-400">
-                Loading...
+                {t('common.loading')}
               </div>
             ) : notifications.length === 0 ? (
               <div className="p-6 text-center text-xs text-slate-400">
@@ -198,9 +198,17 @@ export default function NotificationBell() {
                 return (
                   <div
                     key={item.id}
+                    role="button"
+                    tabIndex={0}
                     data-testid={`notification-item-${item.id}`}
                     onClick={() => void handleItemClick(item)}
-                    className={`flex cursor-pointer items-start gap-3 p-3 transition-colors hover:bg-slate-50/80 ${
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        void handleItemClick(item);
+                      }
+                    }}
+                    className={`flex cursor-pointer items-start gap-3 p-3 transition-colors hover:bg-slate-50/80 focus:outline-none focus-visible:bg-slate-100 ${
                       isUnread ? 'bg-primary/[0.03]' : ''
                     }`}
                   >
@@ -210,7 +218,7 @@ export default function NotificationBell() {
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <div className="flex items-center justify-between gap-1">
                         <span className={`text-xs truncate ${isUnread ? 'font-semibold text-slate-800' : 'font-normal text-slate-600'}`}>
-                          {item.title || item.taskName || 'Notification'}
+                          {item.title || item.taskName || t('notifications.title')}
                         </span>
                         {isUnread && (
                           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
