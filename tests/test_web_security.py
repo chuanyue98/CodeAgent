@@ -11,6 +11,8 @@ execution rather than an information leak.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi import FastAPI, WebSocket
 from fastapi.testclient import TestClient
@@ -18,6 +20,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from core.web.security import (
     HostHeaderMiddleware,
+    get_ui_token,
     is_allowed_origin,
     is_loopback_hostname,
     require_token,
@@ -251,3 +254,67 @@ def test_router_dependency_rejects_an_unauthenticated_websocket(ws_auth_on):
             pass
     # Not 500: the handshake must be refused, not crash the route.
     assert excinfo.value.code == 4401
+
+
+# ── Token lifecycle tests ────────────────────────────────────────────────
+
+
+def test_get_ui_token_generates_and_persists_file(tmp_path, monkeypatch):
+    token_file = tmp_path / ".codeagent" / "ui-token"
+    monkeypatch.setattr("core.web.security._token_path", lambda: token_file)
+    monkeypatch.delenv("CA_UI_TOKEN", raising=False)
+    reset_token_cache()
+
+    token = get_ui_token()
+    assert token and len(token) >= 32
+    assert token_file.exists()
+    assert token_file.read_text(encoding="utf-8").strip() == token
+
+    # Second call returns cached token without re-reading
+    assert get_ui_token() == token
+    reset_token_cache()
+
+
+def test_get_ui_token_reads_existing_file(tmp_path, monkeypatch):
+    token_file = tmp_path / ".codeagent" / "ui-token"
+    token_file.parent.mkdir(parents=True, exist_ok=True)
+    token_file.write_text("persisted-secret-token", encoding="utf-8")
+
+    monkeypatch.setattr("core.web.security._token_path", lambda: token_file)
+    monkeypatch.delenv("CA_UI_TOKEN", raising=False)
+    reset_token_cache()
+
+    assert get_ui_token() == "persisted-secret-token"
+    reset_token_cache()
+
+
+def test_get_ui_token_env_override_wins(tmp_path, monkeypatch):
+    token_file = tmp_path / ".codeagent" / "ui-token"
+    token_file.parent.mkdir(parents=True, exist_ok=True)
+    token_file.write_text("file-token", encoding="utf-8")
+
+    monkeypatch.setattr("core.web.security._token_path", lambda: token_file)
+    monkeypatch.setenv("CA_UI_TOKEN", "env-token")
+    reset_token_cache()
+
+    assert get_ui_token() == "env-token"
+    reset_token_cache()
+
+
+def test_get_ui_token_oserror_fallback_in_memory(tmp_path, monkeypatch):
+    token_file = tmp_path / ".codeagent" / "ui-token"
+    monkeypatch.setattr("core.web.security._token_path", lambda: token_file)
+    monkeypatch.delenv("CA_UI_TOKEN", raising=False)
+
+    def _failing_write(*args, **kwargs):
+        raise OSError("Read-only filesystem")
+
+    monkeypatch.setattr(Path, "write_text", _failing_write)
+    reset_token_cache()
+
+    token = get_ui_token()
+    assert token and len(token) >= 32
+    assert not token_file.exists()
+    # In-memory token is cached
+    assert get_ui_token() == token
+    reset_token_cache()
