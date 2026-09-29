@@ -119,7 +119,8 @@ def test_history_engine_filter_reaches_the_finder(monkeypatch):
 
 def test_show_unknown_session_reports_not_found(monkeypatch, capsys):
     with patch("core.session_history.repository.find_session_by_id", return_value=None):
-        _run(monkeypatch, "history", "show", "claude", "ghost")
+        ret = _run(monkeypatch, "history", "show", "claude", "ghost")
+    assert ret == 1
     assert "[X] Session not found: claude/ghost" in capsys.readouterr().out
 
 
@@ -153,7 +154,8 @@ def test_show_missing_model_falls_back_to_unknown(monkeypatch, capsys):
 
 def test_convert_unknown_session_reports_not_found(monkeypatch, capsys):
     with patch("core.session_history.repository.find_session_by_id", return_value=None):
-        _run(monkeypatch, "history", "convert", "claude", "ghost", "codex")
+        ret = _run(monkeypatch, "history", "convert", "claude", "ghost", "codex")
+    assert ret == 1
     assert "[X] Session not found: claude/ghost" in capsys.readouterr().out
 
 
@@ -163,7 +165,8 @@ def test_convert_refuses_without_confirmation_when_not_interactive(monkeypatch, 
         return_value=_session(),
     ):
         with patch("core.session_history.writers.write_session") as write:
-            _run(monkeypatch, "history", "convert", "claude", "s1", "codex")
+            ret = _run(monkeypatch, "history", "convert", "claude", "s1", "codex")
+    assert ret == 1
     write.assert_not_called()
     out = capsys.readouterr().out
     assert "Refusing to convert without confirmation" in out
@@ -178,8 +181,11 @@ def test_convert_with_yes_writes_and_shows_the_resume_hint(monkeypatch, capsys):
         with patch(
             "core.session_history.writers.write_session", return_value="new-id"
         ) as write:
-            _run(monkeypatch, "history", "convert", "claude", "s1", "codex", "--yes")
+            ret = _run(
+                monkeypatch, "history", "convert", "claude", "s1", "codex", "--yes"
+            )
 
+    assert ret == 0
     write.assert_called_once_with(source, "codex")
     out = capsys.readouterr().out
     assert "[OK] Converted claude -> codex" in out
@@ -196,5 +202,8 @@ def test_convert_writer_failure_is_reported(monkeypatch, capsys):
             "core.session_history.writers.write_session",
             side_effect=RuntimeError("disk full"),
         ):
-            _run(monkeypatch, "history", "convert", "claude", "s1", "codex", "--yes")
+            ret = _run(
+                monkeypatch, "history", "convert", "claude", "s1", "codex", "--yes"
+            )
+    assert ret == 1
     assert "[X] Conversion failed: disk full" in capsys.readouterr().out

@@ -31,6 +31,11 @@ from ..ui_styles import (
 ENGINE_BADGES: dict[str, str] = {k: v.badge for k, v in ENGINE_THEMES.items()}
 _pad_display = pad_display
 
+#: 交互列表里最多展示多少条"最近会话"。编号解析用的却是全量列表——与
+#: ``ca history`` / ``ca -s`` 同一口径——所以 ``ca -r 25`` 和 ``ca -s 25``
+#: 指向同一个会话，而屏幕上不必铺开几十条。
+DISPLAY_LIMIT = 20
+
 
 def format_relative_time(ts_str: str) -> str:
     """Formats an ISO timestamp into a localized human-readable relative time string."""
@@ -103,29 +108,41 @@ def resume_session_flow(
     if selector == "":
         selector = None
 
-    summaries = repository.list_summaries(
+    # Full list for resolution, matching ``ca history`` / ``ca -s``: a number
+    # must name the same session in every entry point. The picker below shows
+    # only the most recent DISPLAY_LIMIT.
+    all_summaries = repository.list_summaries(
         project=project_path,
         engine=engine,
         include_subagents=False,
-        limit=20,
+        limit=100000,
     )
 
-    if not summaries:
+    if not all_summaries:
         print(t("resume.no_sessions", path=project_path))
         return 1
+
+    summaries = all_summaries[:DISPLAY_LIMIT]
+
+    def _print_list() -> None:
+        print(t("resume.title", path=project_path, count=len(all_summaries)))
+        for i, s in enumerate(summaries, 1):
+            print(f"  {format_session_choice_title(i, s)}")
+        if len(all_summaries) > len(summaries):
+            print(t("resume.more", shown=len(summaries), count=len(all_summaries)))
 
     chosen_summary: dict | None = None
 
     if selector is not None:
         try:
             idx = int(selector)
-            if 1 <= idx <= len(summaries):
-                chosen_summary = summaries[idx - 1]
+            if 1 <= idx <= len(all_summaries):
+                chosen_summary = all_summaries[idx - 1]
             else:
-                print(t("resume.invalid_index", index=idx, count=len(summaries)))
+                print(t("resume.invalid_index", index=idx, count=len(all_summaries)))
                 return 1
         except ValueError:
-            for s in summaries:
+            for s in all_summaries:
                 if s["session_id"] == selector:
                     chosen_summary = s
                     break
@@ -134,9 +151,7 @@ def resume_session_flow(
                 return 1
     else:
         if not sys.stdin.isatty():
-            print(t("resume.title", path=project_path, count=len(summaries)))
-            for i, s in enumerate(summaries, 1):
-                print(f"  {format_session_choice_title(i, s)}")
+            _print_list()
             chosen_summary = summaries[0]
         else:
             used_questionary = False
@@ -170,9 +185,7 @@ def resume_session_flow(
                 used_questionary = False
 
             if not used_questionary:
-                print(t("resume.title", path=project_path, count=len(summaries)))
-                for i, s in enumerate(summaries, 1):
-                    print(f"  {format_session_choice_title(i, s)}")
+                _print_list()
 
                 prompt_text = t("resume.prompt", count=len(summaries))
                 try:

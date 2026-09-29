@@ -99,7 +99,7 @@ def show(ctx, engine_name, session_id):  # type: ignore[no-untyped-def]
     session = repository.get_full(engine_name, session_id, project_path)
     if not session:
         print(t("history.not_found", engine=engine_name, session_id=session_id))
-        return
+        return 1
     print(f"{'=' * 60}")
     print(f"{t('history.field_engine')}  {session.engine.value}")
     print(f"{t('history.field_session')}  {session.session_id}")
@@ -145,7 +145,7 @@ def convert(ctx, source_engine, session_id, target_engine, yes):  # type: ignore
     session = repository.get_full(source_engine, session_id, project_path)
     if not session:
         print(t("history.not_found", engine=source_engine, session_id=session_id))
-        return
+        return 1
     title = session.title or session.first_user_message[:60] or t("history.no_title")
     print(t("convert.about_to"))
     print(
@@ -161,10 +161,10 @@ def convert(ctx, source_engine, session_id, target_engine, yes):  # type: ignore
     if not yes:
         if not (sys.stdin.isatty() and sys.stdout.isatty()):
             print(t("convert.needs_confirmation"))
-            return
+            return 1
         if not click.confirm(t("convert.confirm"), default=False):
             print(t("convert.cancelled"))
-            return
+            return 0
     try:
         new_id = write_session(session, target_engine)
         print(t("convert.done", source=source_engine, target=target_engine))
@@ -173,3 +173,5 @@ def convert(ctx, source_engine, session_id, target_engine, yes):  # type: ignore
             print(t(f"convert.resume_{target_engine}", session_id=new_id))
     except Exception as e:
         print(t("convert.failed", error=e))
+        return 1
+    return 0

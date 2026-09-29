@@ -898,6 +898,13 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "Recent sessions in {path} ({count} found):",
         "zh": "当前项目的最近会话 ({count} 条，目录: {path}):",
     },
+    "resume.more": {
+        "en": (
+            "  (showing the {shown} most recent of {count}; "
+            "run `ca history` for the rest)"
+        ),
+        "zh": "  (只显示最近 {shown} 条，共 {count} 条；其余用 `ca history` 查看)",
+    },
     "resume.no_sessions": {
         "en": "[X] No session history found for {path}.\nStart one first, e.g.:  ca claude",
         "zh": "[X] 在 {path} 没有找到任何历史会话。\n请先启动一个引擎开启会话，例如:  ca claude",

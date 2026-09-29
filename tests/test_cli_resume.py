@@ -186,12 +186,41 @@ def test_ca_dash_r_no_sessions(monkeypatch, capsys):
 
 def test_ca_resume_engine_filter(find_all, launched, monkeypatch):
     assert _run_cli(monkeypatch, ["resume", "-e", "codex", "1"]) == 0
+    # 取全量：编号与 ca history / ca -s 同一口径（展示只截最近 20 条）。
     find_all.assert_called_with(
         project=unittest_cwd(),
         engine="codex",
         include_subagents=False,
-        limit=20,
+        limit=100000,
     )
+
+
+def test_ca_dash_r_index_beyond_the_display_window_still_resolves(
+    launched, monkeypatch
+):
+    """``ca -r 21`` 必须和 ``ca -s 21`` 指向同一个会话，不能因只展示 20 条而越界。"""
+    now = datetime.now(UTC)
+    sessions = [
+        _session(
+            f"ses-{i}",
+            EngineType.CODEX,
+            (now - timedelta(minutes=i)).isoformat(),
+            title=f"Task {i}",
+        )
+        for i in range(1, 26)
+    ]
+    summaries = [s.to_summary_dict() for s in sessions]
+    by_id = {s.session_id: s for s in sessions}
+    with patch(
+        "core.session_history.repository.list_summaries", return_value=summaries
+    ):
+        with patch(
+            "core.session_history.repository.get_full",
+            side_effect=lambda engine, session_id, project=None: by_id.get(session_id),
+        ):
+            assert _run_cli(monkeypatch, ["-r", "21"]) == 0
+
+    assert launched == [["codex", "resume", "ses-21"]]
 
 
 def unittest_cwd() -> str:
