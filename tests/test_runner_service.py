@@ -478,6 +478,7 @@ def test_extract_chat_session_id_antigravity(tmp_path, new_runner, field, value)
 
 def test_list_runs_releases_lock_during_get_status(tmp_path, new_runner):
     import threading
+
     from core.services.runner_service import TaskRunStatus
 
     runner = new_runner(tmp_path)
