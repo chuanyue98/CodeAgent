@@ -173,3 +173,42 @@ def test_placeholders_match_across_languages():
         if fields(entry["en"]) != fields(entry["zh"])
     ]
     assert mismatched == []
+
+
+def test_all_codebase_literal_t_calls_exist_in_messages():
+    """Any literal t('some.key') call in the codebase must exist in MESSAGES."""
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    missing = []
+    for p in root.glob("**/*.py"):
+        if any(
+            part in p.parts
+            for part in (".venv", "node_modules", "dist", "build", ".git", "tests")
+        ):
+            continue
+        try:
+            tree = ast.parse(p.read_text(encoding="utf-8"), filename=str(p))
+        except Exception:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func = node.func
+                is_t = (isinstance(func, ast.Name) and func.id == "t") or (
+                    isinstance(func, ast.Attribute)
+                    and func.attr == "t"
+                    and isinstance(func.value, ast.Name)
+                    and func.value.id == "i18n"
+                )
+                if (
+                    is_t
+                    and node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and isinstance(node.args[0].value, str)
+                ):
+                    key = node.args[0].value
+                    if key not in i18n.MESSAGES:
+                        missing.append(f"{p.name}:{node.lineno} -> {key}")
+    assert missing == [], f"Found unknown i18n keys: {missing}"
+
