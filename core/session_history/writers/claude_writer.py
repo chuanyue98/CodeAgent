@@ -16,31 +16,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.session_history.paths import (
+    encode_claude_project_dir as _encode_project_path,
+)
 from core.session_history.previews import result_for_writer
 from core.utils.atomic_write import atomic_write
 from core.utils.long_paths import list_files, long_path, mtime
 
 if TYPE_CHECKING:
     from core.session_history.models import UnifiedSession
-
-
-def _encode_project_path(path: str) -> str:
-    """Encodes a file path into Claude's dash-encoded directory name format.
-
-    ``E:/demo/CodeAgent`` → ``E--demo-CodeAgent``
-
-    Args:
-        path: The file path to encode.
-
-    Returns:
-        str: The encoded directory name.
-    """
-    path = path.replace("\\", "/")
-    m = re.match(r"^([A-Za-z]):/(.*)$", path)
-    if m:
-        drive, rest = m.groups()
-        return f"{drive}--{rest.replace('/', '-')}"
-    return path.replace("/", "-")
 
 
 def _now_iso() -> str:

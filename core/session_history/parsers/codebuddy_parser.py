@@ -47,42 +47,25 @@ from core.session_history.parsers._subagents import (
 )
 from core.session_history.parsers._synthetic import is_synthetic_user_content
 from core.session_history.paths import (
+    _codebuddy_dir_matches,
+    _encode_codebuddy_project_dir,
+    codebuddy_dir_matches,
+    encode_codebuddy_project_dir,
     normalize_project_path,
     strip_extended_length_prefix,
 )
+
+__all__ = [
+    "_codebuddy_dir_matches",
+    "_encode_codebuddy_project_dir",
+    "codebuddy_dir_matches",
+    "encode_codebuddy_project_dir",
+    "find_codebuddy_sessions",
+    "parse_codebuddy_session",
+]
 from core.session_history.previews import args_preview, result_preview
 from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_dirs, list_files, long_path
-
-
-def _encode_codebuddy_project_dir(path: str) -> str:
-    """Encodes a file path the way CodeBuddy Code names its
-    ``~/.codebuddy/projects/<dir>`` directory.
-
-    Rule (verified against real data):
-
-      - the leading drive letter is lower-cased (``E:`` → ``e``)
-      - every run of characters that is not an ASCII letter or digit
-        (``:``, ``\\``, ``/`` ...) collapses to a single ``-``
-      - all other characters keep their original case.
-
-    Args:
-        path: A file path (backslash or forward-slash separated).
-
-    Returns:
-        str: The dash-encoded directory name CodeBuddy Code would use.
-    """
-    p = path.replace("\\", "/")
-    # Lower-case only the leading drive letter (``C:`` / ``c:``), leaving the
-    # rest of the path's casing untouched.
-    if re.match(r"^[A-Za-z]:", p):
-        p = p[0].lower() + p[1:]
-    # ``+`` collapses a run of separators (``:/``, ``:\``, ``\\`` ...) into a
-    # single dash, matching how CodeBuddy names its project dirs
-    # (``E:\demo\CodeAgent`` → ``e-demo-CodeAgent``).
-    # A POSIX path's leading separator is dropped, not dashed: CodeBuddy
-    # stores ``/home/cy/x`` under ``home-cy-x``.
-    return re.sub(r"[^A-Za-z0-9]+", "-", p).lstrip("-")
 
 
 def _to_iso8601(value: object) -> str:
@@ -119,31 +102,6 @@ def _to_iso8601(value: object) -> str:
     except (OverflowError, OSError, ValueError):
         return ""
     return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
-
-
-def _codebuddy_dir_matches(dir_name: str, target_path: str) -> bool:
-    """Checks if a CodeBuddy projects directory name matches a target path.
-
-    Mirrors :func:`claude_parser._claude_dir_matches`: re-encode the *known*
-    ``target_path`` with CodeBuddy's rule and compare directly, rather than
-    trying to invert the (ambiguous, many-to-one) encoding. This is only a
-    pre-filter — the authoritative project path comes from each session's own
-    ``cwd`` field via :func:`normalize_project_path`.
-
-    Args:
-        dir_name: A ``~/.codebuddy/projects`` directory name (e.g.
-            ``e-demo-CodeAgent``).
-        target_path: The target project path (e.g. ``E:/demo/CodeAgent``).
-
-    Returns:
-        bool: True if the directory matches the target path.
-    """
-    normalized_target = strip_extended_length_prefix(
-        target_path.replace("\\", "/")
-    ).rstrip("/")
-    if not normalized_target:
-        return False
-    return dir_name.lower() == _encode_codebuddy_project_dir(normalized_target).lower()
 
 
 #: CodeBuddy closes a finished ``Agent`` result with the transcript it wrote.

@@ -12,7 +12,6 @@ Each line is a JSON object with a ``type`` field.  Relevant types:
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 from core.session_history.models import (
@@ -27,79 +26,29 @@ from core.session_history.parsers._subagents import (
     title_subagent_runs,
 )
 from core.session_history.parsers._synthetic import is_synthetic_user_content
-from core.session_history.paths import strip_extended_length_prefix
+from core.session_history.paths import (
+    _claude_dir_matches,
+    _decode_claude_project_path,
+    _encode_claude_project_dir,
+    claude_dir_matches,
+    decode_claude_project_path,
+    encode_claude_project_dir,
+    strip_extended_length_prefix,
+)
+
+__all__ = [
+    "_claude_dir_matches",
+    "_decode_claude_project_path",
+    "_encode_claude_project_dir",
+    "claude_dir_matches",
+    "decode_claude_project_path",
+    "encode_claude_project_dir",
+    "find_claude_sessions",
+    "parse_claude_session",
+]
 from core.session_history.previews import args_preview, result_preview
 from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_dirs, list_files, long_path
-
-
-def _decode_claude_project_path(dir_name: str) -> str:
-    """Decodes Claude's dash-encoded directory name back to a file path.
-
-    Claude encodes paths as: ``E:\\demo\\CodeAgent`` → ``E--demo-CodeAgent``.
-    Note: single dashes in directory names (e.g. ``hearthstone-bot``) are
-    ambiguous — they could be a path separator or part of the name.
-    This function returns a best-guess decode; use ``_claude_dir_matches``
-    for reliable project path matching.
-
-    Args:
-        dir_name: The dash-encoded directory name.
-
-    Returns:
-        str: The decoded file path (best guess).
-    """
-    m = re.match(r"^([A-Za-z])--(.*)$", dir_name)
-    if m:
-        drive, rest = m.groups()
-        return f"{drive}:/{rest.replace('-', '/')}"
-    return dir_name.replace("-", "/")
-
-
-def _encode_claude_project_dir(path: str) -> str:
-    """Encodes a path the way Claude Code names ``~/.claude/projects/<dir>``.
-
-    Every character that is not an ASCII letter or digit becomes a single
-    ``-``: ``E:\\demo\\hearthstone-bot`` -> ``E--demo-hearthstone-bot``.
-
-    The mapping is many-to-one — separators, dots and literal dashes all
-    collapse onto ``-`` — so a directory name cannot be decoded back into an
-    unambiguous path. Match by re-encoding a known path instead; see
-    :func:`_claude_dir_matches`.
-
-    Args:
-        path: A file path (backslash or forward-slash separated).
-
-    Returns:
-        str: The dash-encoded directory name Claude Code would use for it.
-    """
-    return re.sub(r"[^A-Za-z0-9]", "-", path)
-
-
-def _claude_dir_matches(dir_name: str, target_path: str) -> bool:
-    """Checks if a Claude project directory name matches a target file path.
-
-    Re-encodes ``target_path`` with :func:`_encode_claude_project_dir` and
-    compares, rather than trying to invert that encoding — a decoder walking
-    the dashes cannot tell a separator from a literal dash and can match the
-    wrong project.
-
-    Claude's own encoding stays ambiguous either way: ``.../my-project`` and
-    ``.../my/project`` produce the same directory, so both report a match,
-    exactly as Claude Code itself behaves.
-
-    Args:
-        dir_name: The Claude projects directory name (e.g. ``E--demo-hearthstone-bot``).
-        target_path: The target project path (e.g. ``E:/demo/hearthstone-bot``).
-
-    Returns:
-        bool: True if the directory matches the target path.
-    """
-    normalized_target = strip_extended_length_prefix(
-        target_path.replace("\\", "/")
-    ).rstrip("/")
-    if not normalized_target:
-        return False
-    return dir_name.lower() == _encode_claude_project_dir(normalized_target).lower()
 
 
 @cached_file_parser

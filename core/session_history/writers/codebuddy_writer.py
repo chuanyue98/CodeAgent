@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from core.session_history.models import EngineType
-from core.session_history.parsers.codebuddy_parser import (
+from core.session_history.paths import (
     _encode_codebuddy_project_dir,
 )
 from core.session_history.previews import result_for_writer
