@@ -8,6 +8,12 @@ export interface TerminalTab {
   cwd: string;
   sessionId?: string;
   attachId?: string;
+  /**
+   * First message for a brand-new engine session. Held in memory only: it is
+   * not persisted with the tabs, so reloading the page cannot type it again
+   * into a session that no longer exists.
+   */
+  prompt?: string;
 }
 
 export interface TerminalContextValue {
@@ -22,7 +28,7 @@ export interface TerminalContextValue {
   /** Where the active terminal should sit instead of the bottom drawer. */
   terminalSlot: HTMLElement | null;
   setTerminalSlot: (el: HTMLElement | null) => void;
-  openTab: (engine: string, cwd: string, sessionId?: string, attachId?: string) => void;
+  openTab: (engine: string, cwd: string, sessionId?: string, attachId?: string, prompt?: string) => void;
   closeTab: (id: string) => void;
   setActiveTabId: (id: string | null) => void;
   toggleDrawer: () => void;
@@ -113,7 +119,13 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
   });
 
   useEffect(() => {
-    localStorage.setItem('codeagent.terminalTabs', JSON.stringify(tabs));
+    // The first message is deliberately left out: see TerminalTab.prompt.
+    const persisted = tabs.map(tab => {
+      const copy = { ...tab };
+      delete copy.prompt;
+      return copy;
+    });
+    localStorage.setItem('codeagent.terminalTabs', JSON.stringify(persisted));
   }, [tabs]);
 
   useEffect(() => {
@@ -132,7 +144,7 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
     localStorage.setItem('codeagent.terminalCopyOnSelect', String(copyOnSelect));
   }, [copyOnSelect]);
 
-  const openTab = useCallback((engine: string, cwd: string, sessionId?: string, attachId?: string) => {
+  const openTab = useCallback((engine: string, cwd: string, sessionId?: string, attachId?: string, prompt?: string) => {
     const identity = attachId ?? sessionId;
     if (identity) {
       const existing = tabs.find(
@@ -145,7 +157,8 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
     }
     const id = Math.random().toString(36).slice(2, 11);
-    setTabs(prev => [...prev, { id, engine, cwd, sessionId, attachId }]);
+    const trimmed = prompt?.trim();
+    setTabs(prev => [...prev, { id, engine, cwd, sessionId, attachId, ...(trimmed ? { prompt: trimmed } : {}) }]);
     setActiveTabId(id);
     setIsDrawerOpen(true);
   }, [tabs]);

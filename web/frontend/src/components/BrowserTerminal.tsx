@@ -3,7 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { RotateCw } from 'lucide-react';
-import { ptyWebSocketUrl } from '../api/pty';
+import { ptyWebSocketUrl, stagePtyPrompt } from '../api/pty';
 import { useT } from '../i18n/context';
 import { detectTerminalEvent, stripAnsi } from '../utils/terminalDetector';
 import type { TerminalEventType } from '../utils/terminalDetector';
@@ -20,6 +20,12 @@ export interface BrowserTerminalProps {
   attachId?: string;
   /** The tab's own id: a reconnect of this tab reattaches its engine. */
   tabKey?: string;
+  /**
+   * First message for a fresh engine session. Sent to the server once, before
+   * the socket opens; a reconnect or restart of the same terminal never
+   * repeats it.
+   */
+  initialPrompt?: string;
   /**
    * Whether the terminal is on screen. The socket -- and with it the engine
    * -- only starts once it is, at the size it is actually shown at.
@@ -66,6 +72,7 @@ export default function BrowserTerminal({
   sessionId,
   attachId,
   tabKey,
+  initialPrompt,
   active = true,
   fontSize = 13,
   copyOnSelect = true,
@@ -73,6 +80,11 @@ export default function BrowserTerminal({
   onTerminalEvent,
 }: BrowserTerminalProps) {
   const t = useT();
+  // Read once at mount and cleared as soon as the socket has been opened with
+  // it staged. The staging request is kept so a remount in between (React's
+  // dev double-invoke) waits on the same request instead of sending a second.
+  const pendingPromptRef = useRef(initialPrompt);
+  const stagingRef = useRef<Promise<void> | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -212,8 +224,10 @@ export default function BrowserTerminal({
       }
     };
 
-    const connect = () => {
-      if (socket || superseded) return;
+    let staging = false;
+    const openSocket = () => {
+      pendingPromptRef.current = undefined;
+      stagingRef.current = null;
       fitIfVisible();
       const opened = new WebSocket(ptyWebSocketUrl(engine, cwd, sessionId, attachId, {
         tabKey,
@@ -280,6 +294,22 @@ export default function BrowserTerminal({
         setState('closed');
         setMessage(event.reason || tRef.current('terminal.connectionClosed'));
       };
+    };
+    const connect = () => {
+      if (socket || staging || superseded) return;
+      const prompt = pendingPromptRef.current;
+      if (prompt && tabKey && !sessionId && !attachId) {
+        // The server starts the engine when the socket opens, so the prompt has
+        // to be there first. A failed request just means a session without it.
+        stagingRef.current ??= stagePtyPrompt(tabKey, prompt).then(() => undefined, () => undefined);
+        staging = true;
+        void stagingRef.current.then(() => {
+          staging = false;
+          if (!socket && !superseded) openSocket();
+        });
+        return;
+      }
+      openSocket();
     };
     connectRef.current = connect;
     if (activeRef.current) connect();
@@ -431,6 +461,7 @@ export default function BrowserTerminal({
           {canRestart && (
             <button
               onClick={restart}
+              data-testid="terminal-restart"
               title={t('terminal.startNewHint')}
               className="flex shrink-0 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 font-medium text-slate-600 transition-colors hover:bg-slate-50"
             >

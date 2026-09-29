@@ -44,6 +44,18 @@ export interface PtyConnectOptions {
 }
 
 /**
+ * Hands the server the first message for the terminal about to open under
+ * `tabKey`. It goes in a request body rather than the socket's query string
+ * because URLs end up in access logs, and a prompt can be long or private.
+ */
+export function stagePtyPrompt(tabKey: string, prompt: string): Promise<{ success: boolean }> {
+  return request('/api/pty/prompt', {
+    method: 'POST',
+    body: JSON.stringify({ tabKey, prompt }),
+  });
+}
+
+/**
  * Stops the engine behind a tab the user closed. Dropping the socket alone
  * only detaches it, and the engine would keep running in tmux.
  */

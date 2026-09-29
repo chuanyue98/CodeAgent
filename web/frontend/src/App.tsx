@@ -19,7 +19,6 @@ import {
 } from './navigation';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
-const SystemPage = lazy(() => import('./pages/SystemPage'));
 const ConfigHub = lazy(() => import('./components/ConfigHub'));
 const TaskDashboard = lazy(() => import('./components/TaskDashboard'));
 const ResourceHub = lazy(() => import('./components/ResourceHub'));
@@ -140,7 +139,6 @@ function AppShell() {
             >
               <Route index element={<Navigate to="workspace" replace />} />
               <Route path="workspace" element={page(<ConfigHub />)} />
-              <Route path="system" element={page(<SystemPage />)} />
             </Route>
 
             {/* Older bookmarks. Query strings are carried where a page reads
@@ -171,7 +169,9 @@ function AppShell() {
             <Route path="/settings/capabilities" element={<Navigate to="/extensions/resources" replace />} />
             <Route path="/settings/capabilities/mcp" element={<KeepQuery to="/extensions/mcp" />} />
             <Route path="/config" element={<Navigate to="/settings/workspace" replace />} />
-            <Route path="/system" element={<Navigate to="/settings/system" replace />} />
+            {/* System health is a section of the Settings page now. */}
+            <Route path="/system" element={<Navigate to="/settings/workspace?tab=system" replace />} />
+            <Route path="/settings/system" element={<Navigate to="/settings/workspace?tab=system" replace />} />
             <Route path="*" element={<Navigate to="/home" replace />} />
           </Routes>
         </div>

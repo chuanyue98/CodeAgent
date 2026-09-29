@@ -45,11 +45,26 @@ const PROMPTS = [
   },
 ];
 
+const ENGINE_MOUNTS = [
+  { id: 'claude', name: 'Claude Code', mounts: ['skills', 'hooks', 'plugins'] },
+  { id: 'opencode', name: 'OpenCode', mounts: ['skills', 'hooks', 'plugins'] },
+  { id: 'codex', name: 'Codex', mounts: ['skills', 'hooks', 'plugins'] },
+  { id: 'codebuddy', name: 'CodeBuddy', mounts: ['skills', 'plugins'] },
+  { id: 'antigravity', name: 'Antigravity', mounts: ['skills'] },
+];
+
 let failing: Set<string>;
+let engineMountsFail: boolean;
 
 beforeEach(() => {
   failing = new Set();
+  engineMountsFail = false;
   globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+    if (url.includes('/api/system/engines')) {
+      return engineMountsFail
+        ? Promise.reject(new Error('down'))
+        : jsonResponse({ engines: ENGINE_MOUNTS });
+    }
     if (url.includes('/api/config')) {
       return jsonResponse({ groups: { codeagent: { skills: ['dev/code-review'], prompts: [], hooks: [], plugins: [] } } });
     }
@@ -111,6 +126,75 @@ describe('ResourceHub sidebar', () => {
 
     expect(skills).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('button', { name: /dev/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('ResourceHub engine marks', () => {
+  /** The row (role=button) whose heading is `name`. */
+  async function rowFor(name: string): Promise<HTMLElement> {
+    const heading = await screen.findByRole('heading', { level: 2, name });
+    return heading.closest('[role="button"]') as HTMLElement;
+  }
+
+  test('a skill is marked as attached to every engine', async () => {
+    renderHub();
+    const row = await rowFor('code-review');
+
+    const marks = await within(row).findByRole('img', { name: /Attached to/ });
+    for (const engine of ['Claude', 'OpenCode', 'Codex', 'CodeBuddy', 'Antigravity']) {
+      expect(marks.getAttribute('aria-label')).toContain(engine);
+    }
+  });
+
+  test('a hook is marked only for the engines whose launcher attaches hooks', async () => {
+    renderHub();
+    await screen.findByText('code-review');
+    fireEvent.change(screen.getByLabelText('Search all resources'), { target: { value: 'lint-on' } });
+
+    const marks = await within(await rowFor('lint-on-save')).findByRole('img', { name: /Attached to/ });
+    const label = marks.getAttribute('aria-label') ?? '';
+    expect(label).toContain('Claude');
+    expect(label).toContain('Codex');
+    expect(label).not.toContain('CodeBuddy');
+    expect(label).not.toContain('Antigravity');
+  });
+
+  test('a plugin skips Antigravity, which does not take the group\'s plugins', async () => {
+    renderHub();
+    await screen.findByText('code-review');
+    fireEvent.change(screen.getByLabelText('Search all resources'), { target: { value: 'uv-runner' } });
+
+    const marks = await within(await rowFor('uv-runner')).findByRole('img', { name: /Attached to/ });
+    expect(marks.getAttribute('aria-label')).toContain('CodeBuddy');
+    expect(marks.getAttribute('aria-label')).not.toContain('Antigravity');
+  });
+
+  test('a hollow dot names the engine that does not take the kind', async () => {
+    renderHub();
+    await screen.findByText('code-review');
+    fireEvent.change(screen.getByLabelText('Search all resources'), { target: { value: 'lint-on' } });
+
+    const row = await rowFor('lint-on-save');
+    await within(row).findByRole('img', { name: /Attached to/ });
+    expect(row.querySelector('[title="Antigravity does not take this kind"]')).not.toBeNull();
+  });
+
+  test('prompts carry no marks, since no launcher attaches them per engine', async () => {
+    renderHub();
+    await screen.findByText('code-review');
+    fireEvent.change(screen.getByLabelText('Search all resources'), { target: { value: 'baseline' } });
+
+    const row = await rowFor('base');
+    expect(within(row).queryByRole('img')).toBeNull();
+  });
+
+  test('when the table cannot be loaded, rows show no marks rather than claim none attach', async () => {
+    engineMountsFail = true;
+    renderHub();
+    const row = await rowFor('code-review');
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(within(row).queryByRole('img')).toBeNull();
   });
 });
 

@@ -455,6 +455,7 @@ export default function GlobalTerminalDrawer() {
                 sessionId={tab.sessionId}
                 attachId={tab.attachId}
                 tabKey={tab.id}
+                initialPrompt={tab.prompt}
                 active={showing && tab.id === activeTabId}
                 fontSize={fontSize}
                 copyOnSelect={copyOnSelect}

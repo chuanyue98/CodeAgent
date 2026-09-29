@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { fetchDaily, fetchSessions, fmtTokens, type SessionUsage } from '../api/analytics';
 import { fetchSchedules, type Schedule } from '../api/schedules';
+import { buttonClass } from '../components/shared/buttonClass';
 import { AGENT_ENGINES, findEngine } from '../components/terminalEngines';
 import SectionLabel from '../components/shared/SectionLabel';
 import { useProject } from '../context/ProjectContext';
@@ -45,8 +46,13 @@ export default function HomePage() {
     ? selectedWorkspace
     : (selectedWorkspace.trim() || validProjects[0]?.path || '')).trim();
 
-  const startSession = (engine: string) => {
-    openTab(engine, workspace);
+  const [engine, setEngine] = useState(AGENT_ENGINES[0].id);
+  const [prompt, setPrompt] = useState('');
+
+  const startSession = () => {
+    if (!workspace) return;
+    openTab(engine, workspace, undefined, undefined, prompt);
+    setPrompt('');
     navigate('/agent/terminal');
   };
   const openTabPage = (id: string) => {
@@ -72,20 +78,54 @@ export default function HomePage() {
             <p className="mt-1 font-mono text-sm text-muted-foreground" title={workspace}>{workspaceLabel(workspace)}</p>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('home.startIn')}>
-          <span className="mr-1 text-sm text-muted-foreground">{t('home.startIn')}</span>
-          {AGENT_ENGINES.map(engine => (
+        <div className="glass-card space-y-3 p-4 focus-within:border-primary">
+          <label htmlFor="home-prompt" className="sr-only">{t('home.promptLabel')}</label>
+          <textarea
+            id="home-prompt"
+            value={prompt}
+            onChange={event => setPrompt(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                startSession();
+              }
+            }}
+            rows={2}
+            placeholder={t('home.promptPlaceholder')}
+            className="w-full resize-none bg-transparent text-base leading-relaxed outline-none placeholder:text-muted-foreground"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('home.startIn')}>
+              {AGENT_ENGINES.map(candidate => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  aria-pressed={engine === candidate.id}
+                  onClick={() => setEngine(candidate.id)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium transition-colors ${
+                    engine === candidate.id
+                      ? 'border-foreground/30 bg-muted text-foreground'
+                      : 'border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${candidate.dot}`} />
+                  {candidate.nameKey ? t(candidate.nameKey) : candidate.name}
+                </button>
+              ))}
+            </div>
+            <span className="flex-1" />
+            <kbd className="hidden rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground sm:inline">
+              {t('home.startShortcut')}
+            </kbd>
             <button
-              key={engine.id}
               type="button"
               disabled={!workspace}
-              onClick={() => startSession(engine.id)}
-              className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+              onClick={startSession}
+              className={buttonClass('primary', 'md')}
             >
-              <span className={`h-2 w-2 rounded-full ${engine.dot}`} />
-              {engine.nameKey ? t(engine.nameKey) : engine.name}
+              {t('home.start')}
             </button>
-          ))}
+          </div>
         </div>
       </header>
 

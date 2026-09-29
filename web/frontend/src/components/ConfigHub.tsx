@@ -15,6 +15,7 @@ import {
   ArrowRight,
   Eraser,
   TerminalSquare,
+  Activity,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useProject, type Config, type GroupDefinition, type Project } from '../context/ProjectContext';
@@ -27,6 +28,7 @@ import Button from './shared/Button';
 import SectionLabel from './shared/SectionLabel';
 import { Input, Select, SearchInput } from './shared/Field';
 import { ACTIVE_CHIP } from './shared/activeChip';
+import SystemPage from '../pages/SystemPage';
 
 interface ProxyConfig {
   host: string;
@@ -41,7 +43,9 @@ interface EditableProject extends Project {
   uiId: string;
 }
 
-export type ConfigSectionId = 'workspaces' | 'groups' | 'general' | 'proxy';
+export type ConfigSectionId = 'workspaces' | 'groups' | 'general' | 'proxy' | 'system';
+
+const SECTION_IDS: ConfigSectionId[] = ['workspaces', 'groups', 'general', 'proxy', 'system'];
 
 let nextEditableRowId = 0;
 const createEditableRowId = (kind: 'project' | 'proxy') => `${kind}-${nextEditableRowId++}`;
@@ -68,7 +72,7 @@ const ConfigHub: React.FC = () => {
 
   const initialSection = (searchParams.get('tab') as ConfigSectionId) || 'workspaces';
   const [activeSection, setActiveSection] = useState<ConfigSectionId>(
-    ['workspaces', 'groups', 'general', 'proxy'].includes(initialSection) ? initialSection : 'workspaces'
+    SECTION_IDS.includes(initialSection) ? initialSection : 'workspaces'
   );
 
   const [localConfig, setLocalConfig] = useState<Config | null>(null);
@@ -414,6 +418,22 @@ const ConfigHub: React.FC = () => {
               </span>
             )}
           </button>
+
+          {/* System health: engines installed and signed in, paths, machine load. */}
+          <button
+            type="button"
+            onClick={() => switchSection('system')}
+            className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              activeSection === 'system'
+                ? ACTIVE_CHIP
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 truncate">
+              <Activity size={16} className={activeSection === 'system' ? 'text-primary' : 'text-slate-400'} />
+              <span>{t('config.nav.system')}</span>
+            </div>
+          </button>
         </nav>
 
         {/* Global Language Selector */}
@@ -502,6 +522,13 @@ const ConfigHub: React.FC = () => {
         {error && (
           <div className="mb-4 shrink-0">
             <ErrorBar message={t('config.error', { message: error })} />
+          </div>
+        )}
+
+        {/* ── SECTION: System ── */}
+        {activeSection === 'system' && (
+          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1">
+            <SystemPage />
           </div>
         )}
 

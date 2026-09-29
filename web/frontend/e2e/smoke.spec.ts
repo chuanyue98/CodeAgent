@@ -17,13 +17,13 @@ const PAGES: { path: string; label: string; screenshotSlug: string; emptyStateHi
   // old paths now redirect to /extensions/resources?kind=<id>.
   { path: '/extensions/resources', label: 'Resources', screenshotSlug: 'resources' },
   { path: '/mcp', label: 'MCP', screenshotSlug: 'mcp-servers' },
-  { path: '/config', label: 'Workspace', screenshotSlug: 'configuration' },
+  { path: '/config', label: 'Settings', screenshotSlug: 'configuration' },
   { path: '/dashboard', label: 'Tasks', screenshotSlug: 'dashboard' },
   { path: '/cron', label: 'Schedules', screenshotSlug: 'cron' },
   { path: '/logs', label: 'Logs', screenshotSlug: 'logs' },
   { path: '/analytics', label: 'Usage', screenshotSlug: 'analytics' },
   { path: '/sessions', label: 'Sessions', screenshotSlug: 'sessions' },
-  { path: '/system', label: 'System', screenshotSlug: 'system' },
+  { path: '/system', label: 'Settings', screenshotSlug: 'system' },
 ];
 
 for (const { path, label, screenshotSlug, emptyStateHint } of PAGES) {

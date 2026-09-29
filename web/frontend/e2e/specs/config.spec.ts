@@ -8,7 +8,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoConfig(page: Page): Promise<void> {
   await page.goto('/config');
-  await waitForPage(page, 'Workspace');
+  await waitForPage(page, 'Settings');
   await expect(page.getByRole('button', { name: 'Save All Changes' })).toBeVisible();
 }
 
@@ -43,7 +43,7 @@ test('adding a project then saving persists the row', async ({ page }) => {
     .fill('/tmp/e2e-project');
   await save(page);
   await page.reload();
-  await waitForPage(page, 'Workspace');
+  await waitForPage(page, 'Settings');
   // The project path lives in an <input> value (not text content), so assert
   // the persisted value rather than visible text.
   await expect(

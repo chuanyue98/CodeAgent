@@ -61,6 +61,7 @@ export default function SectionLayout({
             <h1 className="text-2xl font-semibold tracking-tight">{t(labelKey)}</h1>
             {descriptionKey && <p className="mt-1 text-sm text-muted-foreground">{t(descriptionKey)}</p>}
           </div>
+          {tabs.length > 1 && (
           <nav
             aria-label={t('section.nav', { label: t(labelKey) })}
             className="custom-scrollbar flex max-w-full overflow-x-auto rounded-lg border border-border"
@@ -83,6 +84,7 @@ export default function SectionLayout({
               );
             })}
           </nav>
+          )}
         </header>
       )}
       <div key={pathname} className={`relative min-h-0 flex-1 ${bleed ? '' : 'overflow-y-auto px-4 pb-8 md:px-8'}`}>

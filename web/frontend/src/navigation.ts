@@ -72,9 +72,10 @@ export const EXTENSION_TABS: SectionTab[] = [
   { to: '/extensions/mcp', labelKey: 'tab.settings.mcp' },
 ];
 
+// One page: workspaces, groups, language, proxy and system health are
+// sections of it (its own left rail), so there is no tab row to show.
 export const SETTINGS_TABS: SectionTab[] = [
   { to: '/settings/workspace', labelKey: 'tab.settings.workspace' },
-  { to: '/settings/system', labelKey: 'tab.settings.system' },
 ];
 
 // Flat map of every leaf route to its label key. Also doubles as the

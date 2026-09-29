@@ -32,7 +32,7 @@ test('switching language repaints the whole shell, not just the control', async 
 
   // Heading, sidebar nav and section descriptions all come from the same
   // dictionary — if any of them were still hardcoded this fails.
-  await waitForPage(page, '工作区');
+  await waitForPage(page, '设置');
   const nav = page.getByRole('navigation', { name: '主导航' });
   await expect(nav.getByRole('link', { name: '自动化', exact: true })).toBeVisible();
   await expect(nav.getByRole('link', { name: '设置', exact: true })).toBeVisible();
@@ -42,7 +42,7 @@ test('the choice is written to config.json, so the CLI and a reload agree', asyn
   await page.goto('/home');
   await waitForPage(page, 'Overview');
   await chooseLanguage(page, '中文');
-  await waitForPage(page, '工作区');
+  await waitForPage(page, '设置');
 
   // config.json is the shared setting core/i18n.py reads; browser storage
   // alone would leave the CLI in another language.
@@ -55,14 +55,14 @@ test('the choice is written to config.json, so the CLI and a reload agree', asyn
   }).toBe('zh');
 
   await page.reload();
-  await waitForPage(page, '工作区');
+  await waitForPage(page, '设置');
 });
 
 test('a language switch survives navigation across sections', async ({ page }) => {
   await page.goto('/home');
   await waitForPage(page, 'Overview');
   await chooseLanguage(page, '中文');
-  await waitForPage(page, '工作区');
+  await waitForPage(page, '设置');
 
   await page.getByRole('navigation', { name: '主导航' })
     .getByRole('link', { name: '历史', exact: true })
@@ -73,6 +73,6 @@ test('a language switch survives navigation across sections', async ({ page }) =
   // And back again, to prove the switch is not one-way. Picking a language
   // lands you on Settings, so that is the section that has to have repainted.
   await chooseLanguage(page, 'English');
-  await waitForPage(page, 'Workspace');
-  await expect(page.getByRole('navigation', { name: 'Settings sections' })).toBeVisible();
+  await waitForPage(page, 'Settings');
+  await expect(page.getByRole('navigation', { name: 'Settings', exact: true })).toBeVisible();
 });

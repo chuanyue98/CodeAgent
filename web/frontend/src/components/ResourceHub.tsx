@@ -6,9 +6,11 @@ import rehypeHighlight from 'rehype-highlight';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
 import useAllResourceData, { type LoadedKind } from '../hooks/useAllResourceData';
+import { useEngineMounts, type EngineMountTable } from '../hooks/useEngineMounts';
 import useResourceToggle from '../hooks/useResourceToggle';
 import type { ResourceKindConfig, ResourceKindId } from './resources/resourceKinds';
 import type { ResourceItem } from './resources/types';
+import { AGENT_ENGINES } from './terminalEngines';
 import BatchActionBar from './shared/BatchActionBar';
 import ErrorState from './shared/ErrorState';
 import SectionLabel from './shared/SectionLabel';
@@ -37,6 +39,44 @@ const categoryIcon = (category: string) => {
     default: return <Layers className="h-3.5 w-3.5" />;
   }
 };
+
+/**
+ * The kinds a launcher attaches per engine. Prompts are not among them, so
+ * they get no marks rather than a row of hollow dots that would claim they
+ * reach nothing.
+ */
+const MOUNTED_KINDS = new Set<ResourceKindId>(['skills', 'hooks', 'plugins']);
+
+/**
+ * One dot per engine: filled in the engine's colour when `ca` attaches this
+ * kind of resource to it, hollow when that engine does not take it.
+ */
+function EngineDots({ kind, table }: { kind: ResourceKindId; table: EngineMountTable | null }) {
+  const t = useT();
+  if (!table || !MOUNTED_KINDS.has(kind)) return null;
+
+  const nameOf = (engine: (typeof AGENT_ENGINES)[number]) =>
+    engine.nameKey ? t(engine.nameKey) : (engine.name ?? engine.id);
+  const mounted = AGENT_ENGINES.filter(engine => table[engine.id]?.has(kind));
+  const summary = mounted.length === 0
+    ? t('resources.mountsNone')
+    : t('resources.mountsTo', { engines: mounted.map(nameOf).join(', ') });
+
+  return (
+    <span role="img" aria-label={summary} title={summary} className="hidden shrink-0 items-center gap-1.5 sm:flex">
+      {AGENT_ENGINES.map(engine => {
+        const on = table[engine.id]?.has(kind) ?? false;
+        return (
+          <span
+            key={engine.id}
+            title={on ? nameOf(engine) : t('resources.notMounted', { engine: nameOf(engine) })}
+            className={`h-2.5 w-2.5 rounded-full ${on ? engine.dot : 'border border-muted-foreground/50'}`}
+          />
+        );
+      })}
+    </span>
+  );
+}
 
 function matches(kind: ResourceKindConfig, item: ResourceItem, term: string): boolean {
   if (!term) return true;
@@ -67,6 +107,7 @@ export default function ResourceHub() {
   const { currentGroup, groups } = useProject();
   const { kinds, loading, failed, refetchAll } = useAllResourceData();
   const { toggleResource, toggleResources, toggleError, dismissToggleError } = useResourceToggle();
+  const engineMounts = useEngineMounts();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -313,6 +354,9 @@ export default function ResourceHub() {
                 {t('resources.mountHintPrefix')}{' '}
                 <span className="font-semibold text-slate-500">{currentGroup}</span>{' '}
                 {t('resources.mountHintSuffix')}
+                {engineMounts && (
+                  <span className="mt-0.5 hidden sm:block">{t('resources.dotsLegend')}</span>
+                )}
               </p>
             </div>
 
@@ -399,6 +443,7 @@ export default function ResourceHub() {
                       {hit.kind.renderMeta && (
                         <div className="hidden shrink-0 lg:block">{hit.kind.renderMeta(hit.item, t, active)}</div>
                       )}
+                      <EngineDots kind={hit.kind.id} table={engineMounts} />
                       <Toggle
                         checked={active}
                         onChange={event => toggleResource(hit.kind.id, hit.item.id, event)}

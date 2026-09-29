@@ -6,7 +6,11 @@ import { ProjectProvider } from '../context/ProjectContext';
 import { SystemMetricsProvider } from '../context/SystemMetricsContext';
 import { LanguageProvider } from '../i18n/LanguageProvider';
 import { createQueryClient } from '../utils/queryClient';
-import { expect, test, describe } from 'vitest';
+import { afterEach, expect, test, describe, vi } from 'vitest';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 /**
  * The tab carrying aria-current is what identifies the leaf route. The page
@@ -51,9 +55,10 @@ describe('App Layout and Navigation', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('History');
   });
 
-  test('shows correct page heading for /config route', async () => {
+  test('/config lands on Settings', async () => {
     renderWithRouter('/config');
-    expect(await activeTab(/Workspace/i)).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Settings', current: 'page' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Settings');
   });
 
   test('shows correct page heading for /dashboard route', async () => {
@@ -136,11 +141,28 @@ describe('Extensions holds Resources and MCP', () => {
     expect(screen.getByRole('navigation', { name: 'Extensions sections' })).toBeInTheDocument();
   });
 
-  test('Settings is left with Workspace and System', async () => {
+  test('Settings is one page: no tab row, system health is a section of it', async () => {
     renderWithRouter('/settings/workspace');
-    await activeTab(/^Workspace$/);
-    const tabs = screen.getByRole('navigation', { name: 'Settings sections' });
-    expect(within(tabs).getAllByRole('link').map(link => link.textContent)).toEqual(['Workspace', 'System']);
+    expect(await screen.findByRole('link', { name: 'Settings', current: 'page' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Settings sections' })).toBeNull();
+    const sections = await screen.findByRole('navigation', { name: 'Settings' });
+    expect(within(sections).getByRole('button', { name: /System health/ })).toBeInTheDocument();
+  });
+
+  test.each(['/settings/system', '/system'])('the old %s address opens the System health section', async path => {
+    // The section loads its own health report; without an answer it shows an
+    // error instead of its heading.
+    const otherwise = globalThis.fetch;
+    vi.stubGlobal('fetch', (url: RequestInfo | URL, init?: RequestInit) =>
+      String(url).includes('/api/system/health')
+        ? Promise.resolve(new Response(JSON.stringify({ status: 'ok', sections: [] }), { status: 200 }))
+        : otherwise(url, init),
+    );
+    renderWithRouter(path);
+    const sections = await screen.findByRole('navigation', { name: 'Settings' });
+    // The section's own content, not just its rail entry, proves it is the one open.
+    expect(await screen.findByRole('heading', { name: /System health/i, level: 2 })).toBeInTheDocument();
+    expect(within(sections).getByRole('button', { name: /System health/ })).toBeInTheDocument();
   });
 });
 

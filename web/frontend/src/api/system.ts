@@ -33,3 +33,15 @@ export async function fetchSystemHealth(): Promise<SystemHealth> {
 export async function fetchSystemMetrics(): Promise<SystemMetrics> {
   return request('/api/system/metrics');
 }
+
+export interface EngineMounts {
+  id: string;
+  name: string;
+  /** The resource kinds (skills / hooks / plugins) this engine's launcher attaches at start-up. */
+  mounts: string[];
+}
+
+export async function fetchEngineMounts(): Promise<EngineMounts[]> {
+  const body = await request<{ engines?: EngineMounts[] }>('/api/system/engines');
+  return Array.isArray(body.engines) ? body.engines : [];
+}

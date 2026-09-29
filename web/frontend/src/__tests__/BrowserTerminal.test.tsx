@@ -179,6 +179,65 @@ test('resuming names the session the server should hand to the engine', () => {
   expect(sockets[0].url).toContain('session_id=session-a');
 });
 
+/** A fetch that stays pending until the test lets the request finish. */
+function deferFetch() {
+  let finish: () => void = () => {};
+  const gate = new Promise<void>(resolve => { finish = resolve; });
+  const calls: Array<{ url: string; body: unknown }> = [];
+  globalThis.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+    calls.push({ url, body: JSON.parse(String(init?.body ?? 'null')) });
+    await gate;
+    const text = JSON.stringify({ success: true });
+    return { ok: true, status: 200, text: async () => text, json: async () => ({ success: true }) };
+  }) as typeof fetch;
+  return { calls, finish };
+}
+
+test('a first message is staged on the server before the socket opens', async () => {
+  const { calls, finish } = deferFetch();
+  open({ tabKey: 'tab1', initialPrompt: 'fix the login redirect' });
+
+  // The engine starts when the socket opens, so the socket has to wait.
+  await vi.waitFor(() => expect(calls).toHaveLength(1));
+  expect(calls[0].url).toContain('/api/pty/prompt');
+  expect(calls[0].body).toEqual({ tabKey: 'tab1', prompt: 'fix the login redirect' });
+  expect(sockets).toHaveLength(0);
+
+  finish();
+  await vi.waitFor(() => expect(sockets).toHaveLength(1));
+  // The prompt travels in the request body, never in the socket URL.
+  expect(sockets[0].url).not.toContain('fix');
+  expect(sockets[0].url).toContain('tab_key=tab1');
+});
+
+test('a restart of the same terminal does not stage the first message again', async () => {
+  const { calls, finish } = deferFetch();
+  finish();
+  open({ tabKey: 'tab1', initialPrompt: 'fix the login redirect' });
+  await vi.waitFor(() => expect(sockets).toHaveLength(1));
+
+  act(() => sockets[0].emit({ type: 'exit', code: 0 }));
+  fireEvent.click(await screen.findByTestId('terminal-restart'));
+
+  await vi.waitFor(() => expect(sockets).toHaveLength(2));
+  expect(calls).toHaveLength(1);
+});
+
+test('a failed staging request still opens the terminal, just without the message', async () => {
+  globalThis.fetch = vi.fn().mockRejectedValue(new Error('offline')) as typeof fetch;
+  open({ tabKey: 'tab1', initialPrompt: 'fix the login redirect' });
+
+  await vi.waitFor(() => expect(sockets).toHaveLength(1));
+});
+
+test('resuming or attaching never stages a message', () => {
+  const { calls } = deferFetch();
+  open({ tabKey: 'tab1', sessionId: 'session-a', initialPrompt: 'ignored' });
+
+  expect(sockets).toHaveLength(1);
+  expect(calls).toHaveLength(0);
+});
+
 test('output lands in the terminal', () => {
   open();
   act(() => sockets[0].emit({ type: 'output', data: 'hello\r\n' }));

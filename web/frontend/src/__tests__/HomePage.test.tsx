@@ -1,9 +1,9 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import HomePage from '../pages/HomePage';
 import { ProjectProvider } from '../context/ProjectContext';
-import { TerminalProvider } from '../context/TerminalContext';
+import { TerminalProvider, useTerminal } from '../context/TerminalContext';
 import type { SessionUsage } from '../api/analytics';
 import { jsonResponse, session as baseSession } from './factories';
 
@@ -27,12 +27,19 @@ function mockBackend({ sessions = [], daily = [], runs = [], schedules = [] }: B
   }) as typeof fetch;
 }
 
+/** Shows the open terminal tabs as JSON, so a test can read what Start opened. */
+function TabsProbe() {
+  const { tabs } = useTerminal();
+  return <pre data-testid="tabs">{JSON.stringify(tabs)}</pre>;
+}
+
 function renderHome() {
   return render(
     <MemoryRouter>
       <ProjectProvider>
         <TerminalProvider>
           <HomePage />
+          <TabsProbe />
         </TerminalProvider>
       </ProjectProvider>
     </MemoryRouter>,
@@ -82,9 +89,63 @@ test('offers a session in each engine, and none of them is the plain shell', asy
   mockBackend();
   renderHome();
 
-  const group = await screen.findByRole('group', { name: /start a session in|新开会话/i });
+  const group = await screen.findByRole('group', { name: /engine for the new session|新会话使用的引擎/i });
   const names = within(group).getAllByRole('button').map(button => button.textContent);
   expect(names).toEqual(['Claude', 'OpenCode', 'Codex', 'CodeBuddy', 'Antigravity']);
+});
+
+function openedTabs(): Array<{ engine: string; cwd: string; prompt?: string }> {
+  return JSON.parse(screen.getByTestId('tabs').textContent ?? '[]');
+}
+
+test('Start opens a session in the chosen engine with the typed first message', async () => {
+  mockBackend();
+  renderHome();
+
+  const group = await screen.findByRole('group', { name: /engine for the new session|新会话使用的引擎/i });
+  fireEvent.click(within(group).getByRole('button', { name: 'Codex' }));
+  expect(within(group).getByRole('button', { name: 'Codex' })).toHaveAttribute('aria-pressed', 'true');
+  expect(within(group).getByRole('button', { name: 'Claude' })).toHaveAttribute('aria-pressed', 'false');
+
+  fireEvent.change(screen.getByLabelText(/first message|第一条消息/i), {
+    target: { value: '  fix the login redirect  ' },
+  });
+  await waitFor(() => expect(screen.getByRole('button', { name: /^(Start|开始)$/ })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: /^(Start|开始)$/ }));
+
+  await waitFor(() => expect(openedTabs()).toHaveLength(1));
+  expect(openedTabs()[0]).toMatchObject({
+    engine: 'codex',
+    cwd: '/workspace/project-a',
+    prompt: 'fix the login redirect',
+  });
+});
+
+test('Ctrl+Enter in the box starts the session, and an empty box starts a blank one', async () => {
+  mockBackend();
+  renderHome();
+
+  const box = await screen.findByLabelText(/first message|第一条消息/i);
+  await waitFor(() => expect(screen.getByRole('button', { name: /^(Start|开始)$/ })).toBeEnabled());
+  fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true });
+
+  await waitFor(() => expect(openedTabs()).toHaveLength(1));
+  expect(openedTabs()[0].engine).toBe('claude');
+  expect(openedTabs()[0].prompt).toBeUndefined();
+});
+
+test('the first message is not saved with the tabs, so a reload cannot resend it', async () => {
+  mockBackend();
+  renderHome();
+
+  fireEvent.change(await screen.findByLabelText(/first message|第一条消息/i), { target: { value: 'secret plan' } });
+  await waitFor(() => expect(screen.getByRole('button', { name: /^(Start|开始)$/ })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: /^(Start|开始)$/ }));
+
+  await waitFor(() => expect(openedTabs()).toHaveLength(1));
+  const saved = localStorage.getItem('codeagent.terminalTabs') ?? '';
+  expect(saved).toContain('"engine":"claude"');
+  expect(saved).not.toContain('secret plan');
 });
 
 test('a recent session resumes in a terminal through its own engine', async () => {

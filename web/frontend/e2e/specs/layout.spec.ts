@@ -47,7 +47,7 @@ test('nested workspace routes avoid page-level overflow at supported widths', as
     { path: '/automations/tasks', label: 'Tasks' },
     { path: '/activity/sessions', label: 'Sessions' },
     { path: '/extensions/resources', label: 'Resources' },
-    { path: '/settings/system', label: 'System' },
+    { path: '/settings/workspace?tab=system', label: 'Settings' },
   ];
 
   for (const width of [1366, 1024, 768]) {

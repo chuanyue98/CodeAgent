@@ -24,9 +24,10 @@ test('SystemPanel opens from the header status button and expands/collapses its 
   await expect(page.getByTestId('system-metrics')).toHaveCount(0);
 });
 
-test('/system page renders metrics and Refresh reloads', async ({ page }) => {
+test('/system opens the System health section of Settings, and Refresh reloads', async ({ page }) => {
   await page.goto('/system');
-  await waitForPage(page, 'System');
+  await waitForPage(page, 'Settings');
+  await expect(page).toHaveURL(/\/settings\/workspace\?tab=system$/);
   await expect(page.getByText('Metrics')).toBeVisible();
   await page.getByRole('button', { name: 'Refresh' }).click();
   await expect(page.getByText('Metrics')).toBeVisible();
