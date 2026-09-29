@@ -266,11 +266,16 @@ def test_codex_build_command_non_interactive_bypasses():
     assert "test prompt" in cmd
 
 
-def test_codex_format_plugins_for_settings_resolves_to_plugin_mixin():
+def test_codex_format_plugins_for_settings_resolves_to_plugin_mixin(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(CodexEngine, "_get_codex_home", lambda self: tmp_path)
     engine = CodexEngine()
     data = {}
+    plugin_dir = tmp_path / "plugin"
+    plugin_dir.mkdir()
     plugins = [
-        {"name": "test-plugin", "path": "/path/to/plugin"},
+        {"name": "test-plugin", "path": str(plugin_dir)},
     ]
     res = engine._format_plugins_for_settings(data, plugins)
     assert "plugins" in res
