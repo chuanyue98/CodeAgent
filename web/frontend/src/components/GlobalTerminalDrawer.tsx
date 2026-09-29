@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect, useLayoutEffect, type CSSProperties } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, lazy, Suspense, type CSSProperties } from 'react';
 import { useLocation } from 'react-router';
 import {
   Terminal, Plus, X, Maximize2, Minimize2, ChevronDown, ChevronUp, Zap, Loader2,
   ZoomIn, ZoomOut, Copy, Check, Expand, Shrink, MoreHorizontal,
 } from 'lucide-react';
 import { useTerminal } from '../context/TerminalContext';
-import BrowserTerminal from './BrowserTerminal';
+const BrowserTerminal = lazy(() => import('./BrowserTerminal'));
 import SmartHandoffBanner from './SmartHandoffBanner';
 import { useT } from '../i18n/context';
 import { AGENT_ENGINES, findEngine } from './terminalEngines';
@@ -449,26 +449,35 @@ export default function GlobalTerminalDrawer() {
               key={tab.id}
               className={tab.id === activeTabId ? 'absolute inset-0 flex flex-col' : 'hidden'}
             >
-              <BrowserTerminal
-                engine={tab.engine}
-                cwd={tab.cwd}
-                sessionId={tab.sessionId}
-                attachId={tab.attachId}
-                tabKey={tab.id}
-                initialPrompt={tab.prompt}
-                active={showing && tab.id === activeTabId}
-                fontSize={fontSize}
-                copyOnSelect={copyOnSelect}
-                // 引擎自己退出时不关标签页：BrowserTerminal 会就地显示退出码
-                // 和"重新开始"，用户还看得见最后那屏输出。这里挂 closeTab 会
-                // 立刻卸载终端、退回引擎选择器，退出原因和尾屏一起消失。
-                // 关标签页是用户动作，归上面的关闭按钮管。
-                onTerminalEvent={(event) => {
-                  if (event === 'rate_limit') {
-                    markRateLimited(tab.id);
-                  }
-                }}
-              />
+              <Suspense
+                fallback={
+                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                    <Loader2 size={16} className="animate-spin mr-2" />
+                    <span>Loading terminal...</span>
+                  </div>
+                }
+              >
+                <BrowserTerminal
+                  engine={tab.engine}
+                  cwd={tab.cwd}
+                  sessionId={tab.sessionId}
+                  attachId={tab.attachId}
+                  tabKey={tab.id}
+                  initialPrompt={tab.prompt}
+                  active={showing && tab.id === activeTabId}
+                  fontSize={fontSize}
+                  copyOnSelect={copyOnSelect}
+                  // 引擎自己退出时不关标签页：BrowserTerminal 会就地显示退出码
+                  // 和"重新开始"，用户还看得见最后那屏输出。这里挂 closeTab 会
+                  // 立刻卸载终端、退回引擎选择器，退出原因和尾屏一起消失。
+                  // 关标签页是用户动作，归上面的关闭按钮管。
+                  onTerminalEvent={(event) => {
+                    if (event === 'rate_limit') {
+                      markRateLimited(tab.id);
+                    }
+                  }}
+                />
+              </Suspense>
             </div>
           ))}
         </div>
