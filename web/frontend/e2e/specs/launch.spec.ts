@@ -14,7 +14,7 @@ test.beforeEach(async ({ baseURL }) => {
 
 async function gotoLaunch(page: Page): Promise<void> {
   await page.goto('/launch');
-  await waitForPage(page, 'Local Terminal');
+  await waitForPage(page, 'Sessions');
   await expect(engineCard(page, 'Claude')).toBeVisible();
   // Seeded by /api/__e2e_reset: one registered project pointing at $HOME.
   // The page has no workspace field of its own any more — the header switcher
@@ -90,7 +90,7 @@ test('unavailable browser terminal is explained and launch actions are disabled'
   }));
 
   await page.goto('/launch');
-  await waitForPage(page, 'Local Terminal');
+  await waitForPage(page, 'Sessions');
   await expect(page.getByText('Browser terminal unavailable')).toBeVisible();
   await expect(engineCard(page, 'Claude')).toBeDisabled();
 });

@@ -14,7 +14,7 @@ test.beforeEach(async ({ baseURL }) => {
 });
 
 test('the sidebar lists every kind with its item count', async ({ page }) => {
-  await page.goto('/settings/resources');
+  await page.goto('/extensions/resources');
 
   // 3 skills, 2 hooks, 2 plugins, 2 prompt groups in the fixtures.
   await expect(resourceKind(page, 'Skills')).toContainText('3');

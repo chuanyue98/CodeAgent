@@ -19,7 +19,7 @@ async function gotoSessions(page: Page): Promise<void> {
 test('renders the seeded sessions and filter panel', async ({ page }) => {
   await gotoSessions(page);
   await expect(page.locator('main')).toContainText('2 sessions');
-  await expect(page.getByText('Filters', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('activity-filters')).toBeVisible();
 });
 
 test('search filters the session list', async ({ page }) => {

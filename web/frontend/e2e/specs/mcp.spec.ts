@@ -41,5 +41,5 @@ test('switching the engine tab highlights the selection', async ({ page }) => {
   await gotoMcp(page);
   const claudeBtn = page.getByRole('button', { name: 'Claude Code' });
   await claudeBtn.click();
-  await expect(claudeBtn).toHaveClass(/bg-primary\/10/);
+  await expect(claudeBtn).toHaveAttribute('aria-pressed', 'true');
 });

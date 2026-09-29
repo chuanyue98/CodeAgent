@@ -34,22 +34,19 @@ test('compact layout stacks session filters above results', async ({ page }) => 
   await page.goto('/sessions');
   await waitForPage(page, 'Sessions');
 
-  const navBox = await page.locator('aside').first().boundingBox();
   const filtersBox = await page.getByTestId('activity-filters').boundingBox();
   const listBox = await page.getByTestId('session-list').boundingBox();
-  expect(navBox).not.toBeNull();
   expect(filtersBox).not.toBeNull();
   expect(listBox).not.toBeNull();
-  expect(navBox!.width).toBeLessThanOrEqual(96);
   expect(listBox!.y).toBeGreaterThan(filtersBox!.y + filtersBox!.height);
 });
 
 test('nested workspace routes avoid page-level overflow at supported widths', async ({ page }) => {
   const routes = [
-    { path: '/agent/terminal', label: 'Local Terminal' },
+    { path: '/agent/terminal', label: 'Sessions' },
     { path: '/automations/tasks', label: 'Tasks' },
     { path: '/activity/sessions', label: 'Sessions' },
-    { path: '/settings/resources', label: 'Resources' },
+    { path: '/extensions/resources', label: 'Resources' },
     { path: '/settings/system', label: 'System' },
   ];
 

@@ -19,17 +19,17 @@ test('the workspace menu changes the active resource group', async ({ page }) =>
 test('sidebar nav links navigate and mark the active route', async ({ page }) => {
   await page.goto('/skills');
   const primaryNav = page.getByRole('navigation', { name: 'Primary navigation' });
-  const agentLink = primaryNav.getByRole('link', { name: 'Agent', exact: true });
+  const agentLink = primaryNav.getByRole('link', { name: 'Sessions', exact: true });
   await agentLink.click();
-  // Agent opens on the terminal: it carries every feature the engine CLI has.
-  await waitForPage(page, 'Local Terminal');
+  // Sessions opens on the terminal: it carries every feature the engine CLI has.
+  await waitForPage(page, 'Sessions');
   await expect(page).toHaveURL(/\/agent\/terminal$/);
-  await expect(agentLink).toHaveClass(/bg-primary\/10/);
+  await expect(agentLink).toHaveAttribute('aria-current', 'page');
 });
 
 test('/agent lands on the terminal', async ({ page }) => {
   await page.goto('/agent');
-  await waitForPage(page, 'Local Terminal');
+  await waitForPage(page, 'Sessions');
   await expect(page).toHaveURL(/\/agent\/terminal$/);
 });
 
@@ -38,14 +38,19 @@ test('legacy routes redirect into the new hierarchy', async ({ page }) => {
   // addresses carry ?kind= so a bookmark opens the kind it named.
   await page.goto('/skills');
   await waitForPage(page, 'Resources');
-  await expect(page).toHaveURL(/\/settings\/resources\?kind=skills$/);
-  await expect(page.getByRole('navigation', { name: 'Settings sections' })).toBeVisible();
-  // Capabilities was flattened from a nested tab row into the Settings row.
+  await expect(page).toHaveURL(/\/extensions\/resources\?kind=skills$/);
+  await expect(page.getByRole('navigation', { name: 'Extensions sections' })).toBeVisible();
+  // Capabilities was flattened from a nested tab row into the section's own row.
   await expect(page.getByRole('navigation', { name: 'Capabilities sections' })).toHaveCount(0);
 
   await page.goto('/settings/capabilities/plugins');
   await waitForPage(page, 'Resources');
-  await expect(page).toHaveURL(/\/settings\/resources\?kind=plugins$/);
+  await expect(page).toHaveURL(/\/extensions\/resources\?kind=plugins$/);
+
+  // Resources and MCP used to be Settings tabs; their old addresses still land.
+  await page.goto('/settings/mcp');
+  await waitForPage(page, 'MCP');
+  await expect(page).toHaveURL(/\/extensions\/mcp$/);
 });
 
 test('links to the retired Web Agent land on the terminal', async ({ page }) => {
@@ -53,14 +58,11 @@ test('links to the retired Web Agent land on the terminal', async ({ page }) => 
   // rather than 404 -- these paths are in people's bookmarks and history.
   for (const legacy of ['/chat', '/agent/web', '/agent/legacy']) {
     await page.goto(legacy);
-    await waitForPage(page, 'Local Terminal');
+    await waitForPage(page, 'Sessions');
     await expect(page).toHaveURL(/\/agent\/terminal$/);
   }
 
-  const sections = page.getByRole('navigation', { name: 'Agent sections' });
-  await expect(sections.getByRole('link', { name: 'Local Terminal' })).toHaveAttribute('aria-current', 'page');
-  await expect(sections.getByRole('link', { name: 'Web Agent' })).toHaveCount(0);
-  await expect(page.getByText('Opens the provider CLI in an in-browser terminal, running on the machine hosting CodeAgent.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Web Agent' })).toHaveCount(0);
 });
 
 test('command palette opens via Ctrl/Cmd+K, filters, and navigates', async ({ page }) => {
@@ -84,15 +86,5 @@ test('command palette closes on Escape without navigating', async ({ page }) => 
   await expect(page.getByTestId('command-palette')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('command-palette')).toHaveCount(0);
-  await waitForPage(page, 'Home');
-});
-
-test('sidebar collapses to icons and expands back', async ({ page }) => {
-  await page.goto('/skills');
-  const aside = page.locator('aside').first();
-  const collapseBtn = aside.locator('button').first();
-  await collapseBtn.click();
-  await expect(aside).toHaveClass(/w-24/);
-  await collapseBtn.click();
-  await expect(aside).toHaveClass(/w-64/);
+  await waitForPage(page, 'Overview');
 });

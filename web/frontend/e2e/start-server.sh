@@ -37,6 +37,11 @@ trap cleanup EXIT INT TERM
 export HOME="$SCRATCH/home"
 mkdir -p "$HOME"
 
+# An empty .zshrc keeps zsh from opening its first-run wizard in the scratch
+# HOME: the wizard reads the keystrokes a spec types into the plain-terminal
+# engine, so `exit` never reached the shell.
+: > "$HOME/.zshrc"
+
 # Windows: Python's Path.home() reads USERPROFILE (then HOMEDRIVE+HOMEPATH) and
 # never HOME, so the analytics collectors -- which resolve ~/.claude, ~/.codex,
 # their own data dirs themselves -- kept reading the developer's real history despite the

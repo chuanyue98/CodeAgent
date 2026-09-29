@@ -41,12 +41,12 @@ export async function typeSearch(page: Page, term: string): Promise<void> {
   await box.fill(term);
 }
 
-/** Returns the list-card element whose subtree contains `text` — used to
- *  locate a specific skill/plugin/prompt/hook card. Cards come in two visual
- *  weights since ab36ddc: `.glass-card` (panels) and `.glass-card-flat`
- *  (long galleries), so both are matched here. */
+/** Returns the list-row element whose subtree contains `text` — used to
+ *  locate a specific skill/plugin/prompt/hook row. Rows are `role="button"`
+ *  divs inside one list card, so matching the card itself would match the
+ *  whole list. */
 export function cardByText(page: Page, text: string): Locator {
-  return page.locator('div.glass-card, div.glass-card-flat', { hasText: text });
+  return page.locator('div[role="button"]', { hasText: text });
 }
 
 // ── Resources page (ResourceHub) ─────────────────────────────────────────
@@ -57,9 +57,7 @@ export function cardByText(page: Page, text: string): Locator {
 /** The `kind > category` sidebar, scoped by its "Library" heading so the
  *  locators below cannot stray into the app's own navigation. */
 function resourceSidebar(page: Page): Locator {
-  return page
-    .locator('div.glass-card')
-    .filter({ has: page.getByRole('heading', { name: 'Library', exact: true }) });
+  return page.getByRole('heading', { name: 'Library', exact: true }).locator('xpath=..');
 }
 
 /** A kind header ("Skills", "Prompts", ...), which also carries that kind's
@@ -86,7 +84,7 @@ export async function gotoResource(
   kind: string,
   category: string,
 ): Promise<void> {
-  await page.goto('/settings/resources');
+  await page.goto('/extensions/resources');
   await waitForPage(page, 'Resources');
   // Kind groups start expanded, so the category rows are already visible;
   // clicking the kind header would collapse the group instead.
@@ -101,12 +99,12 @@ export async function typeResourceSearch(page: Page, term: string): Promise<void
   await box.fill(term);
 }
 
-/** A resource card — a `role="button"` glass-card (flat variant since ab36ddc)
- *  whose heading is the item name. Matching the heading rather than the card's
- *  text keeps one fixture name from also selecting another that contains it. */
+/** A resource row — a `role="button"` div whose heading is the item name.
+ *  Matching the heading rather than the row's text keeps one fixture name from
+ *  also selecting another that contains it. */
 export function resourceCard(page: Page, name: string): Locator {
   return page
-    .locator('div.glass-card[role="button"], div.glass-card-flat[role="button"]')
+    .locator('div[role="button"]')
     .filter({ has: page.getByRole('heading', { level: 2, name, exact: true }) });
 }
 

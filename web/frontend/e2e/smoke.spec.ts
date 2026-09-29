@@ -12,10 +12,10 @@ import { waitForPage } from './lib/ui';
 // is present catches the class of bug where a component renders nothing at
 // all for an empty array, rather than a real empty-state message.
 const PAGES: { path: string; label: string; screenshotSlug: string; emptyStateHint?: RegExp }[] = [
-  { path: '/launch', label: 'Local Terminal', screenshotSlug: 'launch' },
+  { path: '/launch', label: 'Sessions', screenshotSlug: 'launch' },
   // The four resource galleries were merged into one Resources page; their
-  // old paths now redirect to /settings/resources?kind=<id>.
-  { path: '/settings/resources', label: 'Resources', screenshotSlug: 'resources' },
+  // old paths now redirect to /extensions/resources?kind=<id>.
+  { path: '/extensions/resources', label: 'Resources', screenshotSlug: 'resources' },
   { path: '/mcp', label: 'MCP', screenshotSlug: 'mcp-servers' },
   { path: '/config', label: 'Workspace', screenshotSlug: 'configuration' },
   { path: '/dashboard', label: 'Tasks', screenshotSlug: 'dashboard' },
@@ -81,14 +81,6 @@ for (const { path, label, screenshotSlug, emptyStateHint } of PAGES) {
     }
     expect(blocking, `structural a11y violations on ${path}`).toEqual([]);
 
-    // The one real layout interaction in this shell: the sidebar's
-    // expanded/collapsed states. Screenshot both.
-    await page.screenshot({ path: `e2e/screenshots/${screenshotSlug}-expanded.png` });
-
-    const navigation = page.locator('aside').first();
-    const collapseButton = navigation.locator('button').first();
-    await collapseButton.click();
-    await expect(navigation).toHaveClass(/w-24/);
-    await page.screenshot({ path: `e2e/screenshots/${screenshotSlug}-collapsed.png` });
+    await page.screenshot({ path: `e2e/screenshots/${screenshotSlug}.png` });
   });
 }
