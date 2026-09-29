@@ -45,6 +45,29 @@ jobs:
       - name: Test
         run: uv run pytest --tb=short -q --cov --cov-report=term-missing
 
+  backend-windows:
+    name: Backend — Windows test
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-groups
+
+      - name: Test (Windows)
+        run: uv run pytest --tb=short -q
+
   # ── React / Vite frontend ─────────────────────────────────────────────────
   frontend:
     name: Frontend — lint, test & build
@@ -88,7 +111,7 @@ jobs:
   # ── Release artifacts use the frontend built and tested above ────────────
   package:
     name: Package — wheel with current UI
-    needs: [backend, frontend]
+    needs: [backend, backend-windows, frontend]
     runs-on: ubuntu-latest
 
     steps:
