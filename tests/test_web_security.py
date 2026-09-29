@@ -11,6 +11,7 @@ execution rather than an information leak.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -269,6 +270,10 @@ def test_get_ui_token_generates_and_persists_file(tmp_path, monkeypatch):
     assert token and len(token) >= 32
     assert token_file.exists()
     assert token_file.read_text(encoding="utf-8").strip() == token
+    if sys.platform != "win32":
+        import stat
+
+        assert stat.S_IMODE(token_file.stat().st_mode) == (stat.S_IRUSR | stat.S_IWUSR)
 
     # Second call returns cached token without re-reading
     assert get_ui_token() == token

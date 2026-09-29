@@ -85,7 +85,7 @@ describe('GlobalTerminalDrawer', () => {
     expect(screen.getByText(/1.*launch.tabs|Tabs/i)).toBeInTheDocument();
   });
 
-  it('renders expanded drawer when open', () => {
+  it('renders expanded drawer when open', async () => {
     render(
       <TerminalProvider>
         <TestWrapper addTab>
@@ -95,7 +95,7 @@ describe('GlobalTerminalDrawer', () => {
     );
 
     expect(screen.getByTestId('drawer-expanded')).toBeInTheDocument();
-    expect(screen.getByTestId('mock-terminal-test-engine')).toBeInTheDocument();
+    expect(await screen.findByTestId('mock-terminal-test-engine')).toBeInTheDocument();
   });
 
   it('can toggle maximize', () => {

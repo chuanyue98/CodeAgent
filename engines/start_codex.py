@@ -110,7 +110,7 @@ class CodexEngine(BaseEngine):
         project = Path.cwd().resolve()
         try:
             config = self._load_config(self._get_user_config_path())
-            projects = config.get("projects", {}) or {}
+            projects = (config or {}).get("projects", {}) or {}
             entry = None
             for key, value in projects.items():
                 try:
@@ -406,6 +406,19 @@ class CodexEngine(BaseEngine):
                 )
 
         data = self._load_config(config_path)
+        if data is None:
+            logger.warning(
+                "Skipping plugin injection into %s: file exists but could not be read or parsed",
+                config_path,
+            )
+            return
+        if not isinstance(data, dict):
+            logger.warning(
+                "Skipping plugin injection into %s: expected dict/table root, got %s",
+                config_path,
+                type(data).__name__,
+            )
+            return
         data = self._format_plugins_for_settings(data, plugins)
         self._save_config(config_path, data)
         logger.info("Registered Codex plugins in %s", config_path)

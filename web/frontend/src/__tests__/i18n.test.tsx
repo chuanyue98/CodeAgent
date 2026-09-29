@@ -119,7 +119,7 @@ describe('the language setting', () => {
     const calls: Array<{ url: string; body: unknown }> = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input);
-      if (init?.method === 'POST') {
+      if (init?.method === 'POST' || init?.method === 'PATCH') {
         calls.push({ url, body: JSON.parse(String(init.body)) });
         return new Response(JSON.stringify({ status: 'success' }), { status: 200 });
       }

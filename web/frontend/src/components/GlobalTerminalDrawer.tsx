@@ -453,7 +453,7 @@ export default function GlobalTerminalDrawer() {
                 fallback={
                   <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
                     <Loader2 size={16} className="animate-spin mr-2" />
-                    <span>Loading terminal...</span>
+                    <span>{t('terminal.loading')}</span>
                   </div>
                 }
               >

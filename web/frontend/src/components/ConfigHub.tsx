@@ -60,7 +60,6 @@ const ConfigHub: React.FC = () => {
     projects,
     groups,
     refreshConfig,
-    updateConfig,
     availableGroups,
     setCurrentGroup,
     setSelectedWorkspace,
@@ -146,11 +145,19 @@ const ConfigHub: React.FC = () => {
     setSearchParams(nextParams, { replace: true });
   };
 
-  const chooseLanguage = (next: Language) => {
+  const chooseLanguage = async (next: Language) => {
     if (next === language) return;
     setLanguage(next);
     setLocalConfig(previous => (previous ? { ...previous, language: next } : previous));
-    void updateConfig({ ...(config ?? {}), language: next });
+    try {
+      await request('/api/config', {
+        method: 'PATCH',
+        body: JSON.stringify({ language: next }),
+      });
+      await refreshConfig();
+    } catch (err) {
+      console.error('Failed to update language preference:', err);
+    }
   };
 
   const handleSave = async () => {
@@ -183,6 +190,21 @@ const ConfigHub: React.FC = () => {
       });
 
       await refreshConfig();
+      // Backfill local editable state with normalized values so draftSnapshot matches savedSnapshot
+      setLocalConfig(fullConfig);
+      setLocalProjects(
+        normalizedProjects.map(project => ({
+          ...project,
+          uiId: createEditableRowId('project'),
+        })),
+      );
+      setLocalProxies(
+        (fullConfig.proxy || []).map(proxy => ({
+          ...proxy,
+          uiId: createEditableRowId('proxy'),
+        })),
+      );
+      setLocalGroups(deepClone(localGroups));
       setError(null);
       setSaved(true);
     } catch (err) {

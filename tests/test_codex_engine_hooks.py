@@ -90,3 +90,17 @@ def test_warns_when_a_different_project_is_the_trusted_one(
     engine.warn_if_project_untrusted()
 
     assert "not a trusted project" in capsys.readouterr().out
+
+
+def test_ensure_plugins_available_corrupt_config_skips(engine, tmp_path, monkeypatch):
+    user_config = tmp_path / "codex_home" / "config.toml"
+    user_config.parent.mkdir()
+    user_config.write_text("[corrupted toml invalid !!!", encoding="utf-8")
+    monkeypatch.setattr(engine, "_get_user_config_path", lambda: user_config)
+    monkeypatch.setattr(
+        engine,
+        "get_plugins_to_mount",
+        lambda: [{"name": "fake", "_plugin_dir": str(tmp_path)}],
+    )
+    # Must not raise TypeError or crash
+    engine.ensure_plugins_available()

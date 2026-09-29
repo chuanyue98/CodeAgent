@@ -551,6 +551,27 @@ async def test_malformed_config_returns_server_error(mock_env):
     assert config_path.read_text(encoding="utf-8") == "{ malformed"
 
 
+@pytest.mark.asyncio
+async def test_patch_config_updates_partially(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"language": "en", "default_mode": "local", "existing_key": 123}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(server, "CONFIG_PATH", config_path)
+    monkeypatch.setenv("CA_CONFIG_PATH", str(config_path))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        patch_resp = await ac.patch("/api/config", json={"language": "zh"})
+    assert patch_resp.status_code == 200
+    saved = json.loads(config_path.read_text(encoding="utf-8"))
+    assert saved["language"] == "zh"
+    assert saved["default_mode"] == "local"
+    assert saved["existing_key"] == 123
+
+
 def test_initialize_default_groups_logic(tmp_path, monkeypatch):
     config_path = tmp_path / "config.json"
     config_path.write_text("{}", encoding="utf-8")
@@ -620,7 +641,7 @@ async def test_unhandled_exception_handler():
         ) as ac:
             response = await ac.get("/api/test-unhandled-error")
         assert response.status_code == 500
-        assert "Something unexpectedly blew up" in response.json()["detail"]
+        assert response.json()["detail"] == "Internal server error"
     finally:
         if test_route in app.routes:
             app.routes.remove(test_route)

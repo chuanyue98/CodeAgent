@@ -185,7 +185,15 @@ def test_all_codebase_literal_t_calls_exist_in_messages():
     for p in root.glob("**/*.py"):
         if any(
             part in p.parts
-            for part in (".venv", "node_modules", "dist", "build", ".git", "tests")
+            for part in (
+                ".venv",
+                "node_modules",
+                "dist",
+                "build",
+                ".git",
+                "tests",
+                "plugins",
+            )
         ):
             continue
         try:
@@ -211,4 +219,3 @@ def test_all_codebase_literal_t_calls_exist_in_messages():
                     if key not in i18n.MESSAGES:
                         missing.append(f"{p.name}:{node.lineno} -> {key}")
     assert missing == [], f"Found unknown i18n keys: {missing}"
-

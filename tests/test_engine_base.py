@@ -538,4 +538,3 @@ def test_load_manifest_corrupted_json_returns_empty(tmp_path):
     manifest_file.write_text("{ corrupt json: ...", encoding="utf-8")
     result = mgr.load_manifest(tmp_path)
     assert result == {}
-

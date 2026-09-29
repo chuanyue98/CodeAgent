@@ -285,7 +285,11 @@ async def delete_task(name: str):
         logger.warning("Failed to query schedules for deleted task %s: %s", name, exc)
         disable_warning = str(exc)
 
-    result = {"status": "deleted", "name": name, "disabledSchedules": disabled_schedules}
+    result = {
+        "status": "deleted",
+        "name": name,
+        "disabledSchedules": disabled_schedules,
+    }
     if disable_warning:
         result["disableSchedulesWarning"] = disable_warning
     return result

@@ -710,6 +710,7 @@ export const en = {
   'handoff.rateLimitMessage': 'Rate limit or quota exceeded for {engine}. Relay session to continue:',
   'handoff.relayTo': 'Relay to {engine}',
   'handoff.dismiss': 'Dismiss alert',
+  'terminal.loading': 'Loading terminal...',
   'terminal.sessionEnded': 'Session ended (exit code {code})',
   'terminal.connectionError': 'Terminal connection error',
   'terminal.connectionClosed': 'Connection closed',

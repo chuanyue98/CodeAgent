@@ -516,7 +516,6 @@ def test_list_runs_releases_lock_during_get_status(tmp_path, new_runner):
     runs = runner.list_runs()
     assert len(runs) == 1
     assert runs[0].task_id == "t-1"
-    assert (
-        lock_acquired_in_worker is True
-    ), "另一线程在 get_status 执行期间必须能成功获取 _run_lock"
-
+    assert lock_acquired_in_worker is True, (
+        "另一线程在 get_status 执行期间必须能成功获取 _run_lock"
+    )

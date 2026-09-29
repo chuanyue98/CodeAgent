@@ -168,4 +168,52 @@ describe('ConfigHub Component', () => {
     fireEvent.change(input, { target: { value: '' } });
     expect(screen.getByRole('button', { name: /Save All Changes/i })).toBeDisabled();
   });
+
+  test('saving project path with surrounding whitespace normalizes and resets dirty state', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('/api/config')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ project_registry: [{ path: '/workspace/trimmed', group: 'common' }] }),
+          json: async () => ({ project_registry: [{ path: '/workspace/trimmed', group: 'common' }] }),
+        });
+      }
+      if (url.includes('/api/projects')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify([{ path: '/workspace/trimmed', group: 'common', available: true }]),
+          json: async () => [{ path: '/workspace/trimmed', group: 'common', available: true }],
+        });
+      }
+      if (url.includes('/api/groups')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ common: { skills: [], prompts: [], hooks: [], plugins: [] } }),
+          json: async () => ({ common: { skills: [], prompts: [], hooks: [], plugins: [] } }),
+        });
+      }
+      return originalFetch(url, options);
+    });
+
+    try {
+      renderConfigHub();
+      await screen.findByText(/CodeAgent runs locally/, {}, { timeout: 3000 });
+
+      const projectInput = screen.getByLabelText('Workspace path 1');
+      fireEvent.change(projectInput, { target: { value: '  /workspace/trimmed  ' } });
+
+      const saveBtn = screen.getByRole('button', { name: /Save All Changes/i });
+      expect(saveBtn).not.toBeDisabled();
+
+      fireEvent.click(saveBtn);
+      await screen.findByText(/Saved to config\.json/);
+      expect(screen.getByRole('button', { name: /Save All Changes/i })).toBeDisabled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

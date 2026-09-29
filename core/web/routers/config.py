@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -178,4 +179,24 @@ async def update_config(config: ConfigPayload):
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error writing config: {str(e)}"
+        ) from e
+
+
+@router.patch("/config")
+async def patch_config(patch: dict[str, Any]):
+    try:
+        service = ConfigService(get_config_path())
+
+        def _apply(existing: dict) -> dict:
+            merged = dict(existing)
+            merged.update(patch)
+            return merged
+
+        service.modify_config(_apply)
+        return {"status": "success", "message": "Configuration patched"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error patching config: {str(e)}"
         ) from e

@@ -1210,4 +1210,3 @@ def test_enqueue_pty_output_eof_drains_if_full():
     while not queue.empty():
         items.append(queue.get_nowait())
     assert None in items
-

@@ -239,7 +239,7 @@ def test_array_root_settings_file_is_not_overwritten(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     settings = tmp_path / ".opencode" / "settings.json"
     settings.parent.mkdir(parents=True)
-    array_content = "[\"item1\", \"item2\"]"
+    array_content = '["item1", "item2"]'
     settings.write_text(array_content, encoding="utf-8")
 
     engine = BaseEngine("Dummy", "dummy-model")
@@ -248,4 +248,3 @@ def test_array_root_settings_file_is_not_overwritten(tmp_path, monkeypatch):
     )
 
     assert settings.read_text(encoding="utf-8") == array_content
-

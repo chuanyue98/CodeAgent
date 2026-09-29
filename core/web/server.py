@@ -327,11 +327,14 @@ app.add_middleware(HostHeaderMiddleware)
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Logs unexpected exceptions and returns a consistent JSON 500 error response."""
-    logger.exception("Unhandled server exception on %s %s: %s", request.method, request.url.path, exc)
+    logger.exception(
+        "Unhandled server exception on %s %s: %s", request.method, request.url.path, exc
+    )
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc) or "Internal server error"},
+        content={"detail": "Internal server error"},
     )
+
 
 # Every /api router requires the local UI token. Deliberately NOT applied
 # to /api/health (defined on `app` below, so it is not covered by these

@@ -696,6 +696,7 @@ export const zh: Record<TranslationKey, string> = {
   'handoff.rateLimitMessage': '{engine} 触发速率限制或额度耗尽，可快速接力到其他引擎：',
   'handoff.relayTo': '接力到 {engine}',
   'handoff.dismiss': '关闭提示',
+  'terminal.loading': '终端加载中...',
   'terminal.sessionEnded': '会话已结束（退出码 {code}）',
   'terminal.connectionError': '终端连接出错',
   'terminal.connectionClosed': '连接已断开',
