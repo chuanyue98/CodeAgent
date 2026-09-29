@@ -18,7 +18,7 @@ from core.engine_base.plugin_bundle_mixin import (  # noqa: E402
     BUNDLE_NAME,
     _PluginBundleMixin,
 )
-from core.link_manager import LinkManager  # noqa: E402
+from core.link_manager import LinkManager, is_windows_link  # noqa: E402
 
 
 class FakeEngine(_PluginBundleMixin):
@@ -80,7 +80,10 @@ def test_skills_are_linked_into_the_bundle(engine):
 
     skills_dir = engine._get_plugin_config_dir() / "plugins" / BUNDLE_NAME / "skills"
     link = skills_dir / "task-authoring"
-    assert link.is_symlink(), "技能要链接过去，改源文件下次启动即生效"
+    if sys.platform == "win32":
+        assert is_windows_link(link), "技能要链接过去，改源文件下次启动即生效"
+    else:
+        assert link.is_symlink(), "技能要链接过去，改源文件下次启动即生效"
     assert (link / "SKILL.md").exists()
     # 托管链接自带一份 .codeagent-links.json manifest，它正是"这条链接是我们挂的"
     # 的依据，不算技能。
