@@ -1185,3 +1185,29 @@ def test_pty_websocket_rejects_resuming_a_plain_shell(tmp_path, monkeypatch):
             ) as ws:
                 ws.receive_json()
     assert exc_info.value.code == 4400
+
+
+def test_enqueue_pty_output_bounded_and_drops_oldest():
+    queue: asyncio.Queue = asyncio.Queue(maxsize=3)
+    pty_router._enqueue_pty_output(queue, "a")
+    pty_router._enqueue_pty_output(queue, "b")
+    pty_router._enqueue_pty_output(queue, "c")
+    assert queue.full()
+    pty_router._enqueue_pty_output(queue, "d")
+    # "a" dropped, queue now contains "b", "c", "d"
+    assert queue.get_nowait() == "b"
+    assert queue.get_nowait() == "c"
+    assert queue.get_nowait() == "d"
+
+
+def test_enqueue_pty_output_eof_drains_if_full():
+    queue: asyncio.Queue = asyncio.Queue(maxsize=2)
+    pty_router._enqueue_pty_output(queue, "a")
+    pty_router._enqueue_pty_output(queue, "b")
+    assert queue.full()
+    pty_router._enqueue_pty_output(queue, None)
+    items = []
+    while not queue.empty():
+        items.append(queue.get_nowait())
+    assert None in items
+

@@ -52,6 +52,7 @@ except ImportError:  # pragma: no cover - exercised only on POSIX
 
 from core.constants import ENGINES
 from core.host_env import child_environ
+from core.logging_config import get_logger
 from core.resource_locator import CODE_ROOT
 from core.services.config_service import ConfigService
 from core.services.resume_commands import is_safe_session_id, resume_command
@@ -66,10 +67,44 @@ from core.web.routers.config import get_config_path
 from core.web.security import verify_websocket
 
 router = APIRouter(prefix="/api/pty", tags=["pty"])
+logger = get_logger(__name__)
 
 _CA_LAUNCHER = CODE_ROOT / "ca_launcher.py"
 
 _READ_CHUNK = 65536
+_PTY_QUEUE_MAX_SIZE = 1024
+
+
+def _enqueue_pty_output(
+    queue: asyncio.Queue[bytes | str | None], item: bytes | str | None
+) -> None:
+    """Enqueues output chunk into queue, dropping oldest chunks if full to prevent OOM."""
+    if item is None:
+        while queue.full():
+            try:
+                queue.get_nowait()
+            except (asyncio.QueueEmpty, ValueError):
+                break
+        try:
+            queue.put_nowait(None)
+        except asyncio.QueueFull:
+            pass
+        return
+
+    if queue.full():
+        try:
+            queue.get_nowait()
+            logger.warning(
+                "PTY output queue full (%d items); dropped oldest chunk to prevent memory exhaustion",
+                queue.maxsize,
+            )
+        except (asyncio.QueueEmpty, ValueError):
+            pass
+    try:
+        queue.put_nowait(item)
+    except asyncio.QueueFull:
+        pass
+
 
 # 伪引擎标识：engine=shell 时不拉起任何 Agent CLI，而是给用户一个纯系统
 # shell（Windows 优先 Git Bash，兜底 PowerShell/cmd；POSIX 用 $SHELL）。
@@ -802,9 +837,9 @@ async def _spawn_posix(
         if not chunk:
             with contextlib.suppress(ValueError):
                 loop.remove_reader(master_fd)
-            output_queue.put_nowait(None)
+            _enqueue_pty_output(output_queue, None)
             return
-        output_queue.put_nowait(chunk)
+        _enqueue_pty_output(output_queue, chunk)
 
     loop.add_reader(master_fd, _on_readable)
     return _PosixSession(process, master_fd, tmux_name=tmux_name)
@@ -831,17 +866,37 @@ class _WindowsSession:  # pragma: no cover - exercised only on Windows
         return self._pty.pid
 
     def _read_loop(self) -> None:
+        consecutive_errors = 0
         while True:
             try:
                 data = self._pty.read(_READ_CHUNK)
+                consecutive_errors = 0
             except EOFError:
                 data = ""
-            except Exception:
-                data = ""
+            except Exception as exc:
+                if self._closing.is_set():
+                    return
+                consecutive_errors += 1
+                logger.warning(
+                    "Unexpected error reading from Windows PTY (retry %d): %s",
+                    consecutive_errors,
+                    exc,
+                )
+                is_alive = getattr(self._pty, "isalive", lambda: True)()
+                if not is_alive or consecutive_errors >= 5:
+                    logger.error(
+                        "Windows PTY process is not alive or exceeded error threshold; stopping reader."
+                    )
+                    data = ""
+                else:
+                    time.sleep(0.05)
+                    continue
             if self._closing.is_set():
                 return
             with contextlib.suppress(RuntimeError):
-                self._loop.call_soon_threadsafe(self._queue.put_nowait, data or None)
+                self._loop.call_soon_threadsafe(
+                    _enqueue_pty_output, self._queue, data or None
+                )
             if not data:
                 return
 
@@ -1022,7 +1077,9 @@ async def pty_websocket(
         await websocket.close(code=4400, reason=str(exc))
         return
 
-    output_queue: asyncio.Queue[bytes | str | None] = asyncio.Queue()
+    output_queue: asyncio.Queue[bytes | str | None] = asyncio.Queue(
+        maxsize=_PTY_QUEUE_MAX_SIZE
+    )
 
     # Only a brand-new engine session can take a first message: a resumed
     # session already has its conversation, a shell has no first message, and
