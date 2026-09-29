@@ -151,4 +151,21 @@ describe('ConfigHub Component', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Workspaces/i }));
     expect(screen.getByRole('button', { name: 'Add Workspace' })).toBeVisible();
   });
+
+  test('editing and reverting an input clears dirty state without locking form', async () => {
+    renderConfigHub();
+    await screen.findByText(/CodeAgent runs locally/, {}, { timeout: 3000 });
+
+    fireEvent.click(screen.getByRole('button', { name: /General & Language/i }));
+    const input = screen.getByLabelText(/Private Resource Root/i);
+    expect(screen.getByRole('button', { name: /Save All Changes/i })).toBeDisabled();
+
+    fireEvent.change(input, { target: { value: '/custom/resource/root' } });
+    expect(screen.getByRole('button', { name: /Save All Changes/i })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /Discard/i })).toBeVisible();
+
+    // Revert the edit
+    fireEvent.change(input, { target: { value: '' } });
+    expect(screen.getByRole('button', { name: /Save All Changes/i })).toBeDisabled();
+  });
 });

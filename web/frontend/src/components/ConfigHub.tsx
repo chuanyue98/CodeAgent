@@ -89,8 +89,6 @@ const ConfigHub: React.FC = () => {
   const [newGroupName, setNewGroupName] = useState('');
   const newGroupInputRef = useRef<HTMLInputElement>(null);
 
-  const [isDirty, setIsDirty] = useState(false);
-
   const savedSnapshot = useMemo(
     () => JSON.stringify({
       resourceRoot: config?.paths?.resource_root || '',
@@ -114,7 +112,7 @@ const ConfigHub: React.FC = () => {
   const dirty = !loading && savedSnapshot !== draftSnapshot;
 
   useEffect(() => {
-    if (isDirty) return;
+    if (dirty) return;
 
     if (config) {
       const cloned = deepClone(config);
@@ -139,7 +137,7 @@ const ConfigHub: React.FC = () => {
       setLocalGroups(deepClone(groups));
       setLoading(false);
     }
-  }, [config, projects, groups, isDirty]);
+  }, [config, projects, groups, dirty]);
 
   const switchSection = (section: ConfigSectionId) => {
     setActiveSection(section);
@@ -186,7 +184,6 @@ const ConfigHub: React.FC = () => {
 
       await refreshConfig();
       setError(null);
-      setIsDirty(false);
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('config.genericError'));
@@ -202,14 +199,12 @@ const ConfigHub: React.FC = () => {
   }, [saved]);
 
   const updateProxy = (uiId: string, field: keyof ProxyConfig, value: string | number) => {
-    setIsDirty(true);
     setLocalProxies(current => current.map(proxy => (
       proxy.uiId === uiId ? { ...proxy, [field]: value } : proxy
     )));
   };
 
   const addProxy = () => {
-    setIsDirty(true);
     setLocalProxies(current => [
       ...current,
       { uiId: createEditableRowId('proxy'), host: '127.0.0.1', port: 7890 },
@@ -217,12 +212,10 @@ const ConfigHub: React.FC = () => {
   };
 
   const removeProxy = (uiId: string) => {
-    setIsDirty(true);
     setLocalProxies(current => current.filter(proxy => proxy.uiId !== uiId));
   };
 
   const addProject = () => {
-    setIsDirty(true);
     setLocalProjects(current => [
       ...current,
       { uiId: createEditableRowId('project'), path: '', group: 'common' },
@@ -230,7 +223,6 @@ const ConfigHub: React.FC = () => {
   };
 
   const removeMissingPaths = () => {
-    setIsDirty(true);
     setLocalProjects(current => current.filter(p => {
       const savedProject = projects.find(project => project.path === p.path.trim());
       return !(p.path.trim() && savedProject?.available === false);
@@ -246,14 +238,12 @@ const ConfigHub: React.FC = () => {
   );
 
   const updateProject = (uiId: string, field: keyof Project, value: string) => {
-    setIsDirty(true);
     setLocalProjects(current => current.map(project => (
       project.uiId === uiId ? { ...project, [field]: value } : project
     )));
   };
 
   const removeProject = (uiId: string) => {
-    setIsDirty(true);
     setLocalProjects(current => current.filter(project => project.uiId !== uiId));
   };
 
@@ -271,7 +261,6 @@ const ConfigHub: React.FC = () => {
   const confirmAddGroup = () => {
     const name = newGroupName.trim().toLowerCase().replace(/\s+/g, '-');
     if (name && !localGroups[name]) {
-      setIsDirty(true);
       setLocalGroups({
         ...localGroups,
         [name]: { skills: [], prompts: [], hooks: [], plugins: [] },
@@ -287,7 +276,6 @@ const ConfigHub: React.FC = () => {
   };
 
   const removeGroup = (name: string) => {
-    setIsDirty(true);
     const newGroups = { ...localGroups };
     delete newGroups[name];
     setLocalGroups(newGroups);
@@ -309,7 +297,6 @@ const ConfigHub: React.FC = () => {
     setLocalGroups(deepClone(groups));
     setError(null);
     setSaved(false);
-    setIsDirty(false);
   };
 
   const filteredProjects = useMemo(() => {
@@ -797,7 +784,6 @@ const ConfigHub: React.FC = () => {
                 type="text"
                 value={localConfig.paths?.resource_root || ''}
                 onChange={(e) => {
-                  setIsDirty(true);
                   const newPaths = { ...(localConfig.paths || {}), resource_root: e.target.value };
                   setLocalConfig({ ...localConfig, paths: newPaths });
                 }}
