@@ -8,6 +8,7 @@ import psutil
 from fastapi import APIRouter, HTTPException
 
 from core.doctor import get_doctor_sections
+from core.engine_registry import ENGINES, MOUNTABLE_KINDS
 from core.web.case_convert import ProtocolModel, wire
 
 router = APIRouter(prefix="/api/system", tags=["system"])
@@ -43,6 +44,17 @@ class SystemMetrics(ProtocolModel):
     log_file_count: int
 
 
+class EngineMounts(ProtocolModel):
+    id: str
+    name: str
+    #: The resource kinds this engine's launcher attaches at start-up.
+    mounts: list[str]
+
+
+class EngineMountsResponse(ProtocolModel):
+    engines: list[EngineMounts]
+
+
 def _sections(sections: list) -> list[DoctorSection]:
     return [
         DoctorSection(
@@ -68,6 +80,23 @@ async def get_health():
         return wire(SystemHealth(status="ok", sections=_sections(sections)))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/engines")
+async def get_engine_mounts():
+    """Which resource kinds each engine gets attached when ``ca`` launches it."""
+    return wire(
+        EngineMountsResponse(
+            engines=[
+                EngineMounts(
+                    id=spec.name,
+                    name=spec.display_name,
+                    mounts=[kind for kind in MOUNTABLE_KINDS if kind in spec.mounts],
+                )
+                for spec in ENGINES.values()
+            ]
+        )
+    )
 
 
 @router.get("/metrics")

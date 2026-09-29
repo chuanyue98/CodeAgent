@@ -59,6 +59,18 @@ class EngineSpec:
     #: (``ca agy``, ``"engine": "agy"``). The canonical name itself needs
     #: no entry here.
     aliases: tuple[str, ...] = field(default_factory=tuple)
+    #: Which of :data:`MOUNTABLE_KINDS` this engine's launcher attaches when
+    #: ``ca`` starts it. The Web UI shows it next to every skill/hook/plugin.
+    #: ``tests/test_engine_mounts.py`` checks each entry against the launcher's
+    #: source, so a launcher that gains or loses a mount fails there until this
+    #: is updated.
+    mounts: frozenset[str] = frozenset()
+
+
+#: The resource kinds a launcher can attach per engine. Prompts are not in it:
+#: they are not attached by the launchers the way these three are, so there is
+#: nothing per-engine to report. MCP is per-engine configuration of its own.
+MOUNTABLE_KINDS: tuple[str, ...] = ("skills", "hooks", "plugins")
 
 
 #: Legacy alias from the retired Gemini engine (removed in commit 680b4d4,
@@ -82,6 +94,7 @@ ENGINES: dict[str, EngineSpec] = {
             install_hint="npm install -g @anthropic-ai/claude-code",
             adapter="engines.start_claude_code:ClaudeEngine",
             session_id_fields=("session_id",),
+            mounts=frozenset({"skills", "hooks", "plugins"}),
         ),
         EngineSpec(
             name="opencode",
@@ -91,6 +104,7 @@ ENGINES: dict[str, EngineSpec] = {
             install_hint="npm install -g opencode-ai",
             adapter="engines.start_opencode:OpenCodeEngine",
             session_id_fields=("sessionID",),
+            mounts=frozenset({"skills", "hooks", "plugins"}),
         ),
         EngineSpec(
             name="codex",
@@ -100,6 +114,7 @@ ENGINES: dict[str, EngineSpec] = {
             install_hint="npm install -g @openai/codex",
             adapter="engines.start_codex:CodexEngine",
             session_id_fields=("thread_id",),
+            mounts=frozenset({"skills", "hooks", "plugins"}),
         ),
         EngineSpec(
             name="codebuddy",
@@ -109,6 +124,9 @@ ENGINES: dict[str, EngineSpec] = {
             install_hint="npm install -g @tencent-ai/codebuddy-code",
             adapter="engines.start_codebuddy:CodeBuddyEngine",
             session_id_fields=("session_id", "sessionId"),
+            # No hooks: CodeBuddy has no project-level settings file to inject
+            # them into (see the class docstring in start_codebuddy.py).
+            mounts=frozenset({"skills", "plugins"}),
         ),
         EngineSpec(
             name="antigravity",
@@ -124,6 +142,10 @@ ENGINES: dict[str, EngineSpec] = {
                 "conversation_id",
             ),
             aliases=("agy",),
+            # Skills only: the launcher packs the group's skills (and the
+            # delegation MCP) into one plugin bundle of its own. Neither hooks
+            # nor the group's declared plugins are attached.
+            mounts=frozenset({"skills"}),
         ),
     )
 }

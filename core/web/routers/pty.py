@@ -25,6 +25,7 @@ import struct
 import subprocess
 import sys
 import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -60,7 +61,7 @@ from core.services.workspace_service import (
     WorkspaceResolutionError,
     resolve_registered_workspace,
 )
-from core.web.case_convert import camelize
+from core.web.case_convert import ProtocolModel, camelize
 from core.web.routers.config import get_config_path
 from core.web.security import verify_websocket
 
@@ -102,6 +103,36 @@ _ACTIVE_SESSIONS: dict[str, dict[str, Any]] = {}
 _TAB_KEY_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _MIN_COLS, _MAX_COLS = 2, 1000
 _MIN_ROWS, _MAX_ROWS = 2, 500
+
+# 概览页启动引擎时带的首条提示。不放进 websocket 的 query：uvicorn 的访问日志
+# 会记下整条 URL，提示词既可能很长，也可能含不想落进日志的内容。所以先 POST
+# 到 /api/pty/prompt 暂存，再由同一个 tab_key 的 websocket 取走一次；取走即删，
+# 一直没人取就在 TTL 后丢弃。
+_PENDING_PROMPTS: dict[str, tuple[str, float]] = {}
+_PROMPT_TTL_SECONDS = 60.0
+_MAX_PROMPT_CHARS = 20_000
+
+
+def _purge_expired_prompts(now: float) -> None:
+    for key, (_prompt, stored_at) in list(_PENDING_PROMPTS.items()):
+        if now - stored_at > _PROMPT_TTL_SECONDS:
+            del _PENDING_PROMPTS[key]
+
+
+def _stage_prompt(tab_key: str, prompt: str, *, now: float | None = None) -> None:
+    now = time.monotonic() if now is None else now
+    _purge_expired_prompts(now)
+    _PENDING_PROMPTS[tab_key] = (prompt, now)
+
+
+def _take_prompt(tab_key: str | None, *, now: float | None = None) -> str | None:
+    """Removes and returns the staged prompt for *tab_key*, if it is still fresh."""
+    if tab_key is None:
+        return None
+    now = time.monotonic() if now is None else now
+    _purge_expired_prompts(now)
+    staged = _PENDING_PROMPTS.pop(tab_key, None)
+    return staged[0] if staged else None
 
 
 def _tmux_binary() -> str | None:
@@ -402,7 +433,12 @@ def _shell_command() -> list[str]:
     return [os.environ.get("COMSPEC", "cmd.exe")]
 
 
-def _engine_argv(engine: str, working_dir: Path, session_id: str | None) -> list[str]:
+def _engine_argv(
+    engine: str,
+    working_dir: Path,
+    session_id: str | None,
+    initial_prompt: str | None = None,
+) -> list[str]:
     """What this PTY should run.
 
     Three shapes: a bare shell, a fresh engine session through
@@ -410,12 +446,23 @@ def _engine_argv(engine: str, working_dir: Path, session_id: str | None) -> list
     session handed straight back to its engine. The last one is why the
     endpoint takes a session id at all -- resuming used to mean opening a GUI
     terminal window on whatever machine happened to be running the server.
+
+    *initial_prompt* only applies to the fresh-session shape, as the launcher's
+    positional first message.
     """
     if engine == SHELL_ENGINE:
         return _shell_command()
     if session_id:
         return resume_command(engine, session_id, working_dir)
-    return [sys.executable, str(_CA_LAUNCHER), engine]
+    argv = [sys.executable, str(_CA_LAUNCHER), engine]
+    if initial_prompt and initial_prompt.strip():
+        # The launcher (core.engine_base.launch_args.split_passthrough) reads a
+        # lone argument as an engine flag or subcommand when it has no
+        # whitespace -- "-x" or "resume" would be passed to the engine instead
+        # of typed into it. A trailing space makes it plain text; the launcher
+        # strips it again.
+        argv.append(initial_prompt.strip() + " ")
+    return argv
 
 
 def pty_capability() -> dict:
@@ -431,6 +478,32 @@ def pty_capability() -> dict:
 @router.get("/status")
 async def get_pty_status() -> dict:
     return pty_capability()
+
+
+class StagePromptRequest(ProtocolModel):
+    tab_key: str
+    prompt: str
+
+
+@router.post("/prompt")
+async def stage_initial_prompt(body: StagePromptRequest) -> dict:
+    """Holds the first message for the terminal about to open under *tab_key*.
+
+    The websocket for that tab picks it up when it starts a fresh engine
+    session. A tab that reconnects to a terminal still running in tmux never
+    consumes it, so a reload cannot type the prompt a second time.
+    """
+    if not _TAB_KEY_RE.fullmatch(body.tab_key):
+        raise HTTPException(status_code=400, detail="Malformed tab key")
+    if not body.prompt.strip():
+        raise HTTPException(status_code=400, detail="Empty prompt")
+    if len(body.prompt) > _MAX_PROMPT_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Prompt is longer than {_MAX_PROMPT_CHARS} characters",
+        )
+    _stage_prompt(body.tab_key, body.prompt)
+    return {"success": True}
 
 
 @router.get("/sessions")
@@ -634,6 +707,7 @@ async def _spawn_posix(
     tab_key: str | None = None,
     cols: int = 80,
     rows: int = 24,
+    initial_prompt: str | None = None,
 ) -> _PosixSession:
     """Spawns what the browser terminal drives.
 
@@ -661,7 +735,7 @@ async def _spawn_posix(
     created_tmux_name: str | None = None
     try:
         try:
-            engine_argv = _engine_argv(engine, working_dir, session_id)
+            engine_argv = _engine_argv(engine, working_dir, session_id, initial_prompt)
             binary = _tmux_binary()
             if binary is None:
                 # tmux unavailable (or Windows): run the engine directly,
@@ -844,10 +918,11 @@ async def _spawn_windows(  # pragma: no cover - exercised only on Windows
     session_id: str | None = None,
     cols: int = 80,
     rows: int = 24,
+    initial_prompt: str | None = None,
 ) -> _WindowsSession:
     loop = asyncio.get_running_loop()
     env = {**child_environ(), "TERM": "xterm-256color"}
-    argv = _engine_argv(engine, working_dir, session_id)
+    argv = _engine_argv(engine, working_dir, session_id, initial_prompt)
     try:
         # PtyProcess.spawn() does a PATH lookup + creates the ConPTY
         # synchronously; it's fast, but run it off-thread anyway so a slow
@@ -949,10 +1024,25 @@ async def pty_websocket(
 
     output_queue: asyncio.Queue[bytes | str | None] = asyncio.Queue()
 
+    # Only a brand-new engine session can take a first message: a resumed
+    # session already has its conversation, a shell has no first message, and
+    # attaching to a live terminal starts nothing.
+    initial_prompt = (
+        _take_prompt(tab_key)
+        if session_id is None and engine != SHELL_ENGINE and attach_tmux_name is None
+        else None
+    )
+
     try:
         if sys.platform == "win32":  # pragma: no cover - exercised only on Windows
             session: PtySession = await _spawn_windows(
-                engine, working_dir, output_queue, session_id, cols, rows
+                engine,
+                working_dir,
+                output_queue,
+                session_id,
+                cols,
+                rows,
+                initial_prompt,
             )
         else:
             session = await _spawn_posix(
@@ -964,6 +1054,7 @@ async def pty_websocket(
                 tab_key=tab_key,
                 cols=cols,
                 rows=rows,
+                initial_prompt=initial_prompt,
             )
     except SpawnError as exc:
         with contextlib.suppress(Exception):
