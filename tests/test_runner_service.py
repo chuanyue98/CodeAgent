@@ -476,7 +476,8 @@ def test_extract_chat_session_id_antigravity(tmp_path, new_runner, field, value)
     assert runner._extract_chat_session_id("antigravity", log) == value
 
 
-def test_list_runs_returns_status_and_releases_lock(tmp_path, new_runner):
+def test_list_runs_releases_lock_during_get_status(tmp_path, new_runner):
+    import threading
     from core.services.runner_service import TaskRunStatus
 
     runner = new_runner(tmp_path)
@@ -489,7 +490,32 @@ def test_list_runs_returns_status_and_releases_lock(tmp_path, new_runner):
         start_time=1.0,
     )
     runner.active_runs["t-1"] = status
+
+    lock_acquired_in_worker = False
+    original_get_status = runner.get_status
+
+    def _probe_status(task_id: str):
+        nonlocal lock_acquired_in_worker
+
+        def _worker():
+            nonlocal lock_acquired_in_worker
+            # If runner._run_lock were held by list_runs on the caller thread,
+            # this non-blocking acquire from another thread would fail.
+            acquired = runner._run_lock.acquire(blocking=False)
+            if acquired:
+                lock_acquired_in_worker = True
+                runner._run_lock.release()
+
+        probe_thread = threading.Thread(target=_worker)
+        probe_thread.start()
+        probe_thread.join()
+        return original_get_status(task_id)
+
+    runner.get_status = _probe_status
     runs = runner.list_runs()
     assert len(runs) == 1
     assert runs[0].task_id == "t-1"
+    assert (
+        lock_acquired_in_worker is True
+    ), "另一线程在 get_status 执行期间必须能成功获取 _run_lock"
 

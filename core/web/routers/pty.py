@@ -78,7 +78,16 @@ _PTY_QUEUE_MAX_SIZE = 1024
 def _enqueue_pty_output(
     queue: asyncio.Queue[bytes | str | None], item: bytes | str | None
 ) -> None:
-    """Enqueues output chunk into queue, dropping oldest chunks if full to prevent OOM."""
+    """Enqueues output chunk into queue, dropping oldest chunks if full to prevent OOM.
+
+    Trade-off note: Dropping the oldest chunk when the queue is saturated prioritizes
+    system stability and memory bounds over continuous terminal stream integrity.
+    Discarding an arbitrary chunk may split an in-flight ANSI escape sequence or a
+    multi-byte UTF-8 character boundary, potentially resulting in transient terminal
+    rendering artifacts until the next redraw/clear. This is an intentional choice:
+    preventing process crash / out-of-memory under slow client consumption takes
+    precedence over lossless backlog preservation.
+    """
     if item is None:
         while queue.full():
             try:
