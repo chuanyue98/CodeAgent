@@ -203,7 +203,7 @@ export default function TaskDetail({
   }, [confirmDelete, task.name]);
 
   return (
-    <div className="p-6 lg:p-8 w-full space-y-6 pb-16">
+    <div className="w-full space-y-6 pb-16">
       {/* Studio Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200/70 pb-6">
         {/* Left: Breadcrumbs, Title, Active Badge, Description */}
@@ -276,7 +276,7 @@ export default function TaskDetail({
 
               <button
                 onClick={() => onRun(selectedEngine)}
-                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
               >
                 <Play className="w-4 h-4" />
                 {runLabel}

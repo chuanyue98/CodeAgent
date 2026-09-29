@@ -1,34 +1,45 @@
 import { useEffect, useState } from 'react';
-import { useTerminal } from '../context/TerminalContext';
-import { useSearchParams } from 'react-router';
-import { AlertTriangle, Terminal, TerminalSquare } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router';
+import { AlertTriangle } from 'lucide-react';
+import { fetchSessionPage, type SessionUsage } from '../api/analytics';
 import { fetchPtyStatus } from '../api/pty';
 import { useProject } from '../context/ProjectContext';
-import { useT } from '../i18n/context';
+import { useTerminal } from '../context/TerminalContext';
+import { useLanguageCode, useT } from '../i18n/context';
+import { relativeTime, workspaceLabel } from '../utils/workspaceFormat';
 import SectionLabel from './shared/SectionLabel';
-import TerminalSessionSidebar from './TerminalSessionSidebar';
+import SessionInspector from './SessionInspector';
 import {
   AGENT_ENGINES,
   SHELL_ENGINE,
-  SHELL_ENGINE_ID,
   findEngine,
   type Engine,
 } from './terminalEngines';
 
+const RECENT_LIMIT = 6;
 
+/**
+ * The Sessions stage. With a session open it is the terminal plus an
+ * inspector; with none it is where you start one.
+ *
+ * Every open terminal stays mounted in GlobalTerminalDrawer and only the
+ * active one is shown: unmounting a tab to switch away would close its socket,
+ * and the PTY endpoint spawns a process per connection, so the session would
+ * be gone rather than backgrounded. This component only leaves the slot the
+ * terminal is placed into.
+ */
 export default function LaunchPad() {
   const t = useT();
+  const language = useLanguageCode();
   const { validProjects, selectedWorkspace } = useProject();
+  const { activeTabId, openTab, setTerminalSlot, tabs } = useTerminal();
+  const [searchParams] = useSearchParams();
 
   const [available, setAvailable] = useState<boolean | null>(null);
   const [reason, setReason] = useState<string | null>(null);
-  // Every open terminal stays mounted; only the active one is displayed.
-  // Unmounting a tab to switch away would close its socket, and the PTY
-  // endpoint spawns a process per connection -- the session would be gone,
-  // not backgrounded.
-  const { activeTabId, openTab, setActiveTabId, setTerminalSlot, tabs } = useTerminal();
-  const [searchParams] = useSearchParams();
-  const effectiveProject = (validProjects.some(project => project.path === selectedWorkspace) ? selectedWorkspace : (selectedWorkspace.trim() || validProjects[0]?.path || "")).trim();
+  const [recent, setRecent] = useState<SessionUsage[] | null>(null);
+
+  const effectiveProject = (validProjects.some(project => project.path === selectedWorkspace) ? selectedWorkspace : (selectedWorkspace.trim() || validProjects[0]?.path || '')).trim();
   const activeTab = tabs.find(tab => tab.id === activeTabId);
 
   useEffect(() => {
@@ -44,6 +55,15 @@ export default function LaunchPad() {
   }, []);
 
   useEffect(() => {
+    if (activeTab) return;
+    let cancelled = false;
+    fetchSessionPage({ limit: RECENT_LIMIT })
+      .then(page => { if (!cancelled) setRecent(page.sessions); })
+      .catch(() => { if (!cancelled) setRecent([]); });
+    return () => { cancelled = true; };
+  }, [activeTab]);
+
+  useEffect(() => {
     const engineParam = searchParams.get('engine');
     const cwdParam = searchParams.get('cwd');
     const sessionParam = searchParams.get('session') || undefined;
@@ -53,13 +73,22 @@ export default function LaunchPad() {
     }
   }, [searchParams, openTab]);
 
-  const engineCard = (engine: Engine) => {
+  if (activeTab) {
+    return (
+      <div className="flex h-full min-h-0">
+        {/* The terminal itself stays mounted in GlobalTerminalDrawer; this
+            empty box only tells it where to sit. */}
+        <div ref={setTerminalSlot} data-testid="terminal-slot" className="min-w-0 flex-1" />
+        <SessionInspector tab={activeTab} />
+      </div>
+    );
+  }
+
+  const blocked = !available || !effectiveProject;
+
+  const engineButton = (engine: Engine) => {
     const name = engine.nameKey ? t(engine.nameKey) : engine.name;
-    const description = engine.descriptionKey
-      ? t(engine.descriptionKey)
-      : engine.description;
-    const blocked = !available || !effectiveProject;
-    const Icon = engine.id === SHELL_ENGINE_ID ? Terminal : TerminalSquare;
+    const description = engine.descriptionKey ? t(engine.descriptionKey) : engine.description;
     return (
       <button
         key={engine.id}
@@ -68,128 +97,100 @@ export default function LaunchPad() {
         disabled={blocked}
         aria-label={`${t('launch.openTerminal')} · ${name}`}
         title={`${t('launch.openTerminal')} · ${name}`}
-        className={`glass-card flex h-full w-full items-center gap-3 p-4 text-left transition-all ${
-          blocked
-            ? 'cursor-not-allowed opacity-50'
-            : 'cursor-pointer hover:-translate-y-0.5 hover:shadow-lg'
+        className={`glass-card flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
+          blocked ? 'cursor-not-allowed opacity-50' : 'glass-card-interactive cursor-pointer'
         }`}
       >
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${engine.accent}`}>
-          <Icon size={17} />
-        </span>
+        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${engine.dot}`} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-semibold text-slate-800">{name}</span>
-          <span className="line-clamp-2 block text-xs text-slate-500">{description}</span>
+          <span className="block truncate font-semibold">{name}</span>
+          <span className="block truncate text-xs text-muted-foreground">{description}</span>
         </span>
       </button>
     );
   };
 
-  const launcher = (
-    <div className="mx-auto max-w-4xl space-y-6 py-2">
-      <div className="space-y-1">
-        <h2 className="text-lg font-semibold text-slate-800">{t('launch.newChat')}</h2>
-        {/* The header switcher shows only the trailing directory name, and
-            which directory a terminal opens in is the one thing you must be
-            able to check before launching one. */}
-        {effectiveProject && (
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-xs text-slate-500">
-            <span>{t('launch.workspaceLabel')}</span>
-            <code
-              data-testid="launch-workspace"
-              className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700"
-            >
-              {effectiveProject}
-            </code>
-            <span className="text-slate-400">{t('launch.workspaceChange')}</span>
+  return (
+    <div className="custom-scrollbar h-full overflow-y-auto">
+      <div className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-8 md:px-8 md:py-12">
+        <header className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight">{t('launch.newChat')}</h1>
+          {/* Which directory a terminal opens in is the one thing to check
+              before launching one, and the rail shows only its last segment. */}
+          {effectiveProject && (
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <span>{t('launch.workspaceLabel')}</span>
+              <code data-testid="launch-workspace" className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                {effectiveProject}
+              </code>
+              <span>{t('launch.workspaceChange')}</span>
+            </p>
+          )}
+        </header>
+
+        {available === false && (
+          <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-semibold">{t('launch.unavailable')}</p>
+              <p className="mt-0.5 text-xs">{reason}</p>
+            </div>
+          </div>
+        )}
+        {available !== false && !effectiveProject && (
+          <p role="status" className="rounded-xl border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+            {t('launch.pickWorkspace')}
           </p>
         )}
-      </div>
 
-      {available === false && (
-        <div role="status" className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <div>
-            <p className="font-semibold">{t('launch.unavailable')}</p>
-            <p className="mt-0.5 text-xs">{reason}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Disabled cards used to be the whole message: five tiles at half
-          opacity and nothing saying which of the two reasons applied. */}
-      {available !== false && !effectiveProject && (
-        <p role="status" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          {t('launch.pickWorkspace')}
-        </p>
-      )}
-
-      {/* A fresh session has no id yet, so the sidebar's history can't
-          lead back to it; these can. */}
-      {tabs.length > 0 && (
-        <section className="space-y-2">
-          <SectionLabel as="h2">{t('launch.openTabs')}</SectionLabel>
-          <div className="flex flex-wrap gap-2">
-            {tabs.map(tab => {
-              const engine = findEngine(tab.engine);
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTabId(tab.id)}
-                  title={tab.cwd}
-                  className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-                >
-                  <span className={`h-2 w-2 rounded-full ${engine?.dot ?? 'bg-slate-400'}`} />
-                  {engine?.nameKey ? t(engine.nameKey) : (engine?.name ?? tab.engine)}
-                  <span className="max-w-[12rem] truncate font-normal text-slate-400">{tab.cwd.split(/[\\/]/).filter(Boolean).pop()}</span>
-                </button>
-              );
-            })}
+        <section className="space-y-3">
+          <SectionLabel as="h2">{t('launch.engines')}</SectionLabel>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            {AGENT_ENGINES.map(engineButton)}
+            {engineButton(SHELL_ENGINE)}
           </div>
         </section>
-      )}
 
-      {/* The card is the button. A small button parked at the far edge of a
-          wide card left the label stranded from what it acts on, and it was
-          the one target that had to survive every column width. */}
-      <section className="space-y-2">
-        <SectionLabel as="h2">{t('launch.engines')}</SectionLabel>
-        {/* Four agents, so every column count divides the row evenly. The
-            fifth card used to sit in this grid and wrap 3 + 2, leaving a
-            card-shaped hole at the width the page is usually read at. */}
-        <div className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-          {AGENT_ENGINES.map(engineCard)}
-        </div>
-        {/* And, separately, no agent at all. */}
-        <div className="pt-1">{engineCard(SHELL_ENGINE)}</div>
-      </section>
-    </div>
-  );
-
-
-  // The terminal itself stays mounted in GlobalTerminalDrawer (unmounting
-  // would kill its PTY); this empty box only tells it where to sit.
-  const workspace = activeTab ? (
-    <div ref={setTerminalSlot} data-testid="terminal-slot" className="min-w-0 flex-1" />
-  ) : (
-    <div className="custom-scrollbar min-w-0 flex-1 overflow-y-auto pr-1">{launcher}</div>
-  );
-
-  return (
-    <div className="flex h-full min-h-0 gap-3">
-      {/* On a phone the list would squeeze an open session to a sliver; the
-          tab strip's "+" brings it back along with the launcher. */}
-      <div className={`min-h-0 ${activeTab ? 'hidden md:flex' : 'flex'}`}>
-        <TerminalSessionSidebar
-          currentWorkspace={effectiveProject}
-          activeSessionId={activeTab?.sessionId}
-          launcherActive={activeTabId === null}
-          onOpenSession={openTab}
-          onNewSession={() => setActiveTabId(null)}
-        />
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <SectionLabel as="h2">{t('launch.recent')}</SectionLabel>
+            <Link to="/activity/sessions" className="text-xs font-medium text-primary hover:underline">
+              {t('launch.allHistory')}
+            </Link>
+          </div>
+          {recent !== null && recent.length === 0 && (
+            <p className="text-sm text-muted-foreground">{t('terminalSidebar.empty')}</p>
+          )}
+          {recent !== null && recent.length > 0 && (
+            <ul className="glass-card divide-y divide-border overflow-hidden">
+              {recent.map(session => {
+                const engine = findEngine(session.target);
+                return (
+                  <li key={`${session.target}:${session.sessionId}`}>
+                    <button
+                      type="button"
+                      onClick={() => openTab(session.target, session.projectPath, session.sessionId)}
+                      title={session.title || session.sessionId}
+                      className="grid w-full grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/60"
+                    >
+                      <span className={`h-2 w-2 rounded-full ${engine?.dot ?? 'bg-slate-400'}`} />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{session.title || t('terminalSidebar.untitled')}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {engine?.nameKey ? t(engine.nameKey) : (engine?.name ?? session.target)} · {workspaceLabel(session.projectPath)}
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                        {relativeTime(session.lastActivity, language)}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
       </div>
-      {workspace}
     </div>
   );
 }

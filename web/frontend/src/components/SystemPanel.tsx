@@ -51,12 +51,12 @@ export default function SystemPanel() {
         aria-expanded={open}
         aria-label={t('system.status')}
         title={t('system.status')}
-        className="relative flex items-center gap-1.5 rounded-xl border border-slate-100 bg-white/50 px-3 py-2 text-slate-500 shadow-sm backdrop-blur-md transition-colors hover:bg-white hover:text-slate-800"
+        className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
         <Activity size={16} />
         <span
           data-testid="system-status-dot"
-          className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white ${statusDotFor(metrics, error)}`}
+          className={`absolute right-0.5 top-0.5 h-2 w-2 rounded-full ring-2 ring-card ${statusDotFor(metrics, error)}`}
         />
       </button>
 
@@ -65,7 +65,7 @@ export default function SystemPanel() {
           data-testid="system-metrics"
           role="dialog"
           aria-label={t('system.metrics')}
-          className="glass-card absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] overflow-hidden p-3"
+          className="glass-card absolute bottom-full left-0 z-50 mb-2 w-72 max-w-[calc(100vw-1rem)] overflow-hidden p-3"
         >
           {error ? (
             <ErrorBar message={error} onRetry={handleRetry} />

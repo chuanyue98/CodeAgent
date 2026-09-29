@@ -158,7 +158,7 @@ export default function BrowserTerminal({
       convertEol: true,
       fontSize: fontSize || 13,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-      theme: { background: '#0f172a' },
+      theme: { background: '#0a0c0f', foreground: '#d5d9e0' },
       screenReaderMode: true,
     });
     const fit = new FitAddon();
@@ -445,7 +445,7 @@ export default function BrowserTerminal({
           FitAddon + ResizeObserver below re-fit whenever this box resizes. */}
       <div
         ref={containerRef}
-        className="min-h-56 w-full flex-1 overflow-hidden rounded-xl border border-slate-200 bg-[#0f172a] p-2"
+        className="min-h-56 w-full flex-1 overflow-hidden rounded-xl border border-term-line bg-term p-2"
       />
     </div>
   );

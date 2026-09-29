@@ -1,10 +1,6 @@
-/* Inter and JetBrains Mono are no longer fetched remotely -- they carry
-   solid system-font fallback stacks below (see `body` and `code, pre`),
-   which keeps CodeAgent usable offline/behind a firewall. Instrument Serif
-   has no reasonable system equivalent and is used sparingly for hero
-   display copy (see `.font-display`), so it's still worth the one
-   remaining network fetch. */
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
+/* Fonts are optional: both carry system fallbacks (see tailwind.config.js), so
+   the app stays usable offline or behind a firewall. */
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
 /* Token colours for code fences, applied by rehype-highlight (see
    MarkdownMessage). Imported here rather than from the component so it stays
    above the reset below in source order. */
@@ -15,62 +11,102 @@
 @tailwind utilities;
 
 @layer base {
+  /* Dark-first. Light is the opt-in: the OS preference when nothing is chosen,
+     or data-theme="light". The slate/amber/... scales that follow the theme
+     are emitted by the plugin in tailwind.config.js from the same switch. */
   :root {
-    /* Atmospheric Light Dashboard */
-    --background: 210 40% 98%; /* #F8FAFC */
-    --foreground: 215 25% 27%; /* #1E293B (Dark slate) */
+    --background: 220 17% 6%;
+    --foreground: 222 15% 92%;
 
-    --card: 0 0% 100%; /* #FFFFFF */
-    --card-foreground: 215 25% 27%;
+    --card: 220 17% 9%;
+    --card-foreground: 222 15% 92%;
 
+    --popover: 220 17% 9%;
+    --popover-foreground: 222 15% 92%;
+
+    --primary: 236 100% 77%;
+    --primary-foreground: 220 17% 6%;
+
+    --secondary: 218 18% 12%;
+    --secondary-foreground: 222 15% 92%;
+
+    --muted: 218 18% 12%;
+    --muted-foreground: 217 10% 65%;
+
+    --accent: 218 18% 14%;
+    --accent-foreground: 222 15% 92%;
+
+    --destructive: 5 78% 64%;
+    --destructive-foreground: 220 17% 6%;
+
+    --border: 217 17% 16%;
+    --input: 217 17% 16%;
+    --ring: 236 100% 77%;
+
+    --ok: 79 183 131;
+    --warn: 226 164 69;
+
+    --engine-claude: 224 138 104;
+    --engine-opencode: 167 139 250;
+    --engine-codex: 63 199 150;
+    --engine-codebuddy: 85 168 255;
+    --engine-antigravity: 241 114 179;
+
+    /* Corner scale: controls rounded-md/lg, blocks rounded-xl, surfaces
+       rounded-2xl (= this), large surfaces rounded-3xl. */
+    --radius: 0.75rem;
+
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --background: 228 25% 96%;
+      --foreground: 216 16% 10%;
+      --card: 0 0% 100%;
+      --card-foreground: 216 16% 10%;
+      --popover: 0 0% 100%;
+      --popover-foreground: 216 16% 10%;
+      --primary: 236 65% 54%;
+      --primary-foreground: 0 0% 100%;
+      --secondary: 223 18% 93%;
+      --secondary-foreground: 216 16% 10%;
+      --muted: 223 18% 93%;
+      --muted-foreground: 218 10% 38%;
+      --accent: 223 18% 90%;
+      --accent-foreground: 216 16% 10%;
+      --destructive: 5 62% 49%;
+      --destructive-foreground: 0 0% 100%;
+      --border: 220 14% 88%;
+      --input: 220 14% 88%;
+      --ring: 236 65% 54%;
+      --ok: 31 143 95;
+      --warn: 168 106 0;
+      color-scheme: light;
+    }
+  }
+  :root[data-theme="light"] {
+    --background: 228 25% 96%;
+    --foreground: 216 16% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 216 16% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 27%;
-
-    --primary: 192 82% 31%; /* #0E7490 (Accessible Cyan) */
+    --popover-foreground: 216 16% 10%;
+    --primary: 236 65% 54%;
     --primary-foreground: 0 0% 100%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 214.3 31.8% 91.4%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 192 81% 37%;
-    --accent-foreground: 0 0% 100%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%; /* #E2E8F0 */
-    --input: 214.3 31.8% 91.4%;
-    --ring: 192 81% 37%;
-
-    /* Corner scale: controls rounded-md/lg, interactive blocks rounded-xl,
-       glass cards rounded-2xl, hero cards rounded-3xl. Tailwind's 2xl/3xl
-       read this variable (see tailwind.config.js). */
-    --radius: 1.25rem;
-
-    /* Atmospheric tokens */
-    --grid-line: rgba(15, 23, 42, 0.028);
-    --noise-opacity: 0.045;
-    --mesh-1: rgba(8, 145, 178, 0.11);
-    --mesh-2: rgba(14, 116, 144, 0.07);
-    --mesh-3: rgba(99, 102, 241, 0.05);
-
-    /* Glass surface tokens. The .glass-card* classes consume only these, so
-       a future dark theme is one override block away (redefine these plus
-       the HSL group and atmospheric tokens above; no component edits). */
-    --glass-bg: rgba(255, 255, 255, 0.86);
-    --glass-bg-flat: #ffffff;
-    --glass-bg-feature: rgba(255, 255, 255, 0.92);
-    --glass-border: #e2e8f0;
-    --glass-border-feature: rgba(226, 232, 240, 0.9);
-    --glass-highlight: rgba(255, 255, 255, 0.6);
-    --glass-highlight-feature: rgba(255, 255, 255, 0.7);
-    --glass-shadow-1: 0 20px 30px -12px rgba(15, 23, 42, 0.08);
-    --glass-shadow-2: 0 6px 12px -6px rgba(15, 23, 42, 0.05);
-    --glass-shadow-feature-1: 0 32px 48px -16px rgba(15, 23, 42, 0.12);
-    --glass-shadow-feature-2: 0 10px 20px -8px rgba(15, 23, 42, 0.06);
+    --secondary: 223 18% 93%;
+    --secondary-foreground: 216 16% 10%;
+    --muted: 223 18% 93%;
+    --muted-foreground: 218 10% 38%;
+    --accent: 223 18% 90%;
+    --accent-foreground: 216 16% 10%;
+    --destructive: 5 62% 49%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 14% 88%;
+    --input: 220 14% 88%;
+    --ring: 236 65% 54%;
+    --ok: 31 143 95;
+    --warn: 168 106 0;
+    color-scheme: light;
   }
 }
 
@@ -83,86 +119,22 @@
     outline-offset: 2px;
   }
   body {
-    @apply bg-background text-foreground;
-    font-family:
-      'Inter',
-      -apple-system,
-      BlinkMacSystemFont,
-      'Segoe UI',
-      Roboto,
-      'Helvetica Neue',
-      Arial,
-      'PingFang SC',
-      'Microsoft YaHei',
-      sans-serif;
+    @apply bg-background text-foreground font-sans;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* Layered mesh: dominant cyan anchor top-left, indigo echo top-right,
-       cyan wash bottom-right, deep teal pool bottom-left. Creates depth
-       instead of a flat sheet. */
-    background-image:
-      radial-gradient(at 12% 8%, var(--mesh-1) 0, transparent 45%),
-      radial-gradient(at 88% 14%, var(--mesh-3) 0, transparent 42%),
-      radial-gradient(at 78% 92%, var(--mesh-1) 0, transparent 50%),
-      radial-gradient(at 20% 95%, var(--mesh-2) 0, transparent 48%);
-    background-attachment: fixed;
-    background-repeat: no-repeat;
-    position: relative;
-  }
-  /* Fine grain texture — fractalNoise SVG data URI. multiply blend keeps
-     it readable on light backgrounds while adding analog warmth. */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    opacity: var(--noise-opacity);
-    mix-blend-mode: multiply;
-  }
-  /* Soft dot-grid, masked toward center so edges fade out — keeps the
-     grid from feeling like graph paper while preserving structure. */
-  body::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    background-image:
-      linear-gradient(var(--grid-line) 1px, transparent 1px),
-      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-    background-size: 52px 52px;
-    -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 35%, transparent 80%);
-    mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 35%, transparent 80%);
   }
   code, pre {
-    font-family:
-      'JetBrains Mono',
-      ui-monospace,
-      SFMono-Regular,
-      Menlo,
-      Consolas,
-      'Liberation Mono',
-      monospace;
+    @apply font-mono;
   }
   h1, h2, h3, h4, h5, h6 {
-    color: #0F172A; /* Deep navy */
-    @apply font-semibold tracking-tight;
-  }
-  /* Display serif used sparingly for hero copy — pairs the quiet Inter
-     body with an editorial accent. */
-  .font-display {
-    font-family: 'Instrument Serif', serif;
-    font-weight: 400;
-    letter-spacing: -0.01em;
+    @apply font-semibold tracking-tight text-foreground;
   }
 }
 
 /* Code fence highlighting. The imported highlight.js theme is unlayered, so
    this reset is too — a rule inside @layer base would lose to it. Only the
    container is reset: the theme's token colours are what we want, and they
-   are tuned for a near-black background like the code block's slate-900. */
+   are tuned for the near-black terminal surface (bg-term). */
 .hljs {
   background: transparent;
   color: inherit;
@@ -174,53 +146,27 @@ pre code.hljs {
 }
 
 @layer utilities {
-  .glass-card {
-    background: var(--glass-bg);
-    backdrop-filter: blur(18px) saturate(140%);
-    -webkit-backdrop-filter: blur(18px) saturate(140%);
-    border: 1px solid var(--glass-border);
-    box-shadow:
-      0 1px 0 var(--glass-highlight) inset,
-      var(--glass-shadow-1),
-      var(--glass-shadow-2);
+  /* Surfaces are flat: a solid card colour and a hairline. No blur, no
+     shadow, so nesting a panel in a panel never stacks effects. The three
+     names stay because pages reference them; they differ only by radius. */
+  .glass-card,
+  .glass-card-flat {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
     border-radius: var(--radius);
   }
-  /* Stronger elevation for hero/feature tiles. */
   .glass-card-feature {
-    background: var(--glass-bg-feature);
-    backdrop-filter: blur(22px) saturate(150%);
-    -webkit-backdrop-filter: blur(22px) saturate(150%);
-    border: 1px solid var(--glass-border-feature);
-    box-shadow:
-      0 1px 0 var(--glass-highlight-feature) inset,
-      var(--glass-shadow-feature-1),
-      var(--glass-shadow-feature-2);
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
     border-radius: calc(var(--radius) + 0.25rem);
   }
-  /* The same surface as .glass-card, minus the backdrop blur.
-     backdrop-filter re-computes the blurred backdrop on every frame that
-     anything above it moves, so a card holding a few hundred scrolling rows
-     pays for it continuously. These cards sit on an opaque page ground where
-     the blur was buying close to nothing — the border, shadow and radius are
-     what actually read as a card. */
-  .glass-card-flat {
-    background: var(--glass-bg-flat);
-    border: 1px solid var(--glass-border);
-    box-shadow:
-      0 1px 0 var(--glass-highlight) inset,
-      var(--glass-shadow-1),
-      var(--glass-shadow-2);
-    border-radius: var(--radius);
-  }
-  /* One hover idiom for every clickable card: the border warms toward the
-     primary hue, no lift, no shadow growth. Declared here rather than as a
-     hover:border-* utility because the utility would lose to the `border`
-     shorthand in the card classes above (same layer, later in the sheet). */
+  /* One hover idiom for every clickable card: the border lifts toward the
+      accent, no movement. */
   .glass-card-interactive {
     transition: border-color 150ms ease;
   }
   .glass-card-interactive:hover {
-    border-color: hsl(var(--ring) / 0.35);
+    border-color: hsl(var(--ring) / 0.5);
   }
 }
 
@@ -320,16 +266,16 @@ pre code.hljs {
 
 /* Custom Scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #E2E8F0;
+  background: hsl(var(--border));
   border-radius: 10px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #CBD5E1;
+  background: hsl(var(--muted-foreground) / 0.5);
 }

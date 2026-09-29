@@ -1,25 +1,20 @@
 import { TerminalProvider } from "./context/TerminalContext";
 import GlobalTerminalDrawer from "./components/GlobalTerminalDrawer";
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
-import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router';
-import { Menu, X } from 'lucide-react';
-import CommandPalette from './components/CommandPalette';
-import NotificationBell from './components/NotificationBell';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router';
 import SectionLayout from './components/SectionLayout';
-import SystemPanel from './components/SystemPanel';
-import WorkspaceSwitcher from './components/WorkspaceSwitcher';
+import AppRail from './components/shell/AppRail';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import ErrorBar from './components/shared/ErrorBar';
 import { useProject } from './context/ProjectContext';
 import { useT } from './i18n/context';
-import { useTerminalFocus } from './hooks/useTerminalFocus';
 import {
   ACTIVITY_FILTER_PARAMS,
   ACTIVITY_TABS,
   AGENT_TABS,
   AUTOMATION_TABS,
+  EXTENSION_TABS,
   PAGE_LABEL_KEYS,
-  primaryNav,
   SETTINGS_TABS,
 } from './navigation';
 
@@ -73,212 +68,116 @@ function App() {
 }
 
 function AppShell() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  // An open session narrows the nav to icons and drops the header, without
-  // touching the user's own expand/collapse choice for the other pages.
-  const focused = useTerminalFocus();
-  const sidebarWide = isSidebarOpen && !focused;
   const { pathname } = useLocation();
   const { error: ctxError } = useProject();
   const t = useT();
   const pageLabelKey = PAGE_LABEL_KEYS[pathname];
   const pageLabel = pageLabelKey ? t(pageLabelKey) : 'CodeAgent';
-  // The heading names the section, not the leaf: the leaf is already the
-  // selected chip in the tab row directly below it, and printing the same
-  // word twice, one above the other, spent the page's most prominent line on
-  // nothing. The document title keeps the leaf -- a browser tab has no tab
-  // row to read it off.
-  const section = primaryNav.find(
-    item => pathname === item.matchPrefix || pathname.startsWith(`${item.matchPrefix}/`),
-  );
 
   useEffect(() => {
     document.title = pageLabel === 'CodeAgent' ? pageLabel : `${pageLabel} - CodeAgent`;
   }, [pageLabel]);
 
   return (
-    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-transparent font-sans text-foreground">
-      <div data-testid="app-shell" className="flex min-h-0 flex-1 gap-2 p-2 md:gap-4 md:p-4">
-        <aside
-          className={`animate-fade-in stagger-1 ${
-            sidebarWide ? 'w-20 xl:w-64' : 'w-20 xl:w-24'
-          } glass-card flex shrink-0 flex-col overflow-hidden transition-[width] duration-300`}
-        >
-          <div className="flex items-center justify-center border-b border-slate-100 p-4 lg:justify-between lg:p-8">
-            {sidebarWide && (
-              <span className="hidden text-2xl font-black uppercase tracking-tighter text-primary lg:inline">CodeAgent</span>
-            )}
-            {!focused && (
-            <button
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              aria-label={isSidebarOpen ? t('nav.collapse') : t('nav.expand')}
-              title={isSidebarOpen ? t('nav.collapse') : t('nav.expand')}
-              className={`hidden rounded-xl border border-transparent p-2 text-slate-600 transition-colors hover:border-slate-100 hover:bg-slate-50 lg:block ${!isSidebarOpen && 'mx-auto'}`}
-            >
-              {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
-            )}
-            <span className={`text-xl font-black text-primary ${focused ? '' : 'lg:hidden'}`} aria-label="CodeAgent">CA</span>
-          </div>
+    <div data-testid="app-shell" className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background font-sans text-foreground md:flex-row">
+      <AppRail />
 
-          <nav aria-label={t('nav.primary')} className="custom-scrollbar mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto p-2 lg:mt-4 lg:p-4">
-            {primaryNav.map(item => {
-              const active = pathname === item.matchPrefix
-                || pathname.startsWith(`${item.matchPrefix}/`);
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  aria-label={t(item.labelKey)}
-                  aria-current={active ? 'page' : undefined}
-                  title={t(item.labelKey)}
-                  className={`flex w-full items-center justify-center gap-4 rounded-2xl p-3 transition-colors lg:justify-start lg:p-4 ${
-                    active
-                      ? 'bg-primary/10 font-semibold text-primary'
-                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-                  }`}
-                >
-                  <item.icon size={22} className={`shrink-0 ${active ? 'opacity-100' : 'opacity-70'}`} />
-                  {sidebarWide && (
-                    <span className="hidden text-sm font-medium tracking-wide lg:inline">{t(item.labelKey)}</span>
-                  )}
-                </NavLink>
-              );
-            })}
-          </nav>
-
-          {/* Kept to one short line: the old uppercase "© 2026 CODEAGENT
-              SYSTEM V1.0" wrapped onto two rows and read louder than the nav. */}
-          <div className="border-t border-slate-100 bg-slate-50/50 p-3 text-center text-[10px] font-medium tracking-wide text-slate-400 lg:p-4">
-            v1.0
-          </div>
-        </aside>
-
-        <main className="relative flex min-w-0 flex-1 flex-col gap-3 overflow-hidden md:gap-4">
-          {!focused && (
-          <header className="animate-fade-in stagger-2 relative z-50 flex min-w-0 items-center justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="truncate text-lg font-bold text-slate-800 md:text-xl">
-                {section ? t(section.labelKey) : pageLabel}
-              </h1>
-              {section && (
-                <p
-                  title={t(section.descriptionKey)}
-                  className="hidden truncate text-xs text-slate-400 sm:block"
-                >
-                  {t(section.descriptionKey)}
-                </p>
-              )}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <CommandPalette />
-              <NotificationBell />
-              <SystemPanel />
-              <WorkspaceSwitcher />
-            </div>
-          </header>
-          )}
-          {ctxError && (
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        {ctxError && (
+          <div className="px-4 pt-3 md:px-8">
             <ErrorBar message={t('app.configError', { message: ctxError })} />
-          )}
-          <div className="animate-fade-in stagger-3 custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1 md:pr-2">
-            <Routes>
-              <Route path="/" element={<Navigate to="/home" replace />} />
-              <Route path="/home" element={page(<HomePage />)} />
-
-              <Route
-                path="/agent"
-                element={<SectionLayout labelKey="nav.agent" tabs={AGENT_TABS} />}
-              >
-                <Route index element={<Navigate to="terminal" replace />} />
-                <Route path="terminal" element={page(<LaunchPad />)} />
-                <Route path="instances" element={page(<InstancesPage />)} />
-                <Route path="delegations" element={page(<DelegationsPage />)} />
-              </Route>
-
-              <Route
-                path="/automations"
-                element={<SectionLayout labelKey="nav.automations" tabs={AUTOMATION_TABS} />}
-              >
-                <Route index element={<Navigate to="tasks" replace />} />
-                <Route path="tasks" element={page(<TaskDashboard />)} />
-                <Route path="schedules" element={page(<CronPage />)} />
-                <Route path="logs" element={page(<LogViewer />)} />
-              </Route>
-
-              <Route
-                path="/activity"
-                element={<SectionLayout labelKey="nav.activity" tabs={ACTIVITY_TABS} preserveParams={ACTIVITY_FILTER_PARAMS} />}
-              >
-                <Route index element={<Navigate to="sessions" replace />} />
-                <Route path="sessions" element={page(<SessionsPage />)} />
-                <Route path="usage" element={page(<Analytics />)} />
-              </Route>
-
-              <Route
-                path="/settings"
-                element={<SectionLayout labelKey="nav.settings" tabs={SETTINGS_TABS} />}
-              >
-                <Route index element={<Navigate to="workspace" replace />} />
-                <Route path="workspace" element={page(<ConfigHub />)} />
-                <Route path="resources" element={page(<ResourceHub />)} />
-                <Route path="mcp" element={page(<McpPage />)} />
-                <Route path="system" element={page(<SystemPage />)} />
-              </Route>
-
-              <Route path="/launch" element={<Navigate to="/agent/terminal" replace />} />
-              {/* Two generations of chat surface have now been retired -- the
-                  engine-direct Chat page, then the Web Agent that replaced it.
-                  Old links land on the terminal, which is the surface that
-                  outlived both. */}
-              <Route path="/chat" element={<Navigate to="/agent/terminal" replace />} />
-              <Route path="/agent/legacy" element={<Navigate to="/agent/terminal" replace />} />
-              <Route path="/agent/web" element={<Navigate to="/agent/terminal" replace />} />
-              <Route path="/dashboard" element={<Navigate to="/automations/tasks" replace />} />
-              <Route path="/cron" element={<Navigate to="/automations/schedules" replace />} />
-              <Route path="/logs" element={<Navigate to="/automations/logs" replace />} />
-              {/* Logs moved out of Activity into Automations, where the tasks
-                  that write them live. Keeps existing links working. */}
-              <Route path="/activity/logs" element={<Navigate to="/automations/logs" replace />} />
-              {/* Activity's tabs were renamed History/Events/Analytics ->
-                  Sessions/Timeline/Usage. These carry the query string so a
-                  saved filtered view or a session deep link still resolves. */}
-              <Route path="/activity/history" element={<KeepQuery to="/activity/sessions" />} />
-              {/* Timeline was removed. Its links carry the same
-                  session/sessionEngine/sessionProject params Sessions reads,
-                  so an old bookmark still opens the session it pointed at. */}
-              <Route path="/activity/timeline" element={<KeepQuery to="/activity/sessions" />} />
-              <Route path="/activity/events" element={<KeepQuery to="/activity/sessions" />} />
-              <Route path="/activity/analytics" element={<KeepQuery to="/activity/usage" />} />
-              <Route path="/analytics" element={<KeepQuery to="/activity/usage" />} />
-              <Route path="/sessions" element={<KeepQuery to="/activity/sessions" />} />
-              <Route path="/audit" element={<KeepQuery to="/activity/sessions" />} />
-              <Route path="/skills" element={<Navigate to="/settings/resources?kind=skills" replace />} />
-              <Route path="/prompts" element={<Navigate to="/settings/resources?kind=prompts" replace />} />
-              <Route path="/hooks" element={<Navigate to="/settings/resources?kind=hooks" replace />} />
-              <Route path="/plugins" element={<Navigate to="/settings/resources?kind=plugins" replace />} />
-              <Route path="/settings/skills" element={<Navigate to="/settings/resources?kind=skills" replace />} />
-              <Route path="/settings/prompts" element={<Navigate to="/settings/resources?kind=prompts" replace />} />
-              <Route path="/settings/hooks" element={<Navigate to="/settings/resources?kind=hooks" replace />} />
-              <Route path="/settings/plugins" element={<Navigate to="/settings/resources?kind=plugins" replace />} />
-              <Route path="/mcp" element={<Navigate to="/settings/mcp" replace />} />
-              {/* Settings' capability pages were flattened from
-                  /settings/capabilities/<kind> to /settings/<kind>. */}
-              <Route path="/settings/capabilities" element={<Navigate to="/settings/resources" replace />} />
-              <Route path="/settings/capabilities/skills" element={<Navigate to="/settings/resources?kind=skills" replace />} />
-              <Route path="/settings/capabilities/prompts" element={<Navigate to="/settings/resources?kind=prompts" replace />} />
-              <Route path="/settings/capabilities/hooks" element={<Navigate to="/settings/resources?kind=hooks" replace />} />
-              <Route path="/settings/capabilities/plugins" element={<Navigate to="/settings/resources?kind=plugins" replace />} />
-              <Route path="/settings/capabilities/mcp" element={<KeepQuery to="/settings/mcp" />} />
-              <Route path="/config" element={<Navigate to="/settings/workspace" replace />} />
-              <Route path="/system" element={<Navigate to="/settings/system" replace />} />
-              <Route path="*" element={<Navigate to="/home" replace />} />
-            </Routes>
           </div>
-        </main>
+        )}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <Routes>
+            <Route path="/" element={<Navigate to="/home" replace />} />
+            <Route path="/home" element={page(<HomePage />)} />
 
-        <GlobalTerminalDrawer />
-      </div>
+            <Route
+              path="/agent"
+              element={<SectionLayout labelKey="nav.agent" tabs={AGENT_TABS} bleedPaths={['/agent/terminal']} />}
+            >
+              <Route index element={<Navigate to="terminal" replace />} />
+              <Route path="terminal" element={page(<LaunchPad />)} />
+              <Route path="instances" element={page(<InstancesPage />)} />
+              <Route path="delegations" element={page(<DelegationsPage />)} />
+            </Route>
+
+            <Route
+              path="/activity"
+              element={<SectionLayout labelKey="nav.activity" tabs={ACTIVITY_TABS} preserveParams={ACTIVITY_FILTER_PARAMS} />}
+            >
+              <Route index element={<Navigate to="sessions" replace />} />
+              <Route path="sessions" element={page(<SessionsPage />)} />
+              <Route path="usage" element={page(<Analytics />)} />
+            </Route>
+
+            {/* Logs live under Automations: they are the run logs of the tasks
+                on the Tasks tab, keyed by task id, and read best next to the
+                task that produced them. */}
+            <Route
+              path="/automations"
+              element={<SectionLayout labelKey="nav.automations" tabs={AUTOMATION_TABS} />}
+            >
+              <Route index element={<Navigate to="tasks" replace />} />
+              <Route path="tasks" element={page(<TaskDashboard />)} />
+              <Route path="schedules" element={page(<CronPage />)} />
+              <Route path="logs" element={page(<LogViewer />)} />
+            </Route>
+
+            <Route
+              path="/extensions"
+              element={<SectionLayout labelKey="nav.extensions" tabs={EXTENSION_TABS} />}
+            >
+              <Route index element={<Navigate to="resources" replace />} />
+              <Route path="resources" element={page(<ResourceHub />)} />
+              <Route path="mcp" element={page(<McpPage />)} />
+            </Route>
+
+            <Route
+              path="/settings"
+              element={<SectionLayout labelKey="nav.settings" tabs={SETTINGS_TABS} />}
+            >
+              <Route index element={<Navigate to="workspace" replace />} />
+              <Route path="workspace" element={page(<ConfigHub />)} />
+              <Route path="system" element={page(<SystemPage />)} />
+            </Route>
+
+            {/* Older bookmarks. Query strings are carried where a page reads
+                them (History's filters, Resources' ?kind= / ?group=). */}
+            <Route path="/settings/resources" element={<KeepQuery to="/extensions/resources" />} />
+            <Route path="/settings/mcp" element={<KeepQuery to="/extensions/mcp" />} />
+            <Route path="/launch" element={<Navigate to="/agent/terminal" replace />} />
+            <Route path="/chat" element={<Navigate to="/agent/terminal" replace />} />
+            <Route path="/agent/legacy" element={<Navigate to="/agent/terminal" replace />} />
+            <Route path="/agent/web" element={<Navigate to="/agent/terminal" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/automations/tasks" replace />} />
+            <Route path="/cron" element={<Navigate to="/automations/schedules" replace />} />
+            <Route path="/logs" element={<Navigate to="/automations/logs" replace />} />
+            <Route path="/activity/logs" element={<Navigate to="/automations/logs" replace />} />
+            <Route path="/activity/history" element={<KeepQuery to="/activity/sessions" />} />
+            <Route path="/activity/timeline" element={<KeepQuery to="/activity/sessions" />} />
+            <Route path="/activity/events" element={<KeepQuery to="/activity/sessions" />} />
+            <Route path="/activity/analytics" element={<KeepQuery to="/activity/usage" />} />
+            <Route path="/analytics" element={<KeepQuery to="/activity/usage" />} />
+            <Route path="/sessions" element={<KeepQuery to="/activity/sessions" />} />
+            <Route path="/audit" element={<KeepQuery to="/activity/sessions" />} />
+            {(['skills', 'prompts', 'hooks', 'plugins'] as const).flatMap(kind => [
+              <Route key={`/${kind}`} path={`/${kind}`} element={<Navigate to={`/extensions/resources?kind=${kind}`} replace />} />,
+              <Route key={`/settings/${kind}`} path={`/settings/${kind}`} element={<Navigate to={`/extensions/resources?kind=${kind}`} replace />} />,
+              <Route key={`/settings/capabilities/${kind}`} path={`/settings/capabilities/${kind}`} element={<Navigate to={`/extensions/resources?kind=${kind}`} replace />} />,
+            ])}
+            <Route path="/mcp" element={<Navigate to="/extensions/mcp" replace />} />
+            <Route path="/settings/capabilities" element={<Navigate to="/extensions/resources" replace />} />
+            <Route path="/settings/capabilities/mcp" element={<KeepQuery to="/extensions/mcp" />} />
+            <Route path="/config" element={<Navigate to="/settings/workspace" replace />} />
+            <Route path="/system" element={<Navigate to="/settings/system" replace />} />
+            <Route path="*" element={<Navigate to="/home" replace />} />
+          </Routes>
+        </div>
+      </main>
+
+      <GlobalTerminalDrawer />
     </div>
   );
 }

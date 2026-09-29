@@ -1,5 +1,7 @@
 import { memo, useMemo, useState } from 'react';
-import { Activity, ChevronRight, FileText, Layers, Plus, Sparkles } from 'lucide-react';
+import cronstrue from 'cronstrue/i18n';
+import { Activity, Layers, Plus, Sparkles } from 'lucide-react';
+import type { Schedule } from '../../api/schedules';
 import { useLanguageCode, useT } from '../../i18n/context';
 import { relativeTime } from '../../utils/workspaceFormat';
 import { formatDuration } from '../../utils/sessionProgress';
@@ -15,8 +17,8 @@ function StageProgress({ stages }: { stages: Stage[] }) {
   const done = stages.filter(s => classifyStageStatus(s.status) === 'done').length;
   const pct = stages.length > 0 ? Math.round((done / stages.length) * 100) : 0;
   return (
-    <div className="flex items-center gap-2 mt-2">
-      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+    <div className="mt-1.5 flex items-center gap-2">
+      <div className="h-1 max-w-[12rem] flex-1 overflow-hidden rounded-full bg-muted">
         <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
       </div>
       <span className="text-[10px] text-slate-400 font-medium w-8 text-right">{pct}%</span>
@@ -35,97 +37,125 @@ function runStartedAt(run: RunStatus): string {
   return new Date(run.startTime * 1000).toISOString();
 }
 
+/** "Every day at 09:00" for a cron expression; the raw expression when it does not parse. */
+function describeCron(expr: string, language: string): string {
+  try {
+    return cronstrue.toString(expr, { locale: language === 'zh' ? 'zh_CN' : 'en', use24HourTimeFormat: true });
+  } catch {
+    return expr;
+  }
+}
+
+const RUN_LABEL_KEY = {
+  running: 'tasks.statRunning',
+  completed: 'tasks.statCompleted',
+  failed: 'tasks.statFailed',
+  stopped: 'tasks.neverRun',
+} as const;
+
+const RUN_PILL: Record<RunStatus['status'], string> = {
+  running: 'bg-primary/15 text-primary',
+  completed: 'bg-ok/15 text-ok',
+  failed: 'bg-destructive/15 text-destructive',
+  stopped: 'bg-muted text-muted-foreground',
+};
+
 /**
- * One task card. Memoized so the surrounding 5s list poll re-renders only the
- * cards whose task or running-state actually changed, not the whole grid.
+ * One task as one row: what it is, when it fires, and how it last went.
+ * Memoized so the surrounding 5s list poll re-renders only the rows whose task
+ * or running-state actually changed.
  */
-const TaskCard = memo(function TaskCard({
+const TaskRow = memo(function TaskRow({
   task,
   activeRun,
   lastRun,
+  schedule,
   onSelect,
 }: {
   task: Task;
   activeRun: RunStatus | undefined;
   lastRun: RunStatus | undefined;
+  schedule: Schedule | undefined;
   onSelect: (name: string) => void;
 }) {
   const t = useT();
   const language = useLanguageCode();
+  const shown = activeRun ?? lastRun;
   const lastRunDuration = lastRun?.endTime
     ? formatDuration((lastRun.endTime - lastRun.startTime) * 1000)
+    : null;
+  const nextRun = schedule?.enabled && schedule.nextRunAt
+    ? relativeTime(new Date(schedule.nextRunAt * 1000).toISOString(), language)
     : null;
 
   return (
     <button
       type="button"
       onClick={() => onSelect(task.name)}
-      className="glass-card glass-card-interactive p-4 sm:p-5 text-left group flex flex-col justify-between h-full transition-all border border-slate-100 hover:border-primary/30 hover:shadow-md"
+      className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-muted/60 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto]"
     >
-      <div className="w-full">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3 min-w-0 flex-1">
-            <div className="p-2.5 bg-slate-100 rounded-xl group-hover:bg-primary/10 transition-colors flex-shrink-0 mt-0.5">
-              {task.hasStages
-                ? <Layers className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
-                : <FileText className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-semibold text-slate-900 truncate">{task.title}</h2>
-                {task.hasStages && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-medium border border-slate-200/60">
-                    <Layers className="w-2.5 h-2.5 text-slate-400" />
-                    <span>{task.stages.length > 0 ? `${task.stages.length} ${t('taskDetail.stages')}` : t('taskDetail.stages')}</span>
-                  </span>
-                )}
-                {activeRun && (
-                  <span className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider border border-emerald-100">
-                    <StatusDot tone="running" pulse />
-                    {t('tasks.runningOn', { engine: activeRun.engine })}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-primary flex-shrink-0 transition-colors mt-1" />
-        </div>
-
-        {task.description && (
-          <p className="text-sm text-slate-500 mt-2.5 line-clamp-2 leading-relaxed">{task.description}</p>
-        )}
-      </div>
-
-      <div className="mt-4 pt-3 border-t border-slate-100/80 w-full">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-          {lastRun ? (
-            <>
-              <StatusDot tone={runTone(lastRun.status)} pulse={lastRun.status === 'running'} />
-              <Badge variant="engine" size="sm" engine={lastRun.engine}>{lastRun.engine}</Badge>
-              {lastRunDuration && <span>· {lastRunDuration}</span>}
-              <span>{t('tasks.lastRun', { time: relativeTime(runStartedAt(lastRun), language) })}</span>
-            </>
-          ) : (
-            <>
-              <StatusDot tone="neutral" />
-              <span>{t('tasks.neverRun')}</span>
-            </>
+      <span className="min-w-0">
+        <span className="flex items-center gap-2">
+          <h2 className="truncate text-sm font-medium">{task.title}</h2>
+          {task.hasStages && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+              <Layers className="h-2.5 w-2.5" />
+              {task.stages.length > 0 ? `${task.stages.length} ${t('taskDetail.stages')}` : t('taskDetail.stages')}
+            </span>
           )}
-        </div>
+        </span>
+        {task.description && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{task.description}</span>}
         {task.hasStages && <StageProgress stages={task.stages} />}
-      </div>
+      </span>
+
+      <span className="hidden min-w-0 md:block">
+        {schedule ? (
+          <>
+            <span className="block truncate text-xs text-foreground/80">{describeCron(schedule.cronExpr, language)}</span>
+            <span className="block truncate text-xs text-muted-foreground">
+              {nextRun ? t('tasks.nextRun', { time: nextRun }) : ''}
+            </span>
+          </>
+        ) : (
+          <span className="text-xs text-muted-foreground">{t('tasks.manualOnly')}</span>
+        )}
+      </span>
+
+      <span className="hidden min-w-0 items-center gap-2 md:flex">
+        {shown ? (
+          <Badge variant="engine" size="sm" engine={shown.engine}>{shown.engine}</Badge>
+        ) : null}
+      </span>
+
+      <span className="flex flex-col items-end gap-1">
+        {shown ? (
+          <>
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${RUN_PILL[shown.status]}`}>
+              {shown.status === 'running' && <StatusDot tone="running" pulse />}
+              {t(RUN_LABEL_KEY[shown.status])}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {activeRun
+                ? t('tasks.runningOn', { engine: activeRun.engine })
+                : `${relativeTime(runStartedAt(shown), language)}${lastRunDuration ? ` · ${lastRunDuration}` : ''}`}
+            </span>
+          </>
+        ) : (
+          <span className="text-xs text-muted-foreground">{t('tasks.neverRun')}</span>
+        )}
+      </span>
     </button>
   );
 });
 
 function StatChip({ label, value, live }: { label: string; value: number; live?: boolean }) {
   return (
-    <div className="rounded-lg bg-slate-50 px-2.5 py-1.5">
+    <div className="bg-card px-3 py-2.5">
       <div className="flex items-center gap-1.5">
         {live && <StatusDot tone="running" pulse />}
-        <span className="text-base font-semibold text-slate-800">{value}</span>
+        <span className="font-mono text-lg font-medium tracking-tight">{value}</span>
       </div>
-      <p className="text-[10px] text-slate-400">{label}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
     </div>
   );
 }
@@ -134,11 +164,14 @@ export default memo(function TaskList({
   tasks,
   runs,
   onSelect,
+  schedules = [],
   onGenerateClick,
   onManualCreateClick,
 }: {
   tasks: Task[];
   runs: RunStatus[];
+  /** Schedules whose task name matches a row show their cron and next run inline. */
+  schedules?: Schedule[];
   onSelect: (name: string) => void;
   onGenerateClick: () => void;
   onManualCreateClick: () => void;
@@ -209,23 +242,28 @@ export default memo(function TaskList({
   const resolveTask = (run: RunStatus) =>
     tasks.find(task => (run.taskName && run.taskName === task.name) || run.taskId.startsWith(task.name));
 
+  const scheduleByTask = useMemo(() => {
+    const map = new Map<string, Schedule>();
+    for (const schedule of schedules) {
+      // A task can have several schedules; the enabled one that fires soonest is the one to show.
+      const current = map.get(schedule.taskName);
+      const better = !current
+        || (schedule.enabled && !current.enabled)
+        || (schedule.enabled === current.enabled && (schedule.nextRunAt ?? Infinity) < (current.nextRunAt ?? Infinity));
+      if (better) map.set(schedule.taskName, schedule);
+    }
+    return map;
+  }, [schedules]);
+
   return (
-    <div className="flex flex-col xl:flex-row gap-4 min-h-full xl:h-full">
-      <section
-        className={`flex-1 min-w-0 flex flex-col min-h-0 ${
-          tasks.length === 0 ? '' : 'glass-card p-4 sm:p-6'
-        }`}
-      >
-        {/* The app shell already renders "Tasks" as the page's <h1>, so a second
-            oversized title here just pushed the actual content below the fold. */}
-        <div className="flex flex-wrap justify-between items-center gap-3 pb-4">
-          <div className="min-w-0">
-            <p className="text-sm text-slate-500">
-              {tasks.length === 1
+    <div className="flex min-h-full flex-col gap-6 xl:h-full xl:flex-row">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            {tasks.length === 1
               ? t('tasks.countOne', { count: tasks.length })
               : t('tasks.count', { count: tasks.length })}
-            </p>
-          </div>
+          </p>
           {/* Hidden while the list is empty: the empty state below carries its
               own (better-labeled) create buttons, and showing both pairs at
               once duplicated the same two actions on one screen. */}
@@ -242,7 +280,7 @@ export default memo(function TaskList({
         </div>
 
         {tasks.length > 5 && (
-          <div className="max-w-sm pb-4">
+          <div className="max-w-sm">
             <label htmlFor="task-search" className="sr-only">{t('tasks.searchLabel')}</label>
             <SearchInput
               id="task-search"
@@ -272,21 +310,20 @@ export default memo(function TaskList({
         )}
 
         {tasks.length > 0 && (
-          <div className="custom-scrollbar flex-1 min-h-0 overflow-y-auto pr-1">
+          <div className="glass-card custom-scrollbar min-h-0 flex-1 divide-y divide-border overflow-y-auto">
             {tasks.length > 5 && filteredTasks.length === 0 && (
               <EmptyState compact title={t('tasks.noSearchMatch')} />
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3.5">
-              {filteredTasks.map(task => (
-                <TaskCard
-                  key={task.name}
-                  task={task}
-                  activeRun={activeRunByTask.get(task.name)}
-                  lastRun={lastRunByTask.get(task.name)}
-                  onSelect={onSelect}
-                />
-              ))}
-            </div>
+            {filteredTasks.map(task => (
+              <TaskRow
+                key={task.name}
+                task={task}
+                activeRun={activeRunByTask.get(task.name)}
+                lastRun={lastRunByTask.get(task.name)}
+                schedule={scheduleByTask.get(task.name)}
+                onSelect={onSelect}
+              />
+            ))}
           </div>
         )}
       </section>
@@ -294,22 +331,22 @@ export default memo(function TaskList({
       {tasks.length > 0 && (
         <aside
           aria-label={t('tasks.activityTitle')}
-          className="w-full xl:w-80 shrink-0 glass-card flex flex-col p-5 gap-3 min-h-0"
+          className="flex min-h-0 w-full shrink-0 flex-col gap-3 xl:w-80"
         >
           <div className="flex items-center justify-between gap-2">
             <SectionLabel>{t('tasks.activityTitle')}</SectionLabel>
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+            <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
               {runs.length}
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-border bg-border">
             <StatChip label={t('tasks.statRunning')} value={runStats.running} live={runStats.running > 0} />
             <StatChip label={t('tasks.statCompleted')} value={runStats.completed} />
             <StatChip label={t('tasks.statFailed')} value={runStats.failed} />
           </div>
 
-          <div className="custom-scrollbar flex-1 min-h-0 overflow-y-auto space-y-1">
+          <div className="glass-card custom-scrollbar min-h-0 flex-1 divide-y divide-border overflow-y-auto">
             {recentRuns.map(run => {
               const owner = resolveTask(run);
               const duration = run.endTime
@@ -319,19 +356,18 @@ export default memo(function TaskList({
                 <button
                   key={run.taskId}
                   onClick={() => onSelect(owner?.name ?? run.taskName ?? run.taskId)}
-                  className="w-full text-left rounded-xl px-3 py-2.5 hover:bg-slate-50 transition-colors"
+                  className="grid w-full grid-cols-[8px_minmax(0,1fr)] items-center gap-x-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/60"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <StatusDot tone={runTone(run.status)} pulse={run.status === 'running'} />
-                    <span className="flex-1 min-w-0 truncate text-sm font-medium text-slate-700">
-                      {owner?.title ?? run.taskName ?? run.taskId}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 pl-4 text-[10px] text-slate-400">
+                  <StatusDot tone={runTone(run.status)} pulse={run.status === 'running'} />
+                  <span className="min-w-0 truncate text-sm font-medium">
+                    {owner?.title ?? run.taskName ?? run.taskId}
+                  </span>
+                  <span />
+                  <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <Badge variant="engine" size="sm" engine={run.engine}>{run.engine}</Badge>
                     <span>{relativeTime(runStartedAt(run), language)}</span>
                     {duration && <span>· {duration}</span>}
-                  </div>
+                  </span>
                 </button>
               );
             })}

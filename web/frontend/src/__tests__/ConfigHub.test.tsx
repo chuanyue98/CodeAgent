@@ -129,7 +129,7 @@ describe('ConfigHub Component', () => {
     // Click the View Resources button for the first group (codeagent)
     fireEvent.click(viewButtons[0]);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/settings/resources?group=codeagent');
+    expect(mockNavigate).toHaveBeenCalledWith('/extensions/resources?group=codeagent');
   });
 
   test('switches between configuration sections via sidebar navigation', async () => {

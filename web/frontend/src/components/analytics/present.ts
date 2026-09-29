@@ -3,18 +3,18 @@ import type { Translate } from '../../i18n/context';
 
 // ── Engine palette ───────────────────────────────────────────────────────────
 const ENGINE_COLORS: Record<string, string> = {
-  claude: '#f97316',
-  codex: '#10b981',
-  opencode: '#8b5cf6',
-  codebuddy: '#0ea5e9',
-  antigravity: '#6366f1',
+  claude: '#e08a68',
+  codex: '#3fc796',
+  opencode: '#a78bfa',
+  codebuddy: '#55a8ff',
+  antigravity: '#f172b3',
 };
 const ENGINE_BADGE: Record<string, string> = {
-  claude: 'bg-orange-100 text-orange-700',
-  codex: 'bg-emerald-100 text-emerald-700',
-  opencode: 'bg-violet-100 text-violet-700',
-  codebuddy: 'bg-sky-100 text-sky-700',
-  antigravity: 'bg-indigo-100 text-indigo-700',
+  claude: 'bg-engine-claude/15 text-engine-claude',
+  codex: 'bg-engine-codex/15 text-engine-codex',
+  opencode: 'bg-engine-opencode/15 text-engine-opencode',
+  codebuddy: 'bg-engine-codebuddy/15 text-engine-codebuddy',
+  antigravity: 'bg-engine-antigravity/15 text-engine-antigravity',
 };
 
 export function ec(t: string) { return ENGINE_COLORS[t] ?? '#94a3b8'; }

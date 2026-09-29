@@ -1,4 +1,4 @@
-import { Bot, Clock3, Home, History, Settings, type LucideIcon } from 'lucide-react';
+import { Activity, Clock3, History, Puzzle, Settings, SquareTerminal, type LucideIcon } from 'lucide-react';
 import type { SectionTab } from './components/SectionLayout';
 import type { TranslationKey } from './i18n/locales/en';
 
@@ -17,10 +17,11 @@ export interface PrimaryNavItem {
 // where there is no hook to call, and a label baked in here would freeze the
 // nav in whichever language happened to be active at import time.
 export const primaryNav: PrimaryNavItem[] = [
-  { to: '/home', matchPrefix: '/home', labelKey: 'nav.home', descriptionKey: 'section.home.description', icon: Home },
-  { to: '/agent/terminal', matchPrefix: '/agent', labelKey: 'nav.agent', descriptionKey: 'section.agent.description', icon: Bot },
-  { to: '/automations/tasks', matchPrefix: '/automations', labelKey: 'nav.automations', descriptionKey: 'section.automations.description', icon: Clock3 },
+  { to: '/home', matchPrefix: '/home', labelKey: 'nav.home', descriptionKey: 'section.home.description', icon: Activity },
+  { to: '/agent/terminal', matchPrefix: '/agent', labelKey: 'nav.agent', descriptionKey: 'section.agent.description', icon: SquareTerminal },
   { to: '/activity/sessions', matchPrefix: '/activity', labelKey: 'nav.activity', descriptionKey: 'section.activity.description', icon: History },
+  { to: '/automations/tasks', matchPrefix: '/automations', labelKey: 'nav.automations', descriptionKey: 'section.automations.description', icon: Clock3 },
+  { to: '/extensions/resources', matchPrefix: '/extensions', labelKey: 'nav.extensions', descriptionKey: 'section.extensions.description', icon: Puzzle },
   { to: '/settings/workspace', matchPrefix: '/settings', labelKey: 'nav.settings', descriptionKey: 'section.settings.description', icon: Settings },
 ];
 
@@ -62,15 +63,17 @@ export const ACTIVITY_TABS: SectionTab[] = [
 // single row and shouldn't leak into a sibling tab's filters.
 export const ACTIVITY_FILTER_PARAMS = ['q', 'from', 'to', 'engines', 'types', 'project'];
 
-// One flat row of Settings tabs. Skills/Prompts/Hooks/Plugins used to be four
-// of them; they are one Resources page now, because they are one question --
-// "what is this group running?" -- that four tabs could only answer four
-// times. MCP stays separate: it is scoped per engine, not per group, so it
-// does not belong under the same group selector.
+// Skills/Prompts/Hooks/Plugins are one Resources page, because they are one
+// question -- "what is this group running?" -- that four tabs could only
+// answer four times. MCP stays separate: it is scoped per engine, not per
+// group, so it does not belong under the same group selector.
+export const EXTENSION_TABS: SectionTab[] = [
+  { to: '/extensions/resources', labelKey: 'tab.settings.resources' },
+  { to: '/extensions/mcp', labelKey: 'tab.settings.mcp' },
+];
+
 export const SETTINGS_TABS: SectionTab[] = [
   { to: '/settings/workspace', labelKey: 'tab.settings.workspace' },
-  { to: '/settings/resources', labelKey: 'tab.settings.resources' },
-  { to: '/settings/mcp', labelKey: 'tab.settings.mcp' },
   { to: '/settings/system', labelKey: 'tab.settings.system' },
 ];
 
@@ -87,7 +90,7 @@ export const PAGE_LABEL_KEYS: Record<string, TranslationKey> = {
   '/activity/sessions': 'tab.activity.sessions',
   '/activity/usage': 'tab.activity.usage',
   '/settings/workspace': 'tab.settings.workspace',
-  '/settings/resources': 'tab.settings.resources',
-  '/settings/mcp': 'tab.settings.mcp',
+  '/extensions/resources': 'tab.settings.resources',
+  '/extensions/mcp': 'tab.settings.mcp',
   '/settings/system': 'tab.settings.system',
 };

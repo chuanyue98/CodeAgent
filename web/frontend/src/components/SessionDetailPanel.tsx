@@ -524,7 +524,7 @@ export default function SessionDetailPanel({
                             are the transcript of a session an engine wrote in
                             markdown, so showing them raw meant a wall of ** and
                             backticks in the one place you go to read them back. */}
-                        <div className="prose prose-sm prose-slate max-w-none break-words">
+                        <div className="prose prose-sm prose-ca max-w-none break-words">
                           <MarkdownMessage text={msg.content} />
                         </div>
                         {msg.toolCalls?.length > 0 && (

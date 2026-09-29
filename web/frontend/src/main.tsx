@@ -11,10 +11,15 @@ import LanguageSync from './i18n/LanguageSync.tsx'
 import ErrorBoundary from './components/shared/ErrorBoundary.tsx'
 import { bootstrapToken } from './utils/token.ts'
 import { queryClient } from './utils/queryClient.ts'
+import { applyTheme, readTheme } from './utils/theme.ts'
 
 // Must run before the first API call: lifts ?ca_token=... out of the URL
 // the launcher opened and into sessionStorage. See utils/token.ts.
 bootstrapToken()
+
+// Restore an explicit light/dark choice before the first paint; with none saved
+// the OS preference decides through CSS alone.
+applyTheme(readTheme())
 
 // App-wide boundary: each route already owns its own ErrorBoundary +
 // Suspense pair (see App.tsx), which isolates lazy-loaded page errors.

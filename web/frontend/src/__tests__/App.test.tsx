@@ -34,21 +34,21 @@ function renderWithRouter(initialPath = '/skills') {
 }
 
 describe('App Layout and Navigation', () => {
-  test('renders the five workflow navigation links', async () => {
+  test('renders the six navigation links', async () => {
     renderWithRouter();
     await activeTab(/Resources/i);
-    expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Agent' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Automations' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Activity' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+    // The desktop rail and the phone's bottom bar are both in the DOM (CSS
+    // shows one), so each destination appears once per bar.
+    for (const name of ['Overview', 'Sessions', 'History', 'Automations', 'Extensions', 'Settings']) {
+      expect(screen.getAllByRole('link', { name }).length).toBeGreaterThan(0);
+    }
   });
 
   test('the heading names the section, not the tab below it', async () => {
     // Both used to read "Sessions", one directly above the other.
     renderWithRouter('/activity/sessions');
     expect(await activeTab('Sessions')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Activity');
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('History');
   });
 
   test('shows correct page heading for /config route', async () => {
@@ -103,7 +103,7 @@ describe('Activity tabs are Sessions / Usage', () => {
     renderWithRouter(path);
 
     await activeTab(/Resources/i);
-    const tabs = screen.getByRole('navigation', { name: 'Settings sections' });
+    const tabs = screen.getByRole('navigation', { name: 'Extensions sections' });
     expect(within(tabs).getByRole('link', { name: 'Resources' })).toBeInTheDocument();
   });
 
@@ -113,13 +113,34 @@ describe('Activity tabs are Sessions / Usage', () => {
     renderWithRouter('/activity/history?q=deploy&project=%2Fwork%2Fapp');
     await activeTab('Sessions');
 
-    const tabs = screen.getByRole('navigation', { name: 'Activity sections' });
+    const tabs = screen.getByRole('navigation', { name: 'History sections' });
     const target = new URL(
       within(tabs).getByRole('link', { name: 'Usage' }).getAttribute('href') ?? '',
       'http://localhost',
     );
     expect(target.searchParams.get('q')).toBe('deploy');
     expect(target.searchParams.get('project')).toBe('/work/app');
+  });
+});
+
+describe('Extensions holds Resources and MCP', () => {
+  test.each([
+    ['/extensions/resources', /^Resources$/],
+    ['/extensions/mcp', /^MCP$/],
+    ['/settings/resources', /^Resources$/],
+    ['/settings/mcp', /^MCP$/],
+    ['/mcp', /^MCP$/],
+  ])('%s opens the %s tab', async (path, label) => {
+    renderWithRouter(path);
+    expect(await activeTab(label)).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Extensions sections' })).toBeInTheDocument();
+  });
+
+  test('Settings is left with Workspace and System', async () => {
+    renderWithRouter('/settings/workspace');
+    await activeTab(/^Workspace$/);
+    const tabs = screen.getByRole('navigation', { name: 'Settings sections' });
+    expect(within(tabs).getAllByRole('link').map(link => link.textContent)).toEqual(['Workspace', 'System']);
   });
 });
 

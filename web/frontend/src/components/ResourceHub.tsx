@@ -194,16 +194,14 @@ export default function ResourceHub() {
   }
 
   return (
-    <div className="flex h-full gap-6 overflow-hidden p-6">
+    <div className="flex h-full min-h-0 gap-8 overflow-hidden">
       {/* ── Sidebar: kind > category ─────────────────────────────────────── */}
-      <div className="animate-slide-left stagger-1 glass-card flex w-full xl:w-56 shrink-0 flex-col overflow-hidden">
-        <div className="border-b border-slate-100 p-6">
-          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-slate-400">
-            <BookOpen className="h-4 w-4 text-primary" />
-            {t('resources.sidebar')}
-          </h2>
-        </div>
-        <div className="custom-scrollbar flex-1 space-y-1 overflow-y-auto p-4">
+      <div className="flex w-full shrink-0 flex-col overflow-hidden xl:w-56">
+        <h2 className="mb-3 flex items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <BookOpen className="h-3.5 w-3.5" />
+          {t('resources.sidebar')}
+        </h2>
+        <div className="custom-scrollbar flex-1 space-y-1 overflow-y-auto">
           {kinds.map(kind => {
             const categories = Object.keys(kind.data ?? {});
             const isCollapsed = collapsed.has(kind.config.id);
@@ -348,7 +346,7 @@ export default function ResourceHub() {
             )}
 
             <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-2">
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="glass-card divide-y divide-border overflow-hidden">
                 {shown.map(hit => {
                   const active = isActive(hit.kind.id, hit.item.id);
                   const ItemIcon = hit.kind.itemIcon;
@@ -364,68 +362,54 @@ export default function ResourceHub() {
                           setOpenItem(hit);
                         }
                       }}
-                      className={`animate-fade-rise group glass-card-flat relative cursor-pointer overflow-hidden p-6 transition-colors hover:border-primary/30 hover:bg-slate-50/50 ${
-                        !active ? 'border-slate-200 bg-slate-50/60' : ''
-                      }`}
+                      className="group flex cursor-pointer items-center gap-4 px-4 py-3 transition-colors hover:bg-muted/60"
                     >
-                      <div className="mb-4 flex items-start justify-between">
-                        <div className="flex items-center gap-2">
-                          {!searching && (
-                            <input
-                              type="checkbox"
-                              aria-label={t('gallery.select', { name: hit.item.name })}
-                              checked={selectedIds.has(hit.item.id)}
-                              onClick={event => event.stopPropagation()}
-                              onChange={() =>
-                                setSelectedIds(prev => {
-                                  const next = new Set(prev);
-                                  if (next.has(hit.item.id)) next.delete(hit.item.id);
-                                  else next.add(hit.item.id);
-                                  return next;
-                                })
-                              }
-                              className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
-                            />
-                          )}
-                          <div className={`rounded-lg p-2 ${active ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-400'}`}>
-                            <ItemIcon className="h-5 w-5" />
-                          </div>
-                        </div>
-                        <Toggle
-                          checked={active}
-                          onChange={event => toggleResource(hit.kind.id, hit.item.id, event)}
-                          aria-label={t('gallery.toggleActive', { name: hit.item.name })}
+                      {!searching && (
+                        <input
+                          type="checkbox"
+                          aria-label={t('gallery.select', { name: hit.item.name })}
+                          checked={selectedIds.has(hit.item.id)}
+                          onClick={event => event.stopPropagation()}
+                          onChange={() =>
+                            setSelectedIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(hit.item.id)) next.delete(hit.item.id);
+                              else next.add(hit.item.id);
+                              return next;
+                            })
+                          }
+                          className="h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus:ring-primary"
                         />
-                      </div>
-
-                      {/* The kind badge is what makes a mixed result list
-                          readable — without it a hit is a name with no clue
-                          which of the four things it is. */}
-                      {searching && (
-                        <span className="mb-2 inline-block rounded-full border border-slate-100 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                          {t(hit.kind.labelKey)}
-                        </span>
                       )}
-
-                      <h2 className="mb-2 break-words text-lg font-semibold tracking-tight transition-colors group-hover:text-primary">
-                        {hit.item.name}
-                      </h2>
-                      <p className="line-clamp-3 text-sm font-medium leading-relaxed text-slate-500">
-                        {hit.item.description}
-                      </p>
+                      <ItemIcon className={`h-4 w-4 shrink-0 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h2 className="truncate text-sm font-medium">{hit.item.name}</h2>
+                          {/* The kind badge is what makes a mixed result list
+                              readable: without it a hit is a name with no clue
+                              which of the four things it is. */}
+                          {searching && (
+                            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                              {t(hit.kind.labelKey)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="truncate text-xs text-muted-foreground">{hit.item.description}</p>
+                      </div>
                       {hit.kind.renderMeta && (
-                        <div className="mt-4">{hit.kind.renderMeta(hit.item, t, active)}</div>
+                        <div className="hidden shrink-0 lg:block">{hit.kind.renderMeta(hit.item, t, active)}</div>
                       )}
-                      <div className="mt-6 flex items-center text-[11px] font-semibold uppercase tracking-wider text-primary/60 transition-all group-hover:translate-x-1 group-hover:text-primary">
-                        {t('gallery.viewDetails')} <ChevronRight className="ml-1 h-3 w-3" />
-                      </div>
-                      <div className={`absolute right-0 top-0 h-full w-1 transition-all ${active ? 'bg-primary' : 'bg-slate-200'}`} />
+                      <Toggle
+                        checked={active}
+                        onChange={event => toggleResource(hit.kind.id, hit.item.id, event)}
+                        aria-label={t('gallery.toggleActive', { name: hit.item.name })}
+                      />
                     </div>
                   );
                 })}
               </div>
               {shown.length === 0 && (
-                <div className="glass-card py-20 text-center text-slate-400">
+                <div className="glass-card py-20 text-center text-muted-foreground">
                   {searching ? t('resources.noSearchMatch') : t('resources.emptyCategory')}
                 </div>
               )}
@@ -488,7 +472,7 @@ function DetailView({ hit, active, currentGroup, onBack, onToggle }: DetailViewP
             {kind.renderDetailAside(item, t)}
           </div>
         )}
-        <div className="prose prose-slate max-w-none flex-1 overflow-y-auto bg-white p-8 prose-headings:text-slate-900 prose-p:text-slate-700 prose-strong:text-slate-900 prose-li:text-slate-700">
+        <div className="prose prose-ca max-w-none flex-1 overflow-y-auto bg-card p-8">
           <ReactMarkdown
             rehypePlugins={[rehypeHighlight]}
             components={{
@@ -508,7 +492,7 @@ function DetailView({ hit, active, currentGroup, onBack, onToggle }: DetailViewP
               },
               pre({ children, ...props }) {
                 return (
-                  <pre className="overflow-x-auto rounded-xl border border-slate-700 !bg-slate-900 p-5 !text-slate-100 shadow-inner" {...props}>
+                  <pre className="overflow-x-auto rounded-xl border border-term-line !bg-term p-5 !text-term-fg" {...props}>
                     {children}
                   </pre>
                 );

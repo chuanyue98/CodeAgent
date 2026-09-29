@@ -12,20 +12,25 @@
 | `SectionLabel` | eyebrow 小标题 | 唯一规格：`text-[11px] font-semibold uppercase tracking-wider text-muted-foreground` |
 | `EmptyState` | 空状态 | `icon/title/body/action`；`compact` 用于侧栏内搜索无结果等次要场景 |
 | `StatusDot` | 状态点 | `tone: running\|success\|busy\|pending\|failed\|neutral`、`pulse?`（活体的软光环） |
-| `GlassCard` | 卡片容器 | `variant: default\|feature\|flat`、`interactive?`；选择规则见组件 doc-comment |
+| `GlassCard` | 卡片容器（扁平实色） | `variant: default\|feature\|flat`、`interactive?`；选择规则见组件 doc-comment |
 | `ErrorBar` | 行内错误条 | `message/onDismiss?`；带重试的页面级失败用 `ErrorState` |
 | `Modal` / `ConfirmDialog` / `Toast` / `ErrorState` / `LoadingState` / `FilterListSkeleton` / `Toggle` / `BatchActionBar` | 既有组件 | 沿用原 API |
 
 ## 约定
 
-- **圆角**：控件 `rounded-md/lg`，可交互块 `rounded-xl`，玻璃卡 `rounded-2xl`（= `var(--radius)`），hero 卡 `rounded-3xl`。
-- **卡片 hover**：只走 `GlassCard interactive`（边框向 primary 暖色，无位移无阴影增长）。`active:scale-95` 仅属于 `Button primary`。
+- **主题**：深色优先，浅色为可选项（跟随系统，或 `data-theme="light|dark"`，由 `utils/theme.ts` 读写）。语义 token（`--background`/`--card`/`--primary`…）在 `src/index.css`，三块结构：裸 `:root` 是深色，浅色在 `prefers-color-scheme: light` 与 `[data-theme="light"]` 里重定义。
+- **随主题变色的调色板**：`slate`/`white` 与 `amber`/`red`/`emerald`… 在 `tailwind.config.js` 里被改成 CSS 变量（`themeScales` 插件生成），深色下色阶反向。所以 `bg-slate-50`、`text-amber-800` 这类类名不用改就跟随主题；新代码仍优先用语义 token（`bg-card`、`text-muted-foreground`、`border-border`）。
+- **始终深色的表面**：终端与代码块用 `bg-term` / `text-term-fg` / `border-term-line`，不要用 `slate-900`（深色主题下它会变浅）。
+- **引擎颜色**：`bg-engine-claude` 等（`--engine-*`），经 `terminalEngines.ts` 的 `dot`/`accent` 与 `analytics/present.ts` 的 `eb()`/`ec()` 使用，一个引擎一种色，处处一致。
+- **状态色**：成功/警告用 `ok`/`warn`（`text-ok`、`bg-warn/15`），与强调色分开。
+- **表面**：卡片是实色加细线（`glass-card*` 这三个类名保留，样式已是扁平的，没有模糊和阴影）。列表用「一张卡片 + `divide-y divide-border` 的行」，不要卡片套卡片。
+- **圆角**：`--radius` = 12px，控件 `rounded-lg`，表面 `rounded-2xl`。
+- **Markdown**：用 `prose prose-ca`（颜色走主题变量），不要 `prose-slate` / `prose-invert`。
 - **Loading 三级制**：路由级首屏 = `LoadingState`；已知结构的筛选列表 = `FilterListSkeleton`；按钮/行内动作 = `Button loading` 或行内 `Loader2`。`animate-pulse` 只属于骨架屏，「运行中」的活性用 `StatusDot pulse`。
 - **错误**：页面级（可重试）用 `ErrorState`；动作级用 `ErrorBar`；浮层用 `Toast`。一律 destructive token。
 - **focus-visible**：全局 outline（index.css）是唯一焦点环，组件内不再手写。
-- **激活态**：tab/侧栏行选中统一用 `activeChip.ts` 的 `ACTIVE_CHIP`。
-- **暗色扩展位**：`.glass-card*` 只消费 `--glass-*` 变量；未来暗色 = 一个 `.dark` 块重定义玻璃变量 + HSL 组 + 大气 token，组件零改动。
+- **响应式外壳**：`AppRail` 按 `useMediaQuery` 只挂一套布局（桌面左栏，或手机顶栏 + 底栏），不要用两套都渲染再靠 CSS 隐藏——命令面板挂载时监听 Ctrl+K，两份会同时弹出。
 
 ## 例外
 
-`analytics/present.ts` 的 `eb()/ec()` 保持纯函数不依赖 React；`Badge` 只是它的壳。历史遗留的 slate 硬编码不做全局清扫——被组件吸收后，触碰到的文件顺手迁 token（slate-500→`text-muted-foreground`、slate-200→`border`、slate-100→`bg-muted`）。但 `shared/` 自身零硬编码色：组件层要是留了 slate，暗色主题的一处变量覆盖就盖不住它。
+`analytics/present.ts` 的 `eb()/ec()` 保持纯函数不依赖 React；`Badge` 只是它的壳。历史遗留的 slate 硬编码不做全局清扫——调色板已随主题变色；被组件吸收后，触碰到的文件顺手迁语义 token。

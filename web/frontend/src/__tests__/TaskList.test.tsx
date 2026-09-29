@@ -93,7 +93,7 @@ describe('TaskList run activity feed', () => {
 
     const feed = screen.getByRole('complementary', { name: 'Run activity' });
     expect(within(feed).getByText('Code Review')).toBeVisible();
-    expect(screen.getByText('Completed')).toBeVisible();
+    expect(within(feed).getByText('Completed')).toBeVisible();
 
     fireEvent.click(within(feed).getAllByRole('button')[0]);
     expect(onSelect).toHaveBeenCalledWith('code_review');

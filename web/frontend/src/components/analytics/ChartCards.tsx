@@ -102,7 +102,7 @@ export function TokensTrendCard({ series, granularity, rangeLabel }: TrendCardsP
       <ResponsiveContainer width="100%" height={240}>
         {granularity === 'month' ? (
           <BarChart data={series.tokens} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis dataKey="_key" tick={{ fontSize: 11 }} tickLine={false}
               tickFormatter={v => formatMonth(String(v))} />
             <YAxis tick={{ fontSize: 11 }} tickLine={false}
@@ -131,7 +131,7 @@ export function TokensTrendCard({ series, granularity, rangeLabel }: TrendCardsP
                 </linearGradient>
               ))}
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis dataKey="_key" tick={{ fontSize: 11 }} tickLine={false}
               tickFormatter={v => formatDate(String(v))} />
             <YAxis tick={{ fontSize: 11 }} tickLine={false}

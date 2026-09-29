@@ -9,8 +9,7 @@ import { useTerminal } from '../context/TerminalContext';
 import { useT } from '../i18n/context';
 import { isWithinLocalDayRange } from '../utils/dateRange';
 import ActivityFilterPanel from './ActivityFilterPanel';
-import { eb } from './analytics/present';
-import { AGENT_ENGINES } from './terminalEngines';
+import { AGENT_ENGINES, findEngine } from './terminalEngines';
 import SessionDetailPanel from './SessionDetailPanel';
 import ConfirmDialog from './shared/ConfirmDialog';
 import EmptyState from './shared/EmptyState';
@@ -321,112 +320,109 @@ export default function SessionsPage() {
     return <ErrorState message={error} onRetry={reload} />;
   }
 
+  const sortButton = 'rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors';
+
   return (
-    <div className="flex flex-col xl:flex-row gap-4 min-h-full xl:h-full">
+    <div className="flex min-h-full flex-col gap-4 xl:h-full">
       <ActivityFilterPanel
         filters={filters}
         engineOptions={engines}
         searchPlaceholder={t('sessions.searchPlaceholder')}
       />
 
-      <div data-testid="session-list" className="animate-fade-rise stagger-2 flex-1 min-w-0 glass-card-flat p-5 flex flex-col">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-xs text-slate-400 font-medium cursor-pointer select-none">
-              <input
-                type="checkbox"
-                aria-label={t('sessions.selectAllFiltered')}
-                checked={allFilteredSelected}
-                onChange={toggleSelectAllFiltered}
-                disabled={filtered.length === 0}
-                className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
-              />
-              {filtered.length === 1
-                ? t('sessions.countOne', { count: filtered.length })
-                : t('sessions.count', { count: filtered.length })}
-            </label>
-            {selectedKeys.size > 0 && (
-              <span className="flex items-center gap-2 text-xs">
-                <span className="text-slate-500">{t('sessions.selected', { count: selectedKeys.size })}</span>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">
+        <div data-testid="session-list" className="flex min-w-0 flex-1 flex-col">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  aria-label={t('sessions.selectAllFiltered')}
+                  checked={allFilteredSelected}
+                  onChange={toggleSelectAllFiltered}
+                  disabled={filtered.length === 0}
+                  className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary"
+                />
+                {filtered.length === 1
+                  ? t('sessions.countOne', { count: filtered.length })
+                  : t('sessions.count', { count: filtered.length })}
+              </label>
+              {selectedKeys.size > 0 && (
+                <span className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">{t('sessions.selected', { count: selectedKeys.size })}</span>
+                  <button
+                    onClick={() => setConfirmingDelete(true)}
+                    className="flex items-center gap-1 rounded-lg border border-destructive/30 px-2 py-1 font-medium text-destructive transition-colors hover:bg-destructive/10"
+                  >
+                    <Trash2 className="h-3 w-3" /> {t('sessions.deleteSelected')}
+                  </button>
+                  <button
+                    onClick={() => setSelectedKeys(new Set())}
+                    className="rounded-lg px-2 py-1 text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {t('common.clear')}
+                  </button>
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(['lastActivity', 'tokens'] as SortKey[]).map(key => (
                 <button
-                  onClick={() => setConfirmingDelete(true)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50 transition-colors font-medium"
+                  key={key}
+                  onClick={() => toggleSort(key)}
+                  className={`${sortButton} ${
+                    sortKey === key
+                      ? 'border-foreground/30 bg-muted text-foreground'
+                      : 'border-border text-muted-foreground hover:bg-muted/60'
+                  }`}
                 >
-                  <Trash2 className="w-3 h-3" /> {t('sessions.deleteSelected')}
+                  {key === 'lastActivity' ? t('sessions.sortDate') : t('sessions.sortTokens')}
+                  {sortKey === key && (sortDir === 'asc' ? ' ↑' : ' ↓')}
                 </button>
-                <button
-                  onClick={() => setSelectedKeys(new Set())}
-                  className="px-2 py-1 rounded-md text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  {t('common.clear')}
-                </button>
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(['lastActivity', 'tokens'] as SortKey[]).map(key => (
+              ))}
               <button
-                key={key}
-                onClick={() => toggleSort(key)}
-                className={`px-2 py-1 text-xs rounded-md border transition-colors ${
-                  sortKey === key
-                    ? 'bg-slate-100 border-slate-300 text-slate-800'
-                    : 'border-slate-200 text-slate-500 hover:bg-slate-50'
-                }`}
+                onClick={reload}
+                disabled={loading}
+                className={`${sortButton} flex items-center gap-1 border-border text-muted-foreground hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-60`}
               >
-                {key === 'lastActivity' ? t('sessions.sortDate') : t('sessions.sortTokens')}
-                {sortKey === key && (sortDir === 'asc' ? ' ↑' : ' ↓')}
+                <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} /> {t('common.refresh')}
               </button>
-            ))}
-            <button
-              onClick={reload}
-              disabled={loading}
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> {t('common.refresh')}
-            </button>
+            </div>
           </div>
-        </div>
 
-        {error && (
-          <div className="mb-3 flex items-center gap-2 rounded-lg border border-red-100 bg-red-50/60 px-3 py-2 text-xs text-red-600">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            {error}
-          </div>
-        )}
+          {error && (
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              {error}
+            </div>
+          )}
 
-        {deleteError && (
-          <div className="mb-3 flex items-center gap-2 rounded-lg border border-red-100 bg-red-50/60 px-3 py-2 text-xs text-red-600">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            {deleteError}
-          </div>
-        )}
+          {deleteError && (
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              {deleteError}
+            </div>
+          )}
 
-        {/* The parent pins this card to the viewport height at xl, so the rows
-            have to scroll inside it — without this they overflow a card whose
-            overflow is visible and paint outside its background. Timeline and
-            Schedules already do it this way. */}
-        <div className="space-y-2 flex-1 min-h-0 overflow-y-auto">
-          {filtered.map(session => {
-            const key = sessionKey(session);
-            const isSelected = selectedKey === key;
-            const totalTokens = session.inputTokens + session.outputTokens;
-            const subtaskCount = session.subtasks?.length ?? 0;
-            return (
-              <div
-                key={key}
-                className={`animate-fade-rise rounded-xl border p-4 transition-colors ${
-                  isSelected
-                    ? 'border-primary/40 bg-primary/[0.04]'
-                    : 'border-slate-100 hover:bg-slate-50/60'
-                }`}
-              >
+          {/* One table, one row per session. The list scrolls inside its own
+              box at xl, where the parent pins the page to the viewport. */}
+          <div className="glass-card min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+            {filtered.map(session => {
+              const key = sessionKey(session);
+              const isSelected = selectedKey === key;
+              const totalTokens = session.inputTokens + session.outputTokens;
+              const subtaskCount = session.subtasks?.length ?? 0;
+              const engine = findEngine(session.target);
+              return (
                 <div
+                  key={key}
                   role="button"
                   tabIndex={0}
                   aria-pressed={isSelected}
                   aria-label={t('sessions.open', { id: session.sessionId })}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer"
+                  className={`flex cursor-pointer flex-col justify-between gap-3 px-4 py-3 transition-colors sm:flex-row sm:items-center ${
+                    isSelected ? 'bg-muted' : 'hover:bg-muted/60'
+                  }`}
                   onClick={() => setSelectedKey(isSelected ? null : key)}
                   onKeyDown={event => {
                     if (event.key === 'Enter' || event.key === ' ') {
@@ -435,77 +431,67 @@ export default function SessionsPage() {
                     }
                   }}
                 >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
                     <input
                       type="checkbox"
                       aria-label={t('sessions.select', { id: session.sessionId })}
                       checked={selectedKeys.has(key)}
                       onClick={event => event.stopPropagation()}
                       onChange={() => toggleSelected(key)}
-                      className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-primary focus:ring-primary"
+                      className="h-3.5 w-3.5 shrink-0 rounded border-border text-primary focus:ring-primary"
                     />
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm font-medium text-slate-700 truncate">
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${engine?.dot ?? 'bg-slate-400'}`} />
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="truncate text-sm font-medium">
                           {session.title || session.projectPath.split(/[\\/]/).pop() || session.projectPath || '—'}
-                        </span>
-                        <span className={`shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${eb(session.target)}`}>
-                          {session.target}
                         </span>
                         {/* Subagent runs are folded into the session that spawned
                             them; the count is what tells you the row's tokens cover
                             more than one transcript. */}
                         {subtaskCount > 0 && (
-                          <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                          <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
                             {t('sessions.subtaskCount', { count: subtaskCount })}
+                          </span>
+                        )}
+                        {/* A subagent run only reaches top level when its parent is
+                            gone -- say the engine pruned that transcript. Marked
+                            rather than hidden, so its usage stays visible. */}
+                        {session.parentSessionId && (
+                          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                            {t('sessions.orphanSubtask')}
                           </span>
                         )}
                       </div>
                       {/* Under a workspace filter the path is the filter value
                           repeated on every row, so the line goes to the models
-                          that actually ran the session -- which the list shows
-                          nowhere else. */}
-                      <span
-                        className="text-xs text-slate-400 truncate"
-                        title={session.projectPath}
-                      >
-                        {project
-                          ? session.modelsUsed.join(', ')
-                          : (session.projectPath || '—')}
+                          that actually ran the session. */}
+                      <span className="truncate text-xs text-muted-foreground" title={session.projectPath}>
+                        <span className="font-medium">{session.target}</span>
+                        {' · '}
+                        <span>{project ? session.modelsUsed.join(', ') : (session.projectPath || '—')}</span>
                       </span>
                     </div>
                   </div>
-                  {/* Allowed to shrink: it already wraps its chips, but
-                      `shrink-0` kept them on one line and gave the whole row a
-                      hard minimum width, so a narrower list scrolled sideways
-                      instead of wrapping. */}
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
-                    {/* A subagent run only reaches top level when its parent is
-                        gone -- say the engine pruned that transcript. Marked
-                        rather than hidden, so its usage stays visible. */}
-                    {session.parentSessionId && (
-                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                        {t('sessions.orphanSubtask')}
-                      </span>
-                    )}
-                    <span className="text-xs text-slate-500 flex items-center gap-1">
-                      <FileText className="w-3 h-3" />{fmtTokens(totalTokens)}
+
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+                    <span className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
+                      <FileText className="h-3 w-3" />{fmtTokens(totalTokens)}
                     </span>
-                    <span className="text-xs text-slate-400 flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
+                    <span className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3" />
                       {new Date(session.lastActivity).toLocaleDateString()}
                     </span>
 
-                    {/* Quick Action Buttons: Resume & Relay */}
-                    <div className="flex items-center gap-1.5 shrink-0" onClick={event => event.stopPropagation()}>
+                    <div className="flex shrink-0 items-center gap-1.5" onClick={event => event.stopPropagation()}>
                       <button
                         type="button"
                         onClick={() => handleResumeSession(session)}
                         title={t('sessions.resumeTitle')}
                         aria-label={t('sessions.resumeTitle')}
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-colors shadow-xs"
+                        className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
                       >
-                        <Play size={11} className="fill-slate-600" />
+                        <Play size={11} className="fill-current" />
                         <span className="hidden sm:inline">{t('sessions.resume')}</span>
                       </button>
 
@@ -516,14 +502,14 @@ export default function SessionsPage() {
                           onClick={() => setHandoffSessionId(prev => prev === session.sessionId ? null : session.sessionId)}
                           title={t('launch.handoffTitle')}
                           aria-label={t('launch.handoffTitle')}
-                          className={`inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50/80 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors shadow-xs ${
-                            handoffSessionId === session.sessionId ? 'bg-amber-100 ring-2 ring-amber-400/30' : ''
+                          className={`inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted ${
+                            handoffSessionId === session.sessionId ? 'bg-muted' : ''
                           }`}
                         >
                           {handoffLoading === session.sessionId ? (
-                            <Loader2 size={11} className="animate-spin text-amber-600" />
+                            <Loader2 size={11} className="animate-spin" />
                           ) : (
-                            <Zap size={11} className="text-amber-600" />
+                            <Zap size={11} className="text-warn" />
                           )}
                           <span className="hidden sm:inline">{t('launch.handoff')}</span>
                           <ChevronDown size={10} className={handoffSessionId === session.sessionId ? 'rotate-180 transition-transform' : 'transition-transform'} />
@@ -532,9 +518,9 @@ export default function SessionsPage() {
                         {handoffSessionId === session.sessionId && (
                           <div
                             ref={handoffRef}
-                            className="absolute right-0 top-full z-50 mt-1 min-w-36 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur"
+                            className="absolute right-0 top-full z-50 mt-1 min-w-36 rounded-xl border border-border bg-popover p-1 shadow-lg"
                           >
-                            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                               {t('launch.handoffTitle')}
                             </div>
                             {AGENT_ENGINES.filter(e => e.id !== session.target).map(target => (
@@ -543,7 +529,7 @@ export default function SessionsPage() {
                                 type="button"
                                 disabled={Boolean(handoffLoading)}
                                 onClick={() => void handleHandoffSession(session, target.id)}
-                                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50"
+                                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted disabled:opacity-50"
                               >
                                 <span className={`h-2 w-2 rounded-full ${target.dot}`} />
                                 <span className="font-medium">{target.nameKey ? t(target.nameKey) : target.name}</span>
@@ -555,57 +541,53 @@ export default function SessionsPage() {
                     </div>
 
                     <ChevronRight
-                      className={`w-4 h-4 transition-colors shrink-0 ${isSelected ? 'text-primary' : 'text-slate-300'}`}
+                      className={`h-4 w-4 shrink-0 transition-colors ${isSelected ? 'text-foreground' : 'text-muted-foreground/50'}`}
                     />
                   </div>
                 </div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <EmptyState compact title={t('sessions.empty')} />
+            )}
+
+            {nextCursor && (
+              <div className="flex flex-col items-center gap-1 py-4">
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="rounded-lg border border-border px-4 py-1.5 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-50"
+                >
+                  {loadingMore ? t('sessions.loadingMore') : t('sessions.loadMore')}
+                </button>
+                <p className="text-[11px] text-muted-foreground">
+                  {t('sessions.loadedOfTotal', {
+                    loaded: String(sessions.length),
+                    total: String(matchCount),
+                  })}
+                </p>
               </div>
-            );
-          })}
-          {filtered.length === 0 && (
-            <EmptyState compact title={t('sessions.empty')} />
-          )}
-
-          {nextCursor && (
-            <div className="flex flex-col items-center gap-1 py-4">
-              <button
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="rounded-lg border border-slate-200 px-4 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
-              >
-                {loadingMore ? t('sessions.loadingMore') : t('sessions.loadMore')}
-              </button>
-              <p className="text-[11px] text-slate-400">
-                {t('sessions.loadedOfTotal', {
-                  loaded: String(sessions.length),
-                  total: String(matchCount),
-                })}
-              </p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
+
+        {/* One session, one place: usage, the actual conversation, and the
+            actions that operate on it. Wide enough to read a transcript in --
+            narrower and every fenced code block gets its own scrollbar. */}
+        {openSession && (
+          <div className="glass-card w-full shrink-0 p-5 xl:h-full xl:min-h-0 xl:w-[38rem] xl:max-w-[45%] 2xl:w-[46rem]">
+            <SessionDetailPanel
+              key={selectedKey}
+              engine={openSession.target}
+              sessionId={openSession.sessionId}
+              projectPath={openSession.projectPath}
+              usage={openSession}
+              onClose={() => setSelectedKey(null)}
+              onDeleted={() => dropSession(openSession)}
+            />
+          </div>
+        )}
       </div>
-
-      {/* One session, one place: usage, the actual conversation, and the
-          actions that operate on it. Reading a transcript used to mean
-          hopping to the Events tab and re-finding the session there. */}
-      {/* Wide enough to read a transcript in: at 26rem the markdown body was
-          narrower than the code blocks inside it, so every fenced block got its
-          own horizontal scrollbar. Steps up on larger screens, where the list
-          has width to spare. */}
-      {openSession && (
-        <div className="w-full xl:w-[38rem] xl:max-w-[45%] 2xl:w-[46rem] shrink-0 glass-card-flat p-5 xl:h-full xl:min-h-0">
-          <SessionDetailPanel
-            key={selectedKey}
-            engine={openSession.target}
-            sessionId={openSession.sessionId}
-            projectPath={openSession.projectPath}
-            usage={openSession}
-            onClose={() => setSelectedKey(null)}
-            onDeleted={() => dropSession(openSession)}
-          />
-        </div>
-      )}
 
       {confirmingDelete && (
         <ConfirmDialog

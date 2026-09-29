@@ -1,82 +1,48 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import HomePage from '../pages/HomePage';
-import { SystemMetricsProvider } from '../context/SystemMetricsContext';
-import { createQueryClient } from '../utils/queryClient';
+import { ProjectProvider } from '../context/ProjectContext';
+import { TerminalProvider } from '../context/TerminalContext';
 import type { SessionUsage } from '../api/analytics';
 import { jsonResponse, session as baseSession } from './factories';
 
 interface Backend {
-  events?: unknown[];
   sessions?: unknown[];
   daily?: unknown[];
   runs?: unknown[];
   schedules?: unknown[];
-  metrics?: Record<string, number>;
 }
 
-function mockBackend({ events = [], sessions = [], daily = [], runs = [], schedules = [], metrics }: Backend = {}) {
+function mockBackend({ sessions = [], daily = [], runs = [], schedules = [] }: Backend = {}) {
   globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-    if (url.includes('/api/history/audit')) return jsonResponse({ events, count: events.length });
+    if (url.includes('/api/projects')) {
+      return jsonResponse([{ path: '/workspace/project-a', group: 'common', available: true }]);
+    }
     if (url.includes('/api/analytics/sessions')) return jsonResponse({ sessions, nextCursor: null });
     if (url.includes('/api/analytics/daily')) return jsonResponse(daily);
     if (url.includes('/api/tasks/runs')) return jsonResponse(runs);
     if (url.includes('/api/schedules')) return jsonResponse(schedules);
-    if (url.includes('/api/system/metrics')) {
-      return jsonResponse(
-        metrics ?? {
-          cpuPercent: 12,
-          memoryPercent: 40,
-          memoryUsedGb: 6.4,
-          memoryTotalGb: 16,
-          diskPercent: 55,
-          diskUsedGb: 220,
-          diskTotalGb: 400,
-          uptimeSeconds: 100,
-          historyFileSizeMb: 1,
-          logFileCount: 2,
-        },
-      );
-    }
     return jsonResponse({});
   }) as typeof fetch;
 }
 
 function renderHome() {
   return render(
-    <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter>
-        <SystemMetricsProvider>
+    <MemoryRouter>
+      <ProjectProvider>
+        <TerminalProvider>
           <HomePage />
-        </SystemMetricsProvider>
-      </MemoryRouter>
-    </QueryClientProvider>,
+        </TerminalProvider>
+      </ProjectProvider>
+    </MemoryRouter>,
   );
 }
 
-function auditEvent(overrides: Record<string, unknown> = {}) {
-  return {
-    eventId: 'e1',
-    eventType: 'message',
-    engine: 'claude',
-    projectPath: '/workspace/project-a',
-    sessionId: 'session-a',
-    sessionTitle: 'A session',
-    timestamp: new Date().toISOString(),
-    role: 'user',
-    model: 'claude-opus',
-    contentPreview: 'Fix the launcher',
-    ...overrides,
-  };
-}
-
-/** The home strip reads only recency and title off a session row. */
 function sessionRow(overrides: Partial<SessionUsage> = {}): SessionUsage {
   return baseSession({
-    inputTokens: 0,
-    outputTokens: 0,
+    inputTokens: 1000,
+    outputTokens: 500,
     lastActivity: new Date().toISOString(),
     modelsUsed: [],
     title: 'Refactor the launcher',
@@ -84,233 +50,128 @@ function sessionRow(overrides: Partial<SessionUsage> = {}): SessionUsage {
   });
 }
 
+function schedule(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 's1',
+    taskName: 'Nightly dependency check',
+    engine: 'claude',
+    group: 'common',
+    workspace: '/workspace/project-a',
+    cronExpr: '0 9 * * *',
+    enabled: true,
+    createdAt: 0,
+    lastRunAt: null,
+    lastRunStatus: null,
+    nextRunAt: Math.floor(Date.now() / 1000) + 3 * 3600,
+    ...overrides,
+  };
+}
+
 const originalFetch = globalThis.fetch;
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-test('a run of tool calls says what each call did, not just the tool name', async () => {
-  // "Bash / Bash / Bash" identifies nothing; the arguments are what separates
-  // one row from the one above it.
+test('offers a session in each engine, and none of them is the plain shell', async () => {
+  mockBackend();
+  renderHome();
+
+  const group = await screen.findByRole('group', { name: /start a session in|新开会话/i });
+  const names = within(group).getAllByRole('button').map(button => button.textContent);
+  expect(names).toEqual(['Claude', 'OpenCode', 'Codex', 'CodeBuddy', 'Antigravity']);
+});
+
+test('a recent session resumes in a terminal through its own engine', async () => {
   mockBackend({
-    events: [
-      auditEvent({
-        eventId: 'e1',
-        eventType: 'tool_call',
-        toolName: 'Bash',
-        argsPreview: '{"command": "uv run pytest"}',
-      }),
-      auditEvent({
-        eventId: 'e2',
-        eventType: 'tool_call',
-        toolName: 'Bash',
-        argsPreview: '{"command": "uv run ruff check ."}',
-      }),
-    ],
+    sessions: [sessionRow({ sessionId: 'abc', target: 'codex', projectPath: '/workspace/project-a' })],
   });
-  renderHome();
-
-  expect(await screen.findByText('Bash · uv run pytest')).toBeInTheDocument();
-  expect(screen.getByText('Bash · uv run ruff check .')).toBeInTheDocument();
-});
-
-test('a preview truncated mid-JSON still reads as text, not as braces and quotes', async () => {
-  // Parsers cut args_preview at 200 chars, so the JSON often stops mid-string.
-  mockBackend({
-    events: [
-      auditEvent({
-        eventType: 'tool_call',
-        toolName: 'Edit',
-        argsPreview: '{"file_path": "core/services/agent_gateway.py", "old_string": "def start',
-      }),
-    ],
-  });
-  renderHome();
-
-  expect(
-    await screen.findByText('Edit · core/services/agent_gateway.py'),
-  ).toBeInTheDocument();
-});
-
-test('a tool call with no readable arguments falls back to the tool name', async () => {
-  mockBackend({
-    events: [auditEvent({ eventType: 'tool_call', toolName: 'Read', argsPreview: '{}' })],
-  });
-  renderHome();
-
-  expect(await screen.findByText('Read')).toBeInTheDocument();
-});
-
-test('a message with no content falls back to the session title', async () => {
-  mockBackend({
-    events: [auditEvent({ contentPreview: '   ', sessionTitle: 'Nightly review' })],
-  });
-  renderHome();
-
-  expect(await screen.findByText('Nightly review')).toBeInTheDocument();
-});
-
-test('an empty timeline says so rather than sitting on the loading line', async () => {
-  mockBackend({ events: [] });
-  renderHome();
-
-  expect(
-    await screen.findByText('No activity yet — start a session to see it here.'),
-  ).toBeInTheDocument();
-});
-
-test('a failed timeline lookup lands on the empty state, not a permanent spinner', async () => {
-  globalThis.fetch = vi.fn().mockRejectedValue(new Error('unreachable')) as typeof fetch;
-  renderHome();
-
-  await waitFor(() =>
-    expect(
-      screen.getByText('No activity yet — start a session to see it here.'),
-    ).toBeInTheDocument(),
-  );
-});
-
-test('"continue where you left off" opens the terminal, not the detail page', async () => {
-  // The label is a verb. It used to land on the object view, two clicks short
-  // of the conversation it promised.
-  mockBackend({ sessions: [sessionRow({ target: 'codex' })] });
   renderHome();
 
   const link = await screen.findByRole('link', { name: /Refactor the launcher/ });
-  expect(link).toHaveAttribute(
-    'href',
-    '/agent/terminal?engine=codex&cwd=%2Fworkspace%2Fproject-a&session=session-a',
-  );
+  const href = new URL(link.getAttribute('href') ?? '', 'http://localhost');
+  expect(href.pathname).toBe('/agent/terminal');
+  expect(href.searchParams.get('engine')).toBe('codex');
+  expect(href.searchParams.get('session')).toBe('abc');
+  expect(href.searchParams.get('cwd')).toBe('/workspace/project-a');
 });
 
-test('an untitled session is named by its workspace', async () => {
-  mockBackend({ sessions: [sessionRow({ title: '   ' })] });
+test('a session without a title is labelled by its workspace', async () => {
+  mockBackend({ sessions: [sessionRow({ title: '', projectPath: '/work/blog-site' })] });
   renderHome();
 
-  const list = (await screen.findByText('Continue where you left off')).closest('section')!;
-  expect(within(list).getAllByText('project-a').length).toBeGreaterThan(0);
+  const link = await screen.findByRole('link', { name: /blog-site/ });
+  expect(link).toBeInTheDocument();
 });
 
-test('only running tasks reach the dashboard', async () => {
+test('with no sessions it says so instead of rendering an empty list', async () => {
+  mockBackend({ sessions: [] });
+  renderHome();
+  expect(await screen.findByText(/no sessions yet/i)).toBeInTheDocument();
+});
+
+test('running tasks are listed under In progress; finished ones are not', async () => {
   mockBackend({
     runs: [
-      { taskId: 'review_1', engine: 'claude', status: 'completed' },
-      { taskId: 'deploy_2', engine: 'codex', status: 'running' },
+      { taskId: 'db-migrate', engine: 'claude', status: 'running' },
+      { taskId: 'old-report', engine: 'codex', status: 'completed' },
     ],
   });
   renderHome();
 
-  expect(await screen.findByText('deploy_2')).toBeInTheDocument();
-  expect(screen.queryByText('review_1')).not.toBeInTheDocument();
+  expect(await screen.findByText('db-migrate')).toBeInTheDocument();
+  expect(screen.queryByText('old-report')).toBeNull();
 });
 
-test('no running task offers the way to start one', async () => {
-  mockBackend({ runs: [{ taskId: 'review_1', engine: 'claude', status: 'completed' }] });
-  renderHome();
-
-  expect(await screen.findByText('Nothing running right now.')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /Run a task/ })).toBeInTheDocument();
-});
-
-test('the activity strip plots the days it claims to plot', async () => {
-  const today = new Date();
-  const key = (offset: number) => {
-    const day = new Date(today);
-    day.setDate(day.getDate() - offset);
-    return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-  };
-  mockBackend({
-    daily: [
-      { date: key(0), inputTokens: 300, outputTokens: 100 },
-      { date: key(3), inputTokens: 50, outputTokens: 50 },
-    ],
-  });
-  renderHome();
-
-  const strip = await screen.findByTitle('Tokens per day, last 12 days');
-  const bars = Array.from(strip.children) as HTMLElement[];
-  const height = (bar: HTMLElement) => parseFloat(bar.style.height);
-  expect(bars).toHaveLength(12);
-  // The busiest day is full height and a quieter day is visibly shorter; a day
-  // with no work still keeps a stub, so the strip stays a calendar rather than
-  // silently shortening. The exact stub size is the component's to choose.
-  expect(height(bars[11])).toBe(100);
-  expect(height(bars[8])).toBeLessThan(height(bars[11]));
-  expect(height(bars[8])).toBeGreaterThan(height(bars[0]));
-  expect(height(bars[0])).toBeGreaterThan(0);
-});
-
-test('the system card reads from the shared metrics subscription', async () => {
+test('with nothing open or running, In progress points at starting a session', async () => {
   mockBackend();
   renderHome();
-
-  expect(await screen.findByText('12%')).toBeInTheDocument();
-  expect(screen.getByText('6.4 / 16.0 GB')).toBeInTheDocument();
-  expect(screen.getByText('220 / 400 GB')).toBeInTheDocument();
+  expect(await screen.findByText(/nothing is running/i)).toBeInTheDocument();
 });
 
-test('hero quick actions link to terminal, tasks, and schedules', async () => {
-  mockBackend();
-  renderHome();
-
-  const terminalLink = await screen.findByRole('link', { name: /Open Terminal/ });
-  expect(terminalLink).toHaveAttribute('href', '/agent/terminal');
-
-  const taskLink = screen.getByRole('link', { name: /New Automation Task/ });
-  expect(taskLink).toHaveAttribute('href', '/automations/tasks');
-
-  const scheduleLink = screen.getByRole('link', { name: /New Schedule/ });
-  expect(scheduleLink).toHaveAttribute('href', '/automations/schedules');
-});
-
-test('automation monitor widget displays upcoming schedule and relative countdown', async () => {
-  const futureSec = Math.floor(Date.now() / 1000) + 600;
+test('the next enabled schedule shows with a countdown; disabled ones are skipped', async () => {
   mockBackend({
     schedules: [
-      {
-        id: 'sched-1',
-        taskName: 'Nightly Build',
-        engine: 'claude',
-        enabled: true,
-        nextRunAt: futureSec,
-      },
-      {
-        id: 'sched-2',
-        taskName: 'Later Build',
-        engine: 'codex',
-        enabled: true,
-        nextRunAt: futureSec + 3600,
-      },
-      {
-        id: 'sched-disabled',
-        taskName: 'Disabled Build',
-        engine: 'gemini',
-        enabled: false,
-        nextRunAt: futureSec - 100,
-      },
+      schedule({ id: 'a', taskName: 'Nightly dependency check' }),
+      schedule({ id: 'b', taskName: 'Paused weekly report', enabled: false }),
     ],
   });
   renderHome();
 
-  expect(await screen.findByText('Nightly Build')).toBeInTheDocument();
-  expect(screen.getByText(/in (9|10)m/)).toBeInTheDocument();
-  expect(screen.queryByText('Later Build')).not.toBeInTheDocument();
-  expect(screen.queryByText('Disabled Build')).not.toBeInTheDocument();
+  expect(await screen.findByText('Nightly dependency check')).toBeInTheDocument();
+  expect(screen.queryByText('Paused weekly report')).toBeNull();
+  expect(screen.getByText(/in 2h|in 3h|2 ?小时后|3 ?小时后/)).toBeInTheDocument();
 });
 
-test('automation widget shows empty upcoming state and navigation links', async () => {
-  mockBackend({ schedules: [] });
+test('a schedule whose last run failed is raised above the lists', async () => {
+  mockBackend({ schedules: [schedule({ taskName: 'Migrate database', lastRunStatus: 'failed' })] });
   renderHome();
 
-  expect(await screen.findByText('No upcoming schedules')).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /All Tasks & Schedules/ })).toHaveAttribute(
-    'href',
-    '/automations/schedules',
-  );
+  expect(await screen.findByText(/Migrate database failed on its last run|Migrate database 上次运行失败/)).toBeInTheDocument();
 });
 
+test('token totals count today and the last seven days across engines', async () => {
+  const now = new Date();
+  const iso = (offset: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const row = (date: string, input: number, output: number, target = 'claude') => ({
+    date, target, inputTokens: input, outputTokens: output,
+    cacheCreationTokens: 0, cacheReadTokens: 0, modelsUsed: [], modelBreakdowns: [],
+  });
+  mockBackend({
+    daily: [row(iso(0), 1000, 500), row(iso(0), 200, 300, 'codex'), row(iso(3), 4000, 0), row(iso(20), 90000, 0)],
+  });
+  renderHome();
+
+  // today: 1000+500+200+300 = 2.0K; week adds 4000 but not the 20-day-old row.
+  expect(await screen.findByText('2.0K')).toBeInTheDocument();
+  expect(screen.getByText('6.0K')).toBeInTheDocument();
+});

@@ -14,6 +14,7 @@ import {
   runTask,
   stopRun,
 } from '../../api/tasks';
+import { fetchSchedules } from '../../api/schedules';
 import GenerateTaskModal from './GenerateTaskModal';
 import NewTaskModal from './NewTaskModal';
 import TaskDetail from './TaskDetail';
@@ -56,6 +57,9 @@ const TaskDashboard = () => {
     refetchInterval: activeRunId ? false : IDLE_POLL_MS,
   });
   const enginesQuery = useQuery({ queryKey: ['engines'], queryFn: listEngines });
+  // Only used to show each task's schedule on its row; a failure just leaves
+  // the rows without one.
+  const schedulesQuery = useQuery({ queryKey: ['schedules'], queryFn: fetchSchedules, retry: false });
 
   const detailQuery = useQuery({
     queryKey: ['task', selectedName, currentGroup],
@@ -234,6 +238,7 @@ const TaskDashboard = () => {
       <TaskList
         tasks={tasks}
         runs={runs}
+        schedules={Array.isArray(schedulesQuery.data) ? schedulesQuery.data : []}
         onSelect={openTask}
         onManualCreateClick={() => setShowNewTask(true)}
         onGenerateClick={() => setShowGenerateTask(true)}

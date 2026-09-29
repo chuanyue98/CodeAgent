@@ -22,12 +22,12 @@ function CodeBlockWrapper({ children, ...props }: ComponentPropsWithoutRef<'pre'
     <div className="relative group/code my-2.5">
       <button
         onClick={handleCopy}
-        className="absolute top-2 right-2 p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors border border-slate-700 opacity-0 group-hover/code:opacity-100 focus:opacity-100 z-10"
+        className="absolute top-2 right-2 p-1.5 bg-term-line hover:bg-term-line/70 text-term-dim hover:text-term-fg rounded-lg transition-colors border border-term-line opacity-0 group-hover/code:opacity-100 focus:opacity-100 z-10"
         title={t('agent.copyCode')}
       >
         {copied ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
       </button>
-      <pre ref={preRef} className="!bg-slate-900 !text-slate-100 p-4 rounded-xl shadow-inner border border-slate-800 overflow-x-auto text-xs" {...props}>
+      <pre ref={preRef} className="!bg-term !text-term-fg p-4 rounded-xl border border-term-line overflow-x-auto text-xs" {...props}>
         {children}
       </pre>
     </div>

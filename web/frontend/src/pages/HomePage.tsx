@@ -1,466 +1,248 @@
 import { useEffect, useState } from 'react';
-import {
-  Activity,
-  ArrowRight,
-  ArrowUpRight,
-  Calendar,
-  Clock3,
-  Cpu,
-  HardDrive,
-  MemoryStick,
-  Terminal,
-} from 'lucide-react';
-import { Link } from 'react-router';
-import { fetchAuditEvents, type AuditEvent } from '../api/audit';
-import { fetchDaily, fetchSessions, type SessionUsage } from '../api/analytics';
+import { AlertTriangle } from 'lucide-react';
+import { Link, useNavigate } from 'react-router';
+import { fetchDaily, fetchSessions, fmtTokens, type SessionUsage } from '../api/analytics';
 import { fetchSchedules, type Schedule } from '../api/schedules';
-import request from '../utils/request';
-import { useSystemMetrics } from '../context/SystemMetricsContext';
-import { buildResumeLink } from '../utils/sessionLink';
-import { buttonClass } from '../components/shared/buttonClass';
-import { formatRelativeCountdown } from '../utils/workspaceFormat';
+import { AGENT_ENGINES, findEngine } from '../components/terminalEngines';
+import SectionLabel from '../components/shared/SectionLabel';
+import { useProject } from '../context/ProjectContext';
+import { useTerminal } from '../context/TerminalContext';
 import { useLanguageCode, useT } from '../i18n/context';
+import request from '../utils/request';
+import { buildResumeLink } from '../utils/sessionLink';
+import { formatRelativeCountdown, relativeTime, workspaceLabel } from '../utils/workspaceFormat';
 import type { RunStatus } from '../components/TaskDashboard/types';
 
-/** Home shows only enough of a run to identify it; the dashboard shows the rest. */
+/** Overview shows only enough of a run to identify it; Automations shows the rest. */
 type RunningTask = Pick<RunStatus, 'taskId' | 'engine' | 'status'>;
 
-//: Days of history in the hero's bar strip. Twelve fits the column at the
-//: bar width without the strip becoming a chart that needs axes.
-const ACTIVITY_BAR_DAYS = 12;
+const RECENT_SESSIONS_LIMIT = 6;
+const UPCOMING_LIMIT = 3;
 
-const RECENT_ACTIVITY_LIMIT = 6;
-const RECENT_SESSIONS_LIMIT = 5;
-
-/** Compact "2s"/"14m"/"3h"/"2d" — matches the hero's tight, terminal-ish style. */
-function formatCompactAgo(timestamp: string): string {
-  const then = new Date(timestamp).getTime();
-  if (Number.isNaN(then)) return '';
-  const diffSec = Math.max(0, Math.floor((Date.now() - then) / 1000));
-  if (diffSec < 60) return `${diffSec}s`;
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h`;
-  return `${Math.floor(diffHr / 24)}d`;
+function engineName(id: string, t: ReturnType<typeof useT>): string {
+  const engine = findEngine(id);
+  if (!engine) return id;
+  return engine.nameKey ? t(engine.nameKey) : engine.name ?? id;
 }
 
 /**
- * The single most identifying string in a tool call's JSON arguments.
- *
- * Every engine serialises the arguments differently, so rather than model
- * four schemas this takes the longest string value -- the command, the path,
- * the pattern -- which is the part a person recognises the call by.
- */
-function toolCallSubject(argsPreview: string | undefined): string {
-  if (!argsPreview) return '';
-  try {
-    const parsed: unknown = JSON.parse(argsPreview);
-    if (typeof parsed === 'string') return parsed;
-    if (typeof parsed !== 'object' || parsed === null) return '';
-    return Object.values(parsed as Record<string, unknown>)
-      .filter((v): v is string => typeof v === 'string')
-      .reduce((longest, v) => (v.length > longest.length ? v : longest), '');
-  } catch {
-    // Previews are truncated to 200 chars at parse time, so anything longer
-    // arrives as JSON that stops mid-string. Read the first value out by hand
-    // rather than showing the reader the braces and quotes around it.
-    const firstValue = /"(?:[^"\\]|\\.)*"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(argsPreview);
-    const raw = firstValue ? firstValue[1] : argsPreview;
-    return raw.replace(/\\n/g, ' ').replace(/\\(.)/g, '$1');
-  }
-}
-
-/**
- * What this event was, in the words of the work rather than of the schema.
- *
- * A row has to differ from the one above it or the card is a wall of repeats:
- * a run of tool calls is nearly always the same tool over and over, so the
- * name alone ("Bash", "Bash", "Bash") identifies nothing. The arguments carry
- * what each call actually did.
- */
-function describeAuditEvent(event: AuditEvent): string {
-  if (event.eventType === 'tool_call') {
-    const name = event.toolName || 'tool';
-    const subject = toolCallSubject(event.argsPreview).replace(/\s+/g, ' ').trim();
-    return subject ? `${name} · ${subject}` : name;
-  }
-  const preview = event.contentPreview?.trim();
-  if (preview) return preview;
-  return event.sessionTitle?.trim() || event.engine;
-}
-
-function toneForEvent(event: AuditEvent): 'live' | 'ok' | 'idle' {
-  if (event.eventType === 'tool_call') return 'ok';
-  return event.role === 'user' ? 'live' : 'idle';
-}
-
-/** Last path segment — the label form every other page uses for a workspace. */
-function workspaceLabel(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).pop() || path;
-}
-
-/**
- * Home used to be five entry cards repeating the five primary-nav items one
- * to one. It is now a dashboard of live data — recent sessions, what is
- * running, system health — so the page answers "what's going on / what was I
- * doing" instead of "where is the nav" (the sidebar already answers that).
+ * The page you land on: what is open and running, what needs you, what fires
+ * next, and where you left off. Everything here is read from data the gateway
+ * already has; there is nothing to configure.
  */
 export default function HomePage() {
   const t = useT();
   const lang = useLanguageCode();
-  const recentEvents = useRecentActivity(RECENT_ACTIVITY_LIMIT);
-  const recentSessions = useRecentSessions(RECENT_SESSIONS_LIMIT);
-  const activityBars = useActivityBars(ACTIVITY_BAR_DAYS);
+  const navigate = useNavigate();
+  const { validProjects, selectedWorkspace } = useProject();
+  const { tabs, openTab, setActiveTabId, rateLimitedTabIds } = useTerminal();
+  const recent = useRecentSessions(RECENT_SESSIONS_LIMIT);
+  const usage = useUsage();
   const runs = useRunningTasks();
   const schedules = useSchedules();
-  const { metrics } = useSystemMetrics();
 
-  const upcomingSchedule = schedules
-    ? schedules
-        .filter(s => s.enabled && typeof s.nextRunAt === 'number' && s.nextRunAt > 0)
-        .sort((a, b) => (a.nextRunAt ?? 0) - (b.nextRunAt ?? 0))[0] ?? null
-    : null;
+  const workspace = (validProjects.some(p => p.path === selectedWorkspace)
+    ? selectedWorkspace
+    : (selectedWorkspace.trim() || validProjects[0]?.path || '')).trim();
 
-  const countdown = upcomingSchedule?.nextRunAt
-    ? formatRelativeCountdown(upcomingSchedule.nextRunAt, lang)
-    : '';
+  const startSession = (engine: string) => {
+    openTab(engine, workspace);
+    navigate('/agent/terminal');
+  };
+  const openTabPage = (id: string) => {
+    setActiveTabId(id);
+    navigate('/agent/terminal');
+  };
+
+  const upcoming = (schedules ?? [])
+    .filter(s => s.enabled && typeof s.nextRunAt === 'number' && s.nextRunAt > 0)
+    .sort((a, b) => (a.nextRunAt ?? 0) - (b.nextRunAt ?? 0))
+    .slice(0, UPCOMING_LIMIT);
+  const failedSchedules = (schedules ?? []).filter(s => s.enabled && s.lastRunStatus === 'failed');
+  const limitedTabs = tabs.filter(tab => rateLimitedTabIds.has(tab.id));
+  const hasAttention = limitedTabs.length > 0 || failedSchedules.length > 0;
+  const inProgressCount = tabs.length + (runs?.length ?? 0);
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-3 p-2 sm:space-y-4 sm:p-4 lg:p-6">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
-
-        {/* ===== HERO + live activity ===== */}
-        <section
-          className="animate-fade-rise stagger-1 glass-card-feature group relative flex min-h-[18rem] flex-col justify-between overflow-hidden p-6 sm:p-8 lg:col-span-2"
-          aria-labelledby="hero-heading"
-        >
-          <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 opacity-60">
-            <div className="animate-orbit absolute inset-0 rounded-full border border-primary/20" />
-            <div className="animate-orbit absolute inset-6 rounded-full border border-primary/10" style={{ animationDuration: '32s' }} />
-            <div className="animate-orbit absolute inset-12 rounded-full border border-primary/5" style={{ animationDuration: '40s' }} />
-            <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/40 blur-[1px]" />
-          </div>
-          <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent" />
-
-          <div className="relative">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.06] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-pulse-ring absolute inline-flex h-full w-full rounded-full bg-primary" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
-              </span>
-              {t('home.eyebrow')}
-            </div>
-            <h2 id="hero-heading" className="max-w-xl text-3xl font-bold leading-[1.05] text-slate-900 sm:text-4xl">
-              {t('home.headingPrefix')}<span className="font-display italic text-primary">{t('home.headingAccent')}</span>{t('home.headingSuffix')}
-            </h2>
-            {/* Quick actions stay one compact row — the sidebar owns
-                navigation; these are just the three most common starts. */}
-            <div className="mt-4 flex flex-wrap items-center gap-2.5" aria-label={t('home.quickActions')}>
-              <Link
-                to="/agent/terminal"
-                className={buttonClass('primary', 'md')}
-              >
-                <Terminal className="h-3.5 w-3.5" /> {t('home.actionAgent')}
-              </Link>
-              <Link
-                to="/automations/tasks"
-                className={buttonClass('outline', 'md', 'bg-white/80 border-slate-200 text-slate-700 shadow-sm hover:bg-white hover:text-slate-900')}
-              >
-                <Clock3 className="h-3.5 w-3.5 text-slate-500" /> {t('home.actionTask')}
-              </Link>
-              <Link
-                to="/automations/schedules"
-                className={buttonClass('outline', 'md', 'bg-white/80 border-slate-200 text-slate-700 shadow-sm hover:bg-white hover:text-slate-900')}
-              >
-                <Calendar className="h-3.5 w-3.5 text-slate-500" /> {t('home.actionSchedule')}
-              </Link>
-            </div>
-          </div>
-
-          <div className="relative mt-8 space-y-3">
-            <div
-              className="flex h-10 items-end gap-[3px]"
-              title={t('home.activityBars', { days: ACTIVITY_BAR_DAYS })}
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8 md:px-8 md:py-12">
+      <header className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('home.greeting')}</h1>
+          {workspace && (
+            <p className="mt-1 font-mono text-sm text-muted-foreground" title={workspace}>{workspaceLabel(workspace)}</p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('home.startIn')}>
+          <span className="mr-1 text-sm text-muted-foreground">{t('home.startIn')}</span>
+          {AGENT_ENGINES.map(engine => (
+            <button
+              key={engine.id}
+              type="button"
+              disabled={!workspace}
+              onClick={() => startSession(engine.id)}
+              className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
             >
-              {(activityBars ?? Array.from({ length: ACTIVITY_BAR_DAYS }, () => 0)).map((h, i) => (
-                <span
-                  key={i}
-                  // A day with no work still gets a stub: dropping it to zero
-                  // height would silently shorten the strip and misplace every
-                  // day after it.
-                  className={`eq-bar w-1.5 rounded-full ${h > 0 ? 'bg-gradient-to-t from-primary/30 to-primary' : 'bg-slate-200'}`}
-                  style={{ height: `${Math.max(h * 100, 6)}%`, animationDelay: `${i * 70}ms` }}
-                />
+              <span className={`h-2 w-2 rounded-full ${engine.dot}`} />
+              {engine.nameKey ? t(engine.nameKey) : engine.name}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {hasAttention && (
+        <section aria-label="attention" className="space-y-2">
+          {limitedTabs.map(tab => (
+            <div key={tab.id} className="flex items-center gap-3 rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm">
+              <AlertTriangle size={17} className="shrink-0 text-warn" />
+              <span className="min-w-0 flex-1">
+                {t('home.attentionRateLimited', { engine: engineName(tab.engine, t), workspace: workspaceLabel(tab.cwd) })}
+              </span>
+              <button type="button" onClick={() => openTabPage(tab.id)} className="shrink-0 rounded-lg border border-border bg-card px-3 py-1 font-medium hover:bg-muted">
+                {t('home.attentionOpen')}
+              </button>
+            </div>
+          ))}
+          {failedSchedules.map(schedule => (
+            <div key={schedule.id} className="flex items-center gap-3 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
+              <AlertTriangle size={17} className="shrink-0 text-destructive" />
+              <span className="min-w-0 flex-1">{t('home.attentionFailed', { name: schedule.taskName })}</span>
+              <Link to="/automations/schedules" className="shrink-0 rounded-lg border border-border bg-card px-3 py-1 font-medium hover:bg-muted">
+                {t('home.attentionOpen')}
+              </Link>
+            </div>
+          ))}
+        </section>
+      )}
+
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <section className="space-y-3">
+          <SectionLabel as="h2">
+            {t('home.inProgress')} <span className="ml-1 font-mono normal-case tracking-normal">{inProgressCount}</span>
+          </SectionLabel>
+          {inProgressCount === 0 ? (
+            <p className="text-sm text-muted-foreground">{t('home.inProgressEmpty')}</p>
+          ) : (
+            <ul className="glass-card divide-y divide-border overflow-hidden">
+              {tabs.map(tab => {
+                const engine = findEngine(tab.engine);
+                const limited = rateLimitedTabIds.has(tab.id);
+                return (
+                  <li key={tab.id}>
+                    <button
+                      type="button"
+                      onClick={() => openTabPage(tab.id)}
+                      className="grid w-full grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60"
+                    >
+                      <span className={`h-2 w-2 rounded-full ${limited ? 'bg-warn' : (engine?.dot ?? 'bg-slate-400')}`} />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{engineName(tab.engine, t)}</span>
+                        <span className="block truncate font-mono text-xs text-muted-foreground">{workspaceLabel(tab.cwd)}</span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+              {(runs ?? []).map(run => (
+                <li key={run.taskId}>
+                  <Link
+                    to="/automations/tasks"
+                    className="grid grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/60"
+                  >
+                    <span className={`h-2 w-2 animate-pulse-soft rounded-full ${findEngine(run.engine)?.dot ?? 'bg-primary'}`} />
+                    <span className="min-w-0 truncate font-mono text-sm">{run.taskId}</span>
+                    <span className="text-xs text-muted-foreground">{engineName(run.engine, t)}</span>
+                  </Link>
+                </li>
               ))}
-            </div>
+            </ul>
+          )}
+        </section>
 
-            <div className="rounded-2xl border border-slate-200/70 bg-white/60 p-3 backdrop-blur-sm">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">{t('home.recentActivity')}</span>
-                <Link
-                  to="/activity/sessions"
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary transition-colors hover:text-primary/80"
-                >
-                  {t('home.viewAll')} <ArrowUpRight className="h-3 w-3" />
-                </Link>
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <SectionLabel as="h2">{t('home.upNext')}</SectionLabel>
+            <Link to="/automations/schedules" className="text-xs font-medium text-primary hover:underline">{t('home.allAutomations')}</Link>
+          </div>
+          {schedules !== null && upcoming.length === 0 && (
+            <p className="text-sm text-muted-foreground">{t('home.noUpcomingSchedule')}</p>
+          )}
+          {upcoming.length > 0 && (
+            <ul className="glass-card divide-y divide-border overflow-hidden">
+              {upcoming.map(schedule => (
+                <li key={schedule.id} className="flex items-center gap-3 px-4 py-3">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{schedule.taskName}</span>
+                    <span className="block text-xs text-muted-foreground">{engineName(schedule.engine, t)}</span>
+                  </span>
+                  <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 font-mono text-xs text-muted-foreground">
+                    {formatRelativeCountdown(schedule.nextRunAt ?? 0, lang)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-border bg-border">
+            {[
+              [t('home.statToday'), usage ? fmtTokens(usage.today) : '—'],
+              [t('home.statWeek'), usage ? fmtTokens(usage.week) : '—'],
+              [t('home.statRunning'), runs ? String(runs.length) : '—'],
+            ].map(([label, value]) => (
+              <div key={label} className="bg-card px-4 py-3">
+                <dt className="truncate text-xs text-muted-foreground">{label}</dt>
+                <dd className="mt-0.5 font-mono text-xl font-medium tracking-tight">{value}</dd>
               </div>
-              <ul className="space-y-1.5">
-                {recentEvents === null ? (
-                  <li className="font-mono text-xs text-slate-400">{t('common.loading')}</li>
-                ) : recentEvents.length === 0 ? (
-                  <li className="font-mono text-xs text-slate-400">{t('home.noActivity')}</li>
-                ) : (
-                  recentEvents.map(event => {
-                    const tone = toneForEvent(event);
-                    return (
-                      <li key={event.eventId} className="flex items-center justify-between gap-2 font-mono text-xs">
-                        <span className="flex min-w-0 items-center gap-2 text-slate-600">
-                          <span
-                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                              tone === 'live' ? 'animate-pulse-soft bg-emerald-500'
-                              : tone === 'ok'   ? 'bg-primary'
-                              : 'bg-slate-300'
-                            }`}
-                          />
-                          <span className="shrink-0 rounded bg-slate-100 px-1 font-mono text-[9px] uppercase text-slate-500">
-                            {event.engine}
-                          </span>
-                          <span className="truncate">{describeAuditEvent(event)}</span>
-                        </span>
-                        <span className="shrink-0 text-slate-400">{formatCompactAgo(event.timestamp)}</span>
-                      </li>
-                    );
-                  })
-                )}
-              </ul>
-            </div>
-          </div>
+            ))}
+          </dl>
         </section>
+      </div>
 
-        {/* ===== SYSTEM ===== */}
-        <section className="animate-fade-rise stagger-2 glass-card flex flex-col p-5">
-          <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Cpu className="h-4 w-4 text-primary" /> {t('home.system')}
-            </h3>
-            <Link to="/settings/system" className="text-[11px] font-semibold text-primary hover:underline">
-              {t('home.details')}
-            </Link>
-          </div>
-          <div className="mt-4 flex-1 space-y-3">
-            {metrics ? (
-              <>
-                <MetricRow icon={<Cpu className="h-3.5 w-3.5" />} label="CPU" value={metrics.cpuPercent} />
-                <MetricRow icon={<MemoryStick className="h-3.5 w-3.5" />} label={t('system.memory')} value={metrics.memoryPercent} extra={`${metrics.memoryUsedGb.toFixed(1)} / ${metrics.memoryTotalGb.toFixed(1)} GB`} />
-                <MetricRow icon={<HardDrive className="h-3.5 w-3.5" />} label={t('system.disk')} value={metrics.diskPercent} extra={`${metrics.diskUsedGb.toFixed(0)} / ${metrics.diskTotalGb.toFixed(0)} GB`} />
-              </>
-            ) : (
-              <p className="text-xs text-slate-400">{t('system.loadingMetrics')}</p>
-            )}
-          </div>
-        </section>
-
-        {/* ===== RECENT SESSIONS ===== */}
-        <section className="animate-fade-rise stagger-3 glass-card flex flex-col p-5 sm:col-span-2">
-          <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Activity className="h-4 w-4 text-primary" /> {t('home.continueTitle')}
-            </h3>
-            <Link to="/activity/sessions" className="text-[11px] font-semibold text-primary hover:underline">
-              {t('home.allSessions')}
-            </Link>
-          </div>
-          <ul className="mt-3 flex-1 divide-y divide-slate-100">
-            {recentSessions === null ? (
-              <li className="py-6 text-center text-xs text-slate-400">{t('home.loadingSessions')}</li>
-            ) : recentSessions.length === 0 ? (
-              <li className="py-6 text-center text-xs text-slate-400">
-                {t('home.noSessions')}
-              </li>
-            ) : (
-              recentSessions.map(session => (
-                <li key={session.sessionId}>
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <SectionLabel as="h2">{t('home.continueTitle')}</SectionLabel>
+          <Link to="/activity/sessions" className="text-xs font-medium text-primary hover:underline">{t('home.allSessions')}</Link>
+        </div>
+        {recent === null && <p className="text-sm text-muted-foreground">{t('home.loadingSessions')}</p>}
+        {recent !== null && recent.length === 0 && <p className="text-sm text-muted-foreground">{t('home.noSessions')}</p>}
+        {recent !== null && recent.length > 0 && (
+          <ul className="glass-card divide-y divide-border overflow-hidden">
+            {recent.map(session => {
+              const engine = findEngine(session.target);
+              return (
+                <li key={`${session.target}:${session.sessionId}`}>
                   <Link
                     to={buildResumeLink(session.target, session.sessionId, session.projectPath || '')}
-                    className="group flex items-center justify-between gap-3 py-2.5"
+                    className="grid grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/60"
                   >
-                    <span className="flex min-w-0 items-center gap-3">
-                      <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-slate-500">
-                        {session.target}
+                    <span className={`h-2 w-2 rounded-full ${engine?.dot ?? 'bg-slate-400'}`} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">
+                        {session.title?.trim() || workspaceLabel(session.projectPath || '') || t('home.unknownWorkspace')}
                       </span>
-                      <span className="min-w-0 truncate text-xs font-medium text-slate-700 group-hover:text-primary">
-                        {session.title?.trim() ||
-                          workspaceLabel(session.projectPath || '') ||
-                          t('home.unknownWorkspace')}
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {engineName(session.target, t)} · {workspaceLabel(session.projectPath || '') || t('home.unknownWorkspace')}
                       </span>
                     </span>
-                    <span className="flex shrink-0 items-center gap-2 text-[10px] text-slate-400">
-                      <span className="hidden max-w-[9rem] truncate sm:inline">
-                        {workspaceLabel(session.projectPath || '')}
-                      </span>
-                      <span>{formatCompactAgo(session.lastActivity)}</span>
-                      <ArrowRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
+                    <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                      {fmtTokens(session.inputTokens + session.outputTokens)} · {relativeTime(session.lastActivity, lang)}
                     </span>
                   </Link>
                 </li>
-              ))
-            )}
+              );
+            })}
           </ul>
-        </section>
-
-        {/* ===== AUTOMATIONS ===== */}
-        <section className="animate-fade-rise stagger-4 glass-card flex flex-col p-5">
-          <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Clock3 className="h-4 w-4 text-primary" /> {t('home.automationWidget')}
-            </h3>
-            <Link to="/automations/tasks" className="text-[11px] font-semibold text-primary hover:underline">
-              {t('home.open')}
-            </Link>
-          </div>
-
-          <div className="mt-4 flex-1 space-y-4">
-            {/* 活跃状态 Active Runs */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                <span>{t('home.activeTasks')}</span>
-                {runs && runs.length > 0 && (
-                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-emerald-800">
-                    {runs.length}
-                  </span>
-                )}
-              </div>
-              {runs === null ? (
-                <p className="text-xs text-slate-400">{t('home.checkingRuns')}</p>
-              ) : runs.length === 0 ? (
-                <div className="space-y-1 rounded-xl border border-slate-100 bg-slate-50/60 p-2.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-slate-600">{t('home.noActiveTasks')}</span>
-                    <Link
-                      to="/automations/tasks"
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
-                    >
-                      {t('home.runTask')} <ArrowRight className="h-3 w-3" />
-                    </Link>
-                  </div>
-                  <p className="text-[11px] text-slate-400">{t('home.nothingRunning')}</p>
-                </div>
-              ) : (
-                <ul className="space-y-1.5">
-                  {runs.map(run => (
-                    <li
-                      key={run.taskId}
-                      className="flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 px-2.5 py-2 text-xs"
-                    >
-                      <span className="relative flex h-2 w-2 shrink-0">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                      </span>
-                      <span className="min-w-0 flex-1 truncate font-mono font-semibold text-emerald-900">
-                        {run.taskId}
-                      </span>
-                      <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-emerald-700">
-                        {run.engine}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {/* 下次调度 Next Schedule */}
-            <div className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                {t('home.nextScheduled')}
-              </div>
-              {schedules === null ? (
-                <p className="text-xs text-slate-400">{t('common.loading')}</p>
-              ) : upcomingSchedule ? (
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 text-xs">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 truncate">
-                      <span className="truncate font-semibold text-slate-700">
-                        {upcomingSchedule.taskName}
-                      </span>
-                      <span className="shrink-0 rounded bg-slate-200/70 px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase text-slate-600">
-                        {upcomingSchedule.engine}
-                      </span>
-                    </div>
-                  </div>
-                  {countdown ? (
-                    <span className="shrink-0 font-mono text-[11px] font-medium text-primary">
-                      {countdown}
-                    </span>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400">
-                  {t('home.noUpcomingSchedule')}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* 底部导航 */}
-          <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs">
-            <Link
-              to="/automations/tasks"
-              className="inline-flex items-center gap-1 font-medium text-slate-600 transition-colors hover:text-primary"
-            >
-              <Clock3 className="h-3.5 w-3.5 text-slate-400" />
-              <span>{t('home.automations')}</span>
-            </Link>
-            <Link
-              to="/automations/schedules"
-              className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
-            >
-              <span>{t('home.allAutomations')}</span>
-              <ArrowRight className="h-3 w-3" />
-            </Link>
-          </div>
-        </section>
-      </div>
+        )}
+      </section>
     </div>
   );
 }
 
-function MetricRow({ icon, label, value, extra }: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  extra?: string;
-}) {
-  const pct = Math.min(Math.round(value), 100);
-  const tone = value > 85 ? 'bg-red-500' : value > 65 ? 'bg-amber-400' : 'bg-primary';
-  return (
-    <div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="flex items-center gap-1.5 text-slate-500">
-          {icon} {label}
-        </span>
-        <span className="font-medium text-slate-700">
-          {pct}%{extra ? <span className="ml-1 font-normal text-slate-400">{extra}</span> : null}
-        </span>
-      </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
-        <div className={`h-full rounded-full transition-all ${tone}`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
-}
+const dayKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-/**
- * Tokens per day for the last `days` days, scaled to 0..1 against the busiest.
- *
- * The strip above the activity card used to be twelve hardcoded heights.
- * Sitting directly over a panel of real numbers, a bar chart is read as one,
- * so it now plots the days it appears to plot. Days with no work stay in the
- * series as zeroes rather than being dropped, which is what makes the strip
- * read as a calendar instead of a shape.
- */
-function useActivityBars(days: number): number[] | null {
-  const [bars, setBars] = useState<number[] | null>(null);
+/** Tokens spent today and over the last seven days, summed across engines. */
+function useUsage(): { today: number; week: number } | null {
+  const [usage, setUsage] = useState<{ today: number; week: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -471,35 +253,20 @@ function useActivityBars(days: number): number[] | null {
         for (const row of daily) {
           byDay.set(row.date, (byDay.get(row.date) ?? 0) + row.inputTokens + row.outputTokens);
         }
-        const today = new Date();
-        const series = Array.from({ length: days }, (_, i) => {
-          const day = new Date(today);
-          day.setDate(day.getDate() - (days - 1 - i));
-          const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-          return byDay.get(key) ?? 0;
-        });
-        const peak = Math.max(...series);
-        setBars(peak > 0 ? series.map(v => v / peak) : series.map(() => 0));
+        const now = new Date();
+        let week = 0;
+        for (let i = 0; i < 7; i += 1) {
+          const day = new Date(now);
+          day.setDate(day.getDate() - i);
+          week += byDay.get(dayKey(day)) ?? 0;
+        }
+        setUsage({ today: byDay.get(dayKey(now)) ?? 0, week });
       })
-      .catch(() => { if (!cancelled) setBars([]); });
+      .catch(() => { if (!cancelled) setUsage({ today: 0, week: 0 }); });
     return () => { cancelled = true; };
-  }, [days]);
+  }, []);
 
-  return bars;
-}
-
-function useRecentActivity(limit: number): AuditEvent[] | null {
-  const [events, setEvents] = useState<AuditEvent[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchAuditEvents({ limit })
-      .then(res => { if (!cancelled) setEvents(res.events); })
-      .catch(() => { if (!cancelled) setEvents([]); });
-    return () => { cancelled = true; };
-  }, [limit]);
-
-  return events;
+  return usage;
 }
 
 function useRecentSessions(limit: number): SessionUsage[] | null {
@@ -516,7 +283,7 @@ function useRecentSessions(limit: number): SessionUsage[] | null {
   return sessions;
 }
 
-/** Only the running rows matter on a dashboard — everything else is noise. */
+/** Only the running rows matter here: everything else is noise. */
 function useRunningTasks(): RunningTask[] | null {
   const [runs, setRuns] = useState<RunningTask[] | null>(null);
 
@@ -524,9 +291,7 @@ function useRunningTasks(): RunningTask[] | null {
     let cancelled = false;
     request<RunningTask[]>('/api/tasks/runs')
       .then(list => {
-        if (!cancelled) {
-          setRuns(Array.isArray(list) ? list.filter(run => run.status === 'running') : []);
-        }
+        if (!cancelled) setRuns(Array.isArray(list) ? list.filter(run => run.status === 'running') : []);
       })
       .catch(() => { if (!cancelled) setRuns([]); });
     return () => { cancelled = true; };
@@ -541,15 +306,10 @@ function useSchedules(): Schedule[] | null {
   useEffect(() => {
     let cancelled = false;
     fetchSchedules()
-      .then(list => {
-        if (!cancelled) {
-          setSchedules(Array.isArray(list) ? list : []);
-        }
-      })
+      .then(list => { if (!cancelled) setSchedules(Array.isArray(list) ? list : []); })
       .catch(() => { if (!cancelled) setSchedules([]); });
     return () => { cancelled = true; };
   }, []);
 
   return schedules;
 }
-

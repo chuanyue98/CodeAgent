@@ -141,13 +141,13 @@ export default function NotificationBell() {
         aria-expanded={open}
         aria-label={t('notifications.openPanel')}
         title={t('notifications.openPanel')}
-        className="relative flex items-center gap-1.5 rounded-xl border border-slate-100 bg-white/50 px-3 py-2 text-slate-500 shadow-sm backdrop-blur-md transition-colors hover:bg-white hover:text-slate-800"
+        className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
         <Bell size={16} />
         {unreadCount > 0 && (
           <span
             data-testid="notification-unread-badge"
-            className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-white shadow-sm ring-2 ring-white"
+            className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground shadow-sm ring-2 ring-card"
           >
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
@@ -159,7 +159,7 @@ export default function NotificationBell() {
           data-testid="notification-dropdown"
           role="dialog"
           aria-label={t('notifications.title')}
-          className="glass-card absolute right-0 z-50 mt-2 w-80 sm:w-96 max-w-[calc(100vw-1rem)] overflow-hidden p-0 shadow-xl"
+          className="glass-card absolute bottom-full left-0 z-50 mb-2 w-80 sm:w-96 max-w-[calc(100vw-1rem)] overflow-hidden p-0 shadow-xl"
         >
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <span className="text-xs font-semibold text-slate-700">

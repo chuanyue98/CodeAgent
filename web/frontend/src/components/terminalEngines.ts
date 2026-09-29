@@ -20,11 +20,11 @@ export interface Engine {
 // Engine names and their vendor blurbs are brands, so they are not translated;
 // only OpenCode's descriptive line is prose, and it carries a key instead.
 export const ENGINES: Engine[] = [
-  { id: 'claude',    name: 'Claude',    description: 'Anthropic · Claude Code CLI',      accent: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },
-  { id: 'opencode',  name: 'OpenCode',  descriptionKey: 'launch.opencodeDescription',    accent: 'bg-violet-100 text-violet-600', dot: 'bg-violet-500' },
-  { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',               accent: 'bg-emerald-100 text-emerald-600', dot: 'bg-emerald-500' },
-  { id: 'codebuddy', name: 'CodeBuddy', description: 'Tencent · CodeBuddy Code CLI',     accent: 'bg-sky-100 text-sky-600', dot: 'bg-sky-500' },
-  { id: 'antigravity', name: 'Antigravity', description: 'Google · Antigravity CLI', accent: 'bg-indigo-100 text-indigo-700', dot: 'bg-indigo-500' },
+  { id: 'claude',    name: 'Claude',    description: 'Anthropic · Claude Code CLI',      accent: 'bg-engine-claude/15 text-engine-claude', dot: 'bg-engine-claude' },
+  { id: 'opencode',  name: 'OpenCode',  descriptionKey: 'launch.opencodeDescription',    accent: 'bg-engine-opencode/15 text-engine-opencode', dot: 'bg-engine-opencode' },
+  { id: 'codex',     name: 'Codex',     description: 'OpenAI · Codex CLI',               accent: 'bg-engine-codex/15 text-engine-codex', dot: 'bg-engine-codex' },
+  { id: 'codebuddy', name: 'CodeBuddy', description: 'Tencent · CodeBuddy Code CLI',     accent: 'bg-engine-codebuddy/15 text-engine-codebuddy', dot: 'bg-engine-codebuddy' },
+  { id: 'antigravity', name: 'Antigravity', description: 'Google · Antigravity CLI', accent: 'bg-engine-antigravity/15 text-engine-antigravity', dot: 'bg-engine-antigravity' },
   { id: 'shell',     nameKey: 'launch.shellName', descriptionKey: 'launch.shellDescription', accent: 'bg-slate-200 text-slate-600', dot: 'bg-slate-400' },
 ];
 

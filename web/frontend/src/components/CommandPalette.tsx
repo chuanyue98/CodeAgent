@@ -46,7 +46,7 @@ function loadPinnedIds(): Set<string> {
   }
 }
 
-export default function CommandPalette() {
+export default function CommandPalette({ variant = 'header' }: { variant?: 'header' | 'rail' | 'icon' } = {}) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -208,12 +208,19 @@ export default function CommandPalette() {
         onClick={() => setOpen(true)}
         aria-label={t('palette.open')}
         title={t('palette.searchTitle')}
-        className="flex items-center gap-1.5 rounded-xl border border-slate-100 bg-white/50 px-3 py-2 text-slate-500 shadow-sm backdrop-blur-md transition-colors hover:bg-white hover:text-slate-800"
+        className={
+          variant === 'rail'
+            ? 'flex w-full items-center gap-2 rounded-xl border border-border px-2.5 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground'
+            : 'flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground'
+        }
       >
-        <Search size={16} />
-        <kbd className="hidden rounded border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-400 sm:inline">
-          {navigator.platform.toLowerCase().includes('mac') ? '⌘K' : 'Ctrl K'}
-        </kbd>
+        <Search size={16} className="shrink-0" />
+        {variant === 'rail' && <span className="flex-1 truncate">{t('palette.railLabel')}</span>}
+        {variant !== 'icon' && (
+          <kbd className="hidden rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline">
+            {navigator.platform.toLowerCase().includes('mac') ? '⌘K' : 'Ctrl K'}
+          </kbd>
+        )}
       </button>
 
       {open && (

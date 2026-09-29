@@ -321,9 +321,9 @@ const ConfigHub: React.FC = () => {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col md:flex-row gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-8 md:flex-row">
       {/* ── Left Navigation Rail ────────────────────────────────────────── */}
-      <div className="w-full md:w-64 shrink-0 flex flex-col gap-3 glass-card p-4 overflow-y-auto custom-scrollbar">
+      <div className="w-full md:w-64 shrink-0 flex flex-col gap-3 overflow-y-auto custom-scrollbar">
         <div>
           <h2 className="text-base font-bold tracking-tight text-slate-800">
             {t('config.workspacesTitle')}
@@ -454,7 +454,7 @@ const ConfigHub: React.FC = () => {
           </div>
 
           {/* Save Status & Action Controls */}
-          <div className="rounded-xl border border-slate-100 bg-white/70 p-3 shadow-xs space-y-2.5">
+          <div className="rounded-xl border border-slate-100 bg-white/70 p-3 space-y-2.5">
             <div aria-live="polite" className="text-xs font-medium">
               {saved ? (
                 <span className="flex items-center gap-1.5 text-emerald-600">
@@ -498,7 +498,7 @@ const ConfigHub: React.FC = () => {
       </div>
 
       {/* ── Right Content Area ─────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 h-full glass-card p-4 sm:p-6 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {error && (
           <div className="mb-4 shrink-0">
             <ErrorBar message={t('config.error', { message: error })} />
@@ -560,7 +560,7 @@ const ConfigHub: React.FC = () => {
                 return (
                   <div
                     key={p.uiId}
-                    className="rounded-xl border border-slate-100 bg-slate-50/40 p-3 sm:p-4 hover:border-slate-200 hover:bg-white transition-all space-y-2.5 shadow-xs"
+                    className="rounded-xl border border-slate-100 bg-slate-50/40 p-3 sm:p-4 hover:border-slate-200 hover:bg-white transition-all space-y-2.5"
                   >
                     {/* Top Row: Icon + Folder Title + Group Badge + Quick Actions */}
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -588,7 +588,7 @@ const ConfigHub: React.FC = () => {
                             type="button"
                             onClick={() => openInTerminal(p.path)}
                             title={t('config.openInTerminal')}
-                            className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-primary hover:bg-primary/10 transition-colors border border-slate-200"
+                            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
                           >
                             <TerminalSquare size={13} />
                             <span>{t('config.openInTerminal')}</span>
@@ -616,7 +616,7 @@ const ConfigHub: React.FC = () => {
 
                     {/* Path Input Row */}
                     <div
-                      className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl border shadow-xs transition-all focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary ${
+                      className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl border transition-all focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary ${
                         missing
                           ? 'border-amber-300 bg-amber-50/20'
                           : 'border-slate-200 bg-white/90'
@@ -712,7 +712,7 @@ const ConfigHub: React.FC = () => {
               {Object.entries(localGroups).map(([name, def]) => (
                 <div
                   key={name}
-                  className="flex flex-wrap items-center justify-between gap-3 p-4 border border-slate-100 rounded-xl bg-slate-50/30 hover:border-slate-200 hover:bg-white transition-all shadow-xs"
+                  className="flex flex-wrap items-center justify-between gap-3 p-4 border border-slate-100 rounded-xl bg-slate-50/30 hover:border-slate-200 hover:bg-white transition-all"
                 >
                   <div className="flex flex-wrap items-center gap-3 min-w-0">
                     <span className="w-2.5 h-2.5 rounded-full bg-primary" />
@@ -731,7 +731,7 @@ const ConfigHub: React.FC = () => {
                       <button
                         onClick={() => {
                           setCurrentGroup(name);
-                          navigate(`/settings/resources?group=${encodeURIComponent(name)}`);
+                          navigate(`/extensions/resources?group=${encodeURIComponent(name)}`);
                         }}
                         className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 transition-colors border border-primary/20"
                       >
@@ -838,7 +838,7 @@ const ConfigHub: React.FC = () => {
               {localProxies.map((p, i) => (
                 <div
                   key={p.uiId}
-                  className="flex flex-col sm:flex-row gap-3 sm:items-center bg-slate-50/40 p-3 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-white transition-all shadow-xs"
+                  className="flex flex-col sm:flex-row gap-3 sm:items-center bg-slate-50/40 p-3 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-white transition-all"
                 >
                   <div className="flex-1 min-w-0">
                     <label htmlFor={`proxy-host-${p.uiId}`} className="text-[10px] uppercase font-bold text-slate-400 block mb-1">

@@ -25,7 +25,12 @@ interface Option {
  * screen writing the same selection, and only one of them able to accept a
  * path the registry had never heard of.
  */
-export default function WorkspaceSwitcher() {
+interface WorkspaceSwitcherProps {
+  /** `rail` is the full-width block at the top of the left rail; `header` the compact chip. */
+  variant?: 'header' | 'rail';
+}
+
+export default function WorkspaceSwitcher({ variant = 'header' }: WorkspaceSwitcherProps = {}) {
   const t = useT();
   const {
     validProjects,
@@ -156,17 +161,37 @@ export default function WorkspaceSwitcher() {
         aria-expanded={open}
         aria-label={t('workspaceSwitcher.current', { name: currentLabel })}
         title={selectedWorkspace || t('workspaceSwitcher.pick')}
-        className="flex max-w-56 items-center gap-2 px-3 md:px-4 py-2 bg-white/50 backdrop-blur-md border border-slate-100 rounded-xl hover:bg-white transition-colors shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        className={
+          variant === 'rail'
+            ? 'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
+            : 'flex max-w-56 items-center gap-2 px-3 md:px-4 py-2 bg-card border border-border rounded-xl hover:bg-muted transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
+        }
       >
-        <FolderGit2 size={16} className="text-primary shrink-0" />
-        <span className="truncate text-sm font-semibold">
-          <span className="hidden text-slate-400 lg:inline">{t('workspaceSwitcher.prefix')}</span>
-          {currentLabel}
-        </span>
-        <ChevronDown size={14} className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        {variant === 'rail' ? (
+          <>
+            <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground font-mono text-[13px] font-semibold text-background">
+              {currentLabel.slice(0, 2).toLowerCase()}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold leading-tight">{currentLabel}</span>
+              {selectedWorkspace && (
+                <span className="block truncate font-mono text-[11px] text-muted-foreground">{selectedWorkspace}</span>
+              )}
+            </span>
+          </>
+        ) : (
+          <>
+            <FolderGit2 size={16} className="text-primary shrink-0" />
+            <span className="truncate text-sm font-semibold">
+              <span className="hidden text-slate-400 lg:inline">{t('workspaceSwitcher.prefix')}</span>
+              {currentLabel}
+            </span>
+          </>
+        )}
+        <ChevronDown size={14} className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-slate-100 bg-white shadow-xl">
+        <div className={`absolute z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-border bg-popover shadow-xl ${variant === 'rail' ? 'left-0' : 'right-0'}`}>
           <div role="listbox" ref={listboxRef} className="max-h-64 overflow-y-auto p-2" onKeyDown={handleKeyDown}>
             {validProjects.length > 0 && (
               <SectionLabel className="px-2 pb-1 pt-1">

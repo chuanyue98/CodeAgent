@@ -404,7 +404,7 @@ export default function CronPage() {
     <div className="w-full grid grid-cols-1 xl:grid-cols-12 gap-6 min-h-full pb-8">
       <section
         ref={formRef}
-        className={`xl:col-span-5 w-full glass-card p-5 space-y-4 transition-all ${
+        className={`order-2 xl:col-span-4 w-full glass-card p-5 space-y-4 transition-all ${
           editingScheduleId ? 'ring-2 ring-primary/40 border-primary/40' : ''
         }`}
       >
@@ -508,7 +508,7 @@ export default function CronPage() {
         )}
       </section>
 
-      <div className="xl:col-span-7 min-w-0 glass-card p-5 flex flex-col">
+      <div className="order-1 min-w-0 flex flex-col xl:col-span-8">
         {/* Natural Language Cron parse area */}
         <div className="mb-3.5 rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
@@ -605,7 +605,7 @@ export default function CronPage() {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto space-y-2">
+        <div className="flex-1 space-y-2">
           {schedules.length === 0 && (
             <div className="space-y-5 py-2">
               <EmptyState title={t('cron.empty')} />
@@ -620,6 +620,8 @@ export default function CronPage() {
           {schedules.length > 0 && filteredSchedules.length === 0 && (
             <EmptyState compact title={t('cron.noSearchMatch')} />
           )}
+          {filteredSchedules.length > 0 && (
+          <div className="glass-card divide-y divide-border overflow-hidden">
           {filteredSchedules.map(schedule => {
             const isEditing = editingScheduleId === schedule.id;
             const countdown = schedule.nextRunAt
@@ -628,10 +630,8 @@ export default function CronPage() {
             return (
               <div
                 key={schedule.id}
-                className={`glass-card p-4 transition-all flex flex-wrap items-center gap-3 ${
-                  isEditing
-                    ? 'border-primary ring-2 ring-primary/30 bg-primary/[0.02]'
-                    : 'border-slate-100'
+                className={`flex flex-wrap items-center gap-3 px-4 py-3 transition-colors ${
+                  isEditing ? 'bg-primary/10' : ''
                 } ${!schedule.enabled ? 'opacity-50' : ''}`}
               >
                 <button
@@ -652,7 +652,7 @@ export default function CronPage() {
                       {schedule.taskName}
                     </span>
                     {isEditing && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-primary text-white rounded font-medium">
+                      <span className="text-[10px] px-1.5 py-0.5 bg-primary text-primary-foreground rounded font-medium">
                         {t('cron.editing')}
                       </span>
                     )}
@@ -733,6 +733,8 @@ export default function CronPage() {
             </div>
             );
           })}
+          </div>
+          )}
         </div>
       </div>
 

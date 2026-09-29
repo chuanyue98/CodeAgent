@@ -154,7 +154,7 @@ export default function GlobalTerminalDrawer() {
   if (zenMode && (docked || isDrawerOpen)) {
     frame = 'fixed inset-0 z-[100] h-screen';
   } else if (docked) {
-    frame = 'fixed z-40 overflow-hidden rounded-2xl border border-slate-200 shadow-sm';
+    frame = 'fixed z-40 overflow-hidden';
     frameStyle = slotBox ?? { visibility: 'hidden' };
     showing = Boolean(slotBox);
   } else if (!isDrawerOpen || onTerminalPage) {
@@ -207,15 +207,15 @@ export default function GlobalTerminalDrawer() {
 
       {/* Expanded State */}
       <div 
-        className={`flex flex-col bg-white ${frame}`}
+        className={`flex flex-col bg-card ${frame}`}
         style={frameStyle}
         data-testid="drawer-expanded"
         onTransitionEnd={() => {
           window.dispatchEvent(new Event('resize'));
         }}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-2 py-1.5">
-          <div className="flex min-w-0 items-center gap-1 overflow-x-auto custom-scrollbar">
+        <div className="flex shrink-0 items-stretch justify-between border-b border-border bg-card">
+          <div className="flex min-w-0 items-stretch overflow-x-auto custom-scrollbar">
             {tabs.map(tab => {
               const engine = findEngine(tab.engine);
               const isActive = tab.id === activeTabId;
@@ -226,11 +226,12 @@ export default function GlobalTerminalDrawer() {
                   role="tab"
                   aria-selected={isActive}
                   onClick={() => setActiveTabId(tab.id)}
-                  className={`group flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors cursor-pointer min-w-[120px] max-w-[200px] ${
-                    isActive ? 'bg-white font-medium text-slate-800 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50 hover:text-slate-900 border border-transparent'
+                  className={`group relative flex min-w-[120px] max-w-[220px] cursor-pointer items-center gap-2 border-r border-border px-4 text-sm font-medium transition-colors ${
+                    isActive ? 'bg-term text-term-fg' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
                   }`}
                 >
-                  <div className={`h-2 w-2 shrink-0 rounded-full ${isRateLimited ? 'bg-amber-400' : (isActive ? 'bg-green-500' : 'bg-slate-300')}`} />
+                  {isActive && <span aria-hidden className={`absolute inset-x-0 top-0 h-0.5 ${engine?.dot ?? 'bg-primary'}`} />}
+                  <div className={`h-2 w-2 shrink-0 rounded-full ${isRateLimited ? 'bg-warn' : (engine?.dot ?? 'bg-slate-400')}`} />
                   <span className="truncate">{engine?.name || tab.engine}</span>
                   <button
                     type="button"
@@ -245,7 +246,7 @@ export default function GlobalTerminalDrawer() {
             })}
             <button
               onClick={() => setActiveTabId(null)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+              className="flex w-10 items-center justify-center text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               title="Switch to Launcher"
               aria-label="New terminal"
             >
@@ -253,7 +254,7 @@ export default function GlobalTerminalDrawer() {
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5 ml-4 shrink-0 pr-2">
+          <div className="ml-4 flex shrink-0 items-center gap-1.5 pr-2">
             {isAgentEngine && activeTab && (
               <div ref={handoffMenuRef} className="relative">
                 <button
@@ -442,7 +443,7 @@ export default function GlobalTerminalDrawer() {
           </div>
         )}
 
-        <div className="relative flex-1 min-h-0 bg-slate-900">
+        <div className="relative flex-1 min-h-0 bg-term">
           {tabs.map(tab => (
             <div
               key={tab.id}

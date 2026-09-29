@@ -3,6 +3,7 @@ import { useIsMounted } from '../hooks/useAsyncGuards';
 import { Pencil, Plus, Server, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { useProject } from '../context/ProjectContext';
+import { findEngine } from './terminalEngines';
 import { useT } from '../i18n/context';
 import request from '../utils/request';
 import ConfirmDialog from './shared/ConfirmDialog';
@@ -236,35 +237,28 @@ export default function McpPage() {
   };
 
   return (
-    <div className="flex h-full overflow-hidden p-6 gap-6">
-      {/* Engine sidebar — mirrors the galleries' category sidebar. */}
-      <div className="animate-slide-left stagger-1 w-full xl:w-56 shrink-0 glass-card flex flex-col overflow-hidden">
-        <div className="p-6 border-b border-slate-100">
-          <h2 className="text-sm font-semibold flex items-center gap-2 uppercase tracking-widest text-slate-400">
-            <Server className="w-4 h-4 text-primary" />
-            {t('mcp.engines')}
-          </h2>
-        </div>
-        <div className="custom-scrollbar flex-1 overflow-y-auto p-4 space-y-1">
-          {engines.map(engine => (
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+      {/* MCP is configured per engine, so the engine is the first choice. */}
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('mcp.engines')}>
+        {engines.map(engine => {
+          const selected = selectedEngine === engine.id;
+          return (
             <button
               key={engine.id}
               onClick={() => setSelectedEngine(engine.id)}
-              className={`animate-fade-rise w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
-                selectedEngine === engine.id
-                  ? ACTIVE_CHIP
-                  : 'hover:bg-slate-50 text-slate-500 hover:text-slate-900'
+              aria-pressed={selected}
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                selected
+                  ? 'border-foreground/30 bg-muted text-foreground'
+                  : 'border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground'
               }`}
             >
-              <span className="min-w-0 flex-1 truncate text-left">{engine.name}</span>
-              {selectedEngine === engine.id && (
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                  {servers.length}
-                </span>
-              )}
+              <span className={`h-2 w-2 rounded-full ${findEngine(engine.id)?.dot ?? 'bg-slate-400'}`} />
+              <span className="truncate">{engine.name}</span>
+              {selected && <span className="font-mono text-xs text-muted-foreground">{servers.length}</span>}
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
       {/* Server cards */}
@@ -329,55 +323,46 @@ export default function McpPage() {
           ) : filteredServers.length === 0 ? (
             <EmptyState compact title={t('mcp.noSearchMatch')} />
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 pb-2">
+            <div className="glass-card divide-y divide-border overflow-hidden">
               {filteredServers.map(server => (
-                <div
-                  key={server.name}
-                  className="animate-fade-rise glass-card p-4 flex flex-col gap-2 group"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="p-2 rounded-xl bg-slate-100 text-slate-500 shrink-0">
-                        <Server className="w-4 h-4" />
-                      </span>
-                      <span className="font-semibold text-sm text-slate-800 truncate" title={server.name}>
-                        {server.name}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                      <button
-                        onClick={() => openEdit(server)}
-                        aria-label={t('mcp.editServer', { name: server.name })}
-                        title={t('common.edit')}
-                        className="p-1.5 text-slate-400 hover:text-primary transition-colors"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setPendingRemoveServer(server.name)}
-                        aria-label={t('mcp.removeServer', { name: server.name })}
-                        title={t('common.remove')}
-                        className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                <div key={server.name} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+                  <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium" title={server.name}>{server.name}</div>
+                    <div className="truncate font-mono text-xs text-muted-foreground">
+                      {server.url || (server.command ? server.command.join(' ') : '')}
                     </div>
                   </div>
-                  <div className="text-xs text-slate-400 font-mono break-all line-clamp-2">
-                    {server.url || (server.command ? server.command.join(' ') : '')}
-                  </div>
-                  <div className="mt-auto flex flex-wrap gap-1.5">
-                    <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-mono">
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
                       {server.transport}
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
                       {server.scope}
                     </span>
                     {server.env && Object.keys(server.env).length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
                         {t('mcp.envCount', { count: Object.keys(server.env).length })}
                       </span>
                     )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      onClick={() => openEdit(server)}
+                      aria-label={t('mcp.editServer', { name: server.name })}
+                      title={t('common.edit')}
+                      className="rounded p-1.5 text-muted-foreground transition-colors hover:text-primary"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setPendingRemoveServer(server.name)}
+                      aria-label={t('mcp.removeServer', { name: server.name })}
+                      title={t('common.remove')}
+                      className="rounded p-1.5 text-muted-foreground transition-colors hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
               ))}

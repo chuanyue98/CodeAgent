@@ -73,8 +73,6 @@ function jsonResponse(data: unknown) {
 beforeEach(() => {
   mounted.length = 0;
   unmounted.length = 0;
-  // The sidebar remembers being collapsed, so one test could otherwise hide
-  // the session list from every test after it.
   localStorage.clear();
   globalThis.fetch = vi.fn().mockImplementation((url: string) => { console.log("FETCH_MOCK", url);
     if (url.includes('/api/pty/status')) return jsonResponse({ available: true, reason: null });
@@ -117,13 +115,9 @@ async function openEngine(name: string) {
   fireEvent.click(await launchCard(name));
 }
 
-/**
- * Scoped to the sidebar on purpose: the launcher's recent-session cards carry
- * the same titles, so an unscoped query is a race between the two lists.
- */
-async function sidebarSession(title: string) {
-  const sidebar = await screen.findByRole('complementary');
-  return within(sidebar).findByTitle(title);
+/** The launcher's recent-session list; each row is titled with the session. */
+function recentSession(title: string) {
+  return screen.findByTitle(title);
 }
 
 /** Each engine card is itself the launch button. */
@@ -217,9 +211,9 @@ describe('LaunchPad terminal tabs', () => {
     expect(screen.getAllByRole('tab')).toHaveLength(1);
   });
 
-  test('picking a session from the sidebar resumes it in a terminal', async () => {
+  test('picking a recent session on the launcher resumes it in a terminal', async () => {
     renderLaunchPad();
-    fireEvent.click(await sidebarSession('修复登录'));
+    fireEvent.click(await recentSession('修复登录'));
     await screen.findByTestId('term-opencode:ses_abc');
   });
 
@@ -246,51 +240,23 @@ describe('LaunchPad terminal tabs', () => {
     // Back on the launcher, but the terminal is still alive behind it.
     expect(unmounted).toEqual([]);
 
-    fireEvent.click(await screen.findByRole('button', { name: /^claude/i }));
+    fireEvent.click(screen.getAllByRole('tab')[0]);
     expect(await screen.findByTestId('terminal-slot')).toBeInTheDocument();
   });
 
-  test('the sidebar is there before any terminal is open', async () => {
+  test('the launcher lists recent sessions before any terminal is open', async () => {
     renderLaunchPad();
-    // The launcher used to be the whole screen until you opened a terminal,
-    // which is why there was no way to reach a session from here.
-    expect(await sidebarSession('修复登录')).toBeTruthy();
+    expect(await recentSession('修复登录')).toBeTruthy();
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
-  });
-
-  test('the session list collapses to a rail, and stays collapsed next time', async () => {
-    const first = renderLaunchPad();
-    await sidebarSession('修复登录');
-
-    fireEvent.click(screen.getByLabelText(/collapse the session list/i));
-    expect(within(screen.getByRole('complementary')).queryByTitle('修复登录')).toBeNull();
-    // The rail keeps the way back: collapsing must not hide its own control.
-    expect(screen.getByLabelText(/show the session list/i)).toBeTruthy();
-
-    first.unmount();
-    renderLaunchPad();
-    expect(await screen.findByLabelText(/show the session list/i)).toBeTruthy();
-  });
-
-  test('the collapsed rail can still reach a session', async () => {
-    // Collapsing used to leave two icons and no trace of the list, which made
-    // the rail an edge you could aim at and nothing else.
-    renderLaunchPad();
-    await sidebarSession('修复登录');
-    fireEvent.click(screen.getByLabelText(/collapse the session list/i));
-
-    const rail = within(screen.getByRole('complementary'));
-    fireEvent.click(rail.getByLabelText('修复登录'));
-    await screen.findByTestId('term-opencode:ses_abc');
   });
 
   test('resuming a session that already has a tab focuses it instead of forking a second PTY', async () => {
     renderLaunchPad();
-    fireEvent.click(await sidebarSession('修复登录'));
+    fireEvent.click(await recentSession('修复登录'));
     await screen.findByTestId('term-opencode:ses_abc');
 
     fireEvent.click(screen.getByLabelText(/new terminal/i));
-    fireEvent.click(await sidebarSession('修复登录'));
+    fireEvent.click(await recentSession('修复登录'));
 
     await waitFor(() => expect(screen.getAllByRole('tab')).toHaveLength(1));
     expect(screen.getAllByTestId('term-opencode:ses_abc')).toHaveLength(1);
