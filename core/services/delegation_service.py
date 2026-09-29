@@ -86,17 +86,31 @@ class DelegationResult:
         return "\n".join(lines)
 
 
+def _run_git(
+    cwd: Path | str,
+    *args: str,
+    timeout: float,
+    check: bool = False,
+    input: str | bytes | None = None,
+    text: bool = True,
+) -> subprocess.CompletedProcess[Any]:
+    """Runs a git command in *cwd* with a mandatory timeout parameter."""
+    return subprocess.run(
+        ["git", "-C", str(cwd), *args],
+        capture_output=True,
+        text=text,
+        timeout=timeout,
+        check=check,
+        input=input,
+    )
+
+
 def is_git_repo(path: Path) -> bool:
     """Returns True if *path* is inside a valid git repository working tree."""
     if shutil.which("git") is None:
         return False
     try:
-        proc = subprocess.run(
-            ["git", "-C", str(path), "rev-parse", "--is-inside-work-tree"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        proc = _run_git(path, "rev-parse", "--is-inside-work-tree", timeout=10)
         return proc.returncode == 0 and proc.stdout.strip() == "true"
     except (subprocess.SubprocessError, OSError):
         return False
@@ -104,13 +118,7 @@ def is_git_repo(path: Path) -> bool:
 
 def get_git_root(path: Path) -> Path:
     """Returns the top-level directory of the git repository containing *path*."""
-    proc = subprocess.run(
-        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=True,
-    )
+    proc = _run_git(path, "rev-parse", "--show-toplevel", timeout=10, check=True)
     return Path(proc.stdout.strip()).resolve()
 
 
@@ -150,19 +158,13 @@ def isolated_worktree(
 
     created = False
     try:
-        add_proc = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(repo_root),
-                "worktree",
-                "add",
-                str(worktree_dir),
-                "-b",
-                branch,
-            ],
-            capture_output=True,
-            text=True,
+        add_proc = _run_git(
+            repo_root,
+            "worktree",
+            "add",
+            str(worktree_dir),
+            "-b",
+            branch,
             timeout=_GIT_TIMEOUT_SECONDS,
         )
         if add_proc.returncode != 0:
@@ -186,19 +188,19 @@ def isolated_worktree(
     finally:
         if created and worktree_dir.exists():
             # Check for changes in worktree
-            status_proc = subprocess.run(
-                ["git", "-C", str(worktree_dir), "status", "--porcelain"],
-                capture_output=True,
-                text=True,
+            status_proc = _run_git(
+                worktree_dir,
+                "status",
+                "--porcelain",
                 timeout=_GIT_TIMEOUT_SECONDS,
             )
             has_changes = bool(status_proc.stdout.strip())
 
             # Check if commits were added on the branch compared to repo_root HEAD
-            log_proc = subprocess.run(
-                ["git", "-C", str(repo_root), "rev-list", f"HEAD..{branch}"],
-                capture_output=True,
-                text=True,
+            log_proc = _run_git(
+                repo_root,
+                "rev-list",
+                f"HEAD..{branch}",
                 timeout=_GIT_TIMEOUT_SECONDS,
             )
             has_commits = bool(log_proc.stdout.strip())
@@ -207,46 +209,38 @@ def isolated_worktree(
                 has_changes = has_commits = False
             if has_changes:
                 # Stage and commit any uncommitted changes so the worker branch preserves them
-                subprocess.run(
-                    ["git", "-C", str(worktree_dir), "add", "-A"],
-                    capture_output=True,
+                _run_git(
+                    worktree_dir,
+                    "add",
+                    "-A",
                     timeout=_GIT_TIMEOUT_SECONDS,
                 )
-                subprocess.run(
-                    [
-                        "git",
-                        "-C",
-                        str(worktree_dir),
-                        "commit",
-                        "-m",
-                        f"ca: subtask commit on {branch}",
-                    ],
-                    capture_output=True,
+                _run_git(
+                    worktree_dir,
+                    "commit",
+                    "-m",
+                    f"ca: subtask commit on {branch}",
                     timeout=_GIT_TIMEOUT_SECONDS,
                 )
                 has_commits = True
 
             # Clean up the worktree
-            subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(repo_root),
-                    "worktree",
-                    "remove",
-                    "--force",
-                    str(worktree_dir),
-                ],
-                capture_output=True,
-                text=True,
+            _run_git(
+                repo_root,
+                "worktree",
+                "remove",
+                "--force",
+                str(worktree_dir),
                 timeout=_GIT_TIMEOUT_SECONDS,
             )
 
             # If no commits were produced, delete the empty temporary branch
             if not has_commits:
-                subprocess.run(
-                    ["git", "-C", str(repo_root), "branch", "-D", branch],
-                    capture_output=True,
+                _run_git(
+                    repo_root,
+                    "branch",
+                    "-D",
+                    branch,
                     timeout=_GIT_TIMEOUT_SECONDS,
                 )
 
@@ -259,23 +253,28 @@ def isolated_worktree(
 
 def _carry_uncommitted_changes(repo_root: Path, worktree_dir: Path) -> None:
     """把主工作区相对 HEAD 的改动（含已暂存）原样打到 worktree 上。"""
-    diff = subprocess.run(
-        ["git", "-C", str(repo_root), "diff", "HEAD", "--binary"],
-        capture_output=True,
-        timeout=_GIT_TIMEOUT_SECONDS,
+    diff = _run_git(
+        repo_root, "diff", "HEAD", "--binary", timeout=_GIT_TIMEOUT_SECONDS, text=False
     ).stdout
     if not diff:
         return
-    applied = subprocess.run(
-        ["git", "-C", str(worktree_dir), "apply", "--whitespace=nowarn"],
+    applied = _run_git(
+        worktree_dir,
+        "apply",
+        "--whitespace=nowarn",
         input=diff,
-        capture_output=True,
         timeout=_GIT_TIMEOUT_SECONDS,
+        text=False,
     )
     if applied.returncode != 0:
+        err_msg = (
+            applied.stderr.decode(errors="replace").strip()
+            if isinstance(applied.stderr, bytes)
+            else str(applied.stderr).strip()
+        )
         logger.warning(
             "Failed to carry uncommitted changes into worktree: %s",
-            applied.stderr.decode(errors="replace").strip(),
+            err_msg,
         )
 
 
@@ -298,17 +297,11 @@ def _snapshot_worktree(path: Path) -> tuple[str | None, set[str]]:
     if not is_git_repo(path):
         return None, set()
     try:
-        stash = subprocess.run(
-            ["git", "-C", str(path), "stash", "create"],
-            capture_output=True,
-            text=True,
-            timeout=_GIT_TIMEOUT_SECONDS,
+        stash = _run_git(
+            path, "stash", "create", timeout=_GIT_TIMEOUT_SECONDS
         ).stdout.strip()
-        head = subprocess.run(
-            ["git", "-C", str(path), "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=_GIT_TIMEOUT_SECONDS,
+        head = _run_git(
+            path, "rev-parse", "HEAD", timeout=_GIT_TIMEOUT_SECONDS
         ).stdout.strip()
         return stash or head or None, _untracked_files(path)
     except (subprocess.SubprocessError, OSError):
@@ -316,11 +309,8 @@ def _snapshot_worktree(path: Path) -> tuple[str | None, set[str]]:
 
 
 def _untracked_files(path: Path) -> set[str]:
-    out = subprocess.run(
-        ["git", "-C", str(path), "ls-files", "--others", "--exclude-standard"],
-        capture_output=True,
-        text=True,
-        timeout=_GIT_TIMEOUT_SECONDS,
+    out = _run_git(
+        path, "ls-files", "--others", "--exclude-standard", timeout=_GIT_TIMEOUT_SECONDS
     ).stdout
     return {line for line in out.splitlines() if line}
 
@@ -335,19 +325,11 @@ def _collect_git_changes(
         return [], ""
     ref = base_commit or "HEAD"
     try:
-        changed = subprocess.run(
-            ["git", "-C", str(path), "diff", "--name-only", ref],
-            capture_output=True,
-            text=True,
-            timeout=_GIT_TIMEOUT_SECONDS,
+        changed = _run_git(
+            path, "diff", "--name-only", ref, timeout=_GIT_TIMEOUT_SECONDS
         ).stdout.splitlines()
         new_untracked = sorted(_untracked_files(path) - (untracked_before or set()))
-        diff = subprocess.run(
-            ["git", "-C", str(path), "diff", ref],
-            capture_output=True,
-            text=True,
-            timeout=_GIT_TIMEOUT_SECONDS,
-        ).stdout
+        diff = _run_git(path, "diff", ref, timeout=_GIT_TIMEOUT_SECONDS).stdout
         return [f for f in changed if f] + new_untracked, diff
     except Exception as exc:
         logger.warning("Failed to collect git changes: %s", exc)
