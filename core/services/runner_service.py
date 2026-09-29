@@ -559,8 +559,10 @@ class TaskRunner:
     def list_runs(self) -> list[TaskRunStatus]:
         """Returns all tracked task runs, updating their status first."""
         with self._run_lock:
-            for task_id in list(self.active_runs.keys()):
-                self.get_status(task_id)
+            task_ids = list(self.active_runs.keys())
+        for task_id in task_ids:
+            self.get_status(task_id)
+        with self._run_lock:
             return list(self.active_runs.values())
 
     def get_run(self, task_id: str) -> TaskRunStatus | None:

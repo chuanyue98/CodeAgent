@@ -474,3 +474,22 @@ def test_extract_chat_session_id_antigravity(tmp_path, new_runner, field, value)
     log = tmp_path / "chat.jsonl"
     log.write_text(json.dumps({field: value}) + "\n", encoding="utf-8")
     assert runner._extract_chat_session_id("antigravity", log) == value
+
+
+def test_list_runs_returns_status_and_releases_lock(tmp_path, new_runner):
+    from core.services.runner_service import TaskRunStatus
+
+    runner = new_runner(tmp_path)
+    status = TaskRunStatus(
+        task_id="t-1",
+        engine="codex",
+        pid=None,
+        status="completed",
+        log_path="a.log",
+        start_time=1.0,
+    )
+    runner.active_runs["t-1"] = status
+    runs = runner.list_runs()
+    assert len(runs) == 1
+    assert runs[0].task_id == "t-1"
+
