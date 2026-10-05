@@ -1,4 +1,5 @@
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -13,17 +14,24 @@ os.environ.setdefault("CA_LANG", "en")
 _PYTEST_TMUX_SOCKET = f"ca-pytest-{os.getpid()}"
 os.environ["CA_PTY_TMUX_SOCKET"] = _PYTEST_TMUX_SOCKET
 
+# 会话索引从 ~/.claude、~/.codex 等目录读数据源。不换 HOME 的话，每个用例的
+# 空索引都会把开发者本机的全部会话解析一遍：结果随机器而变，且很慢。
+_PYTEST_HOME = tempfile.mkdtemp(prefix="ca-pytest-home-")
+os.environ["HOME"] = _PYTEST_HOME
+os.environ["USERPROFILE"] = _PYTEST_HOME
+
 from core import i18n  # noqa: E402
 from core.web.security import reset_token_cache  # noqa: E402
 
 
 @pytest.fixture(autouse=True, scope="session")
 def _reap_pytest_tmux_server():
-    """测试结束时收掉本次测试专用的 tmux server。"""
+    """测试结束时收掉本次测试专用的 tmux server 和临时 HOME。"""
     yield
     import shutil
     import subprocess
 
+    shutil.rmtree(_PYTEST_HOME, ignore_errors=True)
     if shutil.which("tmux"):
         subprocess.run(
             ["tmux", "-L", _PYTEST_TMUX_SOCKET, "kill-server"],
@@ -59,6 +67,29 @@ def no_session_index(monkeypatch):
     随机失败。
     """
     monkeypatch.setenv("CA_SESSION_INDEX", "0")
+
+
+@pytest.fixture
+def fast_process_teardown(monkeypatch):
+    """把各 adapter 收尾子进程时的两段等待缩到 50ms。
+
+    用例要验的是「SIGKILL 也收不掉时会放弃」，不必真等满 8~10 秒。
+    """
+    from core.services.agent_adapters import (
+        _process_lifecycle,
+        codebuddy,
+        codex,
+        opencode,
+    )
+
+    real = _process_lifecycle.graceful_terminate
+
+    async def fast(process, **kwargs):
+        kwargs.update(terminate_timeout=0.05, kill_timeout=0.05)
+        await real(process, **kwargs)
+
+    for module in (codebuddy, codex, opencode):
+        monkeypatch.setattr(module, "graceful_terminate", fast)
 
 
 @pytest.fixture(autouse=True)

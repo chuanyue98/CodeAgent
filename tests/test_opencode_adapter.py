@@ -18,20 +18,24 @@ from core.services.agent_protocol import (
 
 
 @pytest.mark.asyncio
-async def test_opencode_stop_gives_up_if_process_never_reaps_after_kill():
+async def test_opencode_stop_gives_up_if_process_never_reaps_after_kill(
+    fast_process_teardown,
+):
     """A hung child that doesn't die even under SIGKILL (e.g. stuck in
     uninterruptible I/O) must not block shutdown forever — stop() has to
     give up and move on rather than await process.wait() unboundedly."""
+
+    calls: list[str] = []
 
     class StubProcess:
         pid = 4242
         returncode = None
 
         def terminate(self):
-            pass
+            calls.append("terminate")
 
         def kill(self):
-            pass
+            calls.append("kill")
 
         async def wait(self):
             await asyncio.sleep(999)
@@ -39,12 +43,10 @@ async def test_opencode_stop_gives_up_if_process_never_reaps_after_kill():
     adapter = OpenCodeAdapter()
     adapter._process = StubProcess()
 
-    start = asyncio.get_event_loop().time()
-    await asyncio.wait_for(adapter.stop(), timeout=20)
-    elapsed = asyncio.get_event_loop().time() - start
-    # Bounded by the two 5s waits inside stop() itself (terminate, then
-    # kill), nowhere near the stub's 999s wait().
-    assert elapsed < 15
+    # The outer timeout only fires if stop() hangs; reaching the asserts
+    # means it escalated to SIGKILL and then gave up on its own.
+    await asyncio.wait_for(adapter.stop(), timeout=5)
+    assert calls == ["terminate", "kill"]
     assert adapter._process is None
 
 
