@@ -169,13 +169,17 @@ class SessionRegistry:
             self._locks.release_resource_lock(handle)
             path.unlink(missing_ok=True)
 
-        alone = True
+        return not self.has_live_sessions()
+
+    def has_live_sessions(self) -> bool:
+        """是否还有存活会话；顺手清掉持有者已不在的登记。调用方须持有 :meth:`exclusive`。"""
+        alive = False
         for path in self.directory.glob("*.session"):
             probe = self._locks.try_acquire_resource_lock(path)
             if probe is None:
-                alone = False
+                alive = True
                 continue
             # 能锁上说明持有者已经不在了，是没来得及注销的残留。
             self._locks.release_resource_lock(probe)
             path.unlink(missing_ok=True)
-        return alone
+        return alive

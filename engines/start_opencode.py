@@ -73,7 +73,7 @@ class OpenCodeEngine(BaseEngine):
             elif not target.exists():
                 self._create_skill_link(entry, target)
 
-    def drop_legacy_workspace_injection(self, project: Path) -> None:
+    def clear_stale_workspace_injection(self, project: Path) -> None:
         """早先版本把技能、插件和钩子桥接都写进了工作区的 ``.opencode/``。"""
         scope = project / ".opencode"
 
@@ -82,7 +82,7 @@ class OpenCodeEngine(BaseEngine):
             self.link_manager.cleanup_link_dir(scope / "skills")
             self._cleanup_plugin_dir(scope / "plugins")
 
-        self.drop_legacy_injection(scope, cleanup)
+        self.clear_stale_injection(scope, cleanup)
 
     def ensure_plugins_link(self):
         """为 OpenCode 优化插件挂载逻辑：支持扁平化链接并自动生成通用适配器"""
@@ -587,7 +587,7 @@ def main():
     user_config_dir = env.get(CONFIG_DIR_ENV)
 
     def setup() -> None:
-        engine.drop_legacy_workspace_injection(project)
+        engine.clear_stale_workspace_injection(project)
         engine.ensure_skills_link(str(config_dir / "skills"))
         engine.ensure_plugins_link()
         # OpenCode 的钩子是插件模块导出的 JS 函数（tool.execute.before /

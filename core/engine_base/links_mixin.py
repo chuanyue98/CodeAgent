@@ -65,17 +65,18 @@ class _LinksMixin:
                         except OSError:
                             pass
 
-    def drop_legacy_injection(self, scope: Path, cleanup: Callable[[], None]) -> None:
-        """摘掉早先版本写进工作区 *scope*（如 ``.claude/``）的注入。
+    def clear_stale_injection(self, scope: Path, cleanup: Callable[[], None]) -> None:
+        """在没有存活会话时，清掉 ca 留在工作区 *scope*（如 ``.codex/``）里的注入。
 
-        那些版本只在正常退出时还原，会话被强杀就会一直留在工作区。还有旧版会话
-        在跑时不动，免得拆掉它正在用的东西。
+        注入只在最后一个会话正常退出时还原，会话被强杀就会一直留着；早先版本
+        写进 ``.claude/``、``.opencode/`` 的东西也靠这里收拾。还有会话在跑时不动，
+        免得拆掉它正在用的东西。
         """
         if not scope.exists():
             return
         registry = SessionRegistry(scope, lock_manager=self.lock_manager)
         with registry.exclusive():
-            if not registry.leave():
+            if registry.has_live_sessions():
                 return
             cleanup()
             if registry.take_scope_created():

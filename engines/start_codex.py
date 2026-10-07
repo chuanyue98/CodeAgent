@@ -169,6 +169,18 @@ class CodexEngine(CodexPluginMixin, BaseEngine):
                 '   trust_level = "trusted"'
             )
 
+    def restore_workspace(self, scope: Path) -> None:
+        """撤掉 ca 写进工作区 *scope*（``.codex/``）的技能链接和钩子。"""
+        self.settings_manager.restore_settings(scope / "config.toml")
+        # 早先版本写的 .codex/settings.json codex 从不读取，一并清掉。
+        self.settings_manager.restore_settings(scope / "settings.json")
+        self.link_manager.cleanup_link_dir(scope / "skills")
+
+    def clear_stale_workspace_injection(self, project: Path) -> None:
+        """会话被强杀后留在 ``.codex/`` 的注入；还有会话在跑时不动。"""
+        scope = project / ".codex"
+        self.clear_stale_injection(scope, lambda: self.restore_workspace(scope))
+
     def build_command(
         self,
         message: str = "",
@@ -442,11 +454,7 @@ def main() -> None:
             engine.warn_if_project_untrusted()
 
     def project_teardown() -> None:
-        engine.restore_settings(".codex/config.toml")
-        # 清理旧版本遗留的 .codex/settings.json —— codex 从不读取它，不清会让
-        # ca doctor 一直报 "stale injections"。
-        engine.restore_settings(".codex/settings.json")
-        engine.cleanup_skills_link(".codex/skills")
+        engine.restore_workspace(Path.cwd() / ".codex")
 
     def launch(text: str) -> None:
         final_command = engine.build_command(

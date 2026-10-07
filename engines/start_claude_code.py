@@ -54,7 +54,7 @@ class ClaudeEngine(_PluginDirMixin, BaseEngine):
     def plugin_hooks_config(self) -> dict[str, Any] | None:
         return build_hooks_config(self.get_hooks_to_inject(), self.EVENT_MAP)
 
-    def drop_legacy_workspace_injection(self, project: Path) -> None:
+    def clear_stale_workspace_injection(self, project: Path) -> None:
         """早先版本把钩子写进 ``.claude/settings.json``、把技能链进 ``.claude/skills``。"""
         scope = project / ".claude"
 
@@ -62,7 +62,7 @@ class ClaudeEngine(_PluginDirMixin, BaseEngine):
             self.settings_manager.restore_settings(scope / "settings.json")
             self.link_manager.cleanup_link_dir(scope / "skills")
 
-        self.drop_legacy_injection(scope, cleanup)
+        self.clear_stale_injection(scope, cleanup)
 
     def build_command(
         self,
@@ -149,7 +149,7 @@ def main():
 
     def setup() -> None:
         nonlocal plugin_dir
-        engine.drop_legacy_workspace_injection(project)
+        engine.clear_stale_workspace_injection(project)
         plugin_dir = engine.ensure_plugin_dir(project)
 
     def teardown() -> None:

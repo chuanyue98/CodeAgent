@@ -244,12 +244,12 @@ DOCTOR_MESSAGES: dict[str, dict[str, str]] = {
     },
     "doctor.stale_label": {"en": "Stale injections", "zh": "残留注入"},
     "doctor.stale_found": {
-        "en": "settings still contain _ca_injected marker: {names}",
-        "zh": "以下配置仍带有 _ca_injected 标记: {names}",
+        "en": "left in the workspace by a session that did not exit cleanly: {names}",
+        "zh": "未正常退出的会话留在工作区里的注入: {names}",
     },
     "doctor.stale_hint": {
-        "en": "Run: ca doctor --fix  (auto-restores from .bak backups)",
-        "zh": "运行: ca doctor --fix  (自动从 .bak 备份恢复)",
+        "en": "Run: ca doctor --fix  (restores .bak backups, removes only what ca created)",
+        "zh": "运行: ca doctor --fix  (从 .bak 备份恢复，只删除 ca 自己生成的内容)",
     },
     "doctor.stale_none": {"en": "none found", "zh": "未发现"},
     "doctor.dry_run_banner": {

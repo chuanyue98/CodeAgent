@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 import shutil
 import subprocess
@@ -17,7 +18,8 @@ from core.constants import TEMP_PROMPT_DIRNAME
 from core.engine_registry import ENGINES
 from core.hook_scanner import get_hooks_to_inject
 from core.i18n import t
-from core.link_manager import is_windows_link
+from core.link_manager import LINK_MANIFEST, is_windows_link
+from core.lock_manager import SessionRegistry
 from core.plugin_scanner import get_plugins_to_mount
 from core.report import (
     FAIL,
@@ -579,31 +581,58 @@ def check_mcp_drift(section: Section) -> None:
     )
 
 
-def check_stale_injections(section: Section) -> list[Path]:
-    """Find stale .ca_injected settings files left by previous crashed sessions."""
-    stale: list[Path] = []
-    cwd = Path.cwd()
+#: ca 往工作区写过注入的目录，以及负责清理它的引擎（``模块:类``）。Claude、
+#: OpenCode 已不再写工作区，这里只为收拾早先版本留下的东西。
+_STALE_SCOPES: tuple[tuple[str, str], ...] = (
+    (".claude", "engines.start_claude_code:ClaudeEngine"),
+    (".opencode", "engines.start_opencode:OpenCodeEngine"),
+    (".codex", "engines.start_codex:CodexEngine"),
+)
 
-    candidates = [
-        cwd / ".claude" / "settings.json",
-        cwd / ".opencode" / "settings.json",
-        cwd / ".codex" / "settings.json",
-        # Codex reads hooks from config.toml -- that is where start_codex
-        # injects and where a SIGKILLed run leaves its residue. settings.json
-        # stays in the list only to sweep up pre-TOML leftovers.
-        cwd / ".codex" / "config.toml",
-    ]
-    for path in candidates:
-        if not path.exists():
+_INJECTED_SETTINGS = ("settings.json", "config.toml")
+
+
+def _injection_residue(scope: Path) -> list[Path]:
+    """*scope* 里 ca 注入后没还原的东西：带标记的配置、技能/插件链接、生成的插件。"""
+    found: list[Path] = []
+    for name in _INJECTED_SETTINGS:
+        path = scope / name
+        if path.exists():
+            data = SettingsFile(path).load()
+            if isinstance(data, dict) and data.get("_ca_injected"):
+                found.append(path)
+    for sub in ("skills", "plugins"):
+        if (scope / sub / LINK_MANIFEST).exists():
+            found.append(scope / sub)
+    for item in sorted((scope / "plugins").glob("ca_*.js")):
+        try:
+            if "_ca_injected: true" in item.read_text(encoding="utf-8")[:500]:
+                found.append(item)
+        except OSError:
+            pass
+    return found
+
+
+def _scope_in_use(scope: Path) -> bool:
+    registry = SessionRegistry(scope)
+    with registry.exclusive():
+        return registry.has_live_sessions()
+
+
+def check_stale_injections(section: Section) -> list[Path]:
+    """找出未正常退出的会话留在工作区里的注入；还有会话在用的目录不算。"""
+    cwd = Path.cwd()
+    stale: list[Path] = []
+    for scope_name, _ in _STALE_SCOPES:
+        scope = cwd / scope_name
+        if not scope.is_dir():
             continue
-        # SettingsFile parses JSON and TOML; a crashed codex injection lives
-        # in config.toml, which json.load here used to silently skip.
-        data = SettingsFile(path).load()
-        if isinstance(data, dict) and data.get("_ca_injected"):
-            stale.append(path)
+        residue = _injection_residue(scope)
+        if residue and not _scope_in_use(scope):
+            stale.extend(residue)
 
     if stale:
-        names = ", ".join(p.name for p in stale)
+        names = ", ".join(str(p.relative_to(cwd)) for p in stale)
         section.add(
             WARN,
             t("doctor.stale_label"),
@@ -618,37 +647,32 @@ def check_stale_injections(section: Section) -> list[Path]:
 # ── Fix routine ───────────────────────────────────────────────────────────────
 
 
-def _injection_backup_path(settings_path: Path) -> Path:
-    """Backup name matching SettingsFile.create_backup() for any suffix.
-
-    ``with_suffix(".json.bak")`` only produced the right name for .json
-    files; on config.toml it yielded config.json.bak and the real
-    config.toml.bak was never found, so --fix fell through to deleting a
-    file that had a restorable backup.
-    """
-    return settings_path.with_name(settings_path.name + ".bak")
+def _planned(stale: list[Path], restore_key: str, remove_key: str) -> list[str]:
+    return [
+        t(restore_key if p.with_name(p.name + ".bak").exists() else remove_key, path=p)
+        for p in stale
+    ]
 
 
 def fix_stale_injections(stale: list[Path]) -> None:
-    for settings_path in stale:
-        backup = _injection_backup_path(settings_path)
-        if backup.exists():
-            os.replace(str(backup), str(settings_path))
-            print(t("doctor.restored", path=settings_path))
-        else:
-            # No backup means ca created the file — safe to remove
-            settings_path.unlink()
-            print(t("doctor.removed_injected", path=settings_path))
+    """交给各引擎自己的清理逻辑（与启动时清残留是同一份代码）。"""
+    cwd = Path.cwd()
+    done = _planned(stale, "doctor.restored", "doctor.removed_injected")
+    for scope_name, engine_ref in _STALE_SCOPES:
+        scope = cwd / scope_name
+        if not any(scope == p or scope in p.parents for p in stale):
+            continue
+        module_name, class_name = engine_ref.split(":")
+        engine_cls = getattr(importlib.import_module(module_name), class_name)
+        engine_cls().clear_stale_workspace_injection(cwd)
+    for line in done:
+        print(line)
 
 
 def preview_stale_injections(stale: list[Path]) -> None:
     """Describe what fix_stale_injections() would do, without touching anything."""
-    for settings_path in stale:
-        backup = _injection_backup_path(settings_path)
-        if backup.exists():
-            print(t("doctor.would_restore", path=settings_path))
-        else:
-            print(t("doctor.would_remove", path=settings_path))
+    for line in _planned(stale, "doctor.would_restore", "doctor.would_remove"):
+        print(line)
 
 
 # ── Lightweight resolver (avoids running a real engine) ───────────────────────

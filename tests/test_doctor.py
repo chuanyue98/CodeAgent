@@ -125,22 +125,82 @@ def test_check_stale_injections_ignores_clean_codex_config_toml(tmp_path, monkey
     assert section.checks[0].status == doctor.OK
 
 
-def test_fix_stale_injections_restores_toml_from_its_own_backup(tmp_path):
-    """--fix must look for config.toml.bak, not with_suffix(".json.bak").
-
-    The old name computation turned config.toml into config.json.bak, missed
-    the real backup, and fell through to deleting a user file that had a
-    restorable original.
-    """
-    codex_config = tmp_path / "config.toml"
+def test_fix_stale_injections_restores_toml_from_its_own_backup(tmp_path, monkeypatch):
+    """--fix must look for config.toml.bak, not with_suffix(".json.bak")."""
+    monkeypatch.chdir(tmp_path)
+    codex_config = tmp_path / ".codex" / "config.toml"
+    codex_config.parent.mkdir()
     codex_config.write_text("_ca_injected = true\n", encoding="utf-8")
-    backup = tmp_path / "config.toml.bak"
+    backup = tmp_path / ".codex" / "config.toml.bak"
     backup.write_text('model = "gpt-5"\n', encoding="utf-8")
 
-    doctor.fix_stale_injections([codex_config])
+    stale = doctor.check_stale_injections(doctor.Section("Stale"))
+    doctor.fix_stale_injections(stale)
 
     assert codex_config.read_text(encoding="utf-8") == 'model = "gpt-5"\n'
     assert not backup.exists()
+
+
+def test_a_scope_a_live_session_is_using_is_not_stale(tmp_path, monkeypatch):
+    """另一个终端里还开着 ca codex 时，config.toml 里的标记是它正在用的钩子。"""
+    from core.lock_manager import SessionRegistry
+
+    monkeypatch.chdir(tmp_path)
+    codex_config = tmp_path / ".codex" / "config.toml"
+    codex_config.parent.mkdir()
+    codex_config.write_text("_ca_injected = true\n", encoding="utf-8")
+
+    running = SessionRegistry(tmp_path / ".codex")
+    with running.exclusive():
+        running.join()
+    try:
+        assert doctor.check_stale_injections(doctor.Section("Stale")) == []
+    finally:
+        with running.exclusive():
+            running.leave()
+
+    assert doctor.check_stale_injections(doctor.Section("Stale")) == [codex_config]
+
+
+def test_leftover_skill_links_are_found_and_removed(tmp_path, monkeypatch):
+    from core.link_manager import LinkManager
+
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "src-skill"
+    source.mkdir()
+    links = tmp_path / ".claude" / "skills"
+    links.mkdir(parents=True)
+    LinkManager().ensure_managed_link(source, links / "probe", links)
+    mine = links / "mine"
+    mine.mkdir()
+
+    stale = doctor.check_stale_injections(doctor.Section("Stale"))
+    assert stale == [links]
+
+    doctor.fix_stale_injections(stale)
+
+    assert not (links / "probe").exists()
+    assert mine.is_dir()
+
+
+def test_generated_opencode_plugins_are_removed_but_the_users_are_kept(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    plugins = tmp_path / ".opencode" / "plugins"
+    plugins.mkdir(parents=True)
+    bridge = plugins / "ca_hooks_bridge.js"
+    bridge.write_text("/* _ca_injected: true */", encoding="utf-8")
+    mine = plugins / "ca_mine.js"
+    mine.write_text("export default {}", encoding="utf-8")
+
+    stale = doctor.check_stale_injections(doctor.Section("Stale"))
+    assert stale == [bridge]
+
+    doctor.fix_stale_injections(stale)
+
+    assert not bridge.exists()
+    assert mine.exists()
 
 
 def test_get_doctor_sections_returns_sections():
