@@ -4,6 +4,8 @@ import sys
 
 
 def _deny(reason: str) -> None:
+    # 保持 ASCII 转义：Windows 上管道的 stdout 是 cp1252，直接写中文会抛异常，
+    # hook 崩掉就等于放行。
     print(
         json.dumps(
             {
@@ -12,8 +14,7 @@ def _deny(reason: str) -> None:
                     "permissionDecision": "deny",
                     "permissionDecisionReason": reason,
                 }
-            },
-            ensure_ascii=False,
+            }
         )
     )
 
@@ -33,7 +34,8 @@ def get_current_branch():
 
 def main():
     try:
-        data = json.load(sys.stdin)
+        # 引擎按 UTF-8 写 stdin；不能用 sys.stdin，它在 Windows 上按 cp1252 解码。
+        data = json.loads(sys.stdin.buffer.read().decode("utf-8"))
     except Exception:
         sys.exit(0)
 
