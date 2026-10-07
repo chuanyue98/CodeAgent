@@ -83,3 +83,6 @@ codeagent-audit-report/
 .codebuddy/
 .qoder/
 audit-report.html
+
+# 本地文档（调研、草稿等），不入库
+docs/
