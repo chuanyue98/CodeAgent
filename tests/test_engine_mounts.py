@@ -28,7 +28,7 @@ MARKERS: dict[str, dict[str, tuple[str, ...]]] = {
         "claude": ("plugin_hooks_config",),
         "opencode": ("ensure_hooks_bridge",),
         "codex": ("inject_hooks_to_settings",),
-        "codebuddy": ("inject_hooks_to_settings", "ensure_hooks_bridge"),
+        "codebuddy": ("plugin_hooks_config",),
         "antigravity": ("inject_hooks_to_settings", "ensure_hooks_bridge"),
     },
     "plugins": {
@@ -87,7 +87,7 @@ def test_endpoint_lists_every_engine_with_its_mounts(client: TestClient):
     by_id = {engine["id"]: engine for engine in body["engines"]}
     assert set(by_id) == set(ENGINES)
     assert by_id["claude"]["mounts"] == ["skills", "hooks", "plugins"]
-    assert by_id["codebuddy"]["mounts"] == ["skills", "plugins"]
+    assert by_id["codebuddy"]["mounts"] == ["skills", "hooks", "plugins"]
     assert by_id["antigravity"]["mounts"] == ["skills"]
     assert by_id["claude"]["name"] == ENGINES["claude"].display_name
 

@@ -57,6 +57,25 @@ class _LinksMixin:
                         except OSError:
                             pass
 
+    def drop_legacy_injection(self, scope: Path, cleanup: Callable[[], None]) -> None:
+        """摘掉早先版本写进工作区 *scope*（如 ``.claude/``）的注入。
+
+        那些版本只在正常退出时还原，会话被强杀就会一直留在工作区。还有旧版会话
+        在跑时不动，免得拆掉它正在用的东西。
+        """
+        if not scope.exists():
+            return
+        registry = SessionRegistry(scope, lock_manager=self.lock_manager)
+        with registry.exclusive():
+            if not registry.leave():
+                return
+            cleanup()
+            if registry.take_scope_created():
+                try:
+                    scope.rmdir()
+                except OSError:
+                    pass
+
     def resolve_skill_sources(self) -> list[tuple[str, Path]]:
         """当前组要挂载的技能，按 (链接名, 源目录) 返回；重名时保留优先级高的来源。"""
         skills_to_mount = self.get_skills_to_mount()

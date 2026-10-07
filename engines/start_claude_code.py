@@ -17,7 +17,6 @@ from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import announce_launch, split_passthrough
 from core.engine_base.plugin_dir_mixin import _PluginDirMixin, build_hooks_config
-from core.lock_manager import SessionRegistry
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -53,26 +52,14 @@ class ClaudeEngine(_PluginDirMixin, BaseEngine):
         return build_hooks_config(self.get_hooks_to_inject(), self.EVENT_MAP)
 
     def drop_legacy_workspace_injection(self, project: Path) -> None:
-        """摘掉早先版本写进工作区的注入。
-
-        那版把钩子写进 ``.claude/settings.json``、把技能链进 ``.claude/skills``，
-        只在正常退出时还原，会话被强杀就会一直留在工作区。还有旧版会话在跑时
-        不动，免得拆掉它正在用的钩子。
-        """
+        """早先版本把钩子写进 ``.claude/settings.json``、把技能链进 ``.claude/skills``。"""
         scope = project / ".claude"
-        if not scope.exists():
-            return
-        registry = SessionRegistry(scope, lock_manager=self.lock_manager)
-        with registry.exclusive():
-            if not registry.leave():
-                return
+
+        def cleanup() -> None:
             self.settings_manager.restore_settings(scope / "settings.json")
             self.link_manager.cleanup_link_dir(scope / "skills")
-            if registry.take_scope_created():
-                try:
-                    scope.rmdir()
-                except OSError:
-                    pass
+
+        self.drop_legacy_injection(scope, cleanup)
 
     def build_command(
         self,
@@ -100,7 +87,7 @@ class ClaudeEngine(_PluginDirMixin, BaseEngine):
     ) -> list[str]:
         """Builds a headless, structured-output command for one ChatPage turn.
 
-        Verified live (see docs/chatpage-cli-spike-results.md spike): the
+        Verified live: the
         session id returned in the stream-json ``result``/``system`` events can
         be passed back via ``-r`` to resume with full prior context.
         """

@@ -295,6 +295,30 @@ def test_codebuddy_keeps_auto_permission_mode_and_passes_through(isolated, monke
     ]
 
 
+def test_codebuddy_mounts_hooks_in_its_inline_plugin(isolated, monkeypatch):
+    monkeypatch.setattr(codebuddy_mod, "require_engine_cli", lambda _name: True)
+    for name in ("get_plugins_to_mount", "get_skills_to_mount"):
+        monkeypatch.setattr(codebuddy_mod.CodeBuddyEngine, name, lambda self: [])
+    monkeypatch.setattr(
+        codebuddy_mod.CodeBuddyEngine,
+        "get_hooks_to_inject",
+        lambda self: [{"name": "guard", "event": "before_tool", "command": "guard.sh"}],
+    )
+
+    def inspect(seen):
+        root = Path(seen["env"]["CODEBUDDY_PLUGIN_DIRS"])
+        seen["hooks"] = json.loads((root / "hooks" / "hooks.json").read_text("utf-8"))
+
+    seen = _capture_run(monkeypatch, codebuddy_mod.CodeBuddyEngine, inspect)
+    monkeypatch.setattr(sys, "argv", ["start_codebuddy.py"])
+    codebuddy_mod.main()
+
+    assert seen["hooks"]["hooks"]["PreToolUse"][0]["hooks"] == [
+        {"type": "command", "command": "guard.sh"}
+    ]
+    assert not (isolated / ".codebuddy").exists()
+
+
 # --- codex ---------------------------------------------------------------
 
 
@@ -360,6 +384,82 @@ def test_opencode_headless_message_goes_on_stdin(isolated, monkeypatch):
 
     assert seen["cmd"] == ["opencode", "run"]
     assert seen["stdin"] == message
+
+
+def _run_opencode_with(monkeypatch, isolated, on_run=None):
+    """挂一个技能、一个 before_tool 钩子跑一次 ca opencode。"""
+    skill = isolated.parent / "skill-src" / "probe"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("---\nname: probe\n---\n", encoding="utf-8")
+    engine_cls = opencode_mod.OpenCodeEngine
+    monkeypatch.setattr(opencode_mod, "require_engine_cli", lambda _name: True)
+    monkeypatch.setattr(
+        engine_cls, "resolve_skill_sources", lambda self: [("probe", skill)]
+    )
+    monkeypatch.setattr(
+        engine_cls,
+        "get_hooks_to_inject",
+        lambda self: [{"name": "guard", "event": "before_tool", "command": "guard.sh"}],
+    )
+    monkeypatch.setattr(engine_cls, "get_plugins_to_mount", lambda self: [])
+    seen = _capture_run(monkeypatch, engine_cls, on_run)
+    monkeypatch.setattr(sys, "argv", ["start_opencode.py"])
+    opencode_mod.main()
+    return seen
+
+
+def test_opencode_mounts_through_its_config_dir_not_the_workspace(
+    isolated, monkeypatch
+):
+    def inspect(seen):
+        root = Path(seen["env"][opencode_mod.CONFIG_DIR_ENV])
+        seen["root"] = root
+        seen["skill"] = (root / "skills" / "probe" / "SKILL.md").exists()
+        seen["bridge"] = (root / "plugins" / "ca_hooks_bridge.js").exists()
+
+    seen = _run_opencode_with(monkeypatch, isolated, inspect)
+
+    assert Path.home() in seen["root"].parents
+    assert seen["skill"] and seen["bridge"]
+    assert not (isolated / ".opencode").exists()
+    assert not seen["root"].exists()
+
+
+def test_opencode_keeps_the_users_own_config_dir(isolated, monkeypatch):
+    user_dir = isolated.parent / "my-opencode"
+    (user_dir / "skills" / "mine").mkdir(parents=True)
+    (user_dir / "agent").mkdir()
+    monkeypatch.setenv(opencode_mod.CONFIG_DIR_ENV, str(user_dir))
+
+    def inspect(seen):
+        root = Path(seen["env"][opencode_mod.CONFIG_DIR_ENV])
+        seen["names"] = {
+            "skills": sorted(
+                p.name
+                for p in (root / "skills").iterdir()
+                if not p.name.startswith(".")
+            ),
+            "agent": (root / "agent").is_dir(),
+        }
+
+    seen = _run_opencode_with(monkeypatch, isolated, inspect)
+
+    assert seen["names"] == {"skills": ["mine", "probe"], "agent": True}
+    assert (user_dir / "skills" / "mine").is_dir()
+
+
+def test_opencode_clears_a_crashed_old_version_injection(isolated, monkeypatch):
+    plugins = isolated / ".opencode" / "plugins"
+    plugins.mkdir(parents=True)
+    bridge = plugins / "ca_hooks_bridge.js"
+    bridge.write_text("/* _ca_injected: true */", encoding="utf-8")
+    users_own = plugins / "mine.js"
+    users_own.write_text("export default {}", encoding="utf-8")
+
+    _run_opencode_with(monkeypatch, isolated)
+
+    assert not bridge.exists()
+    assert users_own.exists()
 
 
 def test_run_shell_sends_stdin_text_as_utf8(isolated):

@@ -13,8 +13,10 @@
 技能列表里），链接只验到「插件能被加载」那一层。技能都是小体积 Markdown，
 每次启动重建一份的代价可以忽略，改了源文件下次启动即生效。
 
-Claude：用 ``--plugin-dir`` 挂载。插件 hooks 与项目 ``.claude/settings.json``
-里的 hooks 叠加执行，exit 2 照样能拦下工具调用（已实测）。
+插件里的 ``hooks/hooks.json`` 在 Claude 和 CodeBuddy 上都与项目自己的 hooks
+叠加执行，exit 2 照样能拦下工具调用（均已端到端实测）。
+
+Claude：用 ``--plugin-dir`` 挂载。
 
 CodeBuddy：不认 Claude 风格的 ``skills/`` 目录，技能只能装在插件里。插件不必
 进市场、也不必安装：``CODEBUDDY_PLUGIN_DIRS`` 里的每个目录都会被当成一个

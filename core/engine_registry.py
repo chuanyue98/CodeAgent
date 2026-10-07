@@ -124,9 +124,7 @@ ENGINES: dict[str, EngineSpec] = {
             install_hint="npm install -g @tencent-ai/codebuddy-code",
             adapter="engines.start_codebuddy:CodeBuddyEngine",
             session_id_fields=("session_id", "sessionId"),
-            # No hooks: CodeBuddy has no project-level settings file to inject
-            # them into (see the class docstring in start_codebuddy.py).
-            mounts=frozenset({"skills", "plugins"}),
+            mounts=frozenset({"skills", "hooks", "plugins"}),
         ),
         EngineSpec(
             name="antigravity",

@@ -11,6 +11,7 @@ import shutil
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 # 确保能找到 core 模块
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -18,7 +19,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import announce_launch, split_passthrough
-from core.engine_base.plugin_dir_mixin import _PluginDirMixin
+from core.engine_base.plugin_dir_mixin import _PluginDirMixin, build_hooks_config
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -34,11 +35,15 @@ class CodeBuddyEngine(_PluginDirMixin, BaseEngine):
     """CodeBuddy 引擎的具体实现。
 
     与 Claude 引擎的主要差异：CodeBuddy 没有项目级 ``.codebuddy/settings.json``
-    概念，也不认 Claude 风格的 ``skills/`` 目录——技能要包成插件挂载，
-    见 :mod:`core.engine_base.plugin_dir_mixin`。
+    概念，也不认 Claude 风格的 ``skills/`` 目录——技能和钩子都包成 inline 插件
+    挂载，见 :mod:`core.engine_base.plugin_dir_mixin`。
     """
 
     COMMAND = "codebuddy"
+    EVENT_MAP = {
+        "before_tool": "PreToolUse",
+        "after_tool": "PostToolUse",
+    }
 
     def __init__(self):
         super().__init__("CodeBuddy", "")
@@ -49,6 +54,9 @@ class CodeBuddyEngine(_PluginDirMixin, BaseEngine):
 
     def _get_plugin_dir_root(self) -> Path:
         return self._get_codebuddy_home() / ".tmp" / "plugins"
+
+    def plugin_hooks_config(self) -> dict[str, Any] | None:
+        return build_hooks_config(self.get_hooks_to_inject(), self.EVENT_MAP)
 
     def drop_legacy_marketplace(self) -> None:
         """摘掉早先版本注册的本地市场。

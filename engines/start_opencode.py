@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import shutil
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -26,17 +28,60 @@ from core.task_lib import (
 
 logger = get_logger(__name__)
 
+#: OpenCode 在全局与项目配置之外再叠加加载的配置目录（skills/、plugins/ 等）。
+CONFIG_DIR_ENV = "OPENCODE_CONFIG_DIR"
+
 
 class OpenCodeEngine(BaseEngine):
-    """OpenCode 引擎的具体实现"""
+    """OpenCode 引擎的具体实现。
+
+    技能、插件和钩子桥接都放进 ca 自己状态目录下按项目分开的一个配置目录，
+    经 ``OPENCODE_CONFIG_DIR`` 叠加给 OpenCode，不写工作区的 ``.opencode/``。
+    实测它与用户全局配置叠加：原有技能、插件、模型设置都还在。
+    """
 
     OPENCODE_COMMAND = "opencode"
 
     def __init__(self):
         super().__init__("OpenCode", "opencode-default")
 
+    def config_dir(self, project: Path) -> Path:
+        """本项目经 ``OPENCODE_CONFIG_DIR`` 交给 OpenCode 的配置目录。"""
+        digest = hashlib.sha256(str(project.resolve()).encode("utf-8")).hexdigest()
+        return Path.home() / ".codeagent" / "opencode" / digest[:16]
+
     def _get_plugin_link_dir(self):
-        return (Path.cwd() / ".opencode" / "plugins").absolute()
+        return self.config_dir(Path.cwd()) / "plugins"
+
+    def mirror_user_config_dir(self, config_dir: Path, user_dir: Path) -> None:
+        """用户自己设了 ``OPENCODE_CONFIG_DIR`` 时，把它的内容链进我们的目录。
+
+        这个变量只能指一个目录，直接换成我们的会让用户那份失效。``skills/`` 和
+        ``plugins/`` 逐项并进来（同名时 ca 的优先），其余顶层条目整体链接。
+        """
+        if not user_dir.is_dir() or user_dir.resolve() == config_dir.resolve():
+            return
+        config_dir.mkdir(parents=True, exist_ok=True)
+        for entry in user_dir.iterdir():
+            target = config_dir / entry.name
+            if entry.name in ("skills", "plugins") and entry.is_dir():
+                target.mkdir(exist_ok=True)
+                for child in entry.iterdir():
+                    if not (target / child.name).exists():
+                        self._create_skill_link(child, target / child.name)
+            elif not target.exists():
+                self._create_skill_link(entry, target)
+
+    def drop_legacy_workspace_injection(self, project: Path) -> None:
+        """早先版本把技能、插件和钩子桥接都写进了工作区的 ``.opencode/``。"""
+        scope = project / ".opencode"
+
+        def cleanup() -> None:
+            self.settings_manager.restore_settings(scope / "settings.json")
+            self.link_manager.cleanup_link_dir(scope / "skills")
+            self._cleanup_plugin_dir(scope / "plugins")
+
+        self.drop_legacy_injection(scope, cleanup)
 
     def ensure_plugins_link(self):
         """为 OpenCode 优化插件挂载逻辑：支持扁平化链接并自动生成通用适配器"""
@@ -432,7 +477,9 @@ export default async () => {{
 
     def cleanup_plugins_link(self):
         """清理所有创建的链接和生成的临时适配器"""
-        link_dir = self._get_plugin_link_dir()
+        self._cleanup_plugin_dir(self._get_plugin_link_dir())
+
+    def _cleanup_plugin_dir(self, link_dir: Path) -> None:
         if not link_dir.exists():
             return
 
@@ -481,7 +528,7 @@ export default async () => {{
     ) -> list[str]:
         """Builds a headless JSON command for one ChatPage turn.
 
-        Verified live (see docs/chatpage-cli-spike-results.md spike):
+        Verified live:
         ``-s/--session <id>`` resumes with full prior context. Legacy Web Chat
         intentionally keeps OpenCode's default permission policy.
         """
@@ -533,23 +580,27 @@ def main():
         if task_prompt:
             message = f"{message}\n\n{task_prompt}".strip()
 
+    project = Path.cwd()
+    config_dir = engine.config_dir(project)
+    env = engine.env_manager.get_env()
+    user_config_dir = env.get(CONFIG_DIR_ENV)
+
     def setup() -> None:
-        engine.ensure_skills_link(".opencode/skills")
+        engine.drop_legacy_workspace_injection(project)
+        engine.ensure_skills_link(str(config_dir / "skills"))
         engine.ensure_plugins_link()
-        # OpenCode 没有 settings.json 这个概念（在 opencode 1.18 的二进制里
-        # 完全搜不到该文件名），它的钩子是插件模块导出的 JS 函数
-        # (tool.execute.before / tool.execute.after)，不是 shell 命令。
-        # 因此用生成的桥接插件来跑 CodeAgent 的 shell 钩子。
+        # OpenCode 的钩子是插件模块导出的 JS 函数（tool.execute.before /
+        # tool.execute.after），不是 shell 命令，所以用生成的桥接插件来跑
+        # CodeAgent 的 shell 钩子。
         engine.ensure_hooks_bridge(engine.get_hooks_to_inject())
+        if user_config_dir:
+            engine.mirror_user_config_dir(config_dir, Path(user_config_dir))
 
     def teardown() -> None:
-        # 清理旧版本可能遗留的 settings.json 注入文件
-        engine.restore_settings(".opencode/settings.json")
-        engine.cleanup_skills_link(".opencode/skills")
-        engine.cleanup_plugins_link()
+        shutil.rmtree(config_dir, ignore_errors=True)
 
     try:
-        env = engine.env_manager.get_env()
+        env[CONFIG_DIR_ENV] = str(config_dir)
         engine.apply_opencode_mcp_env(env)
         if args.non_interactive:
             final_command = engine.build_command(message, True, passthrough)
@@ -561,7 +612,7 @@ def main():
             stdin_text = None
         register_signal_handler()
 
-        with engine.shared_injection(Path.cwd() / ".opencode", setup, teardown):
+        with engine.shared_injection(config_dir, setup, teardown):
             announce_launch(engine.name)
             engine.run_shell(final_command, env, stdin_text=stdin_text)
     finally:
