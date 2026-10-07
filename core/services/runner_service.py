@@ -286,9 +286,8 @@ class TaskRunner:
         """Starts one headless, non-interactive ChatPage turn in the background.
 
         Unlike ``run_task``, this calls each engine's ``build_chat_command()``
-        directly (bypassing ca_launcher.py's skill/hook/plugin injection —
-        see docs/chatpage-cli-spike-results.md for why that's out of scope
-        for v1) and writes structured JSON(L) output to a distinct
+        directly (bypassing ca_launcher.py's skill/hook/plugin injection,
+        which is out of scope for v1) and writes structured JSON(L) output to a distinct
         ``.jsonl`` log so ``logs.py``'s ``*.log`` glob doesn't pick it up.
         """
 

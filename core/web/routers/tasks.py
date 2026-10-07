@@ -344,8 +344,7 @@ async def list_engines():
     """Lists available AI engines.
 
     ``supportsResume`` reflects ChatPage's ability to continue an existing
-    session with prior context intact, verified live per engine — see
-    docs/chatpage-cli-spike-results.md.
+    session with prior context intact, verified live per engine.
     """
     # This could be more dynamic by checking shutil.which for binaries
     return [

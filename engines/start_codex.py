@@ -211,7 +211,7 @@ class CodexEngine(CodexPluginMixin, BaseEngine):
     ) -> list[str]:
         """Builds a headless JSON command for one ChatPage turn.
 
-        Verified live (see docs/chatpage-cli-spike-results.md spike):
+        Verified live:
         ``codex exec resume <thread_id>`` carries full prior context forward.
         """
         if session_id:

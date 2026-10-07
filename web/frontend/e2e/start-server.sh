@@ -3,8 +3,7 @@ set -euo pipefail
 
 # Launches the CodeAgent backend, serving the already-built frontend
 # (dist/), fully isolated from the developer's real data. Used as
-# playwright.config.ts's webServer.command — see e2e/fixtures/README.md
-# and docs/mcp-cli-spike-results.md for why isolation here means more than
+# playwright.config.ts's webServer.command. Isolation here means more than
 # just CA_CONFIG_PATH: mcp_service.py's codex/opencode paths and the
 # session-history parsers read $HOME directly, so $HOME itself is
 # redirected to a scratch dir alongside the app's own CA_*_ROOT vars.

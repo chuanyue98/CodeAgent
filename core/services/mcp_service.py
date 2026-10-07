@@ -8,8 +8,7 @@ config formats. Reads parse each engine's native config file directly
 ``mcp list`` output is cleanly machine-parseable (health-check text,
 account-level entries mixed with project entries, etc).
 
-One engine needed a fallback confirmed by a live pre-build spike — see
-docs/mcp-cli-spike-results.md for the full transcript:
+One engine needed a fallback confirmed by a live pre-build spike:
   - ``opencode`` has no ``mcp remove`` subcommand at all (only
     ``add``/``list``/``auth``/``logout``/``debug``). Removal falls back to
     directly editing ``opencode.json``.

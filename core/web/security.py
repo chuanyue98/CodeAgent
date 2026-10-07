@@ -243,8 +243,8 @@ def is_allowed_host(host_header: str | None) -> bool:
 
     ``CA_UI_ALLOWED_HOSTS="*"`` accepts anything, which **switches off the
     DNS-rebinding defence**. That is only appropriate when a trusted proxy
-    in front of this server already validates Host (the containerized
-    deployment in docs/deployment.md), or in a test harness where the
+    in front of this server already validates Host (a containerized
+    deployment behind a reverse proxy), or in a test harness where the
     client's Host is a fixture artifact. The Origin and token checks are
     unaffected and still apply.
     """

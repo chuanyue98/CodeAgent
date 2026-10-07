@@ -3,8 +3,8 @@
 Endpoints:
   POST /api/chat/turns
       Starts one headless turn in the background (new session, or resuming
-      an existing one via ``session_id`` — see docs/chatpage-cli-spike-results.md
-      for which engines actually carry context forward on resume).
+      an existing one via ``session_id``; each engine's ``build_chat_command``
+      documents how it carries context forward on resume).
 
   GET  /api/chat/turns/{turn_id}
       Polls the current status of a turn (running/completed/failed).
