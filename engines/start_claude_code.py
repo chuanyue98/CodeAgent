@@ -8,6 +8,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 # 确保能找到 core 模块
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -15,6 +16,8 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import announce_launch, split_passthrough
+from core.engine_base.plugin_dir_mixin import _PluginDirMixin, build_hooks_config
+from core.lock_manager import SessionRegistry
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -22,8 +25,12 @@ from core.task_lib import (
 )
 
 
-class ClaudeEngine(BaseEngine):
-    """Claude 引擎的具体实现"""
+class ClaudeEngine(_PluginDirMixin, BaseEngine):
+    """Claude 引擎的具体实现。
+
+    技能和钩子包成临时插件经 ``--plugin-dir`` 挂载，不写工作区的 ``.claude/``，
+    见 :mod:`core.engine_base.plugin_dir_mixin`。
+    """
 
     CLAUDE_COMMAND = "claude"
     CLAUDE_SKIP_PERMISSIONS_FLAG = "--dangerously-skip-permissions"
@@ -31,6 +38,7 @@ class ClaudeEngine(BaseEngine):
         "before_tool": "PreToolUse",
         "after_tool": "PostToolUse",
     }
+    PLUGIN_MANIFEST_DIR = ".claude-plugin"
 
     def __init__(self):
         # Claude CLI has no --model flag in build_command(); the actual model
@@ -38,17 +46,47 @@ class ClaudeEngine(BaseEngine):
         # no accurate value to store here.
         super().__init__("Claude", "")
 
+    def _get_plugin_dir_root(self) -> Path:
+        return Path.home() / ".codeagent" / "plugins" / "claude"
+
+    def plugin_hooks_config(self) -> dict[str, Any] | None:
+        return build_hooks_config(self.get_hooks_to_inject(), self.EVENT_MAP)
+
+    def drop_legacy_workspace_injection(self, project: Path) -> None:
+        """摘掉早先版本写进工作区的注入。
+
+        那版把钩子写进 ``.claude/settings.json``、把技能链进 ``.claude/skills``，
+        只在正常退出时还原，会话被强杀就会一直留在工作区。还有旧版会话在跑时
+        不动，免得拆掉它正在用的钩子。
+        """
+        scope = project / ".claude"
+        if not scope.exists():
+            return
+        registry = SessionRegistry(scope, lock_manager=self.lock_manager)
+        with registry.exclusive():
+            if not registry.leave():
+                return
+            self.settings_manager.restore_settings(scope / "settings.json")
+            self.link_manager.cleanup_link_dir(scope / "skills")
+            if registry.take_scope_created():
+                try:
+                    scope.rmdir()
+                except OSError:
+                    pass
+
     def build_command(
         self,
         message: str,
         non_interactive: bool,
         passthrough: Sequence[str] = (),
+        plugin_dir: Path | None = None,
     ) -> list[str]:
         cmd = [self.CLAUDE_COMMAND, self.CLAUDE_SKIP_PERMISSIONS_FLAG]
-        for plugin_meta in self.get_plugins_to_mount():
-            plugin_dir = plugin_meta.get("_plugin_dir")
-            if plugin_dir:
-                cmd.extend(["--plugin-dir", plugin_dir])
+        plugin_dirs = ([plugin_dir] if plugin_dir is not None else []) + (
+            self.resolve_group_plugin_dirs()
+        )
+        for path in plugin_dirs:
+            cmd.extend(["--plugin-dir", str(path)])
         cmd.extend(self.mcp_config_arg())
         if non_interactive:
             cmd.append("-p")
@@ -116,27 +154,31 @@ def main():
         if task_prompt:
             message = f"{message}\n\n{task_prompt}".strip()
 
+    project = Path.cwd()
+    plugin_dir: Path | None = None
+
     def setup() -> None:
-        engine.ensure_skills_link(".claude/skills")
-        engine.inject_hooks_to_settings(
-            ".claude/settings.json", engine.get_hooks_to_inject()
-        )
+        nonlocal plugin_dir
+        engine.drop_legacy_workspace_injection(project)
+        plugin_dir = engine.ensure_plugin_dir(project)
 
     def teardown() -> None:
-        engine.restore_settings(".claude/settings.json")
-        engine.cleanup_skills_link(".claude/skills")
+        engine.cleanup_plugin_dir(project)
 
     # 规范不由启动器投递：claude 自己读项目根的 AGENTS.md（已实测）。
     try:
-        final_command = engine.build_command(
-            engine.first_message(message),
-            args.non_interactive,
-            passthrough=passthrough,
-        )
         env = engine.env_manager.get_env()
         register_signal_handler()
 
-        with engine.shared_injection(Path.cwd() / ".claude", setup, teardown):
+        with engine.shared_injection(
+            engine.plugin_session_scope(project), setup, teardown
+        ):
+            final_command = engine.build_command(
+                engine.first_message(message),
+                args.non_interactive,
+                passthrough=passthrough,
+                plugin_dir=plugin_dir,
+            )
             announce_launch(engine.name)
             engine.run_shell(final_command, env)
     finally:

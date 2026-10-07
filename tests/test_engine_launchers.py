@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -184,6 +185,91 @@ def test_claude_non_interactive_uses_print_mode():
     cmd = claude_mod.ClaudeEngine().build_command("do it", True)
 
     assert cmd[-2:] == ["-p", "do it"]
+
+
+def _run_claude_with(monkeypatch, isolated, on_run=None):
+    """挂一个技能、一个 before_tool 钩子跑一次 ca claude。"""
+    skill = isolated.parent / "skill-src" / "probe"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("---\nname: probe\n---\n", encoding="utf-8")
+    monkeypatch.setattr(claude_mod, "require_engine_cli", lambda _name: True)
+    monkeypatch.setattr(
+        claude_mod.ClaudeEngine,
+        "resolve_skill_sources",
+        lambda self: [("probe", skill)],
+    )
+    monkeypatch.setattr(
+        claude_mod.ClaudeEngine,
+        "get_hooks_to_inject",
+        lambda self: [{"name": "guard", "event": "before_tool", "command": "guard.sh"}],
+    )
+    monkeypatch.setattr(
+        claude_mod.ClaudeEngine, "get_plugins_to_mount", lambda self: []
+    )
+    seen = _capture_run(monkeypatch, claude_mod.ClaudeEngine, on_run)
+    monkeypatch.setattr(sys, "argv", ["start_claude_code.py"])
+    claude_mod.main()
+    return seen
+
+
+def test_claude_mounts_skills_and_hooks_as_a_plugin_outside_the_workspace(
+    isolated, monkeypatch
+):
+    def inspect(seen):
+        root = Path(seen["cmd"][seen["cmd"].index("--plugin-dir") + 1])
+        seen["root"] = root
+        seen["skill"] = (root / "skills" / "probe" / "SKILL.md").exists()
+        seen["hooks"] = json.loads((root / "hooks" / "hooks.json").read_text("utf-8"))
+
+    seen = _run_claude_with(monkeypatch, isolated, inspect)
+
+    assert Path.home() in seen["root"].parents
+    assert seen["skill"]
+    assert seen["hooks"] == {
+        "hooks": {
+            "PreToolUse": [
+                {"matcher": "*", "hooks": [{"type": "command", "command": "guard.sh"}]}
+            ]
+        }
+    }
+    assert not (isolated / ".claude").exists()
+    assert not seen["root"].exists()
+
+
+def test_claude_clears_a_crashed_old_version_injection(isolated, monkeypatch):
+    claude_dir = isolated / ".claude"
+    claude_dir.mkdir()
+    original = '{"permissions": {}}'
+    (claude_dir / "settings.json.bak").write_text(original, encoding="utf-8")
+    (claude_dir / "settings.json").write_text(
+        '{"_ca_injected": true, "hooks": {}}', encoding="utf-8"
+    )
+
+    _run_claude_with(monkeypatch, isolated)
+
+    assert (claude_dir / "settings.json").read_text(encoding="utf-8") == original
+    assert not (claude_dir / "settings.json.bak").exists()
+
+
+def test_claude_leaves_a_live_old_version_session_alone(isolated, monkeypatch):
+    from core.lock_manager import SessionRegistry
+
+    claude_dir = isolated / ".claude"
+    claude_dir.mkdir()
+    injected = '{"_ca_injected": true, "hooks": {}}'
+    (claude_dir / "settings.json").write_text(injected, encoding="utf-8")
+    (claude_dir / "settings.json.bak").write_text("{}", encoding="utf-8")
+
+    old_session = SessionRegistry(claude_dir)
+    with old_session.exclusive():
+        old_session.join()
+    try:
+        _run_claude_with(monkeypatch, isolated)
+    finally:
+        with old_session.exclusive():
+            old_session.leave()
+
+    assert (claude_dir / "settings.json").read_text(encoding="utf-8") == injected
 
 
 # --- codebuddy -----------------------------------------------------------

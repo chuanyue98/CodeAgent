@@ -19,6 +19,7 @@ from core.engine_base.plugin_dir_mixin import (  # noqa: E402
     PLUGIN_DIRS_ENV,
     PLUGIN_NAME,
     _PluginDirMixin,
+    build_hooks_config,
 )
 
 
@@ -208,3 +209,74 @@ def test_a_plugin_that_no_longer_exists_is_skipped(tmp_path, project):
     )
 
     assert engine.plugin_dir_env(None) == {}
+
+
+# --- 钩子（Claude 从插件加载 hooks） ---------------------------------------
+
+
+class HookingEngine(FakeEngine):
+    PLUGIN_MANIFEST_DIR = ".claude-plugin"
+
+    def __init__(self, home, skills, hooks_config):
+        super().__init__(home, skills)
+        self.hooks_config = hooks_config
+
+    def plugin_hooks_config(self):
+        return self.hooks_config
+
+
+_HOOKS = {"hooks": {"PreToolUse": [{"matcher": "*", "hooks": []}]}}
+
+
+def test_hooks_land_next_to_the_engines_own_manifest(tmp_path, project):
+    root = HookingEngine(tmp_path / "home", [], _HOOKS).ensure_plugin_dir(project)
+
+    assert root is not None
+    assert (root / ".claude-plugin" / "plugin.json").exists()
+    assert json.loads((root / "hooks" / "hooks.json").read_text("utf-8")) == _HOOKS
+    assert not (root / "skills").exists()
+
+
+def test_hooks_dropped_from_the_group_are_gone_on_the_next_run(tmp_path, project):
+    home = tmp_path / "home"
+    src = tmp_path / "skills"
+    skills = [("a", _make_skill(src, "a", "d"))]
+    HookingEngine(home, skills, _HOOKS).ensure_plugin_dir(project)
+
+    root = HookingEngine(home, skills, None).ensure_plugin_dir(project)
+
+    assert not (root / "hooks").exists()
+
+
+def test_build_hooks_config_groups_by_mapped_event():
+    config = build_hooks_config(
+        [
+            {"name": "a", "event": "before_tool", "command": "a.sh"},
+            {"name": "b", "event": "before_tool", "command": "b.sh"},
+            {"name": "c", "event": "after_tool", "command": "c.sh"},
+            {"name": "broken", "event": "before_tool"},
+        ],
+        {"before_tool": "PreToolUse", "after_tool": "PostToolUse"},
+    )
+
+    assert config == {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": "*",
+                    "hooks": [
+                        {"type": "command", "command": "a.sh"},
+                        {"type": "command", "command": "b.sh"},
+                    ],
+                }
+            ],
+            "PostToolUse": [
+                {"matcher": "*", "hooks": [{"type": "command", "command": "c.sh"}]}
+            ],
+        }
+    }
+
+
+def test_build_hooks_config_is_none_without_usable_hooks():
+    assert build_hooks_config([], {}) is None
+    assert build_hooks_config([{"event": "before_tool"}], {}) is None

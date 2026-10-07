@@ -18,21 +18,21 @@ from core.web.routers import system
 #: 每个引擎的启动器里，挂某一类资源时会出现的调用。任何一个出现就算挂了。
 MARKERS: dict[str, dict[str, tuple[str, ...]]] = {
     "skills": {
-        "claude": ("ensure_skills_link",),
+        "claude": ("ensure_plugin_dir",),
         "opencode": ("ensure_skills_link",),
         "codex": ("ensure_skills_link",),
         "codebuddy": ("ensure_plugin_dir",),
         "antigravity": ("ensure_plugin_bundle",),
     },
     "hooks": {
-        "claude": ("inject_hooks_to_settings",),
+        "claude": ("plugin_hooks_config",),
         "opencode": ("ensure_hooks_bridge",),
         "codex": ("inject_hooks_to_settings",),
         "codebuddy": ("inject_hooks_to_settings", "ensure_hooks_bridge"),
         "antigravity": ("inject_hooks_to_settings", "ensure_hooks_bridge"),
     },
     "plugins": {
-        "claude": ("get_plugins_to_mount",),
+        "claude": ("resolve_group_plugin_dirs",),
         "opencode": ("get_plugins_to_mount",),
         "codex": ("get_plugins_to_mount", "ensure_plugins_available"),
         "codebuddy": ("plugin_dir_env",),
