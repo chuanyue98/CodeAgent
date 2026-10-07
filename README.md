@@ -277,7 +277,7 @@ ca batch-run code_review --engine claude --group work
 ca batch-run code_review --engine claude --dry-run   # Preview targets without starting anything
 ```
 
-See [docs/commands.md](docs/commands.md) for the full command reference.
+Run `ca --help` (or `ca <command> --help`) for the full command reference.
 
 ## Configuration
 
@@ -316,7 +316,7 @@ CodeAgent uses a `config.json` for project-specific settings. It is gitignored;
 | `proxy` | Proxy addresses, used only when you pass `--proxy` |
 | `schedules` | Cron-style scheduled task definitions |
 
-See [docs/configuration.md](docs/configuration.md) for detailed reference.
+See [config.example.json](config.example.json) for a complete example.
 
 ## Project Structure
 
@@ -343,8 +343,7 @@ See [docs/configuration.md](docs/configuration.md) for detailed reference.
 ├── plugins/               # Domain capability bundles
 ├── tasks/                 # Pre-defined execution blueprints
 ├── web/                   # React/Vite frontend for Analytics UI
-├── tests/                 # Quality guardrails (80+ test files)
-└── docs/                  # Documentation
+└── tests/                 # Quality guardrails (80+ test files)
 ```
 
 ## Development
@@ -396,18 +395,6 @@ bun run build      # Production build
 # bundle predates the sources -- rebuild, or switch to `ca ui --dev`.
 ```
 
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [docs/index.md](docs/index.md) | Documentation home |
-| [docs/installation.md](docs/installation.md) | Installation guide |
-| [docs/configuration.md](docs/configuration.md) | Configuration reference |
-| [docs/architecture.md](docs/architecture.md) | Architecture deep dive |
-| [docs/commands.md](docs/commands.md) | CLI command reference |
-| [docs/deployment.md](docs/deployment.md) | Docker / production deployment guide |
-| [docs/multi-agent-orchestration-design.md](docs/multi-agent-orchestration-design.md) | Multi-agent crew design |
-
 ## Why CodeAgent?
 
 1. **Prompt Sovereignty** — Your engineering rules live in your repo as **Plain Markdown**. No hidden system prompts, no vendor lock-in.
@@ -416,7 +403,7 @@ bun run build      # Production build
 
 3. **Context Efficiency** — Only inject the prompts and skills you need. Save tokens and improve AI focus by avoiding irrelevant context.
 
-4. **Local First** — Runs natively on your host with symbolic link safety and zero infrastructure dependencies; no Docker setup is required to get started. If you do want a containerized deployment (e.g. for a shared/remote dashboard), CodeAgent ships a `Dockerfile` for that — see [docs/deployment.md](docs/deployment.md).
+4. **Local First** — Runs natively on your host with symbolic link safety and zero infrastructure dependencies; no Docker setup is required to get started. If you do want a containerized deployment (e.g. for a shared/remote dashboard), CodeAgent ships a `Dockerfile` and `docker-compose.dev.yml` for that.
 
 5. **Extensible by Design** — Add new engines, skills, prompts, hooks, or plugins without modifying the core framework.
 
