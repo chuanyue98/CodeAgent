@@ -29,6 +29,8 @@ class AntigravityEngine(_PluginBundleMixin, BaseEngine):
     """
 
     COMMAND = "agy"
+    # 没能实测它读不读 .agents/skills（账号所在地区不可用），先不额外挂，免得重复。
+    READS_AGENTS_SKILLS = True
 
     def __init__(self) -> None:
         super().__init__("Antigravity", "")

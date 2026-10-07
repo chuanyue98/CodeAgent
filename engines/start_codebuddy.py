@@ -55,6 +55,12 @@ class CodeBuddyEngine(_PluginDirMixin, BaseEngine):
     def _get_plugin_dir_root(self) -> Path:
         return self._get_codebuddy_home() / ".tmp" / "plugins"
 
+    def _native_skill_dirs(self, project: Path) -> list[Path]:
+        return [
+            project / ".codebuddy" / "skills",
+            self._get_codebuddy_home() / "skills",
+        ]
+
     def plugin_hooks_config(self) -> dict[str, Any] | None:
         return build_hooks_config(self.get_hooks_to_inject(), self.EVENT_MAP)
 

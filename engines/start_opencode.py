@@ -41,6 +41,7 @@ class OpenCodeEngine(BaseEngine):
     """
 
     OPENCODE_COMMAND = "opencode"
+    READS_AGENTS_SKILLS = True
 
     def __init__(self):
         super().__init__("OpenCode", "opencode-default")

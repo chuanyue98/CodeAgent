@@ -48,6 +48,9 @@ class ClaudeEngine(_PluginDirMixin, BaseEngine):
     def _get_plugin_dir_root(self) -> Path:
         return Path.home() / ".codeagent" / "plugins" / "claude"
 
+    def _native_skill_dirs(self, project: Path) -> list[Path]:
+        return [project / ".claude" / "skills", Path.home() / ".claude" / "skills"]
+
     def plugin_hooks_config(self) -> dict[str, Any] | None:
         return build_hooks_config(self.get_hooks_to_inject(), self.EVENT_MAP)
 

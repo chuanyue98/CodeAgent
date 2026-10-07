@@ -13,8 +13,16 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+#: ``.agents/skills`` 是跨工具的技能目录约定（Codex 原生读取，Orca、Paseo 等也往这里装）。
+AGENTS_SKILLS_DIR = Path(".agents") / "skills"
+
+
 class _LinksMixin:
     """Shared injection lifecycle and skills/plugins symlink management."""
+
+    #: 引擎自己会读项目级和用户级的 ``.agents/skills``（实测 Codex、OpenCode）。
+    #: 为 False 时 ca 把那里的技能一并挂进去。
+    READS_AGENTS_SKILLS = False
 
     # Provided by BaseEngine.__init__ / _ConfigMixin.
     if TYPE_CHECKING:
@@ -77,7 +85,58 @@ class _LinksMixin:
                     pass
 
     def resolve_skill_sources(self) -> list[tuple[str, Path]]:
-        """当前组要挂载的技能，按 (链接名, 源目录) 返回；重名时保留优先级高的来源。"""
+        """要挂载的技能，按 (链接名, 源目录) 返回；重名时保留优先级高的来源。
+
+        先是当前项目组的技能，再是引擎自己不读的 ``.agents/skills`` 里的技能。
+        """
+        resolved = self._resolve_group_skill_sources()
+        if self.READS_AGENTS_SKILLS:
+            return resolved
+        names = {name for name, _ in resolved}
+        extra = [
+            (name, src)
+            for name, src in self._agents_skill_sources(Path.cwd())
+            if name not in names
+        ]
+        if extra:
+            logger.info("Mounting %d skill(s) from .agents/skills", len(extra))
+        return resolved + extra
+
+    def _native_skill_dirs(self, project: Path) -> list[Path]:
+        """引擎自己就会去读的技能目录；那里已有的同名技能不必再从 ``.agents`` 挂。"""
+        return []
+
+    def _agents_skill_sources(self, project: Path) -> list[tuple[str, Path]]:
+        """项目（从 cwd 往上到 git 根）和用户家目录下 ``.agents/skills`` 里的技能。
+
+        近处的优先；引擎自己目录里已有同名技能的跳过——不少安装器会把同一份
+        技能同时拷进 ``~/.agents/skills`` 和 ``~/.claude/skills``。
+        """
+        roots: list[Path] = []
+        current = project.resolve()
+        for directory in (current, *current.parents):
+            roots.append(directory / AGENTS_SKILLS_DIR)
+            if (directory / ".git").exists():
+                break
+        roots.append(Path.home() / AGENTS_SKILLS_DIR)
+
+        native = self._native_skill_dirs(project)
+        found: dict[str, Path] = {}
+        seen_roots: set[Path] = set()
+        for root in roots:
+            if root in seen_roots or not root.is_dir():
+                continue
+            seen_roots.add(root)
+            for entry in sorted(root.iterdir()):
+                name = entry.name
+                if name in found or not (entry / "SKILL.md").is_file():
+                    continue
+                if any((d / name / "SKILL.md").is_file() for d in native):
+                    continue
+                found[name] = entry.resolve()
+        return list(found.items())
+
+    def _resolve_group_skill_sources(self) -> list[tuple[str, Path]]:
         skills_to_mount = self.get_skills_to_mount()
         if not skills_to_mount:
             return []

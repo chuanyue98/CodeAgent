@@ -118,6 +118,7 @@ class CodexEngine(CodexPluginMixin, BaseEngine):
     """Codex engine adapter using shared CodeAgent base behavior."""
 
     MARKETPLACE_NAME = "codeagent-local"
+    READS_AGENTS_SKILLS = True
 
     # Confirmed live against codex-cli 0.142.5 via the app-server's
     # ``hooks/list`` method: codex uses the same PascalCase event names and the
