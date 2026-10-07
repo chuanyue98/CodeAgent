@@ -433,7 +433,6 @@ export default function BrowserTerminal({
       term.dispose();
     };
     // fontSize 只作初始值；之后的变化由上面单独的 effect 就地生效，放进来会断开重连。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine, cwd, sessionId, attachId, tabKey, attempt, copyOnSelect, restoreTitle, requestPermissionOnInteraction]);
 
   const canRestart = state === 'closed' || state === 'error';

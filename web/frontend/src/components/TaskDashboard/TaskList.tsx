@@ -1,5 +1,7 @@
 import { memo, useMemo, useState } from 'react';
-import cronstrue from 'cronstrue/i18n';
+import cronstrue from 'cronstrue';
+// 只注册用到的语言；'cronstrue/i18n' 会把 40 多种语言全部打进包里。
+import 'cronstrue/locales/zh_CN';
 import { Activity, Layers, Plus, Sparkles } from 'lucide-react';
 import type { Schedule } from '../../api/schedules';
 import { useLanguageCode, useT } from '../../i18n/context';

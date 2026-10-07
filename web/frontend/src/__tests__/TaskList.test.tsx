@@ -3,6 +3,8 @@ import { describe, expect, test, vi } from 'vitest';
 import TaskList from '../components/TaskDashboard/TaskList';
 import type { RunStatus } from '../components/TaskDashboard/types';
 import type { Task } from '../components/TaskDashboard/types';
+import type { Schedule } from '../api/schedules';
+import { LanguageProvider } from '../i18n/LanguageProvider';
 
 function makeTask(name: string, title: string, description = ''): Task {
   return { name, title, description, hasStages: false, stages: [] };
@@ -97,5 +99,48 @@ describe('TaskList run activity feed', () => {
 
     fireEvent.click(within(feed).getAllByRole('button')[0]);
     expect(onSelect).toHaveBeenCalledWith('code_review');
+  });
+});
+
+describe('TaskList schedule descriptions', () => {
+  const schedule: Schedule = {
+    id: 's1',
+    taskName: 'code_review',
+    engine: 'claude',
+    group: 'common',
+    workspace: null,
+    cronExpr: '0 9 * * *',
+    enabled: true,
+    createdAt: 0,
+    lastRunAt: null,
+    lastRunStatus: null,
+    nextRunAt: null,
+  };
+
+  function renderIn(language: 'en' | 'zh') {
+    render(
+      <LanguageProvider initialLanguage={language}>
+        <TaskList
+          tasks={MANY_TASKS.slice(0, 1)}
+          runs={[]}
+          schedules={[schedule]}
+          onSelect={vi.fn()}
+          onGenerateClick={vi.fn()}
+          onManualCreateClick={vi.fn()}
+        />
+      </LanguageProvider>,
+    );
+  }
+
+  test('describes the cron expression in English', () => {
+    renderIn('en');
+    expect(screen.getByText('At 09:00')).toBeInTheDocument();
+  });
+
+  test('describes the cron expression in Chinese', () => {
+    // Only the zh_CN locale is bundled; if it fails to register, cronstrue
+    // silently falls back to English and this catches it.
+    renderIn('zh');
+    expect(screen.getByText(/09:00/)).toHaveTextContent(/[一-鿿]/);
   });
 });
