@@ -1,6 +1,7 @@
 import json
 
 from core.engine_base import BaseEngine
+from core.injection_ledger import ledger_path_for
 
 
 def test_inject_hooks_to_settings_new_file(tmp_path, monkeypatch):
@@ -202,7 +203,7 @@ def test_a_leftover_injection_self_heals_on_the_next_cycle(tmp_path, monkeypatch
     assert not settings.exists()
 
 
-def test_a_users_own_settings_are_still_backed_up_and_restored(tmp_path, monkeypatch):
+def test_a_users_own_settings_are_restored_without_a_backup_file(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     settings = tmp_path / ".opencode" / "settings.json"
     settings.parent.mkdir(parents=True)
@@ -213,11 +214,15 @@ def test_a_users_own_settings_are_still_backed_up_and_restored(tmp_path, monkeyp
     engine.inject_hooks_to_settings(
         ".opencode/settings.json", [{"name": "h", "event": "X", "command": "c"}]
     )
-    assert settings.with_suffix(".json.bak").exists()
+    # 不再整文件备份，改记注入账本，也不往用户文件里写 _ca_injected 标记。
+    assert not settings.with_name("settings.json.bak").exists()
+    assert ledger_path_for(settings).exists()
+    assert "_ca_injected" not in json.loads(settings.read_text(encoding="utf-8"))
 
     engine.restore_settings(".opencode/settings.json")
 
-    assert json.loads(settings.read_text(encoding="utf-8")) == {"theme": "dark"}
+    assert settings.read_text(encoding="utf-8") == original
+    assert not ledger_path_for(settings).exists()
 
 
 def test_corrupted_settings_file_is_not_overwritten(tmp_path, monkeypatch):

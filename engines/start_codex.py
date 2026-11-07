@@ -27,6 +27,7 @@ from core.task_lib import (
     set_additional_template_search_paths,
     show_tasks,
 )
+from core.utils.atomic_write import atomic_write
 from engines.code_plans import (
     CODE_PLAN_DIR_PATTERN,
     CODE_PLAN_FILE_SUFFIX,
@@ -267,7 +268,8 @@ class CodexEngine(CodexPluginMixin, BaseEngine):
         """重写：支持 TOML 格式保存"""
         import tomlkit
 
-        path.write_text(tomlkit.dumps(data), encoding="utf-8")
+        # 原子写：这里写的可能是用户级 ~/.codex/config.toml，写一半崩溃会毁掉它。
+        atomic_write(path, tomlkit.dumps(data))
 
 
 # ── shell:first 与 code_plan 实现已拆分至 engines.shell_first 与 engines.code_plans ──

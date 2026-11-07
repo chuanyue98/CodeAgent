@@ -18,6 +18,7 @@ from core.constants import TEMP_PROMPT_DIRNAME
 from core.engine_registry import ENGINES
 from core.hook_scanner import get_hooks_to_inject
 from core.i18n import t
+from core.injection_ledger import ledger_path_for
 from core.link_manager import LINK_MANIFEST, is_windows_link
 from core.lock_manager import SessionRegistry
 from core.plugin_scanner import get_plugins_to_mount
@@ -597,7 +598,10 @@ def _injection_residue(scope: Path) -> list[Path]:
     found: list[Path] = []
     for name in _INJECTED_SETTINGS:
         path = scope / name
-        if path.exists():
+        if ledger_path_for(path).exists():
+            # 有注入账本：上次注入没收回。
+            found.append(path)
+        elif path.exists():
             data = SettingsFile(path).load()
             if isinstance(data, dict) and data.get("_ca_injected"):
                 found.append(path)
@@ -647,17 +651,23 @@ def check_stale_injections(section: Section) -> list[Path]:
 # ── Fix routine ───────────────────────────────────────────────────────────────
 
 
-def _planned(stale: list[Path], restore_key: str, remove_key: str) -> list[str]:
-    return [
-        t(restore_key if p.with_name(p.name + ".bak").exists() else remove_key, path=p)
-        for p in stale
-    ]
+def _planned(
+    stale: list[Path], withdraw_key: str, restore_key: str, remove_key: str
+) -> list[str]:
+    def key(p: Path) -> str:
+        if ledger_path_for(p).exists():
+            return withdraw_key
+        return restore_key if p.with_name(p.name + ".bak").exists() else remove_key
+
+    return [t(key(p), path=p) for p in stale]
 
 
 def fix_stale_injections(stale: list[Path]) -> None:
     """交给各引擎自己的清理逻辑（与启动时清残留是同一份代码）。"""
     cwd = Path.cwd()
-    done = _planned(stale, "doctor.restored", "doctor.removed_injected")
+    done = _planned(
+        stale, "doctor.withdrawn", "doctor.restored", "doctor.removed_injected"
+    )
     for scope_name, engine_ref in _STALE_SCOPES:
         scope = cwd / scope_name
         if not any(scope == p or scope in p.parents for p in stale):
@@ -671,7 +681,9 @@ def fix_stale_injections(stale: list[Path]) -> None:
 
 def preview_stale_injections(stale: list[Path]) -> None:
     """Describe what fix_stale_injections() would do, without touching anything."""
-    for line in _planned(stale, "doctor.would_restore", "doctor.would_remove"):
+    for line in _planned(
+        stale, "doctor.would_withdraw", "doctor.would_restore", "doctor.would_remove"
+    ):
         print(line)
 
 

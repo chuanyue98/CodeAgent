@@ -248,8 +248,8 @@ DOCTOR_MESSAGES: dict[str, dict[str, str]] = {
         "zh": "未正常退出的会话留在工作区里的注入: {names}",
     },
     "doctor.stale_hint": {
-        "en": "Run: ca doctor --fix  (restores .bak backups, removes only what ca created)",
-        "zh": "运行: ca doctor --fix  (从 .bak 备份恢复，只删除 ca 自己生成的内容)",
+        "en": "Run: ca doctor --fix  (withdraws only what CodeAgent wrote)",
+        "zh": "运行: ca doctor --fix  (只收回 CodeAgent 写入的部分)",
     },
     "doctor.stale_none": {"en": "none found", "zh": "未发现"},
     "doctor.dry_run_banner": {
@@ -268,6 +268,14 @@ DOCTOR_MESSAGES: dict[str, dict[str, str]] = {
     "doctor.removed_injected": {
         "en": "  Removed injected {path}",
         "zh": "  已删除注入的 {path}",
+    },
+    "doctor.withdrawn": {
+        "en": "  Withdrew CodeAgent injections from {path}",
+        "zh": "  已从 {path} 收回 CodeAgent 的注入",
+    },
+    "doctor.would_withdraw": {
+        "en": "  Would withdraw CodeAgent injections from {path}",
+        "zh": "  将从 {path} 收回 CodeAgent 的注入",
     },
     "doctor.would_restore": {
         "en": "  Would restore {path} from backup",

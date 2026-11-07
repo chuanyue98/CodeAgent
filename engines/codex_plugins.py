@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.injection_ledger import InjectionLedger
 from core.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -141,6 +142,52 @@ class CodexPluginMixin:
 
         self._create_skill_link(plugin_src_path, installed_path)
 
+    def _withdraw_codeagent_plugins(
+        self, config_path: Path, created: list[Any]
+    ) -> bool:
+        """只摘掉本工具名下的市场和插件项，别的内容原样保留。
+
+        这些键都带着 ``MARKETPLACE_NAME`` 命名空间，归属一目了然，没有账本
+        （旧版本的残留）也能安全收回。返回是否处理完毕。
+        """
+        if not config_path.exists():
+            return True
+        data = self._load_config(config_path)
+        if not isinstance(data, dict):
+            logger.warning(
+                "无法解析 %s，本工具登记的插件没有收回；修好文件后再启动一次 ca codex",
+                config_path,
+            )
+            return False
+
+        modified = False
+        marketplaces = data.get("marketplaces")
+        if isinstance(marketplaces, dict) and self.MARKETPLACE_NAME in marketplaces:
+            del marketplaces[self.MARKETPLACE_NAME]
+            modified = True
+        plugins = data.get("plugins")
+        if isinstance(plugins, dict):
+            for ext_id in [
+                k for k in plugins.keys() if k.endswith(f"@{self.MARKETPLACE_NAME}")
+            ]:
+                del plugins[ext_id]
+                modified = True
+        for marker in created:
+            if (
+                isinstance(marker, list)
+                and len(marker) == 1
+                and marker[0] in data
+                and isinstance(data[marker[0]], dict)
+                and not data[marker[0]]
+            ):
+                del data[marker[0]]
+                modified = True
+
+        if modified:
+            self._save_config(config_path, data)
+            logger.info("Removed CodeAgent plugins from %s", config_path)
+        return True
+
     def _format_plugins_for_settings(self, data: Any, plugins: list[dict]) -> Any:
         """实现 Codex 特有的插件注册逻辑 (marketplace + cache install + enabled 状态)"""
         import tomlkit
@@ -190,29 +237,18 @@ class CodexPluginMixin:
         return data
 
     def ensure_plugins_available(self) -> None:
+        """把本工具的插件市场和插件登记进用户级 ``~/.codex/config.toml``。
+
+        写了什么记在注入账本里（:mod:`core.injection_ledger`），退出时只收回
+        这些。不再整文件备份：codex 会话期间自己也会写这个文件（项目信任、
+        ``/model`` 的选择），整文件还原会把这些改动一起抹掉。
+        """
         plugins = self.get_plugins_to_mount()
         if not plugins:
             return
 
         config_path = self._get_user_config_path()
         config_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # 备份全局配置。不再依赖 ``not backup_path.exists()`` 仅首次创建：
-        # 每次都刷新备份（覆盖旧的），确保即使上一轮崩溃导致备份缺失也能
-        # 重新建立。但若 config 已带有本工具的注入痕迹（说明上次崩溃未还
-        # 原），则保留现有干净备份，避免把脏 config 覆盖掉干净备份导致后续
-        # 永久无法还原。
-        backup_path = config_path.with_suffix(".toml.bak")
-        if config_path.exists():
-            try:
-                current_content = config_path.read_text(encoding="utf-8")
-            except Exception:
-                current_content = ""
-            if self.MARKETPLACE_NAME not in current_content:
-                shutil.copy2(config_path, backup_path)
-                logger.info(
-                    "Created safety backup of global config: %s", backup_path.name
-                )
 
         data = self._load_config(config_path)
         if data is None:
@@ -228,43 +264,30 @@ class CodexPluginMixin:
                 type(data).__name__,
             )
             return
+
+        ledger = InjectionLedger(config_path)
+        ledger.begin()
+        for table in ("marketplaces", "plugins"):
+            if table not in data:
+                ledger.note_created([table])
         data = self._format_plugins_for_settings(data, plugins)
+        ledger.save()
         self._save_config(config_path, data)
+        ledger.commit()
         logger.info("Registered Codex plugins in %s", config_path)
 
     def cleanup_plugins_available(self) -> None:
-        """还原全局配置并清理临时市场/缓存"""
+        """收回全局配置里本工具的登记，并清理临时市场/缓存。"""
         config_path = self._get_user_config_path()
-        backup_path = config_path.with_suffix(".toml.bak")
+        ledger = InjectionLedger(config_path)
+        has_ledger = ledger.load()
 
-        if backup_path.exists():
-            # 使用 copy 而非 move(os.replace) 还原，保留备份副本，确保下一轮
-            # 仍可从干净备份还原（即使本轮再次崩溃）。
-            shutil.copy2(backup_path, config_path)
-            logger.info("Restored global config from backup: %s", backup_path.name)
-        else:
-            # 兜底：若没有备份（罕见），则清理配置中本工具的 marketplaces 与 plugins 项
-            data = self._load_config(config_path)
-            if data and isinstance(data, dict):
-                modified = False
-                if (
-                    "marketplaces" in data
-                    and self.MARKETPLACE_NAME in data["marketplaces"]
-                ):
-                    del data["marketplaces"][self.MARKETPLACE_NAME]
-                    modified = True
-                if "plugins" in data and isinstance(data["plugins"], dict):
-                    to_remove = [
-                        k
-                        for k in data["plugins"].keys()
-                        if k.endswith(f"@{self.MARKETPLACE_NAME}")
-                    ]
-                    for k in to_remove:
-                        del data["plugins"][k]
-                        modified = True
-                if modified:
-                    self._save_config(config_path, data)
-                    logger.info("Removed CodeAgent plugins from %s", config_path)
+        if has_ledger and ledger.untouched_since_commit():
+            ledger.restore_original()
+            ledger.delete()
+            logger.info("Restored %s to its pre-injection content", config_path.name)
+        elif self._withdraw_codeagent_plugins(config_path, ledger.created):
+            ledger.delete()
 
         marketplace_root = self._get_marketplace_root()
         if marketplace_root.exists():

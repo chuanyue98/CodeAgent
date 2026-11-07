@@ -19,6 +19,7 @@ def atomic_write(
     content: str,
     encoding: str = "utf-8",
     fsync: bool = False,
+    newline: str | None = None,
 ) -> None:
     """Writes *content* to *path* atomically.
 
@@ -39,6 +40,9 @@ def atomic_write(
         fsync: Flush the file to disk before the rename. Config and manifest
             writers that must survive a crash turn this on; high-frequency
             writers leave it off.
+        newline: Passed to ``open``. ``""`` writes the text exactly as given,
+            without translating ``\n`` to the platform line ending -- used to
+            put a file back byte for byte.
     """
     path = Path(path)
     parent_target = long_path(path.parent)
@@ -46,7 +50,7 @@ def atomic_write(
 
     fd, tmp_path = tempfile.mkstemp(dir=parent_target, suffix=".tmp")
     try:
-        with os.fdopen(fd, "w", encoding=encoding) as f:
+        with os.fdopen(fd, "w", encoding=encoding, newline=newline) as f:
             f.write(content)
             if fsync:
                 f.flush()

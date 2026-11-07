@@ -186,7 +186,7 @@ def test_engine_inject_hooks_to_settings(mock_engine, tmp_path, monkeypatch):
     assert settings_file.exists()
     with open(settings_file) as f:
         data = json.load(f)
-        assert data["_ca_injected"] is True
+        assert "_ca_injected" not in data
         assert data["hooks"]["pre-commit"][0]["hooks"][0]["name"] == "test-hook"
 
     # Test restore
