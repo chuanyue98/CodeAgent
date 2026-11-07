@@ -21,6 +21,10 @@
 - 改动完成后，交付前必须通过：`uv run pytest` 和 `uv run ruff check .`。
 - 提交信息、注释与文档使用中文。
 
+## 教训
+
+动代码前读 [`LESSONS.md`](LESSONS.md)：以往合并的改动错在哪里，以及本可以拦住它的规则。修完一个 bug，如果它揭示了一条以前没写下来的规则，补进去。
+
 ## 常见错误（Agent 历史前科，勿再犯）
 
 - ❌ `python -m venv .venv` / `pip install -r requirements.txt` → ✅ `uv sync`
