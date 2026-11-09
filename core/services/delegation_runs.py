@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 import uuid
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -252,6 +253,20 @@ def stop_run(run_id: str) -> bool:
     return True
 
 
+def rewind_run(run_id: str, *, force: bool = False) -> dict[str, Any]:
+    """把一次就地委派改过的工作区退回到它开跑前（见 delegation_checkpoint）。"""
+    from core.services import delegation_checkpoint
+
+    run = get_run(run_id)
+    if run.get("status") not in TERMINAL_STATUSES:
+        return {"run_id": run_id, "rewound": False, "error": "委派还在运行，先停掉它"}
+    workspace = read_json(_run_dir(run_id) / "task.json").get("workspace")
+    if not isinstance(workspace, str):
+        return {"run_id": run_id, "rewound": False, "error": "找不到这次委派的工作区"}
+    res = delegation_checkpoint.rewind(Path(workspace), run_id, force=force)
+    return {"run_id": run_id, **asdict(res)}
+
+
 def build_result(res: Any) -> dict[str, Any]:
     """:class:`DelegationResult` → 给发起方模型看的结构化结果。"""
     output = (res.output or "").strip()
@@ -268,4 +283,5 @@ def build_result(res: Any) -> dict[str, Any]:
         "isolated_worktree": res.isolated_worktree,
         "duration_seconds": round(res.duration_seconds, 1),
         "error": res.error,
+        "checkpoint": res.checkpoint,
     }

@@ -28,6 +28,7 @@ from core.engine_registry import ENGINES, get_spec, normalize_engine_name
 from core.host_env import child_environ
 from core.logging_config import QUIET_ENV, get_logger
 from core.resource_locator import CODE_ROOT
+from core.services import delegation_checkpoint
 from core.utils.process_tree import kill_process_tree
 
 logger = get_logger(__name__)
@@ -51,6 +52,8 @@ class DelegationResult:
     isolated_worktree: bool = False
     duration_seconds: float = 0.0
     error: str | None = None
+    # 就地委派开跑前的检查点 id，用 delegation_checkpoint.rewind 退回。
+    checkpoint: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -63,6 +66,8 @@ class DelegationResult:
         ]
         if self.isolated_worktree and self.branch:
             lines.append(f"- **Isolated Branch**: `{self.branch}`")
+        if self.checkpoint:
+            lines.append(f"- **Checkpoint**: `{self.checkpoint}`")
         if self.files_changed:
             lines.append(f"- **Files Changed** ({len(self.files_changed)}):")
             for f in self.files_changed[:10]:
@@ -96,11 +101,17 @@ def _run_git(
     input: str | bytes | None = None,
     text: bool = True,
 ) -> subprocess.CompletedProcess[Any]:
-    """Runs a git command in *cwd* with a mandatory timeout parameter."""
+    """Runs a git command in *cwd* with a mandatory timeout parameter.
+
+    文本模式固定按 UTF-8 解码：git 输出的文件内容和路径是 UTF-8，按系统区域
+    （中文 Windows 是 GBK）解码时读取线程直接抛错，diff 悄悄变成空的。
+    """
     return subprocess.run(
         ["git", "-C", str(cwd), *args],
         capture_output=True,
         text=text,
+        encoding="utf-8" if text else None,
+        errors="replace" if text else None,
         timeout=timeout,
         check=check,
         input=input,
@@ -398,6 +409,7 @@ def delegate_subtask(
     mode: str = "write",
     log_path: Path | None = None,
     depth: int | None = None,
+    checkpoint_name: str | None = None,
 ) -> DelegationResult:
     """Delegates a subtask to another engine.
 
@@ -414,6 +426,7 @@ def delegate_subtask(
             带着当前改动的一次性 worktree 里只读审查，主工作区不会被碰到。
         log_path: 引擎输出实时写到这里（后台委派据此看进度），否则只在内存里收。
         depth: 发起方所在的委派深度，子引擎拿到的是它加一；缺省取当前进程的。
+        checkpoint_name: 就地委派检查点的 id（后台委派用 run_id），缺省按时间生成。
 
     Returns:
         DelegationResult with exit code, outputs, diff, and branch details.
@@ -507,6 +520,13 @@ def delegate_subtask(
                 )
 
             base_commit, untracked_before = _snapshot_worktree(effective_dir)
+            # 就地改用户工作区时才需要检查点：worktree 里的改动在自己的分支上，
+            # review 的 worktree 用完就扔。
+            checkpoint = (
+                delegation_checkpoint.start(effective_dir, checkpoint_name)
+                if not review and not isolated
+                else None
+            )
 
             env = child_environ()
             env["CA_PROJECT_GROUP"] = group
@@ -530,6 +550,8 @@ def delegate_subtask(
 
             returncode, output = _run_engine(cmd, effective_dir, env, timeout, log_path)
             duration = time.time() - t0
+            if checkpoint:
+                delegation_checkpoint.finish(effective_dir, checkpoint)
             # review 的 worktree 里本来就带着用户的改动，那不是审查者的产出。
             files_changed, diff = (
                 ([], "")
@@ -545,6 +567,8 @@ def delegate_subtask(
                         f"；超时前已改动 {len(files_changed)} 个文件，"
                         "这些改动没有撤销，见 files_changed / diff"
                     )
+                    if checkpoint:
+                        message += f"；可按检查点 {checkpoint} 退回到委派前"
                 error: str | None = message
                 exit_code = 124
             else:
@@ -566,6 +590,7 @@ def delegate_subtask(
                 isolated_worktree=isolated,
                 duration_seconds=duration,
                 error=error,
+                checkpoint=checkpoint,
             )
 
     except Exception as exc:

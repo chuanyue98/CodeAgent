@@ -33,6 +33,7 @@ def run(run_dir: Path) -> int:
             mode=task.get("mode") or "write",
             log_path=run_dir / "output.log",
             depth=int(task.get("depth") or 0),
+            checkpoint_name=run_dir.name,
         )
     except Exception as exc:  # 结果必须落盘，否则发起方只能等到超时
         write_status(run_dir, status="failed", ended_at=time.time(), error=str(exc))

@@ -330,6 +330,7 @@ def test_delegation_server_exposes_only_delegation_tools(monkeypatch):
         "ca_delegate_wait",
         "ca_delegate_list",
         "ca_delegate_stop",
+        "ca_delegate_rewind",
     }
 
 

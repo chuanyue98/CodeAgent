@@ -205,6 +205,7 @@ Every engine launched through `ca` gets CodeAgent's delegation MCP server mounte
 - `ca_delegate(engine, instruction, mode="write", isolate_worktree=False)`: Starts the subtask in the background and returns a `run_id` immediately; your session keeps working. `mode="review"` runs a read-only review of your uncommitted changes inside a throwaway git worktree that carries them, and never touches your working tree.
 - `ca_delegate_wait(run_id)`: Waits up to 45 s (below OpenCode's ~60 s MCP timeout); returns the structured result when done, otherwise `running` — call again.
 - `ca_delegate_list()` / `ca_delegate_stop(run_id)`: Inspect or stop delegations.
+- `ca_delegate_rewind(run_id, force=False)`: Undoes what an in-place delegation changed. Before each in-place `write` run, CodeAgent snapshots the whole working tree (uncommitted and new files, not ignored ones) under `refs/ca/checkpoints/<run_id>/`; rewinding deletes the files the run added and restores the ones it changed, keeping your own uncommitted changes, HEAD and index. It refuses if files changed after the run finished, unless `force=True`. The last 20 checkpoints are kept.
 
 Runs live in `~/.codeagent/delegations/<run_id>/` and keep going even if the session that started them exits.
 

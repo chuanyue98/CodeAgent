@@ -57,6 +57,7 @@ DELEGATION_INSTRUCTIONS = """CodeAgent 跨引擎协作：把子任务交给另�
 - 没有后台子代理可用时，才自己调用 ca_delegate_wait（每次最多等 45 秒）。
 - mode="review"：只读审查当前未提交的改动，在带着这些改动的一次性 git worktree 里进行，不会碰主工作区，结果是问题列表。
 - mode="write"：默认在当前工作区就地修改；isolate_worktree=True 则在独立分支上改，结果里会给出分支名。
+- 就地修改的委派开跑前会拍检查点：结果不对（改坏了、超时、被停）时，先征得用户同意，再用 ca_delegate_rewind(run_id) 只撤销这次委派的改动，用户原有的未提交改动保留。
 - 子引擎看不到你的对话，instruction 要写清背景、目标、验收标准和相关文件。
 - 拿到结果后自己核实（看 diff、跑测试），再向用户汇报。"""
 
@@ -338,6 +339,20 @@ def _register_delegation_tools(
         except ValueError as exc:
             return json.dumps({"error": str(exc)}, ensure_ascii=False)
         return json.dumps({"run_id": run_id, "stopped": stopped}, ensure_ascii=False)
+
+    @server.tool()
+    def ca_delegate_rewind(run_id: str, force: bool = False) -> str:
+        """把一次就地（write、没开 isolate_worktree）委派改过的工作区退回到它开跑前。
+
+        只撤销这次委派的改动：开跑前就有的未提交改动保留，HEAD 和暂存区不动。
+        委派结束后文件又被改过时会拒绝并列出这些文件；确认要连那些改动一起
+        抹掉才传 force=true。被 ca_delegate_stop 停掉的委派也要 force。
+        """
+        try:
+            result = delegation_runs.rewind_run(run_id, force=force)
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 def build_delegation_server(root_dir: Path | None = None) -> FastMCP:
