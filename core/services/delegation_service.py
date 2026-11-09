@@ -28,6 +28,7 @@ from core.engine_registry import ENGINES, get_spec, normalize_engine_name
 from core.host_env import child_environ
 from core.logging_config import QUIET_ENV, get_logger
 from core.resource_locator import CODE_ROOT
+from core.utils.process_tree import kill_process_tree
 
 logger = get_logger(__name__)
 
@@ -337,6 +338,53 @@ def _collect_git_changes(
         return [], ""
 
 
+def _run_engine(
+    cmd: list[str],
+    cwd: Path,
+    env: dict[str, str],
+    timeout: int,
+    log_path: Path | None,
+) -> tuple[int | None, str]:
+    """跑委派的启动器，返回 ``(退出码, 输出)``；超时时退出码为 ``None``。
+
+    超时要杀整棵进程树（见 :mod:`core.utils.process_tree`）：只杀启动器的话，
+    引擎 CLI 成了孤儿接着改文件，还握着输出管道让我们一直等到它自己结束。
+    """
+    log = (
+        open(log_path, "w", encoding="utf-8", errors="replace")
+        if log_path is not None
+        else None
+    )
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(cwd),
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=log if log is not None else subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=log is None,
+            encoding=None if log is not None else "utf-8",
+            errors=None if log is not None else "replace",
+        )
+        try:
+            out, _ = proc.communicate(timeout=timeout)
+            returncode: int | None = proc.returncode
+        except subprocess.TimeoutExpired:
+            kill_process_tree(proc.pid)
+            try:
+                out, _ = proc.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                out = ""
+            returncode = None
+    finally:
+        if log is not None:
+            log.close()
+    if log_path is not None:
+        return returncode, log_path.read_text(encoding="utf-8", errors="replace")
+    return returncode, out or ""
+
+
 def delegate_subtask(
     engine: str,
     instruction: str,
@@ -480,35 +528,7 @@ def delegate_subtask(
                 full_prompt,
             ]
 
-            proc: subprocess.CompletedProcess[Any]
-            if log_path is not None:
-                with open(log_path, "w", encoding="utf-8", errors="replace") as log:
-                    proc = subprocess.run(
-                        cmd,
-                        cwd=str(effective_dir),
-                        env=env,
-                        stdin=subprocess.DEVNULL,
-                        stdout=log,
-                        stderr=subprocess.STDOUT,
-                        timeout=timeout,
-                    )
-                output = log_path.read_text(encoding="utf-8", errors="replace")
-            else:
-                proc = subprocess.run(
-                    cmd,
-                    cwd=str(effective_dir),
-                    env=env,
-                    stdin=subprocess.DEVNULL,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=timeout,
-                )
-                output = (proc.stdout or "") + (
-                    "\n" + proc.stderr if proc.stderr else ""
-                )
-
+            returncode, output = _run_engine(cmd, effective_dir, env, timeout, log_path)
             duration = time.time() - t0
             # review 的 worktree 里本来就带着用户的改动，那不是审查者的产出。
             files_changed, diff = (
@@ -517,33 +537,37 @@ def delegate_subtask(
                 else _collect_git_changes(effective_dir, base_commit, untracked_before)
             )
 
+            if returncode is None:
+                # 超时：整棵进程树已经杀掉，但引擎在那之前改过的文件还在。
+                message = f"Delegation subtask timed out after {timeout} seconds"
+                if files_changed:
+                    message += (
+                        f"；超时前已改动 {len(files_changed)} 个文件，"
+                        "这些改动没有撤销，见 files_changed / diff"
+                    )
+                error: str | None = message
+                exit_code = 124
+            else:
+                exit_code = returncode
+                error = (
+                    None
+                    if returncode == 0
+                    else f"Process exited with code {returncode}"
+                )
             return DelegationResult(
-                success=proc.returncode == 0,
+                success=exit_code == 0,
                 engine=canonical_engine,
                 instruction=instruction,
-                exit_code=proc.returncode,
+                exit_code=exit_code,
                 output=output,
                 files_changed=files_changed,
                 diff=diff,
                 branch=branch,
                 isolated_worktree=isolated,
                 duration_seconds=duration,
-                error=None
-                if proc.returncode == 0
-                else f"Process exited with code {proc.returncode}",
+                error=error,
             )
 
-    except subprocess.TimeoutExpired:
-        duration = time.time() - t0
-        return DelegationResult(
-            success=False,
-            engine=canonical_engine,
-            instruction=instruction,
-            exit_code=124,
-            output="",
-            duration_seconds=duration,
-            error=f"Delegation subtask timed out after {timeout} seconds",
-        )
     except Exception as exc:
         duration = time.time() - t0
         return DelegationResult(

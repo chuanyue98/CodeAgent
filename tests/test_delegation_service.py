@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -286,32 +287,46 @@ def test_delegated_launcher_runs_quiet(tmp_path: Path):
     assert "CA_QUIET=1" in res.output
 
 
-def test_delegate_subtask_timeout(tmp_path: Path, monkeypatch):
+def test_delegate_subtask_timeout_kills_the_engine_too(tmp_path: Path):
+    """超时要杀到启动器拉起的引擎，并报告超时前已经改了什么。
+
+    启动器自己再拉起引擎：只杀启动器的话，引擎接着跑、接着写文件，还握着
+    输出管道让委派一直等到它自己结束。
+    """
     root = tmp_path / "ca_root"
     engines_dir = root / "engines"
     engines_dir.mkdir(parents=True)
-    fake_claude = engines_dir / "start_claude_code.py"
-    fake_claude.write_text("import time\ntime.sleep(10)\n", encoding="utf-8")
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    _init_git_repo(ws)
+    marker = tmp_path / "engine-kept-running.txt"
+    engine = (
+        f"import pathlib, time; time.sleep(4); pathlib.Path({str(marker)!r}).touch()"
+    )
+    (engines_dir / "start_claude_code.py").write_text(
+        "import pathlib, subprocess, sys\n"
+        "pathlib.Path('README.md').write_text('half done')\n"
+        f"subprocess.run([sys.executable, '-c', {engine!r}])\n",
+        encoding="utf-8",
+    )
 
-    orig_run = subprocess.run
-
-    def _timeout_run(cmd, *args, **kwargs):
-        if str(fake_claude) in [str(c) for c in cmd]:
-            raise subprocess.TimeoutExpired(cmd=cmd, timeout=1)
-        return orig_run(cmd, *args, **kwargs)
-
-    monkeypatch.setattr(subprocess, "run", _timeout_run)
-
+    started = time.monotonic()
     res = delegate_subtask(
         engine="claude",
         instruction="Run long task",
-        workspace=tmp_path,
+        workspace=ws,
         root_dir=root,
-        isolate=False,
+        timeout=1,
     )
+    assert time.monotonic() - started < 4
     assert not res.success
     assert res.exit_code == 124
     assert "timed out" in (res.error or "")
+    assert res.files_changed == ["README.md"]
+    assert "没有撤销" in (res.error or "")
+
+    time.sleep(4)
+    assert not marker.exists()
 
 
 def test_handoff_session_validation():
