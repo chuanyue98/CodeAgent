@@ -64,6 +64,9 @@
 **失败要说出真实原因。** Windows 上 `rmdir` 删除失败时不抛异常，只返回非零退出码，曾经被当成删除成功（`core/link_manager.py` 的 `safe_remove_link`）。
 → 调外部命令要检查返回码，把 stderr 里的原因记下来。
 
+**读子进程的文本输出要指定 UTF-8。** `23195a2`：`delegation_service._run_git` 用 `text=True` 不带 `encoding`，中文 Windows 上按 GBK 解码；diff 里一有中文，读取线程就抛错，委派结果里的 diff 悄悄变成空的，调用方看不到改了什么。
+→ `subprocess.run(..., text=True)` 一律同时写 `encoding="utf-8", errors="replace"`。
+
 **超时只杀直接子进程，等于没超时。** `bcacab1`：委派的启动器自己再拉起引擎 CLI。超时只杀了启动器，引擎成了孤儿接着改代码；它还握着输出管道，`communicate` 一直等到它自己结束（实测 1 秒的超时 4 秒才返回），而结果报告的是「超时、什么都没改」。
 → 有孙进程的子进程，超时用 `core/utils/process_tree.py` 杀整棵树；超时后照样报告已经发生的改动。
 
