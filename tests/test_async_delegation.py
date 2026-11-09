@@ -78,11 +78,11 @@ def test_nothing_is_mounted_at_the_depth_limit(monkeypatch):
 def test_delegated_engine_is_started_one_level_deeper(tmp_path, monkeypatch):
     seen: dict = {}
 
-    def fake_run(cmd, **kwargs):
-        seen["env"] = kwargs["env"]
-        return subprocess.CompletedProcess(cmd, 0, "done", "")
+    def fake_run(cmd, cwd, env, timeout, log_path):
+        seen["env"] = env
+        return 0, "done"
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr("core.services.delegation_service._run_engine", fake_run)
     monkeypatch.setattr(
         "core.services.delegation_service.is_git_repo", lambda _path: False
     )
@@ -221,18 +221,14 @@ def test_review_sees_uncommitted_changes_and_leaves_no_trace(
 ):
     repo = repo_with_uncommitted_change
     seen: dict = {}
-    real_run = subprocess.run
 
-    def fake_run(cmd, **kwargs):
-        if cmd and cmd[0] == "git":
-            return real_run(cmd, **kwargs)
-        cwd = Path(kwargs["cwd"])
-        seen["cwd"] = cwd
-        seen["file"] = (cwd / "a.py").read_text(encoding="utf-8")
+    def fake_run(cmd, cwd, env, timeout, log_path):
+        seen["cwd"] = Path(cwd)
+        seen["file"] = (Path(cwd) / "a.py").read_text(encoding="utf-8")
         seen["prompt"] = cmd[-1]
-        return subprocess.CompletedProcess(cmd, 0, "未发现问题", "")
+        return 0, "未发现问题"
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr("core.services.delegation_service._run_engine", fake_run)
     res = delegate_subtask("codex", "看并发", workspace=repo, mode="review")
 
     assert res.success
@@ -246,12 +242,10 @@ def test_review_sees_uncommitted_changes_and_leaves_no_trace(
 
 
 def test_review_refuses_outside_a_git_repo(tmp_path, monkeypatch):
-    def must_not_run(cmd, **kwargs):
-        if cmd and cmd[0] == "git":
-            return subprocess.CompletedProcess(cmd, 128, "", "")
+    def must_not_run(*args, **kwargs):
         raise AssertionError("不该在原地拉起引擎")
 
-    monkeypatch.setattr(subprocess, "run", must_not_run)
+    monkeypatch.setattr("core.services.delegation_service._run_engine", must_not_run)
     res = delegate_subtask("codex", "x", workspace=tmp_path, mode="review")
     assert not res.success
     assert "worktree" in (res.error or "")
@@ -263,15 +257,12 @@ def test_in_place_run_reports_only_what_the_subtask_changed(
     """用户本来就有的未提交改动和未跟踪文件，不能算成子任务的产出。"""
     repo = repo_with_uncommitted_change
     (repo / "notes.txt").write_text("mine\n", encoding="utf-8")
-    real_run = subprocess.run
 
-    def fake_run(cmd, **kwargs):
-        if cmd and cmd[0] == "git":
-            return real_run(cmd, **kwargs)
+    def fake_run(cmd, cwd, env, timeout, log_path):
         (repo / "b.py").write_text("y = 1\n", encoding="utf-8")
-        return subprocess.CompletedProcess(cmd, 0, "done", "")
+        return 0, "done"
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr("core.services.delegation_service._run_engine", fake_run)
     res = delegate_subtask("codex", "add b.py", workspace=repo)
 
     assert res.files_changed == ["b.py"]
