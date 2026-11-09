@@ -5,6 +5,14 @@ import traceback
 from pathlib import Path
 
 from core.utils.atomic_write import atomic_write
+from core.utils.last_good import keep_last_good, looks_crash_damaged, read_with_fallback
+
+
+def _parse_config(text: str) -> dict:
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("顶层不是 JSON 对象")
+    return data
 
 
 class ConfigService:
@@ -23,20 +31,39 @@ class ConfigService:
 
     def _read(self) -> tuple[dict, list[str]]:
         """Read the config file from disk (caller must hold ``_lock`` if needed)."""
-        warnings = []
-        if not self.config_path.exists():
-            return {}, []
+        """读不懂时改用上一份完好的副本（见 :mod:`core.utils.last_good`），
+        并在 warnings 里说明，交给调用方提示用户。"""
         try:
-            with open(self.config_path, encoding="utf-8-sig") as f:
-                return json.load(f), []
+            data, note, _intact = read_with_fallback(self.config_path, _parse_config)
         except Exception as e:
-            warnings.append(f"Failed to parse config.json: {e}")
             if os.getenv("CA_DEBUG"):
                 traceback.print_exc()
-            return {}, warnings
+            return {}, [f"Failed to read config.json: {e}"]
+        if note is None:
+            return data or {}, []
+        return data or {}, [f"Failed to parse config.json: {note}"]
+
+    def _read_for_write(self) -> dict:
+        """写之前读：文件读不懂就拒绝覆盖，除非它是断电留下的空文件/全 0 文件。
+
+        手改出错的文件里有用户的改动，覆盖掉就丢了；断电损坏的文件里什么都
+        没有，接着用上一份完好的副本写下去（损坏的文件会先另存一份）。
+        """
+        config, warnings = self._read()
+        if warnings:
+            try:
+                damaged = looks_crash_damaged(self.config_path.read_bytes())
+            except OSError:
+                damaged = False
+            if not damaged:
+                raise ValueError(
+                    f"Refusing to overwrite malformed configuration: {warnings[0]}"
+                )
+        return config
 
     def _atomic_write(self, config: dict) -> None:
         """Atomic write via temp+fsync+replace (caller must hold ``_lock``)."""
+        keep_last_good(self.config_path, _parse_config)
         atomic_write(
             self.config_path,
             json.dumps(config, indent=2, ensure_ascii=False),
@@ -71,13 +98,8 @@ class ConfigService:
         """
         if not isinstance(config, dict):
             raise TypeError("Configuration must be a JSON object")
-        existing, warnings = self._read()
-        if warnings:
-            raise ValueError(
-                f"Refusing to overwrite malformed configuration: {warnings[0]}"
-            )
-
         with self._lock:
+            self._read_for_write()
             self._atomic_write(config)
         self._cache = None
 
@@ -96,9 +118,7 @@ class ConfigService:
             config_service.modify_config(add_skill)
         """
         with self._lock:
-            config, warnings = self._read()
-            if warnings:
-                raise ValueError(warnings[0])
+            config = self._read_for_write()
             config = modifier(config)
             self._atomic_write(config)
         self._cache = None

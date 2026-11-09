@@ -32,11 +32,19 @@ from typing import Any
 
 from core.logging_config import get_logger
 from core.utils.atomic_write import atomic_write
+from core.utils.last_good import keep_last_good, read_with_fallback, remove_last_good
 
 logger = get_logger(__name__)
 
 LEDGER_SUFFIX = ".codeagent-applied.json"
 LEDGER_VERSION = 1
+
+
+def _parse_ledger(text: str) -> dict[str, Any]:
+    data = json.loads(text)
+    if not isinstance(data, dict) or data.get("version") != LEDGER_VERSION:
+        raise ValueError("格式不认识")
+    return data
 
 
 def ledger_path_for(settings_path: Path) -> Path:
@@ -77,16 +85,19 @@ class InjectionLedger:
         return self.path.exists()
 
     def load(self) -> bool:
-        """读入账本，返回是否存在且可用。损坏的账本按不存在处理并记警告。"""
+        """读入账本，返回是否存在且可用。
+
+        账本读不懂时改读上一份完好的副本：副本可能少了最近一次写入的条目，
+        收回时会漏掉它，但不会摘错别人的东西；按不存在处理则什么都收不回。
+        """
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            return False
-        except (OSError, ValueError) as exc:
+            data, note, _intact = read_with_fallback(self.path, _parse_ledger)
+        except OSError as exc:
             logger.warning("注入账本 %s 无法读取，按不存在处理: %s", self.path, exc)
             return False
-        if not isinstance(data, dict) or data.get("version") != LEDGER_VERSION:
-            logger.warning("注入账本 %s 格式不认识，按不存在处理", self.path)
+        if data is None:
+            if note:
+                logger.warning("注入账本按不存在处理: %s", note)
             return False
         original = data.get("original")
         self.original = original if isinstance(original, str) else None
@@ -112,12 +123,14 @@ class InjectionLedger:
             "entries": self.entries,
             "created": self.created,
         }
+        keep_last_good(self.path, _parse_ledger)
         atomic_write(
             self.path, json.dumps(payload, indent=2, ensure_ascii=False), fsync=True
         )
 
     def delete(self) -> None:
         self.path.unlink(missing_ok=True)
+        remove_last_good(self.path)
 
     # ── 注入流程 ──────────────────────────────────────────────────────────
 
