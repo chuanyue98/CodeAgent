@@ -20,6 +20,22 @@ _PYTEST_HOME = tempfile.mkdtemp(prefix="ca-pytest-home-")
 os.environ["HOME"] = _PYTEST_HOME
 os.environ["USERPROFILE"] = _PYTEST_HOME
 
+# 各引擎 CLI 在回落到 HOME 下的目录之前，会先读自己的变量。开发者的 shell 里
+# 留着的，或者测试本身跑在一次委派里继承来的（委派的 codex 拿到的是隔离
+# home），都会让用例读写真实的引擎配置。换了 HOME 还不够，这些一并清掉。
+# 新增一个 ca 会读的引擎目录变量时，记得加进来。
+ENGINE_HOME_VARS = (
+    "CODEX_HOME",
+    "CA_USER_CODEX_HOME",
+    "CA_ISOLATED_HOME",
+    "CLAUDE_CONFIG_DIR",
+    "CODEBUDDY_CONFIG_DIR",
+    "OPENCODE_CONFIG_DIR",
+    "OPENCODE_CONFIG",
+)
+for _var in ENGINE_HOME_VARS:
+    os.environ.pop(_var, None)
+
 from core import i18n  # noqa: E402
 from core.web.security import reset_token_cache  # noqa: E402
 
