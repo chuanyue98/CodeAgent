@@ -32,6 +32,8 @@ def _git(workspace: Path, *args: str, stdin: str | None = None) -> str:
         ["git", "-C", str(workspace), *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         input=stdin,
         timeout=_GIT_TIMEOUT_SECONDS,
         check=True,

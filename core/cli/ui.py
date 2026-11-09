@@ -139,6 +139,8 @@ def _start_ui_dev_server() -> bool:
                 cwd=str(frontend_root),
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=120,
             )
             if install_proc.returncode != 0:
