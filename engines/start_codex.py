@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Sequence
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import Any, cast
 
@@ -17,6 +18,7 @@ from typing import Any, cast
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from core.cli_utils import require_engine_cli
+from core.constants import ISOLATED_HOME_ENV
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import announce_launch, split_passthrough
 from core.i18n import t
@@ -40,6 +42,12 @@ from engines.code_plans import (
     select_code_plan_directory_interactively,
     split_code_plan_argument,
     update_code_plan_history,
+)
+from engines.codex_home import (
+    IsolatedHomeUnavailable,
+    child_codex_env,
+    isolated_codex_home,
+    prepare_isolated_codex_home,
 )
 from engines.codex_plugins import CodexPluginMixin
 from engines.shell_first import (
@@ -248,8 +256,39 @@ class CodexEngine(CodexPluginMixin, BaseEngine):
             message,
         ]
 
+    def use_isolated_home(self) -> Path | None:
+        """委派时改用 ca 自己的 codex home，返回它；做不到时返回 ``None``。
+
+        做不到（凭据快要刷新、硬链接失败、用户配置读不懂……）时记下原因，
+        这一次退回旧的做法：把插件登记进用户的 ``~/.codex``，退出时按账本收回。
+        """
+        group = self.config_manager.get_current_project_group()
+        # 先切过去：登记插件时，市场与缓存的位置都从 _get_codex_home 算。
+        self._codex_home_override = isolated_codex_home(group)
+        try:
+            return prepare_isolated_codex_home(
+                group,
+                Path.cwd(),
+                self._load_config,
+                self._save_config,
+                self._format_isolated_plugins,
+                home=self._codex_home_override,
+                lock_manager=self.lock_manager,
+            )
+        except IsolatedHomeUnavailable as exc:
+            self._codex_home_override = None
+            logger.warning("本次委派沿用用户的 codex 配置，没有隔离：%s", exc)
+            return None
+
+    def _format_isolated_plugins(self, data: Any) -> Any:
+        self.ensure_plugins_link()
+        plugins = self.get_plugins_to_mount()
+        if not plugins:
+            return data
+        return self._format_plugins_for_settings(data, plugins)
+
     def _get_plugin_link_dir(self) -> Path:
-        return (Path.home() / ".codex" / "plugins").absolute()
+        return (self._get_codex_home() / "plugins").absolute()
 
     def _load_config(self, path: Path) -> Any:
         """重写：支持 TOML 格式加载"""
@@ -434,6 +473,12 @@ def main() -> None:
         code_plan_prompts = sanitized_prompts
 
     env = engine.env_manager.get_env()
+    isolated_home = (
+        engine.use_isolated_home()
+        if os.environ.get(ISOLATED_HOME_ENV) == "1"
+        else None
+    )
+    child_codex_env(env, isolated_home)
     pre_launch_commands = list(task_commands)
     allow_shell_first = args.allow_shell_first or _shell_first_allowed_via_override()
 
@@ -471,13 +516,19 @@ def main() -> None:
         finally:
             engine.cleanup_temp_prompt()
 
+    # 隔离 home 归 ca 所有、每次启动重写，不用注入，也就不用收回。
+    # 全局范围用 config.toml 而不是 codex home 做 key：在家目录里启动时项目
+    # 范围恰好也是 ~/.codex，两者不能落进同一份登记表。
+    global_scope: AbstractContextManager[None] = (
+        nullcontext()
+        if isolated_home is not None
+        else engine.shared_injection(
+            engine._get_user_config_path(), global_setup, global_teardown
+        )
+    )
     try:
-        # 全局范围用 config.toml 而不是 ~/.codex 做 key：在家目录里启动时项目
-        # 范围恰好也是 ~/.codex，两者不能落进同一份登记表。
         with (
-            engine.shared_injection(
-                Path.home() / ".codex" / "config.toml", global_setup, global_teardown
-            ),
+            global_scope,
             engine.shared_injection(
                 Path.cwd() / ".codex", project_setup, project_teardown
             ),

@@ -38,6 +38,10 @@ MCP_ENGINES = ENGINES
 # `write_temp_prompt` had long since stopped writing to.
 TEMP_PROMPT_DIRNAME = "codeagent-prompts"
 
+# 委派拉起引擎时设为 "1"：没人看着的运行只借用户的登录，配置放在 ca 自己的
+# 目录里，不往用户的引擎配置里写。目前只有 codex 认它（engines/codex_home.py）。
+ISOLATED_HOME_ENV = "CA_ISOLATED_HOME"
+
 # Canonical engine aliases (derived from the registry, plus the legacy
 # "gemini" spelling from the retired Gemini engine -- kept so old configs
 # and session records still resolve instead of erroring).

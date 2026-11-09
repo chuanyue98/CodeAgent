@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.injection_ledger import InjectionLedger
 from core.logging_config import get_logger
+from engines.codex_home import user_codex_home
 
 logger = get_logger(__name__)
 
@@ -29,9 +30,14 @@ class CodexPluginMixin:
         def _save_config(self, path: Path, data: Any) -> None: ...
 
     MARKETPLACE_NAME: str
+    #: 委派时指向 ca 自己的隔离 home（见 engines.codex_home），插件市场、缓存
+    #: 和配置都落在那里；交互式启动为 None，用用户的 codex home。
+    _codex_home_override: Path | None = None
 
     def _get_codex_home(self) -> Path:
-        return (Path.home() / ".codex").resolve()
+        if self._codex_home_override is not None:
+            return self._codex_home_override.resolve()
+        return user_codex_home().resolve()
 
     def _get_user_config_path(self) -> Path:
         return self._get_codex_home() / "config.toml"

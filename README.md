@@ -206,7 +206,9 @@ Every engine launched through `ca` gets CodeAgent's delegation MCP server mounte
 - `ca_delegate_wait(run_id)`: Waits up to 45 s (below OpenCode's ~60 s MCP timeout); returns the structured result when done, otherwise `running` — call again.
 - `ca_delegate_list()` / `ca_delegate_stop(run_id)`: Inspect or stop delegations.
 
-Runs live in `~/.codeagent/delegations/<run_id>/` and keep going even if the session that started them exits. A delegated engine does not get these tools itself, so delegation never recurses.
+Runs live in `~/.codeagent/delegations/<run_id>/` and keep going even if the session that started them exits.
+
+A delegated Codex runs in a home of its own, `~/.codeagent/engine-homes/codex/<group>/`, instead of your `~/.codex`: it shares only your sign-in (`auth.json`, hard-linked) and your model/provider settings, so your `config.toml` is never edited, and your personal MCP servers, plugins, hooks and `notify` stay out. Its sessions and usage still land in `~/.codex`, so history and analytics see them. When the sign-in is close to its refresh (a hard-linked credential cannot be refreshed), that run falls back to the regular injection and logs why. A delegated engine does not get these tools itself, so delegation never recurses.
 
 The skills/tasks MCP server can still be run standalone:
 
