@@ -74,3 +74,15 @@ export function classifyStageStatus(status: string): StageState {
 }
 
 export const NAME_PATTERN = /^[\w.-]+$/;
+
+/**
+ * Matches a run to its owning task definition.
+ * Prefers `run.taskName` when recorded; falls back to boundary-checked `taskId` prefixes
+ * (`<name>-<ts>` or `<name>_<ts>`) so shorter task names don't match longer prefixed ones.
+ */
+export function runMatchesTask(run: RunStatus, taskName: string): boolean {
+  if (run.taskName) return run.taskName === taskName;
+  if (run.taskId === taskName) return true;
+  if (!run.taskId.startsWith(taskName)) return false;
+  return /^[-_]\d+$/.test(run.taskId.slice(taskName.length));
+}

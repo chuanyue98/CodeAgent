@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
+import shutil
+import stat
 from pathlib import Path
 
 from core.logging_config import get_logger
@@ -12,24 +13,21 @@ LINK_MANIFEST = ".codeagent-links.json"
 
 logger = get_logger(__name__)
 
+_FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+
 
 def is_windows_link(path: Path) -> bool:
     """Verifies if a path is a Windows link or junction point."""
     try:
         if path.is_symlink():
             return True
-
+        if os.name != "nt":
+            return False
+        if path.is_junction():
+            return True
         stat_info = path.lstat()
         attrs = getattr(stat_info, "st_file_attributes", 0)
-        is_reparse = bool(attrs & 1024)
-
-        if is_reparse:
-            return True
-
-        if path.is_mount():
-            return True
-
-        return False
+        return bool(attrs & _FILE_ATTRIBUTE_REPARSE_POINT)
     except Exception:
         return False
 
@@ -77,56 +75,57 @@ class LinkManager:
 
     def managed_link_matches(self, path: Path, source: Path) -> bool:
         try:
-            return (
-                is_windows_link(path) or path.is_symlink()
-            ) and path.resolve() == source.resolve()
+            if is_windows_link(path) or path.is_symlink():
+                return path.resolve() == source.resolve()
+            if os.name == "nt" and path.is_file() and source.is_file():
+                # 无开发者模式时文件链接可能退化为硬链接或逐字节副本；
+                # 只有与源完全一致才认定归属受管，用户改过就保留。
+                if os.path.samefile(path, source):
+                    return True
+                return path.read_bytes() == source.read_bytes()
+            return False
         except OSError:
             return False
 
     def create_skill_link(self, source: Path, target: Path):
-        """Creates a symbolic link or Windows junction from source to target."""
+        """Creates a symbolic link or Windows junction/link from source to target."""
         try:
             target.symlink_to(source, target_is_directory=source.is_dir())
             return
         except OSError:
-            if os.name != "nt" or not source.is_dir():
+            if os.name != "nt":
                 raise
 
-        subprocess.run(
-            ["cmd", "/c", "mklink", "/j", str(target), str(source)],
-            capture_output=True,
-            check=True,
-        )
+        if source.is_dir():
+            import _winapi
 
-    def safe_remove_link(self, path: Path):
-        """Safely removes a link without affecting the target content."""
-        if not path.exists() and not path.is_symlink():
+            _winapi.CreateJunction(str(source), str(target))
             return
 
-        if not (is_windows_link(path) or path.is_symlink()):
+        try:
+            os.link(source, target)
+        except OSError:
+            shutil.copy2(source, target)
+
+    def safe_remove_link(self, path: Path, *, allow_managed_file: bool = False):
+        """Safely removes a link without affecting the target content."""
+        if not os.path.lexists(path):
+            return
+
+        is_link = is_windows_link(path) or path.is_symlink()
+        if not is_link and not (allow_managed_file and path.is_file()):
             logger.warning("Refusing to remove unmanaged path: %s", path)
             return
 
         try:
             if os.name == "nt":
-                if path.is_dir():
-                    result = subprocess.run(
-                        ["cmd", "/c", "rmdir", str(path)],
-                        capture_output=True,
-                        check=False,
-                    )
-                    if result.returncode != 0:
-                        # rmdir fails without raising when the directory is
-                        # in use or access is denied; surface the actual
-                        # reason instead of silently succeeding.
-                        detail = (
-                            result.stderr.decode(errors="replace").strip()
-                            or result.stdout.decode(errors="replace").strip()
-                            or f"rmdir exited with code {result.returncode}"
-                        )
-                        logger.warning(
-                            "Security: failed to remove link %s: %s", path, detail
-                        )
+                lstat_info = path.lstat()
+                attrs = getattr(lstat_info, "st_file_attributes", 0)
+                is_dir_link = bool(attrs & stat.FILE_ATTRIBUTE_DIRECTORY) or (
+                    not is_link and path.is_dir()
+                )
+                if is_dir_link:
+                    os.rmdir(path)
                 else:
                     path.unlink(missing_ok=True)
             else:
@@ -139,23 +138,24 @@ class LinkManager:
         manifest = self.load_manifest(link_path)
         relative_name = target.relative_to(link_path).as_posix()
         previous_source = manifest.get(relative_name)
+        resolved_source = str(source.resolve())
 
-        if target.exists() or target.is_symlink():
+        if os.path.lexists(target):
             if self.managed_link_matches(target, source):
-                if previous_source is not None:
-                    manifest[relative_name] = str(source.resolve())
+                if previous_source != resolved_source:
+                    manifest[relative_name] = resolved_source
                     self.save_manifest(link_path, manifest)
                 return False
             if previous_source and self.managed_link_matches(
                 target, Path(previous_source)
             ):
-                self.safe_remove_link(target)
+                self.safe_remove_link(target, allow_managed_file=True)
             else:
                 logger.warning("Refusing to replace unmanaged path: %s", target)
                 return False
 
         self.create_skill_link(source, target)
-        manifest[relative_name] = str(source.resolve())
+        manifest[relative_name] = resolved_source
         self.save_manifest(link_path, manifest)
         return True
 
@@ -163,14 +163,17 @@ class LinkManager:
         self, link_path: Path, desired_names: set[str]
     ) -> None:
         manifest = self.load_manifest(link_path)
+        changed = False
         for relative_name, source in list(manifest.items()):
             if relative_name in desired_names:
                 continue
             target = link_path / relative_name
             if self.managed_link_matches(target, Path(source)):
-                self.safe_remove_link(target)
+                self.safe_remove_link(target, allow_managed_file=True)
             manifest.pop(relative_name, None)
-        self.save_manifest(link_path, manifest)
+            changed = True
+        if changed:
+            self.save_manifest(link_path, manifest)
 
     def cleanup_link_dir(self, link_path: Path):
         """Remove only links recorded in CodeAgent's ownership manifest."""
@@ -182,7 +185,7 @@ class LinkManager:
             for relative_name, source in manifest.items():
                 item = link_path / relative_name
                 if self.managed_link_matches(item, Path(source)):
-                    self.safe_remove_link(item)
+                    self.safe_remove_link(item, allow_managed_file=True)
 
             self.save_manifest(link_path, {})
 

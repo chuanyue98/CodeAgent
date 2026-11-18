@@ -3,9 +3,9 @@
 
 Kept for backward compatibility: ``import ca_launcher``,
 ``python ca_launcher.py`` and the ``ca`` console script all still work,
-and the public helpers remain importable as ``ca_launcher.xxx`` so that
-the existing test suite's ``patch("ca_launcher._project_root")`` targets
-keep passing (they are mirrored onto ``core.cli.helpers``).
+and ``__getattr__`` forwards missing attributes to ``core.cli.helpers`` and
+``core.cli.ui``; tests patching ``_project_root`` should target
+``core.cli.helpers._project_root`` directly.
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ import sys
 import core.cli.helpers as _helpers
 import core.cli.ui as _ui
 from core.cli.helpers import (  # noqa: F401
-    FALLBACK_ENGINE,
     _ensure_project_on_path,
     _ensure_project_registered,
     _get_task_runner,

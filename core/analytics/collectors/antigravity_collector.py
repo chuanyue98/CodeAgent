@@ -3,17 +3,21 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from core.analytics.aggregator import _parse_ts
 from core.analytics.models import RawUsageEntry
 from core.session_history.parsers.antigravity_parser import (
+    _load_handoff_projects,
     extract_parent_recipient,
     extract_subagent_spawns,
+    handoff_projects_file,
 )
 from core.session_history.paths import strip_extended_length_prefix
+from core.utils.long_paths import connect_sqlite_ro, list_dirs, long_path
 from core.utils.long_paths import exists as path_exists
-from core.utils.long_paths import list_dirs, long_path
 
 
 def _is_valid_project_path(path_str: str) -> bool:
@@ -92,11 +96,13 @@ def _parse_transcript(
     parent_session_id: str = "",
     agent: str = "",
     lineage_out: dict[str, tuple[str, str]] | None = None,
+    known_projects_out: dict[str, str] | None = None,
 ) -> list[RawUsageEntry]:
     """Parses an Antigravity transcript file into raw usage entries."""
     if not path_exists(path):
         return []
 
+    since_dt = _parse_ts(since_timestamp) if since_timestamp else None
     entries: list[RawUsageEntry] = []
     inferred_path = project_path
     raw_rows: list[dict] = []
@@ -164,7 +170,7 @@ def _parse_transcript(
                     continue
 
                 ts = (row.get("created_at") or "").replace(" ", "T")
-                if since_timestamp and ts <= since_timestamp:
+                if since_dt is not None and _parse_ts(ts) <= since_dt:
                     continue
 
                 content = row.get("content") or ""
@@ -203,6 +209,14 @@ def _parse_transcript(
             for cid, role in spawns.items():
                 lineage_out[cid] = (session_id, role)
 
+        # 增量水位过滤前就记录父会话推导出的项目路径，避免子代理继承不到。
+        if (
+            known_projects_out is not None
+            and inferred_path
+            and session_id not in known_projects_out
+        ):
+            known_projects_out[session_id] = inferred_path
+
         if not parent_session_id and raw_rows:
             inferred_parent = extract_parent_recipient(raw_rows)
             if inferred_parent:
@@ -238,6 +252,9 @@ def scan_antigravity_usage(
     model = _read_configured_model(base_dir)
     db_path = base_dir / "conversation_summaries.db"
     brain_dir = base_dir / "brain"
+    handoff_projects = _load_handoff_projects(handoff_projects_file(home))
+    known_projects: dict[str, str] = dict(handoff_projects)
+    since_dt = _parse_ts(since_timestamp) if since_timestamp else None
 
     entries: list[RawUsageEntry] = []
     seen_sessions: set[str] = set()
@@ -246,9 +263,7 @@ def scan_antigravity_usage(
     # 1. From conversation_summaries.db
     if path_exists(db_path):
         try:
-            with sqlite3.connect(
-                f"file:{long_path(db_path)}?mode=ro", uri=True
-            ) as conn:
+            with closing(connect_sqlite_ro(db_path)) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
                     "SELECT conversation_id, workspace_uris, last_modified_time, "
@@ -274,12 +289,19 @@ def scan_antigravity_usage(
                         except (json.JSONDecodeError, TypeError):
                             pass
 
+                    if not project_path:
+                        project_path = handoff_projects.get(session_id, "")
+                    if project_path:
+                        known_projects[session_id] = project_path
+
                     last_modified = str(row["last_modified_time"] or "").replace(
                         " ", "T"
                     )
                     parent_id = str(row["parent_conversation_id"] or "")
                     agent = str(row["agent_name"] or "")
                     step_count = int(row["step_count"] or 0)
+                    if parent_id and session_id not in lineage:
+                        lineage[session_id] = (parent_id, agent)
 
                     transcript_file = (
                         brain_dir
@@ -300,11 +322,12 @@ def scan_antigravity_usage(
                         parent_id,
                         agent,
                         lineage_out=lineage,
+                        known_projects_out=known_projects,
                     )
                     if file_entries:
                         entries.extend(file_entries)
                     elif last_modified and (
-                        not since_timestamp or last_modified > since_timestamp
+                        since_dt is None or _parse_ts(last_modified) > since_dt
                     ):
                         entries.append(
                             RawUsageEntry(
@@ -316,7 +339,9 @@ def scan_antigravity_usage(
                                 cache_creation_tokens=0,
                                 cache_read_tokens=0,
                                 cost=0.0,
-                                project_path=project_path,
+                                project_path=known_projects.get(
+                                    session_id, project_path
+                                ),
                                 target="antigravity",
                                 parent_session_id=parent_id,
                                 agent=agent,
@@ -343,10 +368,11 @@ def scan_antigravity_usage(
             file_entries = _parse_transcript(
                 transcript_file,
                 session_id,
-                "",
+                known_projects.get(session_id, ""),
                 model,
                 since_timestamp,
                 lineage_out=lineage,
+                known_projects_out=known_projects,
             )
             entries.extend(file_entries)
 
@@ -358,14 +384,25 @@ def scan_antigravity_usage(
             if not e.agent and role:
                 e.agent = role
 
-    # Inherit project_path for subagents or sessions that share a parent
-    session_to_project: dict[str, str] = {
-        e.session_id: e.project_path for e in entries if e.project_path
-    }
+    # Inherit project_path for subagents or sessions that share a parent (含父会话未进增量窗口的情况)
+    parent_map: dict[str, str] = {cid: pid for cid, (pid, _role) in lineage.items()}
+    for e in entries:
+        if e.parent_session_id:
+            parent_map.setdefault(e.session_id, e.parent_session_id)
+    session_to_project: dict[str, str] = dict(known_projects)
+    for e in entries:
+        if e.project_path:
+            session_to_project[e.session_id] = e.project_path
     for e in entries:
         if not e.project_path and e.parent_session_id:
-            parent_proj = session_to_project.get(e.parent_session_id)
-            if parent_proj:
-                e.project_path = parent_proj
+            cur = e.parent_session_id
+            for _ in range(5):
+                if not cur:
+                    break
+                parent_proj = session_to_project.get(cur)
+                if parent_proj:
+                    e.project_path = parent_proj
+                    break
+                cur = parent_map.get(cur, "")
 
     return entries

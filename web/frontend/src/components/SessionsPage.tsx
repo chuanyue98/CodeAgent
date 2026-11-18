@@ -1,13 +1,14 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useIsMounted, useLatestRequest } from '../hooks/useAsyncGuards';
 import { useSearchParams } from 'react-router';
-import { ChevronDown, ChevronRight, Clock, FileText, AlertCircle, Loader2, Play, RefreshCw, Trash2, Zap } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, FileText, AlertCircle, Loader2, Play, RefreshCw, Trash2, X, Zap } from 'lucide-react';
 import { fetchSessionPage, type SessionUsage, fmtTokens } from '../api/analytics';
 import { convertAndLaunchSession, deleteHistorySession } from '../api/audit';
 import useActivityFilters from '../hooks/useActivityFilters';
 import { useTerminal } from '../context/TerminalContext';
 import { useT } from '../i18n/context';
 import { isWithinLocalDayRange } from '../utils/dateRange';
+import { workspaceLabel } from '../utils/workspaceFormat';
 import ActivityFilterPanel from './ActivityFilterPanel';
 import { AGENT_ENGINES, findEngine } from './terminalEngines';
 import SessionDetailPanel from './SessionDetailPanel';
@@ -55,24 +56,31 @@ export default function SessionsPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const isMounted = useIsMounted();
+  // Narrowing the query starts a new request while the old one is still out.
+  // Being mounted is not enough to accept a response: the wider result would
+  // land on top of the narrower one the user is now looking at.
+  const claimPage = useLatestRequest();
+
   const { openTab, openDrawer } = useTerminal();
-  const [handoffSessionId, setHandoffSessionId] = useState<string | null>(null);
-  const [handoffLoading, setHandoffLoading] = useState<string | null>(null);
+  const [handoffSessionKey, setHandoffSessionKey] = useState<string | null>(null);
+  const [handoffLoadingKey, setHandoffLoadingKey] = useState<string | null>(null);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
   const handoffRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (handoffRef.current && !handoffRef.current.contains(event.target as Node)) {
-        setHandoffSessionId(null);
+        setHandoffSessionKey(null);
       }
     }
-    if (handoffSessionId) {
+    if (handoffSessionKey) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [handoffSessionId]);
+  }, [handoffSessionKey]);
 
   const handleResumeSession = (session: SessionUsage) => {
     openTab(session.target, session.projectPath, session.sessionId);
@@ -80,7 +88,9 @@ export default function SessionsPage() {
   };
 
   const handleHandoffSession = async (session: SessionUsage, targetEngine: string) => {
-    setHandoffLoading(session.sessionId);
+    const key = sessionKey(session);
+    setHandoffLoadingKey(key);
+    setHandoffError(null);
     try {
       const result = await convertAndLaunchSession({
         sourceEngine: session.target,
@@ -88,13 +98,16 @@ export default function SessionsPage() {
         targetEngine,
         projectPath: session.projectPath,
       });
-      setHandoffSessionId(null);
+      setHandoffSessionKey(null);
       openTab(result.engine, result.project, result.sessionId);
       openDrawer();
     } catch (err) {
-      console.error('Failed to handoff session:', err);
+      const detail = err instanceof Error ? err.message : String(err);
+      setHandoffError(t('launch.handoffFailed', { error: detail }));
     } finally {
-      setHandoffLoading(null);
+      if (isMounted()) {
+        setHandoffLoadingKey(null);
+      }
     }
   };
 
@@ -110,12 +123,6 @@ export default function SessionsPage() {
     const timer = setTimeout(() => setActiveSearch(search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [search]);
-
-  const isMounted = useIsMounted();
-  // Narrowing the query starts a new request while the old one is still out.
-  // Being mounted is not enough to accept a response: the wider result would
-  // land on top of the narrower one the user is now looking at.
-  const claimPage = useLatestRequest();
 
   // Project narrowing and text search both happen server-side, and the page
   // is cut after them: filtering a fixed window here instead would let a busy
@@ -404,6 +411,23 @@ export default function SessionsPage() {
             </div>
           )}
 
+          {handoffError && (
+            <div role="alert" className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <span className="flex items-center gap-2">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                {handoffError}
+              </span>
+              <button
+                type="button"
+                aria-label={t('common.close')}
+                onClick={() => setHandoffError(null)}
+                className="shrink-0 rounded p-0.5 hover:bg-destructive/15"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* One table, one row per session. The list scrolls inside its own
               box at xl, where the parent pins the page to the viewport. */}
           <div className="glass-card min-h-0 flex-1 divide-y divide-border overflow-y-auto">
@@ -423,8 +447,13 @@ export default function SessionsPage() {
                   className={`flex cursor-pointer flex-col justify-between gap-3 px-4 py-3 transition-colors sm:flex-row sm:items-center ${
                     isSelected ? 'bg-muted' : 'hover:bg-muted/60'
                   }`}
-                  onClick={() => setSelectedKey(isSelected ? null : key)}
+                  onClick={event => {
+                    const target = event.target as HTMLElement | null;
+                    if (target?.closest('button, input, a, select, textarea')) return;
+                    setSelectedKey(isSelected ? null : key);
+                  }}
                   onKeyDown={event => {
+                    if (event.target !== event.currentTarget) return;
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
                       setSelectedKey(isSelected ? null : key);
@@ -444,7 +473,7 @@ export default function SessionsPage() {
                     <div className="flex min-w-0 flex-1 flex-col">
                       <div className="flex min-w-0 items-center gap-2">
                         <span className="truncate text-sm font-medium">
-                          {session.title || session.projectPath.split(/[\\/]/).pop() || session.projectPath || '—'}
+                          {session.title || (session.projectPath ? workspaceLabel(session.projectPath) : '—')}
                         </span>
                         {/* Subagent runs are folded into the session that spawned
                             them; the count is what tells you the row's tokens cover
@@ -498,24 +527,24 @@ export default function SessionsPage() {
                       <div className="relative">
                         <button
                           type="button"
-                          disabled={handoffLoading === session.sessionId}
-                          onClick={() => setHandoffSessionId(prev => prev === session.sessionId ? null : session.sessionId)}
+                          disabled={handoffLoadingKey === key}
+                          onClick={() => setHandoffSessionKey(prev => prev === key ? null : key)}
                           title={t('launch.handoffTitle')}
                           aria-label={t('launch.handoffTitle')}
                           className={`inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted ${
-                            handoffSessionId === session.sessionId ? 'bg-muted' : ''
+                            handoffSessionKey === key ? 'bg-muted' : ''
                           }`}
                         >
-                          {handoffLoading === session.sessionId ? (
+                          {handoffLoadingKey === key ? (
                             <Loader2 size={11} className="animate-spin" />
                           ) : (
                             <Zap size={11} className="text-warn" />
                           )}
                           <span className="hidden sm:inline">{t('launch.handoff')}</span>
-                          <ChevronDown size={10} className={handoffSessionId === session.sessionId ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                          <ChevronDown size={10} className={handoffSessionKey === key ? 'rotate-180 transition-transform' : 'transition-transform'} />
                         </button>
 
-                        {handoffSessionId === session.sessionId && (
+                        {handoffSessionKey === key && (
                           <div
                             ref={handoffRef}
                             className="absolute right-0 top-full z-50 mt-1 min-w-36 rounded-xl border border-border bg-popover p-1 shadow-lg"
@@ -527,7 +556,7 @@ export default function SessionsPage() {
                               <button
                                 key={target.id}
                                 type="button"
-                                disabled={Boolean(handoffLoading)}
+                                disabled={Boolean(handoffLoadingKey)}
                                 onClick={() => void handleHandoffSession(session, target.id)}
                                 className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted disabled:opacity-50"
                               >

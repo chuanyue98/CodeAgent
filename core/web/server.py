@@ -2,6 +2,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import cast
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -11,6 +12,7 @@ from core.logging_config import configure_root_logging, get_logger
 from core.plugin_scanner import PluginScanner
 from core.prompt_scanner import DEFAULT_GROUP_PROMPTS, PromptScanner
 from core.services.config_service import ConfigService
+from core.services.runner_service import TaskRunner
 from core.services.schedule_service import ScheduleService
 from core.services.scheduler_loop import scheduler_tick_loop
 from core.skill_scanner import SkillScanner
@@ -44,8 +46,13 @@ configure_root_logging()
 
 logger = get_logger(__name__)
 
-CONFIG_PATH = get_config_path()
+CONFIG_PATH: Path | None = None
 FRONTEND_DIST = resolve_resource_path("web/frontend/dist", "CA_FRONTEND_DIST")
+
+
+def _resolve_config_path() -> Path:
+    """优先返回 ``server.CONFIG_PATH``（供测试覆盖），否则动态解析默认配置路径。"""
+    return CONFIG_PATH if CONFIG_PATH is not None else get_config_path()
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -105,7 +112,8 @@ def initialize_default_groups() -> None:
     Uses ``ConfigService.modify_config`` for an atomic read-modify-write so
     that concurrent scheduler / web-request writes don't clobber each other.
     """
-    config_service = ConfigService(CONFIG_PATH)
+    config_path = _resolve_config_path()
+    config_service = ConfigService(config_path)
 
     def _modifier(config_data: dict) -> dict:
         skills_root, prompts_root, hooks_root = _get_roots()
@@ -178,14 +186,14 @@ def initialize_default_groups() -> None:
         config_service.modify_config(_modifier)
     except FileNotFoundError:
         # Genuinely expected before the first run writes a config.
-        logger.debug("No config at %s yet; skipping group seeding", CONFIG_PATH)
+        logger.debug("No config at %s yet; skipping group seeding", config_path)
     except Exception:
         # Everything else was being swallowed by the same handler, so a
         # permission error, a corrupt config or a bug in _modifier all looked
         # identical to "no config yet" -- the server came up with no groups
         # and nothing said why. Startup still continues; the UI degrades to
         # an empty group list rather than failing to boot.
-        logger.exception("Failed to seed default groups from %s", CONFIG_PATH)
+        logger.exception("Failed to seed default groups from %s", config_path)
 
 
 async def _prewarm_session_history() -> None:
@@ -229,7 +237,7 @@ async def _prewarm_session_history() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    initialize_default_groups()
+    await asyncio.to_thread(initialize_default_groups)
     # Retention sweep walks the log dir, so it belongs to server startup rather
     # than to TaskRunner's constructor, which the CLI also builds for read-only
     # commands. Off the event loop: it stats every log file in the directory.
@@ -250,7 +258,8 @@ async def lifespan(app: FastAPI):
     agent_db = os.environ.get(
         "CA_AGENT_DB", str(Path.home() / ".codeagent" / "agent-gateway.sqlite3")
     )
-    config, _warnings = ConfigService(get_config_path()).get_config()
+    config_path = _resolve_config_path()
+    config, _warnings = ConfigService(config_path).get_config()
     gateway_settings = get_agent_gateway_settings(config)
     app.state.agent_gateway_status = gateway_settings
     adapter_factories = {
@@ -271,7 +280,7 @@ async def lifespan(app: FastAPI):
             ]
         )
     agent_gateway = (
-        AgentGateway(AgentStore(agent_db), get_config_path(), adapters)
+        AgentGateway(AgentStore(agent_db), config_path, adapters)
         if gateway_settings["enabled"]
         else None
     )
@@ -279,11 +288,11 @@ async def lifespan(app: FastAPI):
     if agent_gateway is not None:
         await agent_gateway.start()
     app.state.run_store = _task_runner._run_store
-    schedule_service = ScheduleService(ConfigService(get_config_path()))
+    schedule_service = ScheduleService(ConfigService(config_path))
     scheduler_task = asyncio.create_task(
         scheduler_tick_loop(
             schedule_service,
-            _task_runner,
+            cast(TaskRunner, _task_runner),
             get_tasks_root,
             run_store=_task_runner._run_store,
         )
@@ -301,8 +310,9 @@ async def lifespan(app: FastAPI):
         await agent_gateway.stop()
     app.state.agent_gateway = None
 
-    # 终端随服务一起收摊：tmux 里的引擎在服务关闭后无人能接回，
-    # 留着只会孤儿化地消耗资源。
+    # 终端随服务一起收摊：先关闭登记的活跃会话（覆盖 Windows ConPTY 与 POSIX tmux），
+    # 再彻底关停 tmux server 与看门狗进程。
+    await pty.stop_all_active_sessions()
     await asyncio.to_thread(pty.kill_tmux_server)
 
     # Clean up background subprocesses
@@ -311,9 +321,11 @@ async def lifespan(app: FastAPI):
 
     for name, runner in (("chat", chat_runner), ("tasks", tasks_runner)):
         try:
-            runner.kill_all()
+            await asyncio.to_thread(runner.kill_all)
         except Exception:
             logger.warning("关停 %s runner 的残留进程失败", name, exc_info=True)
+        finally:
+            runner.close()
 
 
 app = FastAPI(title="CodeAgent Web UI", lifespan=lifespan)
@@ -375,7 +387,7 @@ app.include_router(tasks.router, dependencies=_authenticated)
 if os.environ.get("CA_E2E") == "1":
     from core.web.routers import e2e
 
-    app.include_router(e2e.router)
+    app.include_router(e2e.router, dependencies=_authenticated)
 
 
 @app.get("/api/health")
@@ -383,7 +395,7 @@ async def health_check():
     return {"status": "ok"}
 
 
-if not FRONTEND_DIST.exists():
+if not (FRONTEND_DIST / "index.html").is_file():
 
     @app.get("/", include_in_schema=False)
     async def api_root():
@@ -396,25 +408,33 @@ if not FRONTEND_DIST.exists():
 
 
 else:
+    from fastapi import HTTPException
     from fastapi.responses import FileResponse
 
     assets_dir = FRONTEND_DIST / "assets"
     if assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
+    _DIST_ROOT = FRONTEND_DIST.resolve()
+    _INDEX_HTML = _DIST_ROOT / "index.html"
+
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
         if full_path == "api" or full_path.startswith("api/"):
-            from fastapi import HTTPException
-
             raise HTTPException(status_code=404, detail="API route not found")
+        if full_path:
+            candidate = (_DIST_ROOT / full_path).resolve()
+            if candidate.is_relative_to(_DIST_ROOT) and candidate.is_file():
+                return FileResponse(candidate)
+        if not _INDEX_HTML.is_file():
+            raise HTTPException(status_code=404, detail="Frontend index.html not found")
         # Hashed /assets chunks can be cached forever, but index.html must
         # always revalidate: it is the only thing that points at the current
         # chunk names, and a stale cached copy keeps serving the previous
         # build's chunks after a rebuild (they may still be in cache too),
         # which looks exactly like "the rebuild changed nothing".
         return FileResponse(
-            FRONTEND_DIST / "index.html",
+            _INDEX_HTML,
             headers={
                 "Cache-Control": "no-cache",
             },

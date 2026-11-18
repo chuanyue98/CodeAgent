@@ -23,7 +23,6 @@ from pathlib import Path
 import click
 
 from core.constants import ENGINES, normalize_engine_name
-from core.engine_registry import ENGINES as ENGINE_SPECS
 from core.i18n import t
 
 from .. import helpers as _helpers
@@ -33,6 +32,7 @@ from ..ui_styles import (
     StyledTitle,
     format_styled_session_choice,
     get_engine_theme,
+    truncate_display,
 )
 from .resume import format_relative_time
 
@@ -57,9 +57,7 @@ def _prompt_source_session(summaries: list[dict], target_engine: str | None):
             or summary.get("first_user_message")
             or t("history.no_title")
         )
-        title = title.replace("\n", " ").strip()
-        if len(title) > 55:
-            title = title[:52] + "..."
+        title = truncate_display(title.replace("\n", " ").strip(), 55)
         marker = f"{default_marker:<8s}" if i == 1 else "        "
         print(
             f"  [{i:2d}] {marker} [{eng:<10s}]  {time_str:<8s}  ·  {msg_count:3d} msgs  |  {title}"
@@ -330,7 +328,9 @@ def switch(ctx, target_engine, selector, source_engine, yes, no_launch):  # type
         if target_engine == _INVALID_ENGINE:
             return 1
 
-    title = session.title or session.first_user_message[:60] or t("history.no_title")
+    title = truncate_display(session.title or session.first_user_message, 60) or t(
+        "history.no_title"
+    )
 
     if source == target_engine:
         # Already native. Converting would fork a second copy of the same
@@ -361,35 +361,18 @@ def switch(ctx, target_engine, selector, source_engine, yes, no_launch):  # type
         return 1
 
     if no_launch:
-        print(t("switch.resume_manually", command=" ".join(argv)))
+        print(t("switch.resume_manually", command=_helpers.format_cli_command(argv)))
         return 0
 
     print(t("switch.launching", engine=target_engine))
-    try:
-        return subprocess.run(
-            argv, cwd=project_path, env=ctx.obj.get("child_env")
-        ).returncode
-    except FileNotFoundError:
-        if sys.platform == "win32":
-            candidates = [argv[0]]
-            spec = ENGINE_SPECS.get(target_engine)
-            if spec:
-                for c in spec.cli_candidates:
-                    if c not in candidates:
-                        candidates.append(c)
-            for cand in candidates:
-                resolved = shutil.which(cand)
-                if resolved:
-                    try:
-                        return subprocess.run(
-                            [resolved, *argv[1:]],
-                            cwd=project_path,
-                            env=ctx.obj.get("child_env"),
-                        ).returncode
-                    except FileNotFoundError:
-                        continue
-        # The conversion already succeeded, so the session is waiting for them
-        # once the CLI is on PATH -- say so rather than looking like a failure.
-        print(t("switch.engine_not_installed", engine=target_engine))
-        print(t("switch.resume_manually", command=" ".join(argv)))
-        return 1
+    # 转换已写入磁盘，即使本地未装 CLI 也返回 1 并提示手动恢复命令。
+    return _helpers.run_resume_command(
+        argv,
+        target_engine,
+        project_path=project_path,
+        child_env=ctx.obj.get("child_env"),
+        not_installed_msg_key="switch.engine_not_installed",
+        manual_msg_key="switch.resume_manually",
+        runner=subprocess.run,
+        which=shutil.which,
+    )

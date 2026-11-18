@@ -1,4 +1,4 @@
-import { localDayOffset } from '../../utils/dateRange';
+import { localDayOffset, toLocalDayString } from '../../utils/dateRange';
 import type { TranslationKey } from '../../i18n/locales/en';
 import type {
   DailyUsage,
@@ -95,7 +95,14 @@ export function filterSessionsByRange(
 ): SessionUsage[] {
   if (days === null) return sessions;
   const cutoff = localDayOffset(days - 1);
-  return sessions.filter(s => (s.lastActivity || '').slice(0, 10) >= cutoff);
+  return sessions.filter(s => {
+    if (!s.lastActivity) return false;
+    const parsed = new Date(s.lastActivity);
+    const day = Number.isNaN(parsed.getTime())
+      ? s.lastActivity.slice(0, 10)
+      : toLocalDayString(parsed);
+    return day >= cutoff;
+  });
 }
 
 // Every headline number derives from the same filtered set, so the range

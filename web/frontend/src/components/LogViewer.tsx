@@ -11,7 +11,8 @@ import {
   Maximize2,
   Minimize2,
 } from 'lucide-react';
-import { fetchLogFiles, fetchLogFile, useLogStream, type LogFile } from '../api/logs';
+import { fetchLogFiles, fetchLogFile, useLogStream, type LogFile, type LogFileContent } from '../api/logs';
+import { useIsMounted } from '../hooks/useAsyncGuards';
 import usePolling from '../hooks/usePolling';
 import { useT } from '../i18n/context';
 import EmptyState from './shared/EmptyState';
@@ -24,42 +25,72 @@ const DEFAULT_VISIBLE_LINES = 1500;
 
 export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }) {
   const t = useT();
+  const isMounted = useIsMounted();
   const [files, setFiles] = useState<LogFile[] | undefined>(undefined);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId ?? null);
+  const [snapshot, setSnapshot] = useState<LogFileContent | null>(null);
   const [initialContent, setInitialContent] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [filesError, setFilesError] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [showAllLines, setShowAllLines] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [copied, setCopied] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { lines: streamLines, error, connected, finished } = useLogStream(selectedTaskId);
+  const { lines: streamLines, content: streamContent, error, connected, finished } = useLogStream(selectedTaskId, snapshot);
+
+  useEffect(() => {
+    if (initialTaskId !== undefined) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedTaskId(initialTaskId);
+    }
+  }, [initialTaskId]);
 
   const loadFiles = useCallback(async () => {
     try {
-      await fetchLogFiles().then(setFiles);
+      const nextFiles = await fetchLogFiles();
+      if (!isMounted()) return;
+      setFiles(nextFiles);
       setFilesError(null);
     } catch (e) {
+      if (!isMounted()) return;
       setFilesError(e instanceof Error ? e.message : t('logs.loadFailed'));
     }
-  }, [t]);
+  }, [isMounted, t]);
 
   usePolling(loadFiles, 10000);
 
   useEffect(() => {
-    if (!selectedTaskId) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!selectedTaskId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLoading(false);
+      setInitialContent('');
+      setSnapshot(null);
+      setFileError(null);
+      return;
+    }
+    let disposed = false;
     setLoading(true);
+    setInitialContent('');
+    setSnapshot(null);
+    setFileError(null);
     setShowAllLines(false);
     fetchLogFile(selectedTaskId).then(res => {
+      if (disposed) return;
       setInitialContent(res.content);
+      setSnapshot(res);
       setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [selectedTaskId]);
+    }).catch(err => {
+      if (disposed) return;
+      setFileError(err instanceof Error ? err.message : t('logs.loadFailed'));
+      setLoading(false);
+    });
+    return () => { disposed = true; };
+  }, [selectedTaskId, t]);
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
@@ -97,11 +128,9 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
   }, []);
 
   const allLines = useMemo(
-    () => [
-      ...(initialContent ?? '').split('\n'),
-      ...(selectedTaskId ? streamLines : []),
-    ].filter((l: string) => l.trim()),
-    [initialContent, selectedTaskId, streamLines],
+    () => (streamContent ?? (initialContent + (selectedTaskId ? streamLines.join('\n') : '')))
+      .split('\n'),
+    [initialContent, selectedTaskId, streamLines, streamContent],
   );
 
   const filteredLines = useMemo(() => {
@@ -139,18 +168,26 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
         <div className="flex flex-wrap items-center gap-2">
           <Terminal className="w-4 h-4 text-slate-500" />
           <span className="text-sm font-semibold text-slate-700">{t('logs.title')}</span>
-          {selectedTaskId && (
+          {selectedTaskId && (finished || connected || loading || error || snapshot?.cursor) && (
             /* A run that ended closed the stream on purpose. Reporting that
                as "disconnected" reads as a fault the viewer should retry. */
             <span
               className={`flex items-center gap-1 text-xs ${
-                finished ? 'text-slate-500' : connected ? 'text-green-600' : 'text-red-500'
+                finished
+                  ? 'text-slate-500'
+                  : connected
+                    ? 'text-green-600'
+                    : loading
+                      ? 'text-slate-400'
+                      : 'text-red-500'
               }`}
             >
               {finished ? (
                 <CheckCircle2 className="w-3 h-3" />
               ) : connected ? (
                 <Wifi className="w-3 h-3" />
+              ) : loading ? (
+                <Wifi className="w-3 h-3 animate-pulse" />
               ) : (
                 <WifiOff className="w-3 h-3" />
               )}
@@ -158,7 +195,9 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
                 ? t('logs.finished', { status: finished })
                 : connected
                   ? t('logs.live')
-                  : t('logs.disconnected')}
+                  : loading
+                    ? t('common.loading')
+                    : t('logs.disconnected')}
             </span>
           )}
         </div>
@@ -255,10 +294,10 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
           className="flex-1 overflow-y-auto p-3 font-mono text-xs leading-relaxed bg-slate-50/50"
         >
           {loading && <p className="text-slate-400">{t('common.loading')}</p>}
-          {error && (
+          {(fileError || error) && (
             <div className="flex items-center gap-2 text-red-600 mb-2">
               <AlertCircle className="w-3 h-3" />
-              <span className="text-xs">{error}</span>
+              <span className="text-xs">{fileError ?? error}</span>
             </div>
           )}
           {truncated && (
@@ -279,7 +318,7 @@ export default function LogViewer({ taskId: initialTaskId }: { taskId?: string }
           )}
           {searchQuery.trim() && filteredLines.length === 0 && !loading && (
             <div className="py-8 text-center text-xs text-slate-400">
-              匹配 0 行
+              {t('logs.noMatches')}
             </div>
           )}
           {visibleLines.map((line, i) => (

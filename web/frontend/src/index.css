@@ -178,17 +178,9 @@ pre code.hljs {
   from { opacity: 0; transform: translateY(14px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes slide-in-left {
-  from { opacity: 0; transform: translateX(-22px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
 @keyframes fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
-}
-@keyframes scale-in {
-  from { opacity: 0; transform: scale(0.965); }
-  to   { opacity: 1; transform: scale(1); }
 }
 @keyframes pulse-soft {
   0%, 100% { opacity: 0.35; transform: scale(1); }
@@ -198,24 +190,13 @@ pre code.hljs {
   0%   { transform: scale(0.7); opacity: 0.7; }
   100% { transform: scale(2.4); opacity: 0; }
 }
-@keyframes orbit-drift {
-  0%   { transform: rotate(0deg) translateX(0); }
-  50%  { transform: rotate(180deg) translateX(2px); }
-  100% { transform: rotate(360deg) translateX(0); }
-}
-@keyframes bar-rise {
-  from { transform: scaleY(0.15); }
-  to   { transform: scaleY(1); }
-}
 
 /* Entrance durations are deliberately short. At the previous 620ms, stacked
    on a stagger that reached 540ms, the last block of a page landed ~1.2s
    after the data had already arrived — the page read as slow when only the
    animation was. */
 .animate-fade-rise  { animation: fade-rise 120ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-.animate-slide-left { animation: slide-in-left 120ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-fade-in    { animation: fade-in 140ms ease-out both; }
-.animate-scale-in   { animation: scale-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 
 /* Staggered entrance — pair with .animate-fade-rise etc.
    The delays are now zero. `both` fill mode holds an element at opacity 0 for
@@ -232,7 +213,6 @@ pre code.hljs {
 
 .animate-pulse-soft { animation: pulse-soft 2.4s ease-in-out infinite; }
 .animate-pulse-ring { animation: pulse-ring 2.4s ease-out infinite; }
-.animate-orbit      { animation: orbit-drift 24s linear infinite; }
 
 /* Slow spinner for long-running inline indicators. Tailwind's own `animate-spin`
    covers the fast default; this is the deliberate unhurried variant used where
@@ -241,12 +221,6 @@ pre code.hljs {
   to { transform: rotate(360deg); }
 }
 .animate-spin-slow { animation: spin-slow 1.5s linear infinite; }
-
-/* Equalizer bars for the hero "live activity" decoration. */
-.eq-bar {
-  transform-origin: bottom;
-  animation: bar-rise 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
 
 #root {
   position: relative;

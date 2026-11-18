@@ -143,12 +143,3 @@ def test_get_tasks_dir_falls_back_when_paths_section_is_not_an_object(
     # raise AttributeError uncaught.
     result = task_lib.get_tasks_dir()
     assert result is not None
-
-
-def test_set_additional_template_search_paths_appends(tmp_path):
-    original = list(task_lib._ADDITIONAL_TEMPLATE_SEARCH_PATHS)
-    try:
-        task_lib.set_additional_template_search_paths([str(tmp_path)])
-        assert str(tmp_path) in task_lib._ADDITIONAL_TEMPLATE_SEARCH_PATHS
-    finally:
-        task_lib._ADDITIONAL_TEMPLATE_SEARCH_PATHS[:] = original

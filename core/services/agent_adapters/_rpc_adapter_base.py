@@ -9,6 +9,7 @@ from typing import Any
 from core.services.agent_adapters._event_queue import (
     iter_events,
     put_event_dropping_oldest,
+    put_sentinel_dropping_oldest,
 )
 from core.services.agent_protocol import AdapterEvent
 
@@ -31,6 +32,9 @@ class RpcAdapterBase:
     def _put_event(self, event: AdapterEvent) -> None:
         put_event_dropping_oldest(self._events, event, label=self._adapter_label)
 
+    def _put_sentinel(self) -> None:
+        put_sentinel_dropping_oldest(self._events)
+
     async def _emit_crash_event(self, error: Exception) -> None:
         self._put_event(
             AdapterEvent(
@@ -43,6 +47,8 @@ class RpcAdapterBase:
                 },
             )
         )
+        # 进程意外退出时写入结束哨兵，让 supervisor 立即感知并触发重启循环。
+        self._put_sentinel()
 
     async def _request(
         self, method: str, params: dict[str, Any], timeout: float | None = None

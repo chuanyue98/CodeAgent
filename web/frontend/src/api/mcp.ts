@@ -1,3 +1,5 @@
+import request from '../utils/request';
+
 export interface McpServer {
   name: string;
   scope: 'project' | 'global';
@@ -6,8 +8,6 @@ export interface McpServer {
   url: string | null;
   env: Record<string, string>;
 }
-
-import request from '../utils/request';
 
 export interface AddMcpServerParams {
   project: string;
@@ -21,6 +21,7 @@ export interface AddMcpServerParams {
 export async function fetchMcpServers(engine: string, project: string): Promise<McpServer[]> {
   return request(
     `/api/mcp/${encodeURIComponent(engine)}?project=${encodeURIComponent(project)}`,
+    { timeout: 30_000 },
   );
 }
 
@@ -28,6 +29,7 @@ export async function addMcpServer(engine: string, params: AddMcpServerParams): 
   await request(`/api/mcp/${encodeURIComponent(engine)}`, {
     method: 'POST',
     body: JSON.stringify(params),
+    timeout: 30_000,
   });
 }
 
@@ -38,6 +40,6 @@ export async function removeMcpServer(
 ): Promise<void> {
   await request(
     `/api/mcp/${encodeURIComponent(engine)}/${encodeURIComponent(name)}?project=${encodeURIComponent(project)}`,
-    { method: 'DELETE' },
+    { method: 'DELETE', timeout: 30_000 },
   );
 }

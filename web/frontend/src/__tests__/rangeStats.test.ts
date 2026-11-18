@@ -6,9 +6,11 @@ import {
   buildSeries,
   computeTotals,
   filterDailyByRange,
+  filterSessionsByRange,
 } from '../components/analytics/rangeStats';
+import { formatDate, formatMonth } from '../components/analytics/present';
 import type { DailyUsage, ModelStat, SessionUsage } from '../api/analytics';
-import { localDayOffset } from '../utils/dateRange';
+import { localDayOffset, toLocalDayString } from '../utils/dateRange';
 
 function day(date: string, overrides: Partial<DailyUsage> = {}): DailyUsage {
   return {
@@ -172,5 +174,23 @@ describe('buildSeries', () => {
       null,
     );
     expect(series.tokens).toEqual([{ _key: '2024-01', claude: 2 }]);
+  });
+});
+
+describe('local date handling in rangeStats & present', () => {
+  test('filterSessionsByRange matches timestamps by local calendar day', () => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 5, 0, 0);
+    const matches = filterSessionsByRange(
+      [{ sessionId: 'local-today', target: 'claude', lastActivity: todayStart.toISOString() } as SessionUsage],
+      1,
+    );
+    expect(matches.map(s => s.sessionId)).toEqual(['local-today']);
+    expect(toLocalDayString(todayStart)).toBe(localDayOffset(0));
+  });
+
+  test('formatDate and formatMonth interpret calendar buckets in local time', () => {
+    expect(formatDate('2024-03-01')).toBe('Mar 01');
+    expect(formatMonth('2024-03')).toBe('Mar 2024');
   });
 });

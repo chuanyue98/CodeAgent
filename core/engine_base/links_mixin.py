@@ -292,15 +292,6 @@ class _LinksMixin:
     def _safe_remove_link(self, path: Path):
         self.link_manager.safe_remove_link(path)
 
-    def _load_link_manifest(self, link_path: Path) -> dict[str, str]:
-        return self.link_manager.load_manifest(link_path)
-
-    def _save_link_manifest(self, link_path: Path, manifest: dict[str, str]) -> None:
-        self.link_manager.save_manifest(link_path, manifest)
-
-    def _managed_link_matches(self, path: Path, source: Path) -> bool:
-        return self.link_manager.managed_link_matches(path, source)
-
     def _ensure_managed_link(self, source: Path, target: Path, link_path: Path) -> bool:
         return self.link_manager.ensure_managed_link(source, target, link_path)
 
@@ -311,9 +302,6 @@ class _LinksMixin:
 
     def _cleanup_link_dir(self, link_path: Path):
         self.link_manager.cleanup_link_dir(link_path)
-
-    def cleanup_skills_link(self, target_link_path: str):
-        self.link_manager.cleanup_link_dir((Path.cwd() / target_link_path).absolute())
 
     def _is_windows_link(self, path: Path) -> bool:
         from core.link_manager import is_windows_link

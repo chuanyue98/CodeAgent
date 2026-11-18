@@ -142,42 +142,75 @@ class SettingsManager:
 
         ledger.begin()
 
+        hooks_root = data.get("hooks")
         if "hooks" not in data:
             data["hooks"] = {}
+            # tomlkit 会把赋值的 dict 包成自己的 Table，取回包装后的对象再写入。
+            hooks_root = data["hooks"]
             ledger.note_created(_hook_marker())
+        elif not isinstance(hooks_root, dict):
+            logger.warning(
+                "Skipping hook injection into %s: expected hooks table/object, got %s",
+                settings_path,
+                type(hooks_root).__name__,
+            )
+            return
 
         for hook in hooks:
             event_name = hook.get("event")
-            if not event_name:
+            command = hook.get("command")
+            if not event_name or not isinstance(command, str) or not command:
                 continue
+            hook_name = hook.get("name") or "hook"
             event = self.event_map.get(event_name, event_name)
-            if event not in data["hooks"]:
-                data["hooks"][event] = [{"matcher": "*", "hooks": []}]
+            if event not in hooks_root:
+                hooks_root[event] = [{"matcher": "*", "hooks": []}]
                 ledger.note_created(_hook_marker(event))
                 ledger.note_created(_hook_marker(event, "*"))
 
-            target_group = _star_group(data["hooks"][event])
+            event_groups = hooks_root[event]
+            if not isinstance(event_groups, list):
+                logger.warning(
+                    "Skipping hook %s in %s: expected list for event %s",
+                    hook_name,
+                    settings_path,
+                    event,
+                )
+                continue
+
+            target_group = _star_group(event_groups)
             if target_group is None:
-                data["hooks"][event].append({"matcher": "*", "hooks": []})
+                event_groups.append({"matcher": "*", "hooks": []})
                 ledger.note_created(_hook_marker(event, "*"))
                 # tomlkit 会把追加的 dict 包成自己的表，取回包好的那个再往里写。
-                target_group = data["hooks"][event][-1]
+                target_group = event_groups[-1]
 
-            event_hooks = target_group["hooks"]
-            index = _index_by_name(event_hooks, hook["name"])
+            event_hooks = target_group.get("hooks")
+            if event_hooks is None:
+                target_group["hooks"] = []
+                event_hooks = target_group["hooks"]
+            elif not isinstance(event_hooks, list):
+                logger.warning(
+                    "Skipping hook %s in %s: expected list in group.hooks",
+                    hook_name,
+                    settings_path,
+                )
+                continue
+
+            index = _index_by_name(event_hooks, hook_name)
             hook_entry = {
-                "name": hook["name"],
+                "name": hook_name,
                 "type": "command",
-                "command": hook["command"],
+                "command": command,
             }
 
-            record = ledger.find_entry(kind="hook", event=event, name=hook["name"])
+            record = ledger.find_entry(kind="hook", event=event, name=hook_name)
             if record is None:
                 # 第一次写这一条：记下它原先的样子（同名条目可能是用户自己的）。
                 record = {
                     "kind": "hook",
                     "event": event,
-                    "name": hook["name"],
+                    "name": hook_name,
                     "previous": plain(event_hooks[index])
                     if index is not None
                     else None,

@@ -9,7 +9,6 @@ from core.hook_scanner import HookScanner
 from core.link_manager import LinkManager
 from core.lock_manager import LockManager
 from core.plugin_scanner import PluginScanner
-from core.prompt_scanner import PromptScanner
 from core.resource_locator import CODE_ROOT
 from core.settings_manager import SettingsManager
 from core.skill_scanner import SkillScanner
@@ -22,7 +21,7 @@ class BaseEngine(_ConfigMixin, _PromptMixin, _LinksMixin, _SettingsMixin, _McpMi
     (e.g. ``before_tool``) to the vendor-specific names their settings file expects.
 
     Provides core functionality for configuration management, environment setup,
-    resource discovery (skills, prompts, hooks, plugins), and prompt assembly.
+    resource discovery (skills, hooks, plugins), and prompt assembly.
 
     Attributes:
         name (str): The unique name of the engine (e.g., 'opencode', 'claude').
@@ -31,7 +30,6 @@ class BaseEngine(_ConfigMixin, _PromptMixin, _LinksMixin, _SettingsMixin, _McpMi
         full_config (dict): The complete configuration loaded from config.json.
         env_manager (EnvironmentManager): Manager for environment variables.
         skill_scanner (SkillScanner): Scanner for discovering skills.
-        prompt_scanner (PromptScanner): Scanner for discovering prompts.
         hook_scanner (HookScanner): Scanner for discovering hooks.
         plugin_scanner (PluginScanner): Scanner for discovering plugins.
     """
@@ -56,12 +54,20 @@ class BaseEngine(_ConfigMixin, _PromptMixin, _LinksMixin, _SettingsMixin, _McpMi
         self.lock_manager = LockManager()
         self.settings_manager = SettingsManager(self.EVENT_MAP)
         resource_root = self.config_manager.resolve_resource_root()
-        self.skill_scanner = SkillScanner(resource_root / "skills")
-        self.prompt_scanner = PromptScanner(resource_root / "prompt")
+        paths_cfg = (
+            self.full_config.get("paths", {})
+            if isinstance(self.full_config, dict)
+            else {}
+        )
+        self.skill_scanner = SkillScanner(
+            resource_root / paths_cfg.get("skills", "skills")
+        )
         self.hook_scanner = HookScanner(
             self.config_manager.get_hook_search_roots(resource_root)
         )
-        self.plugin_scanner = PluginScanner(resource_root / "plugins")
+        self.plugin_scanner = PluginScanner(
+            resource_root / paths_cfg.get("plugins", "plugins")
+        )
 
     def execute(self, message: str, model: str, non_interactive: bool = False):
         """Abstract method to execute a message with the LLM engine.

@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
@@ -430,7 +431,7 @@ def test_antigravity_collector(tmp_path):
     brain_dir.mkdir(parents=True)
     db_path = base_dir / "conversation_summaries.db"
 
-    with sqlite3.connect(str(db_path)) as con:
+    with closing(sqlite3.connect(str(db_path))) as con, con:
         con.execute(
             "CREATE TABLE conversation_summaries ("
             "conversation_id TEXT, workspace_uris TEXT, last_modified_time TEXT, "
@@ -578,7 +579,7 @@ def test_antigravity_collector_brain_scan_and_subagents(tmp_path):
 
     # DB with parent and subagent link
     db_path = base_dir / "conversation_summaries.db"
-    with sqlite3.connect(str(db_path)) as con:
+    with closing(sqlite3.connect(str(db_path))) as con, con:
         con.execute(
             "CREATE TABLE conversation_summaries ("
             "conversation_id TEXT, workspace_uris TEXT, last_modified_time TEXT, "
@@ -625,7 +626,7 @@ def test_antigravity_collector_missing_transcript_and_unregistered_brain(tmp_pat
     # 1. DB has entry but transcript file doesn't exist -> falls back to step_count estimation
     db_path = base_dir / "conversation_summaries.db"
     base_dir.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(str(db_path)) as con:
+    with closing(sqlite3.connect(str(db_path))) as con, con:
         con.execute(
             "CREATE TABLE conversation_summaries ("
             "conversation_id TEXT, workspace_uris TEXT, last_modified_time TEXT, "

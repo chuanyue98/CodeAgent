@@ -1,6 +1,6 @@
-import { useRef, useState, type ComponentPropsWithoutRef } from 'react';
+import { memo, useRef, useState, type ComponentPropsWithoutRef } from 'react';
 import { Check, Copy } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import { useT } from '../i18n/context';
 
@@ -21,6 +21,7 @@ function CodeBlockWrapper({ children, ...props }: ComponentPropsWithoutRef<'pre'
   return (
     <div className="relative group/code my-2.5">
       <button
+        type="button"
         onClick={handleCopy}
         className="absolute top-2 right-2 p-1.5 bg-term-line hover:bg-term-line/70 text-term-dim hover:text-term-fg rounded-lg transition-colors border border-term-line opacity-0 group-hover/code:opacity-100 focus:opacity-100 z-10"
         title={t('agent.copyCode')}
@@ -34,37 +35,43 @@ function CodeBlockWrapper({ children, ...props }: ComponentPropsWithoutRef<'pre'
   );
 }
 
+const REHYPE_PLUGINS = [rehypeHighlight];
+
+const MARKDOWN_COMPONENTS: Components = {
+  pre({ children, ...props }) {
+    return (
+      <CodeBlockWrapper {...props}>
+        {children}
+      </CodeBlockWrapper>
+    );
+  },
+  code({ className, children, ...props }) {
+    const isInline = !className || !className.includes('language-');
+    return isInline ? (
+      <code className="font-mono bg-slate-200/60 px-1.5 py-0.5 rounded text-cyan-800 text-xs" {...props}>
+        {children}
+      </code>
+    ) : (
+      <code className={`${className} font-mono text-xs`} {...props}>
+        {children}
+      </code>
+    );
+  },
+};
+
 type Props = {
   text: string;
 };
 
-export default function MarkdownMessage({ text }: Props) {
+const MarkdownMessage = memo(function MarkdownMessage({ text }: Props) {
   return (
     <ReactMarkdown
-      rehypePlugins={[rehypeHighlight]}
-      components={{
-        pre({ children, ...props }) {
-          return (
-            <CodeBlockWrapper {...props}>
-              {children}
-            </CodeBlockWrapper>
-          );
-        },
-        code({ className, children, ...props }) {
-          const isInline = !className || !className.includes('language-');
-          return isInline ? (
-            <code className="font-mono bg-slate-200/60 px-1.5 py-0.5 rounded text-cyan-800 text-xs" {...props}>
-              {children}
-            </code>
-          ) : (
-            <code className={`${className} font-mono text-xs`} {...props}>
-              {children}
-            </code>
-          );
-        },
-      }}
+      rehypePlugins={REHYPE_PLUGINS}
+      components={MARKDOWN_COMPONENTS}
     >
       {text}
     </ReactMarkdown>
   );
-}
+});
+
+export default MarkdownMessage;

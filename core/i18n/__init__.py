@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import locale
 import os
+import sys
 from typing import Any
 
 from core.i18n.messages.cli import CLI_MESSAGES
@@ -49,6 +50,10 @@ def _normalize(value: str | None) -> str | None:
         return None
     if candidate in SUPPORTED_LANGUAGES:
         return candidate
+    if candidate.startswith("chinese"):
+        return "zh"
+    if candidate.startswith("english"):
+        return "en"
     # Accept locale-ish forms such as zh-CN, zh-Hans, en-US.
     prefix = candidate.split("-")[0]
     if prefix in SUPPORTED_LANGUAGES:
@@ -65,7 +70,7 @@ def _from_config() -> str | None:
         path = get_default_config_path(CODE_ROOT)
         if not path.exists():
             return None
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
     except Exception:
         return None
     return _normalize(data.get("language")) if isinstance(data, dict) else None
@@ -81,6 +86,17 @@ def _from_locale() -> str | None:
             normalized = _normalize(value.split(".")[0].split(":")[0])
             if normalized:
                 return normalized
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            lang_id = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+            win_loc = locale.windows_locale.get(lang_id)
+            normalized = _normalize(win_loc)
+            if normalized:
+                return normalized
+        except Exception:
+            pass
     try:
         code = locale.getlocale()[0]
     except Exception:

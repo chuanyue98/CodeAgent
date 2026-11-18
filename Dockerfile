@@ -14,7 +14,7 @@ WORKDIR /app
 
 # Install Python dependencies (layer caching)
 COPY pyproject.toml uv.lock README.md setup.py ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-install-project
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy runtime assets
@@ -25,12 +25,15 @@ COPY skills/ skills/
 COPY hooks/ hooks/
 COPY plugins/ plugins/
 COPY tasks/ tasks/
-COPY ca_launcher.py ca_launcher.py
+COPY ca_launcher.py config.example.json ./
 
 # The release pipeline builds the frontend before building this image.
 COPY web/frontend/dist/ web/frontend/dist/
 
+# Install the CodeAgent package itself into .venv now that sources exist
+RUN uv sync --frozen --no-dev
+
 EXPOSE 8524
 
 ENV CA_UI_HOST=0.0.0.0
-CMD ["python", "ca_launcher.py", "ui"]
+CMD ["uv", "run", "--no-sync", "python", "ca_launcher.py", "ui"]

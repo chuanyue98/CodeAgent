@@ -2,12 +2,8 @@ import { FolderGit2, Search, X } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { useT } from '../i18n/context';
 import { ALL_PROJECTS, type ActivityFilters } from '../hooks/useActivityFilters';
+import { workspaceLabel } from '../utils/workspaceFormat';
 import { findEngine } from './terminalEngines';
-
-/** Last path segment, for a label that fits a select. */
-function projectLabel(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).pop() || path;
-}
 
 interface ActivityFilterPanelProps {
   filters: ActivityFilters;
@@ -74,7 +70,7 @@ export default function ActivityFilterPanel({
             <option value={ALL_PROJECTS}>{t('filters.allWorkspaces')}</option>
             {projectPaths.map(path => (
               <option key={path} value={path} title={path}>
-                {projectLabel(path)}
+                {workspaceLabel(path)}
               </option>
             ))}
           </select>

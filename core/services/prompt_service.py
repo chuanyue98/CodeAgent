@@ -4,30 +4,23 @@ from core.prompt_scanner import EXCLUDED_PROMPT_FILES, PromptScanner
 
 
 class PromptService:
-    """Service for managing and scanning prompt templates."""
+    """管理和扫描提示词模板的业务服务。"""
 
-    def __init__(self, prompts_root: Path, root_dir: Path):
-        """Initializes the PromptService with prompts root and project root.
+    def __init__(self, prompts_root: Path, root_dir: Path | None = None):
+        """使用提示词根目录和可选项目根目录初始化 ``PromptService``。
 
         Args:
-            prompts_root: Path to the directory containing prompt categories.
-            root_dir: The absolute root directory of the project for path relativization.
+            prompts_root: 提示词分组根目录。
+            root_dir: 可选项目根目录，保留以兼容三参调用方。
         """
         self.prompts_root = prompts_root
         self.root_dir = root_dir
         self.scanner = PromptScanner(prompts_root)
 
     def get_prompt_groups(self) -> list[dict]:
-        """Scans and groups prompt files by category.
-
-        Returns:
-            A list of dictionaries, each representing a prompt group/category.
-            Each dictionary contains: id, name, description, readme (combined content),
-            and a list of individual prompt files with their paths.
-        """
+        """复用扫描器结果按分组聚合提示词文件详情。"""
         scanned, _ = self.scanner.scan()
         prompt_groups = []
-        excluded_files = EXCLUDED_PROMPT_FILES
 
         for category in sorted(scanned.keys()):
             group_dir = self.prompts_root / category
@@ -35,11 +28,16 @@ class PromptService:
             combined_parts = []
             description = ""
 
-            for prompt_file in sorted(group_dir.glob("*.md")):
-                if prompt_file.name in excluded_files:
+            for prompt_name in sorted(scanned[category]):
+                prompt_file = group_dir / f"{prompt_name}.md"
+                if prompt_file.name in EXCLUDED_PROMPT_FILES:
                     continue
-
-                content = prompt_file.read_text(encoding="utf-8").strip()
+                try:
+                    content = prompt_file.read_text(
+                        encoding="utf-8", errors="replace"
+                    ).strip()
+                except (OSError, UnicodeDecodeError):
+                    continue
                 if not content:
                     continue
 

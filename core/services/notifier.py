@@ -47,7 +47,8 @@ def notify(config: dict, event: str, payload: dict[str, Any]) -> None:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            urllib.request.urlopen(request, timeout=5)  # noqa: S310
+            with urllib.request.urlopen(request, timeout=5):  # noqa: S310
+                pass
         except (urllib.error.URLError, OSError, ValueError):
             logger.warning(
                 "Failed to deliver %s webhook notification to %s",

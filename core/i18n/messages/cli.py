@@ -63,6 +63,12 @@ CLI_MESSAGES: dict[str, dict[str, str]] = {
         "zh": "请启动'任务编排专家 (Task Authoring)'模式，目标是为 CodeAgent "
         "编写一个新的自动化任务剧本，文件名为：",
     },
+    "task.invalid_name": {
+        "en": "[X] Invalid task name: {name}. Use letters, digits, '_', '-', or '.' "
+        "(cannot start with '.' or '-').",
+        "zh": "[X] 无效的任务名: {name}。只能包含字母、数字、'_'、'-' 或 '.'"
+        "（且不能以 '.' 或 '-' 开头）。",
+    },
     "cli.help.task_mode": {"en": "Task mode", "zh": "任务模式"},
     "cli.help.list_tasks": {"en": "List all tasks", "zh": "列出所有任务"},
     "cli.help.non_interactive": {"en": "Non-interactive mode", "zh": "非交互模式"},
@@ -74,7 +80,6 @@ CLI_MESSAGES: dict[str, dict[str, str]] = {
         "en": "YOLO mode (bypass approvals/sandbox)",
         "zh": "开启 YOLO 模式 (跳过审批与沙箱)",
     },
-    "cli.help.review_pr_url": {"en": "PR URL to review", "zh": "代码审查 PR URL"},
     "cli.epilog": {
         "en": "Engines: opencode, claude, codex, codebuddy, antigravity (agy)\n"
         "\n"
@@ -413,14 +418,6 @@ CLI_MESSAGES: dict[str, dict[str, str]] = {
         "en": "[!] Warning: Failed to load config.json: {error}",
         "zh": "[!] 警告: 加载 config.json 失败: {error}",
     },
-    "engine.unknown_default": {
-        "en": "[!] Unknown default_engine {value!r} in config.json; falling "
-        "back to {fallback}.\n"
-        "    Known engines: {known}",
-        "zh": "[!] config.json 中的 default_engine {value!r} 无法识别，本次回退到 "
-        "{fallback}。\n"
-        "    可用引擎: {known}",
-    },
     "engine.yolo_warning": {
         "en": "[!] YOLO mode is ON: the engine may edit files and run commands "
         "without asking for approval.",
@@ -614,25 +611,9 @@ CLI_MESSAGES: dict[str, dict[str, str]] = {
         "en": "   New session ID: {session_id}",
         "zh": "   新会话 ID: {session_id}",
     },
-    "convert.resume_claude": {
-        "en": "   Resume with: claude -r {session_id}",
-        "zh": "   恢复方式: claude -r {session_id}",
-    },
-    "convert.resume_codex": {
-        "en": "   Resume with: codex continue",
-        "zh": "   恢复方式: codex continue",
-    },
-    "convert.resume_codebuddy": {
-        "en": "   Resume with: codebuddy --resume {session_id}",
-        "zh": "   恢复方式: codebuddy --resume {session_id}",
-    },
-    "convert.resume_opencode": {
-        "en": "   Resume with: opencode (select from history)",
-        "zh": "   恢复方式: opencode (从历史记录中选择)",
-    },
-    "convert.resume_antigravity": {
-        "en": "   Resume with: agy --conversation {session_id}",
-        "zh": "   恢复方式: agy --conversation {session_id}",
+    "convert.resume_with": {
+        "en": "   Resume with: {command}",
+        "zh": "   恢复方式: {command}",
     },
     "convert.failed": {
         "en": "[X] Conversion failed: {error}",
@@ -886,6 +867,10 @@ CLI_MESSAGES: dict[str, dict[str, str]] = {
         "zh": "← 目录已不存在",
     },
     "project.current_marker": {"en": "<- you are here", "zh": "← 当前目录"},
+    "project.parent_marker": {
+        "en": "<- covers current directory",
+        "zh": "← 覆盖当前目录",
+    },
     "resources.none": {"en": "No {kind} found.", "zh": "没有找到任何{kind}。"},
     "resources.header": {
         "en": "{kind} ({count}) — {label}",
@@ -907,10 +892,6 @@ CLI_MESSAGES: dict[str, dict[str, str]] = {
         "{engines}. Run 'ca --help' for available commands.",
         "zh": "未知的引擎或命令: '{name}'。可用引擎: {engines}。运行 'ca --help' "
         "查看可用命令。",
-    },
-    "launcher.banner_title": {
-        "en": "CodeAgent: Professional AI Engineering Shell",
-        "zh": "CodeAgent 统一 AI 编程辅助平台",
     },
     "launcher.project_label": {"en": "Project", "zh": "当前项目"},
     "launcher.latest_session_label": {"en": "Latest", "zh": "最近会话"},
@@ -956,8 +937,8 @@ CLI_MESSAGES: dict[str, dict[str, str]] = {
         "zh": "❓ 查看完整命令帮助 (--help)",
     },
     "launcher.more": {
-        "en": "📋 More Actions...     Sync standards / Install MCP / Health check / Help",
-        "zh": "📋 更多操作...        规范同步 / MCP 安装 / 健康检查 / 帮助",
+        "en": "📋 More Actions...     Health check / Help",
+        "zh": "📋 更多操作...        健康检查 / 帮助",
     },
     "launcher.back": {"en": "↩️  Back", "zh": "↩️  返回上一级"},
     "launcher.exit": {"en": "🚪 Exit", "zh": "🚪 退出"},

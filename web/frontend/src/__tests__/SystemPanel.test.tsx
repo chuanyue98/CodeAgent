@@ -69,4 +69,17 @@ describe('SystemPanel', () => {
     expect(screen.queryByText('Failed to fetch system metrics')).not.toBeInTheDocument();
     expect(screen.getByText('12%')).toBeInTheDocument();
   });
+
+  test('Escape closes the metrics popover when open', async () => {
+    vi.mocked(fetchSystemMetrics).mockResolvedValue(metrics);
+
+    renderPanel();
+    await act(async () => {});
+
+    fireEvent.click(screen.getByRole('button', { name: 'System status' }));
+    expect(screen.getByTestId('system-metrics')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByTestId('system-metrics')).not.toBeInTheDocument();
+  });
 });

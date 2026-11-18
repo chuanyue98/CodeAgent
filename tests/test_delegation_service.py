@@ -127,6 +127,8 @@ def test_isolated_worktree_git_lifecycle(tmp_path: Path):
         ["git", "-C", str(git_repo), "branch", "--list", branch_name],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert branch_name not in res.stdout
 
@@ -145,6 +147,8 @@ def test_isolated_worktree_git_lifecycle(tmp_path: Path):
         ["git", "-C", str(git_repo), "branch", "--list", saved_branch],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert saved_branch in res.stdout
 
@@ -152,6 +156,8 @@ def test_isolated_worktree_git_lifecycle(tmp_path: Path):
         ["git", "-C", str(git_repo), "log", "-1", "--oneline", saved_branch],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert f"ca: subtask commit on {saved_branch}" in log_res.stdout
 
@@ -171,6 +177,31 @@ def test_collect_git_changes(tmp_path: Path):
     assert "README.md" in files
     assert "-# Test Repo" in diff
     assert "+# Updated" in diff
+
+
+@pytest.mark.parametrize("failed_command", ["status", "rev-list", "add", "commit"])
+def test_worktree_is_preserved_when_saving_fails(tmp_path, monkeypatch, failed_command):
+    """清理前任一步失败，都必须留下委派产物供恢复。"""
+    from core.services import delegation_service as service
+
+    _init_git_repo(tmp_path)
+    real_git = service._run_git
+
+    def failing_git(cwd, *args, **kwargs):
+        if args[0] == failed_command:
+            if kwargs.get("check"):
+                raise subprocess.CalledProcessError(1, args, stderr="模拟保存失败")
+            return subprocess.CompletedProcess(
+                args, 1, stdout="", stderr="模拟保存失败"
+            )
+        return real_git(cwd, *args, **kwargs)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        with isolated_worktree(tmp_path) as context:
+            output = context["path"] / "result.txt"
+            output.write_text("必须保留的产物", encoding="utf-8")
+            monkeypatch.setattr(service, "_run_git", failing_git)
+    assert output.read_text(encoding="utf-8") == "必须保留的产物"
 
 
 def test_delegate_subtask_validation(tmp_path: Path):

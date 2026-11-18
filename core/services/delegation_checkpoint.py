@@ -65,7 +65,7 @@ def _git(
     input: bytes | None = None,
 ) -> str:
     proc = subprocess.run(
-        ["git", "-C", str(repo), *args],
+        ["git", "-c", "core.quotepath=false", "-C", str(repo), *args],
         capture_output=True,
         timeout=_GIT_TIMEOUT,
         env=env,
@@ -106,12 +106,14 @@ def snapshot(repo: Path, message: str) -> str:
             # 拷用户的 index 只为借它的 stat 缓存，免得把每个文件重新算一遍哈希。
             shutil.copyfile(real_index, index)
         env = {**os.environ, **_IDENTITY, "GIT_INDEX_FILE": str(index)}
-        _git(repo, "add", "-A", "--", ":/", env=env)
+        _git(repo, "add", "-A", "--", ":/", ":!/.ca_worktrees", env=env)
         tree = _git(repo, "write-tree", env=env).strip()
         head = subprocess.run(
             ["git", "-C", str(repo), "rev-parse", "--verify", "-q", "HEAD"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=_GIT_TIMEOUT,
         ).stdout.strip()
         parents = ["-p", head] if head else []
@@ -132,6 +134,8 @@ def _resolve(repo: Path, cid: str, which: str) -> str | None:
         ["git", "-C", str(repo), "rev-parse", "--verify", "-q", _ref(cid, which)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=_GIT_TIMEOUT,
     )
     return proc.stdout.strip() or None
@@ -212,7 +216,7 @@ def rewind(workspace: Path, cid: str, *, force: bool = False) -> RewindResult:
                 if target.is_file() or target.is_symlink():
                     target.unlink()
                     _remove_empty_parents(target.parent, repo)
-                removed.append(path)
+                    removed.append(path)
             else:
                 restored.append(path)
         if restored:
@@ -246,6 +250,48 @@ def start(workspace: Path, name: str | None = None) -> str | None:
         logger.warning("委派前的检查点没拍成，这次委派无法退回：%s", exc)
         return None
     return cid
+
+
+def diff_changes(workspace: Path, cid: str) -> tuple[list[str], str] | None:
+    """从检查点 ``before..after`` 提取完整变更文件列表与 diff（含新增未跟踪文件）。"""
+    repo = repo_root(workspace)
+    if repo is None:
+        return None
+    before = _resolve(repo, cid, "before")
+    after = _resolve(repo, cid, "after")
+    if before is None or after is None:
+        return None
+    try:
+        names = [
+            line
+            for line in _git(
+                repo,
+                "diff",
+                "--no-ext-diff",
+                "--no-renames",
+                "--name-only",
+                before,
+                after,
+                "--",
+                ":/",
+                ":!/.ca_worktrees",
+            ).splitlines()
+            if line
+        ]
+        diff = _git(
+            repo,
+            "diff",
+            "--no-ext-diff",
+            before,
+            after,
+            "--",
+            ":/",
+            ":!/.ca_worktrees",
+        )
+        return names, diff
+    except (CheckpointError, OSError, subprocess.SubprocessError) as exc:
+        logger.warning("读取检查点 %s 的变更失败，将回退到 git diff：%s", cid, exc)
+        return None
 
 
 def finish(workspace: Path, cid: str) -> None:

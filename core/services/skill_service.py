@@ -36,7 +36,12 @@ class SkillService:
                 body = ""
                 description = ""
                 if skill_md_path.exists():
-                    content = skill_md_path.read_text(encoding="utf-8")
+                    try:
+                        content = skill_md_path.read_text(
+                            encoding="utf-8", errors="replace"
+                        )
+                    except (OSError, UnicodeDecodeError):
+                        content = ""
                     body = content
 
                     # Extract description from YAML frontmatter, and strip it

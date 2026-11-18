@@ -34,22 +34,13 @@ class NotificationItem(ProtocolModel):
 @router.get("/notifications")
 def list_notifications(
     request: Request,
-    limit: int = Query(50, le=100),
+    limit: int = Query(50, ge=1, le=100),
     unread_only: bool = Query(False),
 ) -> list[dict]:
     """Lists recent notifications (most recent first)."""
     store = _get_run_store(request)
     rows = store.list_notifications(limit=limit, unread_only=unread_only)
-    result = []
-    for row in rows:
-        item = wire(NotificationItem.model_validate(row))
-        item["task_id"] = row.get("task_id")
-        item["schedule_id"] = row.get("schedule_id")
-        item["task_name"] = row.get("task_name")
-        item["created_at"] = row.get("created_at")
-        item["read_at"] = row.get("read_at")
-        result.append(item)
-    return result
+    return [wire(NotificationItem.model_validate(row)) for row in rows]
 
 
 @router.get("/notifications/unread-count")
@@ -74,5 +65,5 @@ def mark_read(
 def mark_all_read(request: Request) -> dict:
     """Marks all unread notifications as read."""
     store = _get_run_store(request)
-    store.mark_all_read()
-    return {"status": "ok"}
+    marked = store.mark_all_read()
+    return {"status": "ok", "marked": marked}

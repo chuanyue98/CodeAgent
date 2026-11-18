@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -45,11 +46,15 @@ class ClaudeEngine(_PluginDirMixin, BaseEngine):
         # no accurate value to store here.
         super().__init__("Claude", "")
 
+    def _get_claude_home(self) -> Path:
+        configured = os.environ.get("CLAUDE_CONFIG_DIR", "").strip()
+        return Path(configured) if configured else Path.home() / ".claude"
+
     def _get_plugin_dir_root(self) -> Path:
         return Path.home() / ".codeagent" / "plugins" / "claude"
 
     def _native_skill_dirs(self, project: Path) -> list[Path]:
-        return [project / ".claude" / "skills", Path.home() / ".claude" / "skills"]
+        return [project / ".claude" / "skills", self._get_claude_home() / "skills"]
 
     def plugin_hooks_config(self) -> dict[str, Any] | None:
         return build_hooks_config(self.get_hooks_to_inject(), self.EVENT_MAP)

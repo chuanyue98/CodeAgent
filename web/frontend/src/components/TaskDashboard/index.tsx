@@ -19,7 +19,7 @@ import GenerateTaskModal from './GenerateTaskModal';
 import NewTaskModal from './NewTaskModal';
 import TaskDetail from './TaskDetail';
 import TaskList from './TaskList';
-import type { Task } from './types';
+import { runMatchesTask, type Task } from './types';
 
 const IDLE_POLL_MS = 5000;
 const ACTIVE_POLL_MS = 2000;
@@ -128,7 +128,7 @@ const TaskDashboard = () => {
     // A run for this task may already be going (e.g. started by batch-run):
     // attach to it so the detail shows its live log.
     const active = runsQuery.data?.find(
-      run => run.taskId.startsWith(name) && run.status === 'running',
+      run => runMatchesTask(run, name) && run.status === 'running',
     );
     setActiveRunId(active ? active.taskId : null);
   }, [runsQuery.data]);
@@ -180,7 +180,7 @@ const TaskDashboard = () => {
   const stopMutation = useMutation({
     mutationFn: stopRun,
     onSuccess: () => setActiveRunId(null),
-    onError: e => console.error('Failed to stop task', e),
+    onError: e => setError(e instanceof Error ? e.message : t('tasks.stopFailed')),
   });
 
   if (tasksQuery.isLoading)

@@ -4,7 +4,12 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from core.analytics.aggregator import _parse_ts
 from core.analytics.models import RawUsageEntry
+from core.session_history.parsers._subagents import subagent_files
+from core.session_history.paths import codebuddy_dir, strip_extended_length_prefix
+from core.utils.long_paths import exists as path_exists
+from core.utils.long_paths import list_dirs, list_files, long_path
 
 
 def _to_iso(ts) -> str:
@@ -45,34 +50,31 @@ def scan_codebuddy_usage(
         List[RawUsageEntry]: A list of raw usage entries extracted from
         CodeBuddy's JSONL log files.
     """
-    base = (home or Path.home()) / ".codebuddy" / "projects"
-    if not base.exists():
+    base = codebuddy_dir(home) / "projects"
+    if not path_exists(base):
         return []
 
     entries: list[RawUsageEntry] = []
 
-    for project_dir in base.iterdir():
+    for project_dir in list_dirs(base):
         if not project_dir.is_dir():
             continue
-        for jsonl_file in project_dir.glob("*.jsonl"):
+        for jsonl_file in list_files(project_dir, ".jsonl"):
             _parse_codebuddy_file(jsonl_file, jsonl_file.stem, entries, since_timestamp)
 
         # Subagent transcripts live in ``<session_id>/subagents/``, which a
         # flat glob never reaches. A run that spawns its own nests one level
         # further, so the owner is the nearest ``agent-<id>`` directory.
-        for session_dir in project_dir.iterdir():
+        for session_dir in list_dirs(project_dir):
             if not session_dir.is_dir():
                 continue
-            for agent_file in (session_dir / "subagents").rglob("*.jsonl"):
-                owner = agent_file.parent.name
+            for agent_file, owner_id in subagent_files(session_dir):
                 _parse_codebuddy_file(
                     agent_file,
                     agent_file.stem,
                     entries,
                     since_timestamp,
-                    parent_session_id=(
-                        owner if owner.startswith("agent-") else session_dir.name
-                    ),
+                    parent_session_id=owner_id,
                 )
 
     return entries
@@ -95,8 +97,9 @@ def _parse_codebuddy_file(
         parent_session_id: Owning session when ``path`` is a subagent
             transcript; empty for a session a user started.
     """
+    since_dt = _parse_ts(since_timestamp) if since_timestamp else None
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(long_path(path), encoding="utf-8", errors="replace") as f:
             for line in f:
                 line = line.strip()
                 if not line:
@@ -119,7 +122,7 @@ def _parse_codebuddy_file(
                 ts = _to_iso(row.get("timestamp"))
                 if not ts:
                     continue
-                if since_timestamp and ts <= since_timestamp:
+                if since_dt is not None and _parse_ts(ts) <= since_dt:
                     continue
 
                 input_t = usage.get("inputTokens", 0) or 0
@@ -132,6 +135,17 @@ def _parse_codebuddy_file(
                     if isinstance(detail, dict):
                         cache_read += detail.get("cached_tokens", 0) or 0
 
+                raw_cwd = row.get("cwd") or ""
+                if raw_cwd:
+                    slashed = raw_cwd.replace("\\", "/")
+                    proj_path = (
+                        strip_extended_length_prefix(slashed)
+                        if slashed.lower().startswith("//?/")
+                        else raw_cwd
+                    )
+                else:
+                    proj_path = ""
+
                 entries.append(
                     RawUsageEntry(
                         timestamp=ts,
@@ -140,7 +154,7 @@ def _parse_codebuddy_file(
                         input_tokens=input_t,
                         output_tokens=output_t,
                         cache_read_tokens=cache_read,
-                        project_path=row.get("cwd") or "",
+                        project_path=proj_path,
                         target="codebuddy",
                         parent_session_id=parent_session_id,
                     )

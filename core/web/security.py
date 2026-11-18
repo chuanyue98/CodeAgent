@@ -70,11 +70,11 @@ import stat
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from fastapi import HTTPException, Request, WebSocket, WebSocketException
-from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import HTTPException, WebSocket, WebSocketException
+from starlette.datastructures import Headers
 from starlette.requests import HTTPConnection
 from starlette.responses import PlainTextResponse
-from starlette.types import ASGIApp
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from core.logging_config import get_logger
 
@@ -335,6 +335,8 @@ async def require_token(connection: HTTPConnection) -> None:
             raise WebSocketException(code=ws_code, reason=detail)
         raise HTTPException(status_code=status, detail=detail)
 
+    if is_websocket and not is_allowed_host(connection.headers.get("host")):
+        reject(421, WS_CLOSE_FORBIDDEN_ORIGIN, "Host not allowed")
     if not is_allowed_origin(
         connection.headers.get("origin"), connection.headers.get("host")
     ):
@@ -343,30 +345,35 @@ async def require_token(connection: HTTPConnection) -> None:
         reject(401, WS_CLOSE_UNAUTHORIZED, "Missing or invalid UI token")
 
 
-class HostHeaderMiddleware(BaseHTTPMiddleware):
+class HostHeaderMiddleware:
     """Rejects requests whose ``Host`` header is not this server's identity.
 
-    This is the DNS-rebinding defence. An attacker page on
-    ``http://evil.test`` whose DNS flips to 127.0.0.1 reaches this server
-    with ``Host: evil.test``; the browser considers it same-origin (so
-    neither CORS nor the Origin check fires), but the Host header still
-    carries the attacker's name and is rejected here.
-
-    Applied to *every* route including static assets and ``/api/health``,
-    since rebinding does not care which path it targets.
+    同时拦截 HTTP 请求与 WebSocket 握手，防止通过 DNS 重绑定绕过同源校验。
     """
 
     def __init__(self, app: ASGIApp) -> None:
-        super().__init__(app)
+        self.app = app
 
-    async def dispatch(self, request: Request, call_next):
-        if not is_allowed_host(request.headers.get("host")):
-            return PlainTextResponse(
-                "Host header is not allowed. Set CA_UI_ALLOWED_HOSTS if this "
-                "server is reached under a real hostname.",
-                status_code=421,  # Misdirected Request
-            )
-        return await call_next(request)
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        scope_type = scope.get("type")
+        if scope_type in ("http", "websocket"):
+            headers = Headers(scope=scope)
+            if not is_allowed_host(headers.get("host")):
+                if scope_type == "websocket":
+                    ws = WebSocket(scope, receive, send)
+                    await ws.close(
+                        code=WS_CLOSE_FORBIDDEN_ORIGIN,
+                        reason="Host not allowed",
+                    )
+                    return
+                response = PlainTextResponse(
+                    "Host header is not allowed. Set CA_UI_ALLOWED_HOSTS if this "
+                    "server is reached under a real hostname.",
+                    status_code=421,  # Misdirected Request
+                )
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
 
 
 async def verify_websocket(websocket: WebSocket) -> bool:

@@ -52,6 +52,11 @@ class HookScanner:
                         try:
                             with open(metadata_path, encoding="utf-8-sig") as f:
                                 metadata = json.load(f)
+                                if not isinstance(metadata, dict):
+                                    raise ValueError(
+                                        "metadata.json root must be a JSON object"
+                                    )
+                                metadata["_id"] = f"{category}/{item.name}"
                                 metadata["_hook_dir"] = str(item.resolve().as_posix())
                                 # Use category/name as unique identifier for overriding
                                 result[category][item.name] = metadata
@@ -92,10 +97,9 @@ def get_hooks_to_inject(
         if cat in scanned and name in scanned[cat]:
             hook_data = scanned[cat][name].copy()
             # Replace placeholder in the command
-            if "command" in hook_data and "{hook_dir}" in hook_data["command"]:
-                hook_data["command"] = hook_data["command"].replace(
-                    "{hook_dir}", hook_data["_hook_dir"]
-                )
+            cmd = hook_data.get("command")
+            if isinstance(cmd, str) and "{hook_dir}" in cmd:
+                hook_data["command"] = cmd.replace("{hook_dir}", hook_data["_hook_dir"])
             result_map[full_name] = hook_data
 
     # 1. Read from config.groups[project_type].hooks
@@ -113,20 +117,22 @@ def get_hooks_to_inject(
         for hn in extra_hooks:
             add_hook(hn)
 
-    # 4. Automatic loading: include hooks from non-standard roots (e.g., project-local hooks)
-    ca_root = CODE_ROOT
-    ca_hooks_root = (ca_root / "hooks").resolve()
-
-    for root in scanner.hooks_roots:
-        resolved_root = root.resolve()
-        if resolved_root != ca_hooks_root:
-            # This is a local hooks directory, scan and add all
-            for cat, hooks in scanned.items():
-                for name, metadata in hooks.items():
-                    hook_path = Path(metadata["_hook_dir"]).resolve()
-                    if resolved_root in hook_path.parents:
-                        full_name = f"{cat}/{name}"
-                        if full_name not in result_map:
-                            add_hook(full_name)
+    # 4. Automatic loading: only auto-load project-local `<cwd>/hooks`, never global roots
+    cwd_resolved = Path.cwd().resolve()
+    local_hooks_root = (cwd_resolved / "hooks").resolve()
+    global_hooks_root = (
+        scanner.hooks_roots[-1].resolve() if scanner.hooks_roots else None
+    )
+    if cwd_resolved != CODE_ROOT:
+        for root in scanner.hooks_roots:
+            resolved_root = root.resolve()
+            if resolved_root == local_hooks_root and resolved_root != global_hooks_root:
+                for cat, hooks in scanned.items():
+                    for name, metadata in hooks.items():
+                        hook_path = Path(metadata["_hook_dir"]).resolve()
+                        if resolved_root in hook_path.parents:
+                            full_name = f"{cat}/{name}"
+                            if full_name not in result_map:
+                                add_hook(full_name)
 
     return list(result_map.values()), scan_warnings

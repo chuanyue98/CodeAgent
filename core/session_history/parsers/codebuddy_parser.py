@@ -49,6 +49,7 @@ from core.session_history.parsers._synthetic import is_synthetic_user_content
 from core.session_history.paths import (
     _codebuddy_dir_matches,
     _encode_codebuddy_project_dir,
+    codebuddy_dir,
     codebuddy_dir_matches,
     encode_codebuddy_project_dir,
     normalize_project_path,
@@ -213,7 +214,7 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
                     elif role == "assistant" and row.get("status") == "completed":
                         text = _extract_text_content(row.get("content"), "output_text")
                         msg_model = (row.get("providerData") or {}).get("model", "")
-                        if msg_model and not model:
+                        if msg_model:
                             model = msg_model
                         if text:
                             if not started_at and ts:
@@ -294,8 +295,10 @@ def parse_codebuddy_session(file_path: Path) -> UnifiedSession | None:
         return None
 
     # Prefer the cwd recorded in the JSONL; fall back to the encoded dir name.
+    # subagents/ 目录名不是项目目录名，避免污染子代理的 project_path。
     project_dir = file_path.parent.name
-    project_path = cwd or project_dir
+    in_subagents = "subagents" in file_path.parent.parts
+    project_path = cwd or ("" if in_subagents else project_dir)
 
     return UnifiedSession(
         session_id=session_id,
@@ -355,7 +358,7 @@ def find_codebuddy_sessions(
         list[UnifiedSession]: All sessions found, sorted by start time
         descending.
     """
-    base = (home or Path.home()) / ".codebuddy" / "projects"
+    base = codebuddy_dir(home) / "projects"
     if not base.exists():
         return []
 
@@ -388,11 +391,26 @@ def find_codebuddy_sessions(
                 session.parent_session_id = parent_session_id
                 # When the session's own cwd resolves to the target, surface
                 # the canonical (user-supplied) spelling so the UI is stable.
-                if normalized_target is not None and normalize_project_path(
-                    session.project_path or ""
-                ) == normalize_project_path(normalized_target):
+                if normalized_target is not None and (
+                    not session.project_path
+                    or normalize_project_path(session.project_path)
+                    == normalize_project_path(normalized_target)
+                ):
                     session.project_path = normalized_target
                 sessions.append(session)
+
+    # 子代理无 cwd 时从父会话继承 project_path（支持多层嵌套）。
+    by_id = {s.session_id: s for s in sessions}
+    for _ in range(5):
+        changed = False
+        for session in sessions:
+            if not session.project_path and session.parent_session_id:
+                parent = by_id.get(session.parent_session_id)
+                if parent and parent.project_path:
+                    session.project_path = parent.project_path
+                    changed = True
+        if not changed:
+            break
 
     title_subagent_runs(sessions)
     sessions.sort(key=lambda s: s.started_at, reverse=True)

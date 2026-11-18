@@ -27,6 +27,7 @@ from pathlib import Path
 
 from core.logging_config import get_logger
 from core.utils.atomic_write import atomic_write
+from core.utils.long_paths import long_path
 
 logger = get_logger(__name__)
 
@@ -45,7 +46,8 @@ def looks_crash_damaged(raw: bytes) -> bool:
 
 def _read_bytes(path: Path) -> bytes | None:
     try:
-        return path.read_bytes()
+        with open(long_path(path), "rb") as f:
+            return f.read()
     except FileNotFoundError:
         return None
 
@@ -68,7 +70,7 @@ def keep_last_good(path: Path, parse: Callable[[str], object]) -> None:
     except Exception:
         bad = path.with_name(f"{path.name}{BAD_COPY_INFIX}{time.time_ns()}")
         try:
-            shutil.copyfile(path, bad)
+            shutil.copyfile(long_path(path), long_path(bad))
             logger.warning("%s 读不懂，覆盖前另存为 %s", path, bad)
         except OSError as exc:
             logger.warning("%s 读不懂，另存失败: %s", path, exc)
@@ -112,6 +114,6 @@ def read_with_fallback[T](
 
 def remove_last_good(path: Path) -> None:
     try:
-        os.unlink(last_good_path(path))
+        os.unlink(long_path(last_good_path(path)))
     except FileNotFoundError:
         pass

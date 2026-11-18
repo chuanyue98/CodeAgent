@@ -64,7 +64,7 @@ def resources_list(ctx, kind, group):  # type: ignore[no-untyped-def]
             resolve_resource_path("hooks", "CA_HOOKS_ROOT"),
             get_default_config_path(ctx.obj["root"]),
         )
-        for item in hook_service.get_detailed_hooks():
+        for item in hook_service.get_detailed_hooks(group=group):
             rows.append(
                 (item["id"], item["description"] or item["event"], item["isActive"])
             )

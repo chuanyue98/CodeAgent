@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import request from '../utils/request';
 import { queryClient as defaultQueryClient } from '../utils/queryClient';
@@ -23,14 +24,23 @@ function useResourceData<T>(endpoint: string): ResourceDataResult<T> {
     defaultQueryClient,
   );
 
-  return {
-    data: data ?? null,
-    loading: isLoading,
-    error: isError ? (error instanceof Error ? error.message : 'Failed to fetch data') : null,
-    refetch: () => {
-      void refetch();
-    },
-  };
+  const stableRefetch = useCallback(() => {
+    void refetch();
+  }, [refetch]);
+
+  const errorMessage = isError
+    ? (error instanceof Error ? error.message : 'Failed to fetch data')
+    : null;
+
+  return useMemo(
+    () => ({
+      data: data ?? null,
+      loading: isLoading,
+      error: errorMessage,
+      refetch: stableRefetch,
+    }),
+    [data, isLoading, errorMessage, stableRefetch],
+  );
 }
 
 export default useResourceData;

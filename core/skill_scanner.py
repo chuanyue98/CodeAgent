@@ -65,7 +65,7 @@ class SkillScanner:
 
 def get_skills_to_mount(
     config: dict,
-    scanner: SkillScanner,
+    scanner: SkillScanner | None = None,
     project_type: str = "common",
     extra_skills: list[str] | None = None,
 ) -> list[str]:
@@ -73,13 +73,14 @@ def get_skills_to_mount(
 
     Args:
         config: The application configuration dictionary.
-        scanner: An instance of SkillScanner.
+        scanner: Unused legacy parameter kept for signature compatibility.
         project_type: The type of project (e.g., 'common', 'web').
         extra_skills: Additional skills to mount.
 
     Returns:
         A list of unique skill identifiers to mount.
     """
+    del scanner
     result: list[str] = []
 
     def _add(items):
@@ -100,12 +101,17 @@ def get_skills_to_mount(
         _add(extra_skills)
 
     # 4. Automatically load skills from the local 'skills/' subdirectory
-    cwd = Path.cwd()
+    cwd = Path.cwd().resolve()
     if cwd != CODE_ROOT:
         local_skills = cwd / "skills"
-        if local_skills.exists():
+        if local_skills.is_dir():
             for item in local_skills.iterdir():
-                if item.is_dir():
+                if not item.is_dir():
+                    continue
+                if (item / "SKILL.md").is_file() or any(
+                    sub.is_dir() and (sub / "SKILL.md").is_file()
+                    for sub in item.iterdir()
+                ):
                     _add([item.name])
 
     return result

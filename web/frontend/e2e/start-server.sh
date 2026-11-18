@@ -8,14 +8,14 @@ set -euo pipefail
 # session-history parsers read $HOME directly, so $HOME itself is
 # redirected to a scratch dir alongside the app's own CA_*_ROOT vars.
 #
-# Required before running: `npm run build` in web/frontend (produces dist/).
+# Required before running: `bun run build` in web/frontend (produces dist/).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND_DIR="$(dirname "$SCRIPT_DIR")"
 REPO_ROOT="$(dirname "$(dirname "$FRONTEND_DIR")")"
 
 if [ ! -f "$FRONTEND_DIR/dist/index.html" ]; then
-  echo "❌ web/frontend/dist not found — run 'npm run build' in web/frontend first." >&2
+  echo "❌ web/frontend/dist not found — run 'bun run build' in web/frontend first." >&2
   exit 1
 fi
 
@@ -53,6 +53,7 @@ if command -v cygpath >/dev/null 2>&1; then
   export HOMEPATH="${USERPROFILE#*:}"
 fi
 
+export CA_DATA_DIR="$SCRATCH/data"
 export CA_CONFIG_PATH="$SCRATCH/config.json"
 export CA_TASKS_ROOT="$SCRATCH/tasks"
 export CA_SKILLS_ROOT="$SCRATCH/skills"
@@ -76,7 +77,7 @@ export CA_AGENT_GATEWAY_FAKE=1
 export CA_UI_TOKEN="codeagent-e2e-token"
 export CA_AGENT_DB="$SCRATCH/agent-gateway.sqlite3"
 
-mkdir -p "$CA_TASKS_ROOT" "$CA_SKILLS_ROOT" "$CA_PROMPTS_ROOT" "$CA_HOOKS_ROOT" "$CA_PLUGINS_ROOT"
+mkdir -p "$CA_DATA_DIR" "$CA_TASKS_ROOT" "$CA_SKILLS_ROOT" "$CA_PROMPTS_ROOT" "$CA_HOOKS_ROOT" "$CA_PLUGINS_ROOT"
 cp "$SCRIPT_DIR"/fixtures/tasks/*.md "$CA_TASKS_ROOT"/
 cp -r "$SCRIPT_DIR"/fixtures/skills/* "$CA_SKILLS_ROOT"/
 cp -r "$SCRIPT_DIR"/fixtures/hooks/* "$CA_HOOKS_ROOT"/

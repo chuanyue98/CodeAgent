@@ -10,6 +10,64 @@ from core.web.routers import logs as logs_router
 from core.web.server import app
 
 
+def test_cursor_keeps_partial_utf8_for_next_read(tmp_path):
+    path = tmp_path / "log"
+    raw = "中".encode()
+    path.write_bytes(b"first\n" + raw[:2])
+    text, cursor, _ = logs_router._read_chunk(path, None)
+    assert text == "first\n"
+    with path.open("ab") as stream:
+        stream.write(raw[2:] + b"tail")
+    text, next_cursor, reset = logs_router._read_chunk(path, cursor)
+    assert text == "中tail"
+    assert not reset
+    assert logs_router._read_chunk(path, next_cursor)[0] == ""
+
+
+def test_cursor_detects_truncation_and_replacement(tmp_path):
+    path = tmp_path / "log"
+    path.write_bytes(b"original long output")
+    _, cursor, _ = logs_router._read_chunk(path, None)
+    path.write_bytes(b"new")
+    text, cursor, reset = logs_router._read_chunk(path, cursor)
+    assert reset and text == "new"
+    replacement = tmp_path / "replacement"
+    replacement.write_bytes(b"other file")
+    replacement.replace(path)
+    text, _, reset = logs_router._read_chunk(path, cursor)
+    assert reset and text == "other file"
+
+
+@pytest.mark.asyncio
+async def test_snapshot_cursor_covers_gap_and_reconnect(logs_dir, monkeypatch):
+    import json
+
+    from starlette.requests import Request
+
+    path = logs_dir / "task-1.log"
+    path.write_bytes(b"snapshot\n")
+    snapshot = await logs_router.get_log_file("task-1")
+    with path.open("ab") as stream:
+        stream.write(b"between snapshot and stream\n")
+    response = await logs_router.stream_log_file("task-1", cursor=snapshot["cursor"])
+    iterator = response.body_iterator
+    chunk = await anext(iterator)
+    assert "between snapshot and stream" in chunk
+    data = json.loads(str(chunk).split("data: ", 1)[1])
+    await iterator.aclose()
+    with path.open("ab") as stream:
+        stream.write(b"while disconnected\n")
+    request = Request(
+        {"type": "http", "headers": [(b"last-event-id", data["cursor"].encode())]}
+    )
+    monkeypatch.setattr(logs_router._runner, "get_run", lambda _: _run("completed"))
+    response = await logs_router.stream_log_file("task-1", request, snapshot["cursor"])
+    chunks = [str(chunk) async for chunk in response.body_iterator]
+    assert "while disconnected" in chunks[0]
+    assert "between snapshot" not in "".join(chunks)
+    assert "event: done" in chunks[-1]
+
+
 @pytest.fixture
 def logs_dir(tmp_path, monkeypatch):
     directory = tmp_path / ".ca_task_logs"
@@ -61,10 +119,9 @@ async def test_get_log_file_returns_content(logs_dir):
         response = await ac.get("/api/logs/task-1")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "taskId": "task-1",
-        "content": "line one\nline two\n",
-    }
+    assert response.json()["taskId"] == "task-1"
+    assert response.json()["content"] == "line one\nline two\n"
+    assert response.json()["cursor"]
 
 
 @pytest.mark.asyncio
@@ -135,7 +192,6 @@ async def test_stream_log_file_emits_error_and_stops_when_file_is_removed(logs_d
     body_iterator = response.body_iterator
 
     pending = asyncio.ensure_future(anext(body_iterator))
-    await asyncio.sleep(0)  # let it capture last_size successfully first
     path.unlink()
 
     chunk = await asyncio.wait_for(pending, timeout=2)

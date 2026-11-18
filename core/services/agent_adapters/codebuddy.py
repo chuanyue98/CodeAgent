@@ -20,7 +20,9 @@ import shutil
 from typing import Any
 from uuid import uuid4
 
+from core.host_env import child_environ
 from core.logging_config import get_logger
+from core.services.agent_adapters._event_queue import drain_events
 from core.services.agent_adapters._jsonrpc_transport import JsonRpcStdioTransport
 from core.services.agent_adapters._process_lifecycle import graceful_terminate
 from core.services.agent_adapters._rpc_adapter_base import RpcAdapterBase
@@ -28,6 +30,7 @@ from core.services.agent_protocol import (
     AdapterEvent,
     ApprovalDecision,
     CreateSessionOptions,
+    PermissionMode,
     ProviderCapabilities,
     ProviderSession,
     ResumeOptions,
@@ -64,6 +67,7 @@ class CodeBuddyAdapter(RpcAdapterBase):
         self._turn_tasks: dict[str, asyncio.Task] = {}
         self._active_turns: dict[str, str] = {}
         self._message_text: dict[tuple[str, str], str] = {}
+        self._session_modes: dict[str, PermissionMode] = {}
         self._unavailable_reason: str | None = None
         self._stopping = False
 
@@ -77,6 +81,7 @@ class CodeBuddyAdapter(RpcAdapterBase):
             )
             raise RuntimeError(self._unavailable_reason)
         self._stopping = False
+        drain_events(self._events)
         try:
             # On Windows the resolved executable is a ``.cmd`` shim that
             # asyncio cannot exec directly; route it through ``cmd /c``.
@@ -89,6 +94,8 @@ class CodeBuddyAdapter(RpcAdapterBase):
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=child_environ(),
+                limit=16 * 1024 * 1024,
             )
             self._transport.attach(
                 self._process,
@@ -133,6 +140,8 @@ class CodeBuddyAdapter(RpcAdapterBase):
         self._pending_approvals.clear()
         self._active_turns.clear()
         self._message_text.clear()
+        self._session_modes.clear()
+        self._put_sentinel()
 
     async def capabilities(self) -> ProviderCapabilities:
         running = self._process is not None and self._process.returncode is None
@@ -194,6 +203,7 @@ class CodeBuddyAdapter(RpcAdapterBase):
         # permission modes as runtime ``config_option_update`` notifications.
         # We best-effort the model selection and never require a mode, so an
         # unusual response shape can't break session creation.
+        self._session_modes[session_id] = options.permission_mode
         current_model = (result.get("models") or {}).get("currentModelId")
         if options.model and options.model != current_model:
             try:
@@ -290,6 +300,8 @@ class CodeBuddyAdapter(RpcAdapterBase):
                 )
             )
         finally:
+            if self._turn_tasks.get(provider_session_id) is asyncio.current_task():
+                self._turn_tasks.pop(provider_session_id, None)
             self._active_turns.pop(provider_session_id, None)
             self._message_text.pop((provider_session_id, turn_id), None)
 
@@ -399,11 +411,42 @@ class CodeBuddyAdapter(RpcAdapterBase):
             approval_id = f"codebuddy:{request_id}"
             options = params.get("options") or []
             session_id = params.get("sessionId", "")
+            tool_call = params.get("toolCall") or {}
+            # 只读模式下自动拒绝写/执行类权限请求，避免触发交互审批或越权修改。
+            if self._session_modes.get(
+                session_id
+            ) == PermissionMode.READ_ONLY and tool_call.get("kind") not in {
+                "read",
+                "search",
+                "think",
+            }:
+                reject_opt = next(
+                    (
+                        option
+                        for option in options
+                        if isinstance(option, dict)
+                        and option.get("kind") in {"reject_once", "reject_always"}
+                        and option.get("optionId") is not None
+                    ),
+                    None,
+                )
+                outcome = (
+                    {"outcome": "selected", "optionId": reject_opt["optionId"]}
+                    if reject_opt is not None
+                    else {"outcome": "cancelled"}
+                )
+                await self._write(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "result": {"outcome": outcome},
+                    }
+                )
+                return
             self._pending_approvals[approval_id] = (request_id, options, session_id)
             self._approval_timeouts[approval_id] = asyncio.create_task(
                 self._timeout_approval(approval_id)
             )
-            tool_call = params.get("toolCall") or {}
             raw_input = tool_call.get("rawInput")
             command = raw_input.get("command") if isinstance(raw_input, dict) else None
             self._put_event(

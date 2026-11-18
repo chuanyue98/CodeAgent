@@ -21,8 +21,7 @@ export function relativeTime(value: string | null | undefined, language: Languag
 
 export function formatWorkspaceLabel(path: string, group?: string): string {
   if (!path) return '';
-  const trimmed = path.replace(/[/\\]+$/, '');
-  const basename = trimmed.split(/[/\\]/).pop() || path;
+  const basename = workspaceLabel(path);
   if (group && group !== 'common') {
     return `${basename} (${group})`;
   }

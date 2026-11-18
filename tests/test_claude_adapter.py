@@ -162,14 +162,13 @@ async def test_claude_put_event_drops_oldest_under_backpressure():
     adapter._put_event(AdapterEvent(type="a", provider_session_id="s"))
     adapter._put_event(AdapterEvent(type="b", provider_session_id="s"))
     # Queue is now full (size 2); this third put must drop "a" rather than
-    # block, and leave a backpressure error behind for the consumer.
+    # block, while preserving "b" and the newest event "c".
     adapter._put_event(AdapterEvent(type="c", provider_session_id="s"))
 
     first = await asyncio.wait_for(adapter._events.get(), timeout=1)
     second = await asyncio.wait_for(adapter._events.get(), timeout=1)
     assert first.type == "b"
-    assert second.type == "error"
-    assert second.data["code"] == "provider_backpressure"
+    assert second.type == "c"
     assert adapter._events.empty()
 
 

@@ -22,21 +22,24 @@ def validate_skill(skill_path):
     """Basic validation of a skill"""
     skill_path = Path(skill_path)
 
+    if not skill_path.is_dir():
+        return False, f"技能目录不存在或不是目录: {skill_path}"
+
     # Check SKILL.md exists
     skill_md = skill_path / "SKILL.md"
-    if not skill_md.exists():
+    if not skill_md.is_file():
         return False, "未找到 SKILL.md"
 
     # Read and validate frontmatter. SKILL.md is UTF-8 (every one in this repo
     # contains Chinese); without an explicit encoding read_text() falls back to
     # the platform default -- cp936 on a Chinese Windows install -- and dies on
     # a UnicodeDecodeError before validating anything.
-    content = skill_md.read_text(encoding="utf-8")
+    content = skill_md.read_text(encoding="utf-8", errors="replace")
     if not content.startswith("---"):
         return False, "未找到 YAML frontmatter"
 
     # Extract frontmatter
-    match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
+    match = re.match(r"^---[ \t]*\n(.*?)\n---(?=[ \t]*(?:\n|\Z))", content, re.DOTALL)
     if not match:
         return False, "Frontmatter 格式无效"
 
@@ -72,15 +75,16 @@ def validate_skill(skill_path):
     if not isinstance(name, str):
         return False, f"Name 必须是字符串，实际为 {type(name).__name__}"
     name = name.strip()
-    if name:
-        # Check naming convention (hyphen-case: lowercase with hyphens)
-        if not re.match(r"^[a-z0-9-]+$", name):
-            return False, f"名称 '{name}' 应为连字符命名法（仅小写字母、数字和连字符）"
-        if name.startswith("-") or name.endswith("-") or "--" in name:
-            return False, f"名称 '{name}' 不能以连字符开头/结尾或包含连续的连字符"
-        # Check name length (max 64 characters per spec)
-        if len(name) > 64:
-            return False, f"名称太长 ({len(name)} 个字符)。最大为 64 个字符。"
+    if not name:
+        return False, "Frontmatter 中的 'name' 不能为空"
+    # Check naming convention (hyphen-case: lowercase with hyphens)
+    if not re.match(r"^[a-z0-9-]+$", name):
+        return False, f"名称 '{name}' 应为连字符命名法（仅小写字母、数字和连字符）"
+    if name.startswith("-") or name.endswith("-") or "--" in name:
+        return False, f"名称 '{name}' 不能以连字符开头/结尾或包含连续的连字符"
+    # Check name length (max 64 characters per spec)
+    if len(name) > 64:
+        return False, f"名称太长 ({len(name)} 个字符)。最大为 64 个字符。"
 
     # Extract and validate description
     description = frontmatter.get("description", "")
@@ -89,7 +93,13 @@ def validate_skill(skill_path):
     # scaffolded skill failed with "Description 必须是字符串，实际为 list" --
     # that reads as a broken validator rather than "you haven't filled in the
     # template yet". Failing here is still correct; only the wording changes.
-    if "TODO" in str(description):
+    if (
+        isinstance(description, list)
+        and any("TODO" in str(item) for item in description)
+    ) or (
+        isinstance(description, str)
+        and ("[TODO:" in description or description.lstrip().startswith("TODO"))
+    ):
         return False, (
             "Description 仍是 init_skill.py 生成的 TODO 占位符。"
             "请替换为真实描述：说明该技能做什么，以及何时应该触发它。"
@@ -97,20 +107,21 @@ def validate_skill(skill_path):
     if not isinstance(description, str):
         return False, f"Description 必须是字符串，实际为 {type(description).__name__}"
     description = description.strip()
-    if description:
-        # Check for angle brackets
-        if "<" in description or ">" in description:
-            return False, "描述不能包含尖括号 (< 或 >)"
-        # Check description length (max 1024 characters per spec)
-        if len(description) > 1024:
-            return False, f"描述太长 ({len(description)} 个字符)。最大为 1024 个字符。"
+    if not description:
+        return False, "Frontmatter 中的 'description' 不能为空"
+    # Check for angle brackets
+    if "<" in description or ">" in description:
+        return False, "描述不能包含尖括号 (< 或 >)"
+    # Check description length (max 1024 characters per spec)
+    if len(description) > 1024:
+        return False, f"描述太长 ({len(description)} 个字符)。最大为 1024 个字符。"
 
     return True, "技能有效！"
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("用法: python quick_validate.py <skill_directory>")
+        print("用法: uv run python quick_validate.py <skill_directory>")
         sys.exit(1)
 
     valid, message = validate_skill(sys.argv[1])

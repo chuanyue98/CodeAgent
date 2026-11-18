@@ -2,41 +2,31 @@
 
 from __future__ import annotations
 
-import json
 import os
-from collections.abc import Iterable
 from pathlib import Path
 
-from core.resource_locator import get_bundled_resource_root, get_default_config_path
+from core.resource_locator import (
+    CODE_ROOT,
+    get_bundled_resource_root,
+    get_default_config_path,
+    resolve_resource_root_from_config,
+)
+from core.services.config_service import ConfigService
 
 TASKS_DIR = "tasks"
 TASK_FILE_SUFFIX = ".md"
-GENERAL_PROMPT_RELATIVE_PATH = "prompt/general.basic.md"
-
-_ADDITIONAL_TEMPLATE_SEARCH_PATHS: list[str] = []
-
-
-def get_general_prompt_path() -> Path:
-    """Returns the absolute path to the general.md prompt file.
-
-    Returns:
-        The Path object pointing to the general prompt file.
-    """
-
-    script_dir = Path(__file__).resolve().parent.parent
-    return script_dir / GENERAL_PROMPT_RELATIVE_PATH
 
 
 def get_tasks_dir(directory: str | Path = TASKS_DIR) -> Path:
-    """Returns the absolute path to the tasks directory.
+    """返回任务目录的绝对路径。
 
     Args:
-        directory: The relative or absolute path to the tasks directory. Defaults to TASKS_DIR.
+        directory: 任务目录的相对或绝对路径，默认为 TASKS_DIR。
 
     Returns:
-        The absolute Path object for the tasks directory.
+        任务目录对应的绝对 Path 对象。
     """
-    dir_path = Path(directory)
+    dir_path = Path(directory).expanduser()
 
     if dir_path.is_absolute():
         return dir_path
@@ -46,44 +36,13 @@ def get_tasks_dir(directory: str | Path = TASKS_DIR) -> Path:
         if env_root:
             return Path(env_root).expanduser().resolve()
 
-        codeagent_root = Path(__file__).resolve().parent.parent.parent
-        config_path = get_default_config_path(codeagent_root)
-        try:
-            config = json.loads(config_path.read_text(encoding="utf-8-sig"))
-            if not isinstance(config, dict):
-                raise TypeError("config.json must contain a JSON object")
-            resource_root = config.get("paths", {}).get("resource_root")
-            if resource_root:
-                expanded = str(resource_root).replace(
-                    "$CODEAGENT", codeagent_root.as_posix()
-                )
-                resolved_root = Path(expanded).expanduser()
-                if not resolved_root.is_absolute():
-                    resolved_root = codeagent_root / resolved_root
+        config_path = get_default_config_path(CODE_ROOT)
+        config, _ = ConfigService(config_path).get_config()
+        if isinstance(config, dict) and isinstance(config.get("paths"), dict):
+            resolved_root = resolve_resource_root_from_config(config, CODE_ROOT)
+            if resolved_root is not None:
                 return (resolved_root / TASKS_DIR).resolve()
-        except (OSError, json.JSONDecodeError, TypeError, AttributeError):
-            pass
 
-        return get_bundled_resource_root(codeagent_root) / TASKS_DIR
+        return get_bundled_resource_root(CODE_ROOT) / TASKS_DIR
 
     return (Path.cwd() / dir_path).resolve()
-
-
-def set_additional_template_search_paths(paths: Iterable[str | Path]) -> None:
-    """Configures additional search paths for task template rendering.
-
-    Args:
-        paths: An iterable of paths to add to the template search list.
-    """
-
-    resolved_paths: list[str] = []
-
-    for raw_path in paths:
-        path_obj = Path(raw_path).expanduser()
-        if not path_obj.is_absolute():
-            path_obj = Path(__file__).resolve().parent.parent / path_obj
-        resolved_paths.append(str(path_obj))
-
-    # Use dict.fromkeys to maintain original order and remove duplicates
-    unique_paths = list(dict.fromkeys(resolved_paths))
-    _ADDITIONAL_TEMPLATE_SEARCH_PATHS[:] = unique_paths

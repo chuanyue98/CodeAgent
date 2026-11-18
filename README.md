@@ -8,7 +8,7 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 
 - **Multi-Engine Support** — Seamlessly switch between Claude, OpenCode, Codex, CodeBuddy, and Google Antigravity without changing your workflow
 - **Prompt Sovereignty** — Your engineering rules live in your repo as Plain Markdown. No hidden system prompts
-- **Cross-Engine Delegation & MCP** — Built-in FastMCP server turns CodeAgent into a multi-engine hub where models dynamically delegate subtasks and hand off sessions
+- **Built-in MCP Server** — Exposes CodeAgent skills, tasks, and cross-engine delegation over FastMCP (stdio and HTTP)
 - **Modular Skills System** — Atomic, reusable automation capabilities with instruction files and executable scripts
 - **Lifecycle Hooks** — Execute custom commands on the `before_tool` / `after_tool` events (e.g. branch protection, CI monitoring, pre-commit linting)
 - **Plugin Architecture** — Bundle skills, prompts, and hooks into domain-specific capability packages
@@ -33,8 +33,8 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
 │ Engines  │  Core    │ Prompts  │  Skills  │  Hooks/Plugins  │
 │──────────│──────────│──────────│──────────│─────────────────│
 │ opencode │ Services │  base/   │  base/   │  lifecycle      │
-│ claude   │ Scanners │ coding/  │ custom/  │  triggers       │
-│ codex    │ Analytics│ eng/     │          │  bundles        │
+│ claude   │ Scanners │  custom/ │  custom/ │  triggers       │
+│ codex    │ Analytics│          │          │  bundles        │
 │codebuddy │ Web API  │          │          │                 │
 │antigrav. │          │          │          │                 │
 ├──────────┴──────────┴──────────┴──────────┴─────────────────┤
@@ -51,9 +51,7 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
    - `ca antigravity` (or `ca agy`): Google Next-Gen Agent CLI driver
 
 2. **Prompts** — Your modular engineering "Soul" (`prompt/`)
-   - `base/`: Core philosophy, language rules, and values
-   - `coding/`: Language-specific and general coding standards
-   - `engineering/`: Workflow enhancements (Git, PR, File Safety)
+   - `base/`: Core philosophy, language rules, and values (plus custom prompt groups you add under `prompt/`)
 
 3. **Skills** — Atomic, reusable automation capabilities (`skills/`)
    - Each skill contains its own `SKILL.md` (instruction) and `scripts/` (execution)
@@ -80,7 +78,7 @@ CodeAgent is a professional, CLI-first AI orchestration framework. It acts as an
   dependency manager — do not use `pip`/`venv`/`conda`; see AGENTS.md).
 - **At least one provider CLI, already installed and signed in.** CodeAgent drives the
   official CLIs — it does not talk to any API itself, and does not store your keys.
-  Any one of `claude`, `opencode`, `codex`, or `codebuddy` is enough to start.
+  Any one of `claude`, `opencode`, `codex`, `codebuddy`, or `antigravity` (`agy`) is enough to start.
 - [Optional] `bun` or `npm`, only if you want the Web UI.
 
 ### Installation
@@ -129,9 +127,9 @@ ca codebuddy             # CodeBuddy Code
 ca agy                   # Google Antigravity (alias: antigravity)
 
 # Execute a task directly
-python ca_launcher.py opencode "Refactor this module"
-python ca_launcher.py claude -t refactor    # Run pre-defined task
-python ca_launcher.py antigravity -t code_review
+uv run python ca_launcher.py opencode "Refactor this module"
+uv run python ca_launcher.py claude -t refactor    # Run pre-defined task
+uv run python ca_launcher.py antigravity -t code_review
 
 # Engine flags pass straight through, so resuming works as usual
 ca claude -r
@@ -146,7 +144,7 @@ itself. Skills, plugins and hooks are linked in at launch from the current proje
 resource group, so editing them takes effect on the next run. Several sessions can run in
 the same project at once; the links are removed when the last of them exits.
 
-The `ca` command is also registered as a console script after `pip install -e .`:
+`uv sync` registers the `ca` console script in the project environment (also runnable via `uv run ca`):
 
 ```bash
 ca              # Open interactive launcher console (or ca menu)
@@ -242,14 +240,14 @@ ca new my-automation-task
 ca new my-automation-task --engine claude
 
 # Run a pre-defined task
-python ca_launcher.py opencode -t refactor
+uv run python ca_launcher.py opencode -t refactor
 ```
 
 ### Health Check
 
 ```bash
-python ca_launcher.py doctor        # Check environment
-python ca_launcher.py doctor --fix  # Auto-repair issues
+uv run python ca_launcher.py doctor        # Check environment
+uv run python ca_launcher.py doctor --fix  # Auto-repair issues
 ```
 
 ### Discover Resources
@@ -290,7 +288,7 @@ CodeAgent uses a `config.json` for project-specific settings. It is gitignored;
 ```json
 {
   "default_mode": "local",
-  "default_engine": "opencode",
+  "default_group": "common",
   "language": "auto",
   "groups": {
     "codeagent": {
@@ -313,9 +311,10 @@ CodeAgent uses a `config.json` for project-specific settings. It is gitignored;
 | Field | Description |
 |-------|-------------|
 | `default_mode` | Execution mode (`local`, `remote`) |
+| `default_group` | Fallback resource group for unregistered projects (default: `"common"`) |
 | `language` | CLI language (`auto`, `en`, `zh`) |
 | `groups` | Named configurations mapping skills, prompts, hooks, and plugins |
-| `project_registry` | Maps project paths to configuration groups |
+| `project_registry` | Maps project paths to configuration groups (managed via `ca project add/remove/list`) |
 | `proxy` | Proxy addresses, used only when you pass `--proxy` |
 | `schedules` | Cron-style scheduled task definitions |
 
@@ -325,8 +324,9 @@ See [config.example.json](config.example.json) for a complete example.
 
 ```text
 .
-├── ca_launcher.py         # CLI entry point
-├── config.json            # Project configuration
+├── ca_launcher.py         # CLI entry point (shim to core.cli)
+├── config.example.json    # Tracked template used to seed config.json
+├── config.json            # Local configuration (gitignored)
 ├── core/                  # Framework logic
 │   ├── analytics/         # Usage tracking & cost estimation
 │   ├── services/          # Orchestration services (gateway, runner, scheduler, MCP)
@@ -339,14 +339,16 @@ See [config.example.json](config.example.json) for a complete example.
 ├── engines/               # LLM Adapters
 │   ├── start_claude_code.py
 │   ├── start_opencode.py
-│   └── start_codex.py
+│   ├── start_codex.py
+│   ├── start_codebuddy.py
+│   └── start_antigravity.py
 ├── prompt/                # Modular standard groups (The Soul)
 ├── skills/                # Atomic automation capabilities (The Tools)
 ├── hooks/                 # Lifecycle event triggers
 ├── plugins/               # Domain capability bundles
 ├── tasks/                 # Pre-defined execution blueprints
 ├── web/                   # React/Vite frontend for Analytics UI
-└── tests/                 # Quality guardrails (80+ test files)
+└── tests/                 # Quality guardrails (110+ test files)
 ```
 
 ## Development
@@ -356,27 +358,27 @@ See [config.example.json](config.example.json) for a complete example.
 ```bash
 # Install with dev dependencies
 uv sync --group dev
-# or: pip install -e ".[dev]"
 
 # Install pre-commit hooks
-pre-commit install
+uv run pre-commit install
 ```
 
 ### Code Quality
 
 ```bash
-# Linting
-ruff check .
+# Linting & formatting
+uv run ruff check .
+uv run ruff format --check .
 
 # Type checking (the two skill script trees intentionally contain duplicate
 # module names, so type-check the application packages explicitly)
-mypy core engines ca_launcher.py
+uv run mypy core engines ca_launcher.py
 
 # Tests
-pytest
+uv run pytest
 
-# Coverage
-pytest --cov=core --cov-report=term-missing
+# Coverage (source configured in pyproject.toml: core, engines, ca_launcher.py)
+uv run pytest --cov --cov-report=term-missing
 ```
 
 ### Frontend Development

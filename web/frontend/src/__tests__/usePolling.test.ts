@@ -16,6 +16,21 @@ afterEach(() => {
 });
 
 describe('usePolling', () => {
+  test('切回标签页时等待进行中的请求，不重复启动轮询', async () => {
+    vi.useFakeTimers();
+    const fn = vi.fn(() => new Promise(resolve => setTimeout(resolve, 500)));
+    const { unmount } = renderHook(() => usePolling(fn, 1000));
+    setVisibility('hidden');
+    setVisibility('visible');
+    setVisibility('visible');
+    expect(fn).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(fn).toHaveBeenCalledTimes(2);
+    unmount();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
   test('chains async ticks instead of stacking intervals', async () => {
     vi.useFakeTimers();
     let inFlight = 0;

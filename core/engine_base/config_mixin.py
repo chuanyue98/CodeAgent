@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -11,14 +10,13 @@ if TYPE_CHECKING:
     from core.config_manager import ConfigManager
     from core.hook_scanner import HookScanner
     from core.plugin_scanner import PluginScanner
-    from core.prompt_scanner import PromptScanner
     from core.skill_scanner import SkillScanner
 
 logger = get_logger(__name__)
 
 
 class _ConfigMixin:
-    """Project-group/config resolution and resource discovery (skills, plugins, prompts, hooks)."""
+    """Project-group/config resolution and resource discovery (skills, plugins, hooks)."""
 
     # Provided by BaseEngine.__init__ -- declared here so mypy knows these
     # exist without this mixin owning their construction.
@@ -27,72 +25,7 @@ class _ConfigMixin:
         full_config: dict
         skill_scanner: "SkillScanner"
         plugin_scanner: "PluginScanner"
-        prompt_scanner: "PromptScanner"
         hook_scanner: "HookScanner"
-
-    def _resolve_resource_root(self) -> Path:
-        return self.config_manager.resolve_resource_root()
-
-    def _load_full_config(self) -> dict:
-        return self.config_manager.full_config
-
-    def _resolve_config_groups(self, section_name: str) -> list[str]:
-        cfg = self.full_config.get(section_name, {})
-        groups = cfg.get("groups", {})
-        mappings = cfg.get("project_mapping", [])
-        default_group = cfg.get("default_group", "common")
-
-        cwd_str = str(Path.cwd().as_posix())
-        selected_group_name = default_group
-
-        for mapping in mappings:
-            pattern = mapping.get("pattern")
-            if pattern:
-                if re.search(pattern, cwd_str, re.IGNORECASE):
-                    selected_group_name = mapping.get("group")
-                    break
-
-        if section_name == "prompts":
-            logger.info("Prompts matched group: [%s]", selected_group_name)
-
-        def resolve(name, visited=None):
-            if visited is None:
-                visited = set()
-            if name in visited:
-                return []
-
-            visited.add(name)
-
-            result = []
-            if name in groups:
-                for item in groups.get(name, []):
-                    result.extend(resolve(item, visited))
-            else:
-                result.append(name)
-            return result
-
-        return list(dict.fromkeys(resolve(selected_group_name)))
-
-    def _get_mapped_config_value(
-        self,
-        section_name: str,
-        mapping_key: str,
-        value_key: str,
-    ) -> str | None:
-        cfg = self.full_config.get(section_name, {})
-        mappings = cfg.get(mapping_key, [])
-        cwd_str = str(Path.cwd().as_posix())
-
-        for mapping in mappings:
-            pattern = mapping.get("pattern")
-            if pattern and re.search(pattern, cwd_str, re.IGNORECASE):
-                value = mapping.get(value_key)
-                if isinstance(value, str) and value.strip():
-                    return value.strip()
-        return None
-
-    def _resolve_path_token(self, raw_path: str) -> Path:
-        return self.config_manager.resolve_path_token(raw_path)
 
     def _get_skill_search_roots(self) -> list[Path]:
         resource_root = self.config_manager.resolve_resource_root()

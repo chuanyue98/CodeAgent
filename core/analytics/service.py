@@ -58,7 +58,7 @@ def _collect_all() -> list[RawUsageEntry]:
         history = kept
         save_history(history)
 
-    last_ts = get_last_timestamps()
+    last_ts = get_last_timestamps(history)
 
     # A record a collector has only just learned to read is usually older than
     # the watermark, so the first scan that can see it has to ignore the
@@ -86,22 +86,29 @@ def _collect_all() -> list[RawUsageEntry]:
     codex_by_session = {
         entry.session_id: entry for entry in history if entry.target == "codex"
     }
-    codex_by_session.update({entry.session_id: entry for entry in codex_snapshots})
-    non_codex_history = [entry for entry in history if entry.target != "codex"]
-    history = non_codex_history + list(codex_by_session.values())
+    codex_changed = False
+    for entry in codex_snapshots:
+        if codex_by_session.get(entry.session_id) != entry:
+            codex_by_session[entry.session_id] = entry
+            codex_changed = True
+    if codex_changed:
+        non_codex_history = [entry for entry in history if entry.target != "codex"]
+        history = non_codex_history + list(codex_by_session.values())
 
-    # 3. Save new entries to history file
+    # 3. Save new entries to history file（codex 未变化时不重复重写全量 JSONL）
     if rebuilding:
         # Additive on purpose: engines prune their own transcripts, so the
         # archive holds sessions the rescan cannot reproduce.
         history = merge_history(history, new_entries)
         save_history(history)
         mark_backfill_done(BACKFILL_VERSION)
+    elif codex_changed:
+        if new_entries:
+            history.extend(new_entries)
+        save_history(history)
     elif new_entries:
         append_history(new_entries)
         history.extend(new_entries)
-    if codex_snapshots:
-        save_history(history)
 
     return history
 
@@ -230,7 +237,9 @@ def _refresh_in_background() -> None:
     def _run() -> None:
         global _refreshing
         try:
-            refresh_analytics_data()
+            # 保留过期缓存直到新结果原子覆盖，避免并发请求撞上空缓存阻塞。
+            with _collect_lock:
+                _collect_and_cache()
         except Exception:
             # 派生数据：采集失败就继续用旧值，下次再试。
             logger.exception("Background analytics refresh failed")

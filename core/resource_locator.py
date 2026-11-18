@@ -103,5 +103,11 @@ def seed_config_if_missing(code_root: Path = CODE_ROOT) -> Path | None:
         return None
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
+    content = template.read_text(encoding="utf-8")
+    try:
+        # 多个首次启动并发时，只允许一个进程创建，不能覆盖已生成的配置。
+        with config_path.open("x", encoding="utf-8") as stream:
+            stream.write(content)
+    except FileExistsError:
+        return None
     return config_path

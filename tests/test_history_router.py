@@ -1,6 +1,7 @@
 """Tests for the /api/history/audit endpoint."""
 
 import json
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -442,7 +443,7 @@ async def test_delete_antigravity_session_removes_orphan_dbs(tmp_path, monkeypat
         (conv_dir / f"sess-agy.db{suffix}").write_bytes(b"dummy")
 
     summaries_path = cli_root / "conversation_summaries.db"
-    with sqlite3.connect(str(summaries_path)) as con:
+    with closing(sqlite3.connect(str(summaries_path))) as con, con:
         con.execute(
             "CREATE TABLE conversation_summaries (conversation_id TEXT PRIMARY KEY)"
         )
@@ -474,7 +475,7 @@ async def test_delete_antigravity_session_removes_orphan_dbs(tmp_path, monkeypat
     assert cache.read_bytes() == cache_entry("other"), "agy 会用这份缓存把会话复活"
     for suffix in ("", "-wal", "-shm"):
         assert not (conv_dir / f"sess-agy.db{suffix}").exists()
-    with sqlite3.connect(str(summaries_path)) as con:
+    with closing(sqlite3.connect(str(summaries_path))) as con:
         assert (
             con.execute("SELECT count(*) FROM conversation_summaries").fetchone()[0]
             == 0

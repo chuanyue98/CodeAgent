@@ -1,12 +1,12 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useIsMounted } from '../../hooks/useAsyncGuards';
 import { Loader2, Sparkles, StopCircle, X } from 'lucide-react';
-import request from '../../utils/request';
+import { generateTask, getRunStatus, listTasks, stopRun } from '../../api/tasks';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import ErrorBar from '../shared/ErrorBar';
 import { Field, Input, Select, Textarea } from '../shared/Field';
-import { NAME_PATTERN, type Engine, type RunPollResponse, type Task } from './types';
+import { NAME_PATTERN, type Engine } from './types';
 import { useT } from '../../i18n/context';
 
 const GENERATE_POLL_MS = 2000;
@@ -33,31 +33,50 @@ export default function GenerateTaskModal({
 
   const isMounted = useIsMounted();
   const cancelled = useRef(false);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (engines.length > 0 && !engines.some(item => item.id === engine)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEngine(engines[0].id);
+    }
+  }, [engines, engine]);
+
+  useEffect(() => {
+    return () => {
+      cancelled.current = true;
+      if (pollTimerRef.current !== null) {
+        clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleSubmit = async () => {
     if (!nameValid || !title.trim() || !description.trim()) return;
     setError(null);
     cancelled.current = false;
+    if (pollTimerRef.current !== null) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
     setPhase('generating');
     try {
-      const status = await request<{ taskId: string }>('/api/tasks/generate', {
-        method: 'POST',
-        body: JSON.stringify({ engine, name, title, description }),
-      });
-      if (!isMounted()) return;
+      const status = await generateTask({ engine, name, title, description });
+      if (!isMounted() || cancelled.current) return;
       setRunId(status.taskId);
 
       const poll = async () => {
-        if (cancelled.current) return;
+        if (!isMounted() || cancelled.current) return;
         try {
-          const { status: runStatus } = await request<RunPollResponse>(`/api/tasks/runs/${status.taskId}`);
+          const { status: runStatus } = await getRunStatus(status.taskId);
           if (!isMounted() || cancelled.current) return;
 
           if (runStatus.status === 'running') {
-            setTimeout(() => void poll(), GENERATE_POLL_MS);
+            pollTimerRef.current = setTimeout(() => void poll(), GENERATE_POLL_MS);
             return;
           }
-          const tasks = await request<Task[]>('/api/tasks').catch(() => []);
+          const tasks = await listTasks().catch(() => []);
           if (!isMounted() || cancelled.current) return;
 
           if (tasks.some(t => t.name === name)) {
@@ -82,9 +101,13 @@ export default function GenerateTaskModal({
 
   const cancelGeneration = async () => {
     cancelled.current = true;
+    if (pollTimerRef.current !== null) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
     if (runId) {
       try {
-        await request(`/api/tasks/runs/${runId}/stop`, { method: 'POST' });
+        await stopRun(runId);
       } catch (e) {
         console.error('Failed to stop generation run', e);
       }

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Components } from 'react-markdown';
 import { useSearchParams } from 'react-router';
 import { BookOpen, ChevronDown, ChevronRight, Cpu, Globe, Layers, Terminal } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -104,7 +105,7 @@ function matches(kind: ResourceKindConfig, item: ResourceItem, term: string): bo
  */
 export default function ResourceHub() {
   const t = useT();
-  const { currentGroup, groups } = useProject();
+  const { currentGroup, groups, setCurrentGroup, availableGroups } = useProject();
   const { kinds, loading, failed, refetchAll } = useAllResourceData();
   const { toggleResource, toggleResources, toggleError, dismissToggleError } = useResourceToggle();
   const engineMounts = useEngineMounts();
@@ -129,6 +130,33 @@ export default function ResourceHub() {
   // to /settings/hooks still lands on hooks rather than on whatever sorts
   // first.
   const requestedKind = searchParams.get('kind');
+  const requestedGroup = searchParams.get('group');
+  const syncedGroupParamRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!requestedGroup) {
+      syncedGroupParamRef.current = null;
+      return;
+    }
+    if (
+      syncedGroupParamRef.current !== requestedGroup &&
+      availableGroups.includes(requestedGroup)
+    ) {
+      syncedGroupParamRef.current = requestedGroup;
+      if (requestedGroup !== currentGroup) {
+        setCurrentGroup(requestedGroup);
+      }
+    }
+  }, [requestedGroup, availableGroups, currentGroup, setCurrentGroup]);
+
+  useEffect(() => {
+    if (!requestedGroup || !currentGroup || requestedGroup === currentGroup) return;
+    if (syncedGroupParamRef.current === null) return;
+    syncedGroupParamRef.current = currentGroup;
+    const next = new URLSearchParams(searchParams);
+    next.set('group', currentGroup);
+    setSearchParams(next, { replace: true });
+  }, [currentGroup, requestedGroup, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (loading) return;
@@ -399,8 +427,13 @@ export default function ResourceHub() {
                       key={`${hit.kind.id}:${hit.item.id}`}
                       role="button"
                       tabIndex={0}
-                      onClick={() => setOpenItem(hit)}
+                      onClick={event => {
+                        const target = event.target as HTMLElement | null;
+                        if (target?.closest('button, input, a, select, textarea, [role="switch"]')) return;
+                        setOpenItem(hit);
+                      }}
                       onKeyDown={event => {
+                        if (event.target !== event.currentTarget) return;
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault();
                           setOpenItem(hit);
@@ -476,6 +509,32 @@ interface DetailViewProps {
 }
 
 /** Re-mounts on selection so the entrance animation plays each time. */
+const DETAIL_REHYPE_PLUGINS = [rehypeHighlight];
+
+const DETAIL_MARKDOWN_COMPONENTS: Components = {
+  code({ className, children, ...props }) {
+    // rehype-highlight prefixes the class list with `hljs`, so the
+    // language marker is no longer necessarily the first class.
+    const isCodeBlock = Boolean(className?.includes('language-'));
+    return isCodeBlock ? (
+      <code className={`${className} font-mono`} {...props}>
+        {children}
+      </code>
+    ) : (
+      <code className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[0.875em] text-cyan-700" {...props}>
+        {children}
+      </code>
+    );
+  },
+  pre({ children, ...props }) {
+    return (
+      <pre className="overflow-x-auto rounded-xl border border-term-line !bg-term p-5 !text-term-fg" {...props}>
+        {children}
+      </pre>
+    );
+  },
+};
+
 function DetailView({ hit, active, currentGroup, onBack, onToggle }: DetailViewProps) {
   const t = useT();
   const { kind, item } = hit;
@@ -519,30 +578,8 @@ function DetailView({ hit, active, currentGroup, onBack, onToggle }: DetailViewP
         )}
         <div className="prose prose-ca max-w-none flex-1 overflow-y-auto bg-card p-8">
           <ReactMarkdown
-            rehypePlugins={[rehypeHighlight]}
-            components={{
-              code({ className, children, ...props }) {
-                // rehype-highlight prefixes the class list with `hljs`, so the
-                // language marker is no longer necessarily the first class.
-                const isCodeBlock = Boolean(className?.includes('language-'));
-                return isCodeBlock ? (
-                  <code className={`${className} font-mono`} {...props}>
-                    {children}
-                  </code>
-                ) : (
-                  <code className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[0.875em] text-cyan-700" {...props}>
-                    {children}
-                  </code>
-                );
-              },
-              pre({ children, ...props }) {
-                return (
-                  <pre className="overflow-x-auto rounded-xl border border-term-line !bg-term p-5 !text-term-fg" {...props}>
-                    {children}
-                  </pre>
-                );
-              },
-            }}
+            rehypePlugins={DETAIL_REHYPE_PLUGINS}
+            components={DETAIL_MARKDOWN_COMPONENTS}
           >
             {item.readme}
           </ReactMarkdown>

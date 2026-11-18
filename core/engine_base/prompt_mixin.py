@@ -4,24 +4,16 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from core.constants import TEMP_PROMPT_DIRNAME
 from core.engine_base.environment import EngineExecutionError
 from core.logging_config import get_logger
-
-if TYPE_CHECKING:
-    from core.prompt_scanner import PromptScanner
 
 logger = get_logger(__name__)
 
 
 class _PromptMixin:
     """Prompt assembly, temp-file lifecycle, and subprocess execution."""
-
-    # Provided by _ConfigMixin / BaseEngine.__init__.
-    if TYPE_CHECKING:
-        prompt_scanner: "PromptScanner"
 
     def first_message(self, message: str) -> str:
         """单行消息原样作为首条消息；多行内容改成让模型去读临时文件。

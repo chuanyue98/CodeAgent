@@ -497,6 +497,25 @@ def test_seeding_never_overwrites_an_existing_config(tmp_path, monkeypatch):
     assert existing.read_text(encoding="utf-8") == '{"mine": true}'
 
 
+def test_seeding_preserves_config_created_during_template_read(tmp_path, monkeypatch):
+    """首次存在性检查后，另一个进程可能已经创建并编辑了配置。"""
+    template = tmp_path / "config.example.json"
+    template.write_text('{"groups": {}}', encoding="utf-8")
+    target = tmp_path / "config.json"
+    monkeypatch.setenv("CA_CONFIG_PATH", str(target))
+    monkeypatch.setenv("CODEAGENT_RESOURCE_ROOT", str(tmp_path))
+    real_read = Path.read_text
+
+    def read_with_concurrent_create(path, *args, **kwargs):
+        if path == template:
+            target.write_text('{"mine": true}', encoding="utf-8")
+        return real_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read_with_concurrent_create)
+    assert resource_locator.seed_config_if_missing(tmp_path) is None
+    assert target.read_text(encoding="utf-8") == '{"mine": true}'
+
+
 def test_zero_skills_warns_instead_of_reporting_green(tmp_path, monkeypatch):
     """ "Skills (0 declared) -- all resolved" read as healthy while the
     product's headline feature was mounting nothing."""

@@ -17,6 +17,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.session_history.paths import (
+    claude_dir,
+    strip_extended_length_prefix,
+)
+from core.session_history.paths import (
     encode_claude_project_dir as _encode_project_path,
 )
 from core.session_history.previews import result_for_writer
@@ -62,7 +66,7 @@ def _recent_native_meta(
         ``(model, version)``, either of which is None when this install has
         no usable history yet.
     """
-    root = (home or Path.home()) / ".claude" / "projects"
+    root = claude_dir(home) / "projects"
     try:
         files = sorted(
             list_files(root, ".jsonl", recursive=True), key=mtime, reverse=True
@@ -150,17 +154,20 @@ def write_claude_session(session: UnifiedSession) -> str:
         str: The new session UUID (file stem).
     """
     new_session_id = str(uuid.uuid4())
-    project_dir_name = _encode_project_path(session.project_path)
-    claude_projects = Path.home() / ".claude" / "projects" / project_dir_name
+    clean_project = strip_extended_length_prefix(
+        (session.project_path or "").replace("\\", "/")
+    )
+    project_dir_name = _encode_project_path(clean_project)
+    claude_projects = claude_dir() / "projects" / project_dir_name
     # No mkdir here: atomic_write creates the parent, and it does so through
     # the long-path spelling. Claude names this directory after the entire
     # project path, so a deep project passes MAX_PATH and a plain
     # Path.mkdir fails on a directory it is perfectly able to create.
     file_path = claude_projects / f"{new_session_id}.jsonl"
     cwd = (
-        session.project_path.replace("/", "\\")
-        if re.match(r"^[A-Za-z]:", session.project_path)
-        else session.project_path
+        clean_project.replace("/", "\\")
+        if re.match(r"^[A-Za-z]:", clean_project)
+        else clean_project
     )
 
     lines: list[str] = []
@@ -170,7 +177,7 @@ def write_claude_session(session: UnifiedSession) -> str:
     native_model, native_version = _recent_native_meta()
     fallback_model = native_model or SYNTHETIC_MODEL
     cli_version = native_version or CLI_VERSION_FALLBACK
-    git_branch = _git_branch(session.project_path)
+    git_branch = _git_branch(clean_project)
 
     if session.title:
         lines.append(

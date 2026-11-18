@@ -26,7 +26,6 @@ from core.logging_config import get_logger
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
-    set_additional_template_search_paths,
     show_tasks,
 )
 from core.utils.atomic_write import atomic_write
@@ -120,8 +119,6 @@ CODEX_OTHER_SUBCOMMANDS = frozenset(
 
 logger = get_logger(__name__)
 
-set_additional_template_search_paths([Path(__file__).resolve().parent.parent])
-
 
 class CodexEngine(CodexPluginMixin, BaseEngine):
     """Codex engine adapter using shared CodeAgent base behavior."""
@@ -139,11 +136,6 @@ class CodexEngine(CodexPluginMixin, BaseEngine):
 
     def __init__(self) -> None:
         super().__init__("Codex", "codex-default")
-
-    def _format_plugins_for_settings(
-        self, data: Any, plugins: list[dict[str, Any]]
-    ) -> Any:
-        return CodexPluginMixin._format_plugins_for_settings(self, data, plugins)
 
     def warn_if_project_untrusted(self) -> None:
         """Warns when codex will silently ignore the hooks just injected.
@@ -222,11 +214,6 @@ class CodexEngine(CodexPluginMixin, BaseEngine):
         if message:
             cmd.append(message)
         return cmd
-
-    def build_interactive_command(
-        self, message: str = "", yolo: bool = False
-    ) -> list[str]:
-        return self.build_command(message, non_interactive=False, yolo=yolo)
 
     def build_chat_command(
         self, message: str, session_id: str | None = None
@@ -329,6 +316,7 @@ def parse_arguments() -> tuple[argparse.Namespace, list[str]]:
     )
     parser.add_argument("--list", action="store_true", help="List available tasks")
     parser.add_argument(
+        "-ni",
         "--non-interactive",
         "--non-interactively",
         action="store_true",
@@ -474,9 +462,7 @@ def main() -> None:
 
     env = engine.env_manager.get_env()
     isolated_home = (
-        engine.use_isolated_home()
-        if os.environ.get(ISOLATED_HOME_ENV) == "1"
-        else None
+        engine.use_isolated_home() if os.environ.get(ISOLATED_HOME_ENV) == "1" else None
     )
     child_codex_env(env, isolated_home)
     pre_launch_commands = list(task_commands)

@@ -22,12 +22,15 @@ import json
 import re
 import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from core.session_history.models import EngineType
 from core.session_history.paths import (
     _encode_codebuddy_project_dir,
+    codebuddy_dir,
+    strip_extended_length_prefix,
 )
 from core.session_history.previews import result_for_writer
 from core.utils.atomic_write import atomic_write
@@ -43,7 +46,7 @@ def _recent_native_model(home: Path | None = None, scan_files: int = 6) -> str:
     Returns:
         The model id, or ``""`` when this install has no usable history.
     """
-    root = (home or Path.home()) / ".codebuddy" / "projects"
+    root = codebuddy_dir(home) / "projects"
     try:
         files = sorted(
             list_files(root, ".jsonl", recursive=True), key=mtime, reverse=True
@@ -96,9 +99,9 @@ def _to_codebuddy_ts(value: str | None) -> int:
         return int(s)
     # ISO-8601 (e.g. Claude's ``2025-...Z``) → epoch ms.
     try:
-        from datetime import datetime
-
         dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
         return int(dt.timestamp() * 1000)
     except ValueError:
         return int(time.time() * 1000)
@@ -118,13 +121,16 @@ def write_codebuddy_session(session: Any) -> str:
         str: The new session UUID (file stem).
     """
     new_session_id = str(uuid.uuid4())
-    project_dir_name = _encode_codebuddy_project_dir(session.project_path)
-    codebuddy_projects = Path.home() / ".codebuddy" / "projects" / project_dir_name
+    clean_project = strip_extended_length_prefix(
+        (session.project_path or "").replace("\\", "/")
+    )
+    project_dir_name = _encode_codebuddy_project_dir(clean_project)
+    codebuddy_projects = codebuddy_dir() / "projects" / project_dir_name
     # No mkdir here: atomic_write creates the parent through the long-path
     # spelling. CodeBuddy names this directory after the entire project
     # path, which passes MAX_PATH on a deep project.
     file_path = codebuddy_projects / f"{new_session_id}.jsonl"
-    cwd = _codebuddy_cwd(session.project_path)
+    cwd = _codebuddy_cwd(clean_project)
 
     lines: list[str] = []
 

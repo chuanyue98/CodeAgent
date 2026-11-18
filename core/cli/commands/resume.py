@@ -16,20 +16,16 @@ from pathlib import Path
 import click
 
 from core.constants import normalize_engine_name
-from core.engine_registry import ENGINES
 from core.i18n import t
 
 from .. import helpers as _helpers
 from ..ui_styles import (
     CLI_QUESTIONARY_STYLE,
-    ENGINE_THEMES,
     format_styled_session_choice,
     get_engine_theme,
     pad_display,
+    truncate_display,
 )
-
-ENGINE_BADGES: dict[str, str] = {k: v.badge for k, v in ENGINE_THEMES.items()}
-_pad_display = pad_display
 
 #: 交互列表里最多展示多少条"最近会话"。编号解析用的却是全量列表——与
 #: ``ca history`` / ``ca -s`` 同一口径——所以 ``ca -r 25`` 和 ``ca -s 25``
@@ -50,7 +46,7 @@ def format_relative_time(ts_str: str) -> str:
         else:
             now = datetime.now(dt.tzinfo)
         diff = now - dt
-        secs = int(diff.total_seconds())
+        secs = max(0, int(diff.total_seconds()))
         if secs < 60:
             return t("time.just_now")
         elif secs < 3600:
@@ -80,9 +76,7 @@ def format_session_choice_title(idx: int, s: dict) -> str:
     msg_str = f"{msg_count:3d} msgs"
 
     title = s.get("title") or t("history.no_title")
-    title = title.replace("\n", " ").strip()
-    if len(title) > 50:
-        title = title[:47] + "..."
+    title = truncate_display(title.replace("\n", " ").strip(), 50)
 
     return f"[{idx:2d}]  {eng_padded} {time_padded} · {msg_str}  │ {title}"
 
@@ -237,32 +231,16 @@ def resume_session_flow(
         print(t("resume.no_resume_command", error=exc))
         return 1
 
-    try:
-        return subprocess.run(
-            argv, cwd=project_path, env=ctx.obj.get("child_env")
-        ).returncode
-    except FileNotFoundError:
-        if sys.platform == "win32":
-            candidates = [argv[0]]
-            spec = ENGINES.get(target_engine)
-            if spec:
-                for c in spec.cli_candidates:
-                    if c not in candidates:
-                        candidates.append(c)
-            for cand in candidates:
-                resolved = shutil.which(cand)
-                if resolved:
-                    try:
-                        return subprocess.run(
-                            [resolved, *argv[1:]],
-                            cwd=project_path,
-                            env=ctx.obj.get("child_env"),
-                        ).returncode
-                    except FileNotFoundError:
-                        continue
-        print(t("switch.engine_not_installed", engine=target_engine))
-        print(t("switch.resume_manually", command=" ".join(argv)))
-        return 1
+    return _helpers.run_resume_command(
+        argv,
+        target_engine,
+        project_path=project_path,
+        child_env=ctx.obj.get("child_env"),
+        not_installed_msg_key="switch.engine_not_installed",
+        manual_msg_key="switch.resume_manually",
+        runner=subprocess.run,
+        which=shutil.which,
+    )
 
 
 @click.command(name="resume", help=t("cli.desc.resume_cmd"))

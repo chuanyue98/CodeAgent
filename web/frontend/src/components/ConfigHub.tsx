@@ -22,6 +22,7 @@ import { useProject, type Config, type GroupDefinition, type Project } from '../
 import { useLanguage, useT } from '../i18n/context';
 import { SUPPORTED_LANGUAGES, type Language } from '../i18n/language';
 import request from '../utils/request';
+import { workspaceLabel } from '../utils/workspaceFormat';
 import LoadingState from './shared/LoadingState';
 import ErrorBar from './shared/ErrorBar';
 import Button from './shared/Button';
@@ -43,7 +44,7 @@ interface EditableProject extends Project {
   uiId: string;
 }
 
-export type ConfigSectionId = 'workspaces' | 'groups' | 'general' | 'proxy' | 'system';
+type ConfigSectionId = 'workspaces' | 'groups' | 'general' | 'proxy' | 'system';
 
 const SECTION_IDS: ConfigSectionId[] = ['workspaces', 'groups', 'general', 'proxy', 'system'];
 
@@ -60,7 +61,6 @@ const ConfigHub: React.FC = () => {
     projects,
     groups,
     refreshConfig,
-    availableGroups,
     setCurrentGroup,
     setSelectedWorkspace,
   } = useProject();
@@ -69,10 +69,16 @@ const ConfigHub: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const initialSection = (searchParams.get('tab') as ConfigSectionId) || 'workspaces';
+  const tabParam = searchParams.get('tab') as ConfigSectionId | null;
   const [activeSection, setActiveSection] = useState<ConfigSectionId>(
-    SECTION_IDS.includes(initialSection) ? initialSection : 'workspaces'
+    tabParam && SECTION_IDS.includes(tabParam) ? tabParam : 'workspaces'
   );
+
+  useEffect(() => {
+    const next = tabParam && SECTION_IDS.includes(tabParam) ? tabParam : 'workspaces';
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActiveSection(next);
+  }, [tabParam]);
 
   const [localConfig, setLocalConfig] = useState<Config | null>(null);
   const [localProjects, setLocalProjects] = useState<EditableProject[]>([]);
@@ -177,16 +183,16 @@ const ConfigHub: React.FC = () => {
 
     try {
       setSaving(true);
-      const fullConfig = {
-        ...localConfig,
+      const configPatch = {
+        paths: localConfig?.paths || {},
         proxy: localProxies.map(({ host, port }) => ({ host, port })),
         project_registry: normalizedProjects,
         groups: localGroups,
       };
 
       await request('/api/config', {
-        method: 'POST',
-        body: JSON.stringify(fullConfig),
+        method: 'PATCH',
+        body: JSON.stringify(configPatch),
       });
 
       const serverData = await refreshConfig();
@@ -211,7 +217,7 @@ const ConfigHub: React.FC = () => {
         );
         setLocalGroups(deepClone(serverData.groups));
       } else {
-        setLocalConfig(fullConfig);
+        setLocalConfig(previous => (previous ? { ...previous, ...configPatch } : { ...configPatch }));
         setLocalProjects(
           normalizedProjects.map(project => ({
             ...project,
@@ -219,7 +225,7 @@ const ConfigHub: React.FC = () => {
           })),
         );
         setLocalProxies(
-          (fullConfig.proxy || []).map(proxy => ({
+          configPatch.proxy.map(proxy => ({
             ...proxy,
             uiId: createEditableRowId('proxy'),
           })),
@@ -291,8 +297,8 @@ const ConfigHub: React.FC = () => {
   };
 
   const openInTerminal = (projectPath: string) => {
-    setSelectedWorkspace(projectPath);
-    navigate(`/agent/terminal?project=${encodeURIComponent(projectPath)}`);
+    setSelectedWorkspace(projectPath.trim());
+    navigate('/agent/terminal');
   };
 
   const startAddingGroup = () => {
@@ -604,8 +610,7 @@ const ConfigHub: React.FC = () => {
               {filteredProjects.map((p, i) => {
                 const savedProject = projects.find(project => project.path === p.path.trim());
                 const missing = Boolean(p.path.trim()) && savedProject?.available === false;
-                const pathSegments = p.path.split('/').filter(Boolean);
-                const folderName = pathSegments.pop() || (p.path ? p.path : `Workspace ${i + 1}`);
+                const folderName = p.path.trim() ? workspaceLabel(p.path.trim()) : t('config.workspaceUntitled', { index: i + 1 });
 
                 return (
                   <div
@@ -651,7 +656,7 @@ const ConfigHub: React.FC = () => {
                           onChange={(e) => updateProject(p.uiId, 'group', e.target.value)}
                           className="w-32 py-1 text-xs"
                         >
-                          {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                          {Object.keys(localGroups).map(g => <option key={g} value={g}>{g}</option>)}
                         </Select>
                         <button
                           aria-label={t('config.removeWorkspace', { name: p.path || i + 1 })}
@@ -845,7 +850,11 @@ const ConfigHub: React.FC = () => {
               <div className="text-xs font-semibold text-slate-700 flex items-center gap-2">
                 <Languages size={14} className="text-primary" /> {t('language.label')}
               </div>
-              <div className="flex gap-2">
+              <div
+                role="radiogroup"
+                aria-label={t('language.label')}
+                className="flex gap-2"
+              >
                 {SUPPORTED_LANGUAGES.map(code => (
                   <button
                     key={code}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
-import request from '../../utils/request';
+import { createTask } from '../../api/tasks';
+import { useIsMounted } from '../../hooks/useAsyncGuards';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import ErrorBar from '../shared/ErrorBar';
@@ -16,6 +17,7 @@ export default function NewTaskModal({
   onCreated: (name: string) => void;
 }) {
   const t = useT();
+  const isMounted = useIsMounted();
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
   const [objective, setObjective] = useState('');
@@ -32,15 +34,14 @@ export default function NewTaskModal({
     setSubmitting(true);
     setError(null);
     try {
-      await request('/api/tasks', {
-        method: 'POST',
-        body: JSON.stringify({ name, title, objective, context, instructions, verification }),
-      });
+      await createTask({ name, title, objective, context, instructions, verification });
+      if (!isMounted()) return;
       onCreated(name);
     } catch (e) {
+      if (!isMounted()) return;
       setError(e instanceof Error ? e.message : t('taskModal.createFailed'));
     } finally {
-      setSubmitting(false);
+      if (isMounted()) setSubmitting(false);
     }
   };
 
@@ -80,17 +81,18 @@ export default function NewTaskModal({
         </Field>
       </div>
 
-      {[
-        [t('taskModal.objective'), objective, setObjective, t('taskModal.objectivePlaceholder')],
-        [t('taskModal.context'), context, setContext, t('taskModal.contextPlaceholder')],
-        [t('taskModal.instructions'), instructions, setInstructions, t('taskModal.instructionsPlaceholder')],
-        [t('taskModal.verification'), verification, setVerification, t('taskModal.verificationPlaceholder')],
-      ].map(([label, value, setter, placeholder]) => (
-        <Field key={label as string} label={label as string}>
+      {([
+        ['new-task-objective', t('taskModal.objective'), objective, setObjective, t('taskModal.objectivePlaceholder')],
+        ['new-task-context', t('taskModal.context'), context, setContext, t('taskModal.contextPlaceholder')],
+        ['new-task-instructions', t('taskModal.instructions'), instructions, setInstructions, t('taskModal.instructionsPlaceholder')],
+        ['new-task-verification', t('taskModal.verification'), verification, setVerification, t('taskModal.verificationPlaceholder')],
+      ] as const).map(([fieldId, label, value, setter, placeholder]) => (
+        <Field key={fieldId} label={label} htmlFor={fieldId}>
           <Textarea
-            value={value as string}
-            onChange={e => (setter as (v: string) => void)(e.target.value)}
-            placeholder={placeholder as string}
+            id={fieldId}
+            value={value}
+            onChange={e => setter(e.target.value)}
+            placeholder={placeholder}
             rows={2}
             className="resize-y"
           />

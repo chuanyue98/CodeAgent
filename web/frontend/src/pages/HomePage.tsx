@@ -3,19 +3,19 @@ import { AlertTriangle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { fetchDaily, fetchSessions, fmtTokens, type SessionUsage } from '../api/analytics';
 import { fetchSchedules, type Schedule } from '../api/schedules';
+import { listRuns } from '../api/tasks';
 import { buttonClass } from '../components/shared/buttonClass';
 import { AGENT_ENGINES, findEngine } from '../components/terminalEngines';
 import SectionLabel from '../components/shared/SectionLabel';
 import { useProject } from '../context/ProjectContext';
 import { useTerminal } from '../context/TerminalContext';
 import { useLanguageCode, useT } from '../i18n/context';
-import request from '../utils/request';
 import { buildResumeLink } from '../utils/sessionLink';
 import { formatRelativeCountdown, relativeTime, workspaceLabel } from '../utils/workspaceFormat';
 import type { RunStatus } from '../components/TaskDashboard/types';
 
 /** Overview shows only enough of a run to identify it; Automations shows the rest. */
-type RunningTask = Pick<RunStatus, 'taskId' | 'engine' | 'status'>;
+type RunningTask = Pick<RunStatus, 'taskId' | 'taskName' | 'engine' | 'status'>;
 
 const RECENT_SESSIONS_LIMIT = 6;
 const UPCOMING_LIMIT = 3;
@@ -189,7 +189,7 @@ export default function HomePage() {
                     className="grid grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/60"
                   >
                     <span className={`h-2 w-2 animate-pulse-soft rounded-full ${findEngine(run.engine)?.dot ?? 'bg-primary'}`} />
-                    <span className="min-w-0 truncate font-mono text-sm">{run.taskId}</span>
+                    <span className="min-w-0 truncate font-mono text-sm">{run.taskName || run.taskId}</span>
                     <span className="text-xs text-muted-foreground">{engineName(run.engine, t)}</span>
                   </Link>
                 </li>
@@ -329,7 +329,7 @@ function useRunningTasks(): RunningTask[] | null {
 
   useEffect(() => {
     let cancelled = false;
-    request<RunningTask[]>('/api/tasks/runs')
+    listRuns()
       .then(list => {
         if (!cancelled) setRuns(Array.isArray(list) ? list.filter(run => run.status === 'running') : []);
       })

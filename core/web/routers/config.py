@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -14,8 +15,17 @@ def get_config_path():
     return get_default_config_path()
 
 
+def _resolve_config_path() -> Path:
+    """优先使用测试在 ``server.CONFIG_PATH`` 上注入的路径，否则回退到默认配置路径。"""
+    server_mod = sys.modules.get("core.web.server")
+    override = getattr(server_mod, "CONFIG_PATH", None) if server_mod else None
+    if override is not None:
+        return Path(override)
+    return get_config_path()
+
+
 def _load_config(service: ConfigService) -> tuple[dict, list[str]]:
-    """Load config, returning (config, warnings) without raising on warnings."""
+    """读取配置，返回 ``(config, warnings)``。"""
     return service.get_config()
 
 
@@ -33,11 +43,6 @@ class ProjectPayload(BaseModel):
         if not normalized:
             raise ValueError("must not be blank")
         return normalized
-
-
-class ProxyPayload(BaseModel):
-    host: str = Field(min_length=1)
-    port: int = Field(gt=0, le=65535)
 
 
 class GroupDefinitionPayload(BaseModel):
@@ -62,8 +67,8 @@ class ConfigPayload(BaseModel):
 
 
 @router.get("/projects")
-async def list_projects():
-    service = ConfigService(get_config_path())
+def list_projects():
+    service = ConfigService(_resolve_config_path())
     config, _ = _load_config(service)
     projects = config.get("project_registry", [])
     result = []
@@ -87,9 +92,9 @@ async def list_projects():
 
 
 @router.post("/projects")
-async def add_project(payload: ProjectPayload):
+def add_project(payload: ProjectPayload):
     try:
-        service = ConfigService(get_config_path())
+        service = ConfigService(_resolve_config_path())
         registry = service.add_project(payload.path, payload.group)
         return {"status": "success", "registry": registry}
     except HTTPException:
@@ -99,9 +104,9 @@ async def add_project(payload: ProjectPayload):
 
 
 @router.delete("/projects")
-async def delete_project(path: str):
+def delete_project(path: str):
     try:
-        service = ConfigService(get_config_path())
+        service = ConfigService(_resolve_config_path())
         registry = service.delete_project(path)
         return {"status": "success", "registry": registry}
     except HTTPException:
@@ -111,22 +116,27 @@ async def delete_project(path: str):
 
 
 @router.get("/groups")
-async def list_groups():
-    service = ConfigService(get_config_path())
+def list_groups():
+    service = ConfigService(_resolve_config_path())
     config, _ = _load_config(service)
     return config.get("groups", {})
 
 
 @router.post("/groups/{group_name}")
-async def update_group(group_name: str, definition: GroupDefinitionPayload):
+def update_group(group_name: str, definition: GroupDefinitionPayload):
     try:
-        service = ConfigService(get_config_path())
-        config, _ = _load_config(service)
-        if "groups" not in config:
-            config["groups"] = {}
+        service = ConfigService(_resolve_config_path())
         group_data = definition.model_dump()
-        config["groups"][group_name] = group_data
-        service.update_config(config)
+
+        def _modifier(config: dict) -> dict:
+            groups = config.get("groups")
+            if not isinstance(groups, dict):
+                groups = {}
+            groups[group_name] = group_data
+            config["groups"] = groups
+            return config
+
+        service.modify_config(_modifier)
         return {
             "status": "success",
             "group": group_name,
@@ -139,16 +149,22 @@ async def update_group(group_name: str, definition: GroupDefinitionPayload):
 
 
 @router.delete("/groups/{group_name}")
-async def delete_group(group_name: str):
+def delete_group(group_name: str):
     try:
-        service = ConfigService(get_config_path())
-        config, _ = _load_config(service)
-        if "groups" in config and group_name in config["groups"]:
-            del config["groups"][group_name]
-        else:
-            raise HTTPException(status_code=404, detail="Group not found")
-        service.update_config(config)
-        return {"status": "success", "groups": config.get("groups", {})}
+        service = ConfigService(_resolve_config_path())
+        remaining_groups: dict[str, Any] = {}
+
+        def _modifier(config: dict) -> dict:
+            nonlocal remaining_groups
+            groups = config.get("groups")
+            if not isinstance(groups, dict) or group_name not in groups:
+                raise HTTPException(status_code=404, detail="Group not found")
+            del groups[group_name]
+            remaining_groups = dict(groups)
+            return config
+
+        service.modify_config(_modifier)
+        return {"status": "success", "groups": remaining_groups}
     except HTTPException:
         raise
     except Exception as e:
@@ -156,10 +172,10 @@ async def delete_group(group_name: str):
 
 
 @router.get("/config")
-async def get_config():
-    path = get_config_path()
+def get_config():
+    path = _resolve_config_path()
     if not path.exists():
-        raise HTTPException(status_code=404, detail="config.json not found")
+        return {"warnings": []}
     service = ConfigService(path)
     config, warnings = _load_config(service)
     if warnings:
@@ -168,10 +184,12 @@ async def get_config():
 
 
 @router.post("/config")
-async def update_config(config: ConfigPayload):
+def update_config(config: ConfigPayload):
     try:
         config_dict = config.model_dump(exclude_none=True)
-        service = ConfigService(get_config_path())
+        # warnings 是服务端读取时附带的诊断字段，绝不持久化回 config.json。
+        config_dict.pop("warnings", None)
+        service = ConfigService(_resolve_config_path())
         service.update_config(config_dict)
         return {"status": "success", "message": "Configuration updated"}
     except HTTPException:
@@ -183,13 +201,16 @@ async def update_config(config: ConfigPayload):
 
 
 @router.patch("/config")
-async def patch_config(patch: dict[str, Any]):
+def patch_config(patch: dict[str, Any]):
     try:
-        service = ConfigService(get_config_path())
+        service = ConfigService(_resolve_config_path())
+        clean_patch = dict(patch)
+        clean_patch.pop("warnings", None)
 
         def _apply(existing: dict) -> dict:
             merged = dict(existing)
-            merged.update(patch)
+            merged.update(clean_patch)
+            merged.pop("warnings", None)
             return merged
 
         service.modify_config(_apply)

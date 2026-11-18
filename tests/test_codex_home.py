@@ -112,7 +112,9 @@ def _prepare(tmp_path, user_home, cwd=None, format_plugins=lambda doc: doc):
 
 
 def test_api_key_login_never_needs_a_refresh():
-    assert credential_refresh_due({"auth_mode": "apikey", "OPENAI_API_KEY": "k"}) is None
+    assert (
+        credential_refresh_due({"auth_mode": "apikey", "OPENAI_API_KEY": "k"}) is None
+    )
 
 
 def test_recently_refreshed_token_is_safe_to_share():
@@ -230,7 +232,10 @@ def test_plugins_are_written_into_the_isolated_config(tmp_path, user_home):
     [
         (lambda h: (h / "auth.json").unlink(), "不存在"),
         (lambda h: (h / "auth.json").write_text("{", encoding="utf-8"), "读不懂"),
-        (lambda h: (h / "config.toml").write_text("= nope", encoding="utf-8"), "读不懂"),
+        (
+            lambda h: (h / "config.toml").write_text("= nope", encoding="utf-8"),
+            "读不懂",
+        ),
         (
             lambda h: (h / "config.toml").write_text(
                 'cli_auth_credentials_store = "keyring"\n', encoding="utf-8"

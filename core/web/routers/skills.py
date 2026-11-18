@@ -13,7 +13,7 @@ def get_skills_root():
 
 
 @router.get("/skills")
-async def list_skills() -> dict:
+def list_skills() -> dict:
     """List all registered skills with metadata."""
     try:
         service = SkillService(get_skills_root())

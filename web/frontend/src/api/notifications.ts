@@ -38,14 +38,14 @@ export async function fetchUnreadCount(): Promise<number> {
 }
 
 export async function markNotificationRead(id: number): Promise<void> {
-  await request<{ status: string }>(`/api/notifications/${id}/read`, {
+  await request<{ status?: string; marked?: number }>(`/api/notifications/${id}/read`, {
     method: 'POST',
   });
 }
 
 export async function markAllNotificationsRead(): Promise<number> {
-  const res = await request<{ marked: number }>('/api/notifications/read-all', {
+  const res = await request<{ marked?: number; status?: string }>('/api/notifications/read-all', {
     method: 'POST',
   });
-  return res.marked;
+  return res.marked ?? 0;
 }

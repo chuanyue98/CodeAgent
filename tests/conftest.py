@@ -19,6 +19,7 @@ os.environ["CA_PTY_TMUX_SOCKET"] = _PYTEST_TMUX_SOCKET
 _PYTEST_HOME = tempfile.mkdtemp(prefix="ca-pytest-home-")
 os.environ["HOME"] = _PYTEST_HOME
 os.environ["USERPROFILE"] = _PYTEST_HOME
+os.environ["CA_DATA_DIR"] = str(Path(_PYTEST_HOME) / "data")
 
 # 各引擎 CLI 在回落到 HOME 下的目录之前，会先读自己的变量。开发者的 shell 里
 # 留着的，或者测试本身跑在一次委派里继承来的（委派的 codex 拿到的是隔离
@@ -157,29 +158,23 @@ def web_security_test_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def isolated_runner_state():
-    """Clears the shared web runner singleton before each test.
+def isolated_runner_state(tmp_path_factory, monkeypatch):
+    """按用例隔离 web runner 运行数据目录，并保持延迟初始化不被空转触发。
 
-    core.web.routers.tasks builds a module-level ``TaskRunner(ROOT_DIR)``
-    whose constructor reloads any still-"running" rows from the repo's
-    ``.ca_task_logs/runs.db``. A stale row left by a crashed or manual
-    session leaks into every test that aggregates runner state -- e.g.
-    test_instances_router's "empty without gateway" assertion goes red.
-    Only in-memory state is cleared; the SQLite store is left untouched so
-    tests exercising run history keep working.
+    ``core.web.routers.tasks`` 使用 ``LazyTaskRunner`` 延迟打开 ``runs.db``。
+    若无条件读取 ``_runner._run_lock``，会在每个测试前强制建库，既慢又掩盖
+    导入副作用检查；同时使用 ``tmp_path_factory`` 独立目录避免污染测试自身的
+    ``tmp_path``（许多测试会断言 ``tmp_path`` 为空或仅含 git 仓库文件）。
     """
     from core.web.routers import tasks as tasks_router
 
-    runner = tasks_router._runner
-    with runner._run_lock:
-        runner.active_runs.clear()
-        runner._processes.clear()
-        runner._stopping_tasks.clear()
+    tasks_router._runner.close()
+    runtime_dir = tmp_path_factory.mktemp("ca-runtime")
+    monkeypatch.setenv("CA_DATA_DIR", str(runtime_dir))
     yield
-    with runner._run_lock:
-        runner.active_runs.clear()
-        runner._processes.clear()
-        runner._stopping_tasks.clear()
+    if getattr(tasks_router._runner, "is_initialized", False):
+        tasks_router._runner.kill_all()
+        tasks_router._runner.close()
 
 
 @pytest.fixture

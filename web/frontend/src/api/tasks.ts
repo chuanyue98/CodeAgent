@@ -13,7 +13,8 @@ export async function listTasks(): Promise<Task[]> {
 export async function getTask(name: string, group?: string): Promise<Task> {
   const params = new URLSearchParams();
   if (group) params.append('group', group);
-  return request(`/api/tasks/${name}?${params.toString()}`);
+  const qs = params.toString();
+  return request(`/api/tasks/${encodeURIComponent(name)}${qs ? `?${qs}` : ''}`);
 }
 
 export async function createTask(body: {
@@ -28,14 +29,14 @@ export async function createTask(body: {
 }
 
 export async function updateTask(name: string, content: string): Promise<Task> {
-  return request(`/api/tasks/${name}`, {
+  return request(`/api/tasks/${encodeURIComponent(name)}`, {
     method: 'PUT',
     body: JSON.stringify({ content }),
   });
 }
 
 export async function deleteTask(name: string): Promise<void> {
-  await request(`/api/tasks/${name}`, { method: 'DELETE' });
+  await request(`/api/tasks/${encodeURIComponent(name)}`, { method: 'DELETE' });
 }
 
 export async function generateTask(body: {
@@ -54,22 +55,25 @@ export async function listRuns(): Promise<RunStatus[]> {
 
 /** Persisted run history for one task. */
 export async function listTaskRuns(name: string): Promise<RunStatus[]> {
-  return request(`/api/tasks/${name}/runs`);
+  return request(`/api/tasks/${encodeURIComponent(name)}/runs`);
 }
 
 export async function getRunStatus(taskId: string): Promise<RunPollResponse> {
-  return request(`/api/tasks/runs/${taskId}`);
+  return request(`/api/tasks/runs/${encodeURIComponent(taskId)}`);
 }
 
 export async function runTask(
   name: string,
   body: { engine: string; group: string; workspace: string },
 ): Promise<RunStatus> {
-  return request(`/api/tasks/${name}/run`, { method: 'POST', body: JSON.stringify(body) });
+  return request(`/api/tasks/${encodeURIComponent(name)}/run`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 export async function stopRun(taskId: string): Promise<void> {
-  await request(`/api/tasks/runs/${taskId}/stop`, { method: 'POST' });
+  await request(`/api/tasks/runs/${encodeURIComponent(taskId)}/stop`, { method: 'POST' });
 }
 
 export interface RunCommit {
@@ -111,7 +115,7 @@ export interface RunChanges {
 }
 
 export async function getRunChanges(taskId: string): Promise<RunChanges> {
-  return request(`/api/tasks/runs/${taskId}/changes`);
+  return request(`/api/tasks/runs/${encodeURIComponent(taskId)}/changes`);
 }
 
 export async function listEngines(): Promise<Engine[]> {

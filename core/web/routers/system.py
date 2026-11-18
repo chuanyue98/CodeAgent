@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 
 from core.doctor import get_doctor_sections
 from core.engine_registry import ENGINES, MOUNTABLE_KINDS
+from core.runtime_paths import get_run_dir
 from core.web.case_convert import ProtocolModel, wire
 
 router = APIRouter(prefix="/api/system", tags=["system"])
@@ -99,40 +100,44 @@ async def get_engine_mounts():
     )
 
 
+def _collect_metrics() -> SystemMetrics:
+    """在工作线程中采样本机 CPU、内存、磁盘与日志指标。"""
+    cpu = psutil.cpu_percent(0.1)
+    mem = psutil.virtual_memory()
+    disk = psutil.disk_usage(str(Path.home()))
+    uptime = time.time() - psutil.boot_time()
+
+    history_path = Path.home() / ".ca_analytics_history.jsonl"
+    history_size = 0
+    if history_path.exists():
+        try:
+            history_size = history_path.stat().st_size
+        except OSError:
+            pass
+
+    logs_dir = get_run_dir()
+    log_count = 0
+    if logs_dir.exists():
+        log_count = len(list(logs_dir.glob("*.log")))
+
+    return SystemMetrics(
+        cpu_percent=cpu,
+        memory_percent=mem.percent,
+        memory_used_gb=round(mem.used / 1e9, 2),
+        memory_total_gb=round(mem.total / 1e9, 2),
+        disk_percent=disk.percent,
+        disk_used_gb=round(disk.used / 1e9, 2),
+        disk_total_gb=round(disk.total / 1e9, 2),
+        uptime_seconds=int(uptime),
+        history_file_size_mb=round(history_size / 1e6, 2),
+        log_file_count=log_count,
+    )
+
+
 @router.get("/metrics")
 async def get_metrics():
     try:
-        cpu = await asyncio.to_thread(psutil.cpu_percent, 0.1)
-        mem = psutil.virtual_memory()
-        disk = psutil.disk_usage(str(Path.home().anchor))
-        uptime = time.time() - psutil.boot_time()
-
-        history_path = Path.home() / ".ca_analytics_history.jsonl"
-        history_size = 0
-        if history_path.exists():
-            try:
-                history_size = history_path.stat().st_size
-            except OSError:
-                pass
-
-        logs_dir = Path(__file__).resolve().parent.parent.parent / ".ca_task_logs"
-        log_count = 0
-        if logs_dir.exists():
-            log_count = len(list(logs_dir.glob("*.log")))
-
-        return wire(
-            SystemMetrics(
-                cpu_percent=cpu,
-                memory_percent=mem.percent,
-                memory_used_gb=round(mem.used / 1e9, 2),
-                memory_total_gb=round(mem.total / 1e9, 2),
-                disk_percent=disk.percent,
-                disk_used_gb=round(disk.used / 1e9, 2),
-                disk_total_gb=round(disk.total / 1e9, 2),
-                uptime_seconds=int(uptime),
-                history_file_size_mb=round(history_size / 1e6, 2),
-                log_file_count=log_count,
-            )
-        )
+        metrics = await asyncio.to_thread(_collect_metrics)
+        return wire(metrics)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

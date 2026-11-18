@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import Any
 
 from core.analytics import history as _history
 from core.logging_config import get_logger
+from core.utils.atomic_write import atomic_write
 
 logger = get_logger(__name__)
 
@@ -80,17 +82,20 @@ def load_cache(path: Path | None = None, *, allow_stale: bool = False) -> Any | 
     try:
         with open(p, encoding="utf-8") as f:
             doc = json.load(f)
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):
         return None
 
-    if doc.get("version") != CACHE_SCHEMA_VERSION:
+    if not isinstance(doc, dict) or doc.get("version") != CACHE_SCHEMA_VERSION:
         return None
 
     if doc.get("source_key") != _source_key():
         return None
 
+    saved_at = doc.get("saved_at", 0)
+    if not isinstance(saved_at, (int, float)) or not math.isfinite(saved_at):
+        return None
     if not allow_stale:
-        age = time.time() - doc.get("saved_at", 0)
+        age = time.time() - saved_at
         if age > CACHE_MAX_AGE_SECONDS:
             return None
     return doc.get("data")
@@ -111,8 +116,7 @@ def save_cache(data: Any, path: Path | None = None) -> None:
         "data": data,
     }
     try:
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump(doc, f, ensure_ascii=False)
+        atomic_write(p, json.dumps(doc, ensure_ascii=False))
     except OSError:
         logger.debug("Failed to write analytics cache to %s", p, exc_info=True)
 

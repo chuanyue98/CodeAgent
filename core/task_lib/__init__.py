@@ -8,49 +8,35 @@ site keeps working unchanged.
 
 from __future__ import annotations
 
-from core.console import configure_console_encoding
-
-configure_console_encoding()
-
-from core.task_lib.expressions import (  # noqa: E402
+from core.task_lib.expressions import (
     parse_combination_expression,
     parse_range_expression,
     resolve_task_range,
 )
-from core.task_lib.files import (  # noqa: E402
-    create_task_template,
+from core.task_lib.files import (
     get_task_file_path,
     list_tasks,
     read_task_prompt,
     show_tasks,
     validate_task_file,
 )
-from core.task_lib.interactive import (  # noqa: E402
+from core.task_lib.interactive import (
     _prompt_for_task_choice as _prompt_for_task_choice,
 )
-from core.task_lib.interactive import (  # noqa: E402
+from core.task_lib.interactive import (
     select_task_interactively,
 )
-from core.task_lib.paths import (  # noqa: E402
-    _ADDITIONAL_TEMPLATE_SEARCH_PATHS as _ADDITIONAL_TEMPLATE_SEARCH_PATHS,
-)
-from core.task_lib.paths import (  # noqa: E402
-    GENERAL_PROMPT_RELATIVE_PATH,
+from core.task_lib.paths import (
     TASK_FILE_SUFFIX,
     TASKS_DIR,
-    get_general_prompt_path,
     get_tasks_dir,
-    set_additional_template_search_paths,
 )
-from core.task_lib.selection import handle_task_mode, load_multiple_tasks  # noqa: E402
+from core.task_lib.selection import handle_task_mode, load_multiple_tasks
 
 __all__ = [
     "TASKS_DIR",
     "TASK_FILE_SUFFIX",
-    "GENERAL_PROMPT_RELATIVE_PATH",
-    "get_general_prompt_path",
     "get_tasks_dir",
-    "set_additional_template_search_paths",
     "list_tasks",
     "parse_range_expression",
     "parse_combination_expression",
@@ -59,7 +45,6 @@ __all__ = [
     "get_task_file_path",
     "validate_task_file",
     "read_task_prompt",
-    "create_task_template",
     "select_task_interactively",
     "handle_task_mode",
     "load_multiple_tasks",

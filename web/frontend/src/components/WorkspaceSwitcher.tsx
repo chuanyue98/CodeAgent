@@ -73,6 +73,17 @@ export default function WorkspaceSwitcher({ variant = 'header' }: WorkspaceSwitc
   }, []);
 
   useEffect(() => {
+    if (!open) return;
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setOpen(false);
+      }
+    }
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [open]);
+
+  useEffect(() => {
     if (open) {
       const idx = options.findIndex(option => option.path === selectedWorkspace);
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -155,6 +166,7 @@ export default function WorkspaceSwitcher({ variant = 'header' }: WorkspaceSwitc
   return (
     <div className="relative" ref={ref}>
       <button
+        type="button"
         onClick={() => setOpen(!open)}
         onKeyDown={handleKeyDown}
         aria-haspopup="listbox"
@@ -206,6 +218,7 @@ export default function WorkspaceSwitcher({ variant = 'header' }: WorkspaceSwitc
                   </SectionLabel>
                 )}
                 <button
+                  type="button"
                   role="option"
                   aria-selected={option.path === selectedWorkspace}
                   tabIndex={focusedIndex === index ? 0 : -1}

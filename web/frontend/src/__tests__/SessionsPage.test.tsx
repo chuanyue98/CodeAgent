@@ -320,4 +320,33 @@ describe('SessionsPage stale responses', () => {
     });
     expect(screen.getByText('1 session')).toBeVisible();
   });
+
+  test('failed session handoff displays a dismissible error alert', async () => {
+    sessionsFixture = [
+      session({ sessionId: 'ses-fail', target: 'claude', projectPath: '/workspace/proj-fail' }),
+    ];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes('/api/history/convert-and-launch')) {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          text: async () => JSON.stringify({ detail: 'conversion crashed' }),
+          json: async () => ({ detail: 'conversion crashed' }),
+        } as Response);
+      }
+      return (originalFetch as typeof fetch)(url, init);
+    });
+
+    renderSessionsPage();
+    await screen.findByText('1 session');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Relay session to different engine' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Codex' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/conversion crashed/);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });

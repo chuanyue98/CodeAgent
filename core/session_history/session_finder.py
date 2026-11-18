@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from core.constants import normalize_engine_name
 from core.session_history.models import UnifiedMessage, UnifiedSession
 from core.session_history.parsers import (
     find_antigravity_sessions,
@@ -22,6 +23,40 @@ def _message_key(message: UnifiedMessage) -> tuple[str, str, str, str]:
     return (message.role, message.timestamp, message.content, message.model)
 
 
+def _merge_session_metadata(
+    base: UnifiedSession, other: UnifiedSession
+) -> UnifiedSession:
+    """合并重复会话的元信息，保留子代理父子字段与子代理标题映射。"""
+    merged_titles = {**other.subagent_titles, **base.subagent_titles}
+    needs_update = (
+        (not base.project_path and bool(other.project_path))
+        or (not base.started_at and bool(other.started_at))
+        or (not base.ended_at and bool(other.ended_at))
+        or (not base.title and bool(other.title))
+        or (not base.model and bool(other.model))
+        or (not base.source_file and bool(other.source_file))
+        or (not base.parent_session_id and bool(other.parent_session_id))
+        or (not base.agent and bool(other.agent))
+        or merged_titles != base.subagent_titles
+    )
+    if not needs_update:
+        return base
+    return UnifiedSession(
+        session_id=base.session_id,
+        engine=base.engine,
+        project_path=base.project_path or other.project_path,
+        started_at=base.started_at or other.started_at,
+        ended_at=base.ended_at or other.ended_at,
+        messages=base.messages,
+        title=base.title or other.title,
+        model=base.model or other.model,
+        source_file=base.source_file or other.source_file,
+        parent_session_id=base.parent_session_id or other.parent_session_id,
+        agent=base.agent or other.agent,
+        subagent_titles=merged_titles,
+    )
+
+
 def _merge_duplicate_sessions(
     current: UnifiedSession, candidate: UnifiedSession
 ) -> UnifiedSession:
@@ -29,9 +64,9 @@ def _merge_duplicate_sessions(
     current_keys = {_message_key(message) for message in current.messages}
     candidate_keys = {_message_key(message) for message in candidate.messages}
     if candidate_keys.issubset(current_keys):
-        return current
+        return _merge_session_metadata(current, candidate)
     if current_keys.issubset(candidate_keys):
-        return candidate
+        return _merge_session_metadata(candidate, current)
 
     preferred = max(
         (current, candidate),
@@ -42,6 +77,7 @@ def _merge_duplicate_sessions(
             session.source_file,
         ),
     )
+    other = candidate if preferred is current else current
     messages: list[UnifiedMessage] = []
     seen: set[tuple[str, str, str, str]] = set()
     for message in [*current.messages, *candidate.messages]:
@@ -55,15 +91,16 @@ def _merge_duplicate_sessions(
     return UnifiedSession(
         session_id=preferred.session_id,
         engine=preferred.engine,
-        project_path=preferred.project_path
-        or current.project_path
-        or candidate.project_path,
+        project_path=preferred.project_path or other.project_path,
         started_at=min(starts) if starts else "",
         ended_at=max(ends) if ends else "",
         messages=messages,
-        title=preferred.title or current.title or candidate.title,
-        model=preferred.model or current.model or candidate.model,
-        source_file=preferred.source_file,
+        title=preferred.title or other.title,
+        model=preferred.model or other.model,
+        source_file=preferred.source_file or other.source_file,
+        parent_session_id=preferred.parent_session_id or other.parent_session_id,
+        agent=preferred.agent or other.agent,
+        subagent_titles={**other.subagent_titles, **preferred.subagent_titles},
     )
 
 
@@ -104,21 +141,22 @@ def find_all_sessions(
         list[UnifiedSession]: All sessions found, sorted by start time
         descending (most recent first).
     """
+    normalized_engine = normalize_engine_name(engine) if engine is not None else None
     all_sessions: list[UnifiedSession] = []
 
-    if engine is None or engine == "claude":
+    if normalized_engine is None or normalized_engine == "claude":
         all_sessions.extend(find_claude_sessions(project_path, home))
 
-    if engine is None or engine == "codex":
+    if normalized_engine is None or normalized_engine == "codex":
         all_sessions.extend(find_codex_sessions(project_path, home))
 
-    if engine is None or engine == "opencode":
+    if normalized_engine is None or normalized_engine == "opencode":
         all_sessions.extend(find_opencode_sessions(project_path, home))
 
-    if engine is None or engine == "codebuddy":
+    if normalized_engine is None or normalized_engine == "codebuddy":
         all_sessions.extend(find_codebuddy_sessions(project_path, home))
 
-    if engine is None or engine in ("antigravity", "agy"):
+    if normalized_engine is None or normalized_engine == "antigravity":
         all_sessions.extend(find_antigravity_sessions(project_path, home))
 
     # A provider may expose multiple backing files for one logical session.
@@ -146,6 +184,7 @@ def find_session_by_id(
     Returns:
         UnifiedSession if found, None otherwise.
     """
+    engine = normalize_engine_name(engine)
     sessions = find_all_sessions(project_path, home, engine=engine)
     for session in sessions:
         if session.session_id == session_id:

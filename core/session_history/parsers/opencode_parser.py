@@ -164,6 +164,7 @@ def parse_opencode_session(
             parts_by_message.setdefault(part_row["message_id"], []).append(part_row)
 
         messages: list[UnifiedMessage] = []
+        last_assistant_model = ""
 
         for msg_row in msg_rows:
             msg_id = msg_row["id"]
@@ -241,6 +242,17 @@ def parse_opencode_session(
                             parts.append(block)
                     content = "\n".join(parts).strip()
 
+            turn_model = model_str
+            if role == "assistant":
+                raw_msg_model = msg_data.get("modelID")
+                if not raw_msg_model and isinstance(msg_data.get("model"), dict):
+                    raw_msg_model = msg_data["model"].get("modelID")
+                elif not raw_msg_model and isinstance(msg_data.get("model"), str):
+                    raw_msg_model = msg_data["model"]
+                if isinstance(raw_msg_model, str) and raw_msg_model.strip():
+                    turn_model = raw_msg_model.strip()
+                    last_assistant_model = turn_model
+
             if content or tool_calls:
                 messages.append(
                     UnifiedMessage(
@@ -248,7 +260,7 @@ def parse_opencode_session(
                         content=content,
                         timestamp=timestamp,
                         tool_calls=tool_calls,
-                        model=model_str if role == "assistant" else "",
+                        model=turn_model if role == "assistant" else "",
                     )
                 )
 
@@ -269,7 +281,7 @@ def parse_opencode_session(
         ended_at=_ms_to_iso(ended_ms),
         messages=messages,
         title=title,
-        model=model_str,
+        model=model_str or last_assistant_model,
         source_file=str(db_path),
         parent_session_id=sess_row["parent_id"] or "",
         agent=sess_row["agent"] or "",

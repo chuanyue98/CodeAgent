@@ -23,7 +23,7 @@ def get_config_path():
 
 
 @router.get("/hooks")
-async def list_hooks() -> list:
+def list_hooks() -> list:
     """List all registered hooks with metadata."""
     try:
         service = HookService(get_hooks_root(), get_config_path())

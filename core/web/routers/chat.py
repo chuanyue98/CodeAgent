@@ -21,6 +21,7 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
+import codecs
 import json
 import os
 from pathlib import Path
@@ -29,7 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import Field
 
-from core.constants import ENGINES
+from core.constants import ENGINES, normalize_engine_name
 from core.services.config_service import ConfigService
 from core.web.case_convert import ProtocolModel, wire
 from core.web.routers.config import get_config_path
@@ -153,6 +154,7 @@ async def get_chat_capabilities(
     provider-native capabilities remain unknown because their discovery is
     internal to each CLI and is not exposed by the one-shot protocol.
     """
+    engine = normalize_engine_name(engine)
     if engine not in ENGINES:
         raise HTTPException(status_code=400, detail=f"Invalid engine: {engine!r}")
 
@@ -282,6 +284,7 @@ async def stream_chat_turn(turn_id: str):
     async def event_generator():
         last_size = 0
         buffer = ""
+        decoder = codecs.getincrementaldecoder("utf-8")("replace")
 
         while True:
             current_status = await asyncio.to_thread(_runner.get_status, turn_id)
@@ -290,21 +293,27 @@ async def stream_chat_turn(turn_id: str):
                 yield 'data: {"error": "log file removed"}\n\n'
                 return
 
-            if current_size != last_size:
+            if current_size < last_size:
+                # 文件被截断或重建时重置偏移与增量解码器。
+                last_size = 0
+                buffer = ""
+                decoder.reset()
 
-                def _read_new_bytes(p: Path = path, offset: int = last_size) -> str:
-                    with open(p, encoding="utf-8") as fh:
+            if current_size > last_size:
+
+                def _read_new_bytes(p: Path = path, offset: int = last_size) -> bytes:
+                    with open(p, "rb") as fh:
                         fh.seek(offset)
                         return fh.read()
 
                 try:
-                    new_data = await asyncio.to_thread(_read_new_bytes)
+                    raw = await asyncio.to_thread(_read_new_bytes)
                 except Exception:
                     yield 'data: {"error": "read failed"}\n\n'
                     return
 
-                last_size = current_size
-                buffer += new_data
+                last_size += len(raw)
+                buffer += decoder.decode(raw, final=False)
                 lines = buffer.split("\n")
                 buffer = lines.pop()  # keep the possibly-incomplete trailing line
                 for line in lines:
@@ -315,8 +324,15 @@ async def stream_chat_turn(turn_id: str):
             if (
                 current_status is not None
                 and current_status.status != "running"
-                and current_size == last_size
+                and current_size <= last_size
             ):
+                buffer += decoder.decode(b"", final=True)
+                lines = buffer.split("\n")
+                buffer = lines.pop()
+                for line in lines:
+                    line = line.strip()
+                    if line:
+                        yield f"data: {line}\n\n"
                 trailing = buffer.strip()
                 if trailing:
                     yield f"data: {trailing}\n\n"

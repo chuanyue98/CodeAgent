@@ -32,8 +32,16 @@ import sys
 import time
 from pathlib import Path
 
+import yaml  # type: ignore[import-untyped]
+
 from core.host_env import child_environ
 from core.resource_locator import get_bundled_resource_root
+from core.runtime_paths import get_run_dir
+from core.utils.process_tree import (
+    kill_process_tree,
+    process_created_at,
+    terminate_process_tree,
+)
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -63,17 +71,19 @@ DELEGATION_INSTRUCTIONS = """CodeAgent 跨引擎协作：把子任务交给另�
 
 
 def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
-    """极简 frontmatter 解析,返回 (meta, body)。无 frontmatter 时返回 ({}, 原文)。"""
+    """使用 ``yaml.safe_load`` 解析 frontmatter，返回 ``(meta, body)``。"""
     if not text.startswith("---"):
         return {}, text
     parts = text.split("---", 2)
     if len(parts) < 3:
         return {}, text
-    meta: dict[str, str] = {}
-    for line in parts[1].strip().splitlines():
-        if ":" in line:
-            key, _, value = line.partition(":")
-            meta[key.strip()] = value.strip().strip("\"'")
+    try:
+        loaded = yaml.safe_load(parts[1])
+    except yaml.YAMLError:
+        return {}, parts[2].strip()
+    if not isinstance(loaded, dict):
+        return {}, parts[2].strip()
+    meta = {str(k): "" if v is None else str(v) for k, v in loaded.items()}
     return meta, parts[2].strip()
 
 
@@ -137,31 +147,37 @@ def discover_skills(
 
 
 def _find_skill(skills_root: Path, name: str) -> Path | None:
-    """按技能目录名定位 SKILL.md(跨 category 查找)。"""
+    """按技能目录名定位 SKILL.md（跨 category 查找，校验路径不越界）。"""
     if not skills_root.exists():
         return None
-    for category_dir in skills_root.iterdir():
+    for category_dir in sorted(skills_root.iterdir()):
         if not category_dir.is_dir():
             continue
-        candidate = category_dir / name / "SKILL.md"
-        if candidate.is_file():
+        cat_resolved = category_dir.resolve()
+        candidate = (cat_resolved / name / "SKILL.md").resolve()
+        if candidate.is_relative_to(cat_resolved) and candidate.is_file():
             return candidate
     return None
 
 
 def _find_hook(hooks_root: Path, name: str) -> Path | None:
-    """按 hook 名定位 hook.py(跨 category 查找)。name 可为 ``category/hook`` 或 ``hook``。"""
+    """按 hook 名定位 hook.py（跨 category 查找，校验路径不越界）。
+
+    ``name`` 可为 ``category/hook`` 或 ``hook``。
+    """
     if not hooks_root.exists():
         return None
-    # 支持 "category/hook" 直接定位
-    direct = hooks_root / name / "hook.py"
-    if direct.is_file():
+    root_resolved = hooks_root.resolve()
+    # 支持 "category/hook" 直接定位，同时阻止路径穿越到 hooks_root 之外
+    direct = (root_resolved / name / "hook.py").resolve()
+    if direct.is_relative_to(root_resolved) and direct.is_file():
         return direct
     for category_dir in sorted(hooks_root.iterdir()):
         if not category_dir.is_dir():
             continue
-        candidate = category_dir / name / "hook.py"
-        if candidate.is_file():
+        cat_resolved = category_dir.resolve()
+        candidate = (cat_resolved / name / "hook.py").resolve()
+        if candidate.is_relative_to(cat_resolved) and candidate.is_file():
             return candidate
     return None
 
@@ -169,15 +185,18 @@ def _find_hook(hooks_root: Path, name: str) -> Path | None:
 def _resolve_skill_script(skill_dir: Path, script_arg: str | None) -> Path | None:
     """定位要执行的脚本。
 
-    - ``script_arg`` 给定时,解析后必须仍落在 ``skill_dir`` 内(防路径穿越),否则抛 ``ValueError``。
-    - 否则自动挑选:``scripts/run.{py,sh,cmd}`` 优先,退化为 ``scripts/`` 下唯一个文件。
-    - 都没有则返回 ``None``(交给调用方做"返回指引"的安全回退)。
+    - ``script_arg`` 给定时，解析后必须仍落在 ``skill_dir`` 内且为普通文件，否则抛 ``ValueError``。
+    - 否则自动挑选：``scripts/run.{py,sh,cmd}`` 优先，退化为 ``scripts/`` 下唯一的文件。
+    - 都没有则返回 ``None``（交给调用方做“返回指引”的安全回退）。
     """
     scripts_dir = skill_dir / "scripts"
     if script_arg:
-        candidate = (skill_dir / script_arg).resolve()
-        if not str(candidate).startswith(str(skill_dir.resolve())):
+        base = skill_dir.resolve()
+        candidate = (base / script_arg).resolve()
+        if not candidate.is_relative_to(base):
             raise ValueError(f"脚本路径越界: {script_arg}")
+        if not candidate.is_file():
+            raise ValueError(f"脚本不存在: {script_arg}")
         return candidate
     for entry in ("run.py", "run.sh", "run.cmd"):
         auto = scripts_dir / entry
@@ -202,35 +221,58 @@ def _script_command(script_path: Path) -> list[str]:
     return [str(script_path)]
 
 
-def _run_script(
-    script_path: Path, args: str, cwd: Path, timeout: int = 300
+def _run_subprocess(
+    cmd: list[str],
+    *,
+    cwd: Path | None = None,
+    input_text: str | None = None,
+    timeout: int = 300,
 ) -> tuple[str, int]:
-    """在干净子进程中执行脚本。
+    """在干净子进程中执行命令，超时时终止整棵进程树。
 
-    不继承 server 自身的 stdin/stdout/stderr(尤其 stdio 传输下必须如此,否则会
-    污染 JSON-RPC 通道)。返回 ``(combined_output, exit_code)``;输出截断到 64KB。
+    不继承 server 自身的 stdin/stdout/stderr（尤其 stdio 传输下必须如此，
+    否则会污染 JSON-RPC 通道）。返回 ``(combined_output, exit_code)``；
+    输出截断到 64KB。
     """
-    cmd = _script_command(script_path) + shlex.split(args or "")
-    proc = subprocess.run(
+    proc = subprocess.Popen(
         cmd,
-        cwd=str(cwd),
+        cwd=str(cwd) if cwd is not None else None,
         env=child_environ(),
-        stdin=subprocess.DEVNULL,
+        stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         encoding="utf-8",
         errors="replace",
-        timeout=timeout,
     )
-    out = (proc.stdout or "")[: 64 * 1024]
-    return out, proc.returncode
+    created_at = process_created_at(proc.pid)
+    try:
+        out, _ = proc.communicate(input=input_text, timeout=timeout)
+        return (out or "")[: 64 * 1024], proc.returncode
+    except subprocess.TimeoutExpired:
+        if not terminate_process_tree(proc.pid, created_at) and proc.poll() is None:
+            kill_process_tree(proc.pid)
+        try:
+            out, _ = proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            out = ""
+        partial = (out or "")[: 64 * 1024]
+        timeout_msg = f"\n[超时: 超过 {timeout} 秒，已终止进程树]"
+        return (partial + timeout_msg)[: 64 * 1024], 124
+
+
+def _run_script(
+    script_path: Path, args: str, cwd: Path, timeout: int = 300
+) -> tuple[str, int]:
+    """在干净子进程中执行脚本，返回 ``(combined_output, exit_code)``。"""
+    cmd = _script_command(script_path) + shlex.split(args or "", posix=os.name != "nt")
+    return _run_subprocess(cmd, cwd=cwd, timeout=timeout)
 
 
 def _append_audit(root_dir: Path | None, tool: str, args: dict) -> None:
-    """轻量审计:追加一行 JSONL 到 ``<root>/.ca_task_logs/mcp_audit.log``。"""
-    root = root_dir or Path.cwd()
-    log_dir = root / ".ca_task_logs"
+    """轻量审计：追加一行 JSONL 到运行目录（``get_run_dir() / "mcp_audit.log"``）。"""
+    del root_dir
+    log_dir = get_run_dir()
     log_dir.mkdir(parents=True, exist_ok=True)
     entry = {
         "ts": time.time(),
@@ -402,7 +444,7 @@ def build_server(
         skill_md = _find_skill(root, name)
         if skill_md is None:
             return f"技能不存在: {name}(可用 skill_list 查看全部)"
-        return skill_md.read_text(encoding="utf-8")
+        return skill_md.read_text(encoding="utf-8", errors="replace")
 
     @server.resource("ca://skills")
     def skills_index() -> str:
@@ -418,7 +460,7 @@ def build_server(
         skill_md = _find_skill(root, name)
         if skill_md is None:
             return f"技能不存在: {name}"
-        return skill_md.read_text(encoding="utf-8")
+        return skill_md.read_text(encoding="utf-8", errors="replace")
 
     if allow_write or trust_hooks:
 
@@ -443,7 +485,7 @@ def build_server(
                 return f"✗ {exc}"
             if target is None:
                 return (
-                    skill_md.read_text(encoding="utf-8")
+                    skill_md.read_text(encoding="utf-8", errors="replace")
                     + "\n\n[该技能无可执行脚本,以上为操作指引]"
                 )
             out, code = _run_script(target, args, cwd=skill_dir)
@@ -533,19 +575,12 @@ def build_server(
                 json.loads(event_json)
             except json.JSONDecodeError:
                 return "✗ event_json 不是合法 JSON"
-            proc = subprocess.run(
+            out, code = _run_subprocess(
                 _script_command(hook_py),
-                input=event_json,
-                env=child_environ(),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
+                input_text=event_json,
                 timeout=300,
             )
-            out = (proc.stdout or "")[: 64 * 1024]
-            return f"exit={proc.returncode}\n---\n{out}"
+            return f"exit={code}\n---\n{out}"
 
     return server
 
@@ -625,7 +660,14 @@ def main() -> None:
         build_delegation_server().run(transport="stdio")
         return
     allow_write = args.allow_write or args.trust_hooks
+    config: dict | None = None
+    if args.group is not None:
+        from core.resource_locator import get_default_config_path
+        from core.services.config_service import ConfigService
+
+        config, _ = ConfigService(get_default_config_path()).get_config()
     serve(
+        config=config,
         transport="http" if args.http else "stdio",
         group=args.group,
         port=args.port,

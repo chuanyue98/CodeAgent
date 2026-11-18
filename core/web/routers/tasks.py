@@ -1,8 +1,12 @@
 import asyncio
+import threading
+from contextlib import suppress
+from pathlib import Path
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from core.constants import ENGINES, normalize_engine_name
+from core.engine_registry import ENGINES as ENGINE_SPECS
 from core.logging_config import get_logger
 from core.services.config_service import ConfigService
 from core.services.git_service import describe_run_changes
@@ -29,13 +33,85 @@ from core.web.routers.config import get_config_path
 router = APIRouter(prefix="/api")
 logger = get_logger(__name__)
 
+
 # Singleton runner for the session
-_runner = TaskRunner(ROOT_DIR)
+class LazyTaskRunner:
+    """导入路由不打开数据库；应用启动或首次调用才创建。"""
+
+    def __init__(self):
+        self._instance = None
+        self._lock = threading.Lock()
+
+    @property
+    def is_initialized(self) -> bool:
+        return self._instance is not None
+
+    def __getattr__(self, name):
+        with self._lock:
+            if self._instance is None:
+                self._instance = TaskRunner(ROOT_DIR)
+            return getattr(self._instance, name)
+
+    def __setattr__(self, name, value):
+        if name in {"_instance", "_lock"}:
+            object.__setattr__(self, name, value)
+        else:
+            self.__getattr__(name)
+            setattr(self._instance, name, value)
+
+    def __delattr__(self, name):
+        delattr(self._instance, name)
+
+    def close(self):
+        with self._lock:
+            if self._instance is not None:
+                self._instance.close()
+                self._instance = None
+
+
+_runner = LazyTaskRunner()
+_PENDING_GENERATED_LOCK = threading.Lock()
+_PENDING_GENERATED_PATHS: dict[str, Path] = {}
+
+
+def _unlink_if_empty(path: Path) -> None:
+    """生成失败或中止时清理空占位文件，避免阻断后续重试。"""
+    with suppress(OSError):
+        if path.is_file() and path.stat().st_size == 0:
+            path.unlink(missing_ok=True)
+
+
+def _cleanup_generated_task(task_id: str, status: TaskRunStatus | None) -> None:
+    """任务结束且仍为空占位文件时清理生成占位。"""
+    if status is not None and status.status == "running":
+        return
+    with _PENDING_GENERATED_LOCK:
+        path = _PENDING_GENERATED_PATHS.pop(task_id, None)
+    if path is not None:
+        _unlink_if_empty(path)
+
+
+def _reap_finished_generated_tasks() -> None:
+    """兜底清理已结束但尚未被轮询状态的空占位任务文件。"""
+    with _PENDING_GENERATED_LOCK:
+        pending = list(_PENDING_GENERATED_PATHS.items())
+    if not pending:
+        return
+    if not getattr(_runner, "is_initialized", True):
+        return
+    get_status = getattr(_runner, "get_status", None)
+    if not callable(get_status):
+        return
+    for task_id, _path in pending:
+        with suppress(Exception):
+            _cleanup_generated_task(task_id, get_status(task_id))
 
 
 def _wire_run(status: TaskRunStatus) -> dict:
     """Wire shape of :class:`~core.services.runner_service.TaskRunStatus`."""
-    return camelize(vars(status))
+    data = vars(status).copy()
+    data.pop("process_created_at", None)
+    return camelize(data)
 
 
 def get_tasks_root():
@@ -54,6 +130,7 @@ def resolve_registered_workspace(workspace: str) -> RegisteredWorkspace:
 
 @router.get("/tasks")
 async def list_tasks():
+    await asyncio.to_thread(_reap_finished_generated_tasks)
     return await asyncio.to_thread(TaskService(get_tasks_root()).list_tasks)
 
 
@@ -84,7 +161,7 @@ async def create_task(
 
 
 _GENERATE_TASK_PROMPT = """你是 CodeAgent 的任务编排专家 (Task Authoring)。请把用户下面描述的自动化任务整理成规范剧本，
-直接创建文件 tasks/{name}.md（相对当前工作目录的路径，不要询问确认，直接写入）。
+直接创建并覆盖文件 {target_path}（不要询问确认，直接写入）。
 
 文件要求：
 - 第一行是一级标题：# {title}
@@ -108,22 +185,24 @@ async def generate_task(
     title: str = Body(..., embed=True),
     description: str = Body(..., embed=True),
 ):
-    """Runs a headless engine turn that authors tasks/<name>.md itself.
+    """Runs a headless engine turn that authors a task markdown file itself.
 
     Mirrors ``ca new``'s task-authoring flow (an AI agent writes the file
     directly with its own tools) instead of taking pre-filled section text,
     but reuses the already-hardened one-shot ChatPage pipeline
     (``build_chat_command``) rather than the interactive-oriented CLI path.
     """
+    engine = normalize_engine_name(engine)
     if engine not in ENGINES:
         raise HTTPException(status_code=400, detail=f"Invalid engine: {engine!r}")
     if not is_valid_task_name(name):
         raise HTTPException(status_code=400, detail="Task name must match [\\w.-]+")
 
+    await asyncio.to_thread(_reap_finished_generated_tasks)
     tasks_root = get_tasks_root()
     tasks_root.mkdir(parents=True, exist_ok=True)
-    path = tasks_root / f"{name}.md"
-    if not path.resolve().is_relative_to(tasks_root.resolve()):
+    path = (tasks_root / f"{name}.md").resolve()
+    if not path.is_relative_to(tasks_root.resolve()):
         raise HTTPException(status_code=400, detail="Invalid task name")
     try:
         # Exclusive-create ("x") reserves the filename atomically so a second
@@ -139,7 +218,7 @@ async def generate_task(
         ) from exc
 
     message = _GENERATE_TASK_PROMPT.format(
-        name=name, title=title, description=description.strip()
+        target_path=str(path), title=title, description=description.strip()
     )
     try:
         status = await asyncio.to_thread(
@@ -153,14 +232,24 @@ async def generate_task(
         # Dispatch failed synchronously, before any agent could have started
         # writing the file: release the reserved name instead of leaving a
         # dangling empty placeholder that would 409 all future retries.
-        path.unlink(missing_ok=True)
+        _unlink_if_empty(path)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception:
+        _unlink_if_empty(path)
+        raise
+
+    if status.status == "running":
+        with _PENDING_GENERATED_LOCK:
+            _PENDING_GENERATED_PATHS[status.task_id] = path
+    else:
+        _unlink_if_empty(path)
     return _wire_run(status)
 
 
 @router.get("/tasks/runs")
 async def list_runs():
     """Lists all background task runs."""
+    await asyncio.to_thread(_reap_finished_generated_tasks)
     runs = await asyncio.to_thread(_runner.list_runs)
     return [_wire_run(run) for run in runs]
 
@@ -170,10 +259,13 @@ async def get_run_status(task_id: str):
     """Retrieves the status of a specific background task run, including real-time progress."""
     status = await asyncio.to_thread(_runner.get_status, task_id)
     if not status:
+        await asyncio.to_thread(_cleanup_generated_task, task_id, None)
         raise HTTPException(status_code=404, detail="Run not found")
 
+    await asyncio.to_thread(_cleanup_generated_task, task_id, status)
+
     # Enrich with latest task data
-    task_name = task_id.rsplit("_", 1)[0]
+    task_name = status.task_name or task_id.rsplit("_", 1)[0]
     task_service = TaskService(get_tasks_root())
     task_data = await asyncio.to_thread(
         task_service.get_task, task_name, log_path=status.log_path
@@ -186,6 +278,9 @@ async def get_run_status(task_id: str):
 async def stop_run(task_id: str):
     """Stops a running background task."""
     success = await asyncio.to_thread(_runner.stop_task, task_id)
+    latest = await asyncio.to_thread(_runner.get_status, task_id)
+    if success or latest is None or latest.status != "running":
+        await asyncio.to_thread(_cleanup_generated_task, task_id, None)
     return {"success": success}
 
 
@@ -339,43 +434,28 @@ async def run_task(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+_ENGINE_DESCRIPTIONS: dict[str, str] = {
+    "claude": "Anthropic High-Reasoning Driver",
+    "opencode": "Local npm CLI with TUI",
+    "codex": "OpenAI Engineering Driver",
+    "codebuddy": "Tencent Engineering Driver",
+    "antigravity": "Google Next-Gen Agent CLI",
+}
+
+
 @router.get("/engines")
 async def list_engines():
-    """Lists available AI engines.
+    """Lists available AI engines from :data:`core.engine_registry.ENGINES`.
 
     ``supportsResume`` reflects ChatPage's ability to continue an existing
     session with prior context intact, verified live per engine.
     """
-    # This could be more dynamic by checking shutil.which for binaries
     return [
         {
-            "id": "claude",
-            "name": "Claude Code",
-            "description": "Anthropic High-Reasoning Driver",
+            "id": spec.name,
+            "name": spec.display_name,
+            "description": _ENGINE_DESCRIPTIONS.get(spec.name, spec.install_hint),
             "supportsResume": True,
-        },
-        {
-            "id": "opencode",
-            "name": "OpenCode AI",
-            "description": "Local npm CLI with TUI",
-            "supportsResume": True,
-        },
-        {
-            "id": "codex",
-            "name": "OpenAI Codex",
-            "description": "OpenAI Engineering Driver",
-            "supportsResume": True,
-        },
-        {
-            "id": "codebuddy",
-            "name": "CodeBuddy Code",
-            "description": "Tencent Engineering Driver",
-            "supportsResume": True,
-        },
-        {
-            "id": "antigravity",
-            "name": "Google Antigravity",
-            "description": "Google Next-Gen Agent CLI",
-            "supportsResume": True,
-        },
+        }
+        for spec in ENGINE_SPECS.values()
     ]

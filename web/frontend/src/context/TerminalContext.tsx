@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { closePtyTerminal } from '../api/pty';
 
@@ -118,6 +118,22 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   });
 
+  const tabsRef = useRef(tabs);
+  const activeTabIdRef = useRef(activeTabId);
+
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
+
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
+
+  const selectActiveTab = useCallback((id: string | null) => {
+    activeTabIdRef.current = id;
+    setActiveTabId(id);
+  }, []);
+
   useEffect(() => {
     // The first message is deliberately left out: see TerminalTab.prompt.
     const persisted = tabs.map(tab => {
@@ -125,32 +141,49 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
       delete copy.prompt;
       return copy;
     });
-    localStorage.setItem('codeagent.terminalTabs', JSON.stringify(persisted));
+    try {
+      localStorage.setItem('codeagent.terminalTabs', JSON.stringify(persisted));
+    } catch {
+      // Ignore storage quota/access errors (e.g. private browsing).
+    }
   }, [tabs]);
 
   useEffect(() => {
-    if (activeTabId) {
-      localStorage.setItem('codeagent.activeTabId', activeTabId);
-    } else {
-      localStorage.removeItem('codeagent.activeTabId');
+    try {
+      if (activeTabId) {
+        localStorage.setItem('codeagent.activeTabId', activeTabId);
+      } else {
+        localStorage.removeItem('codeagent.activeTabId');
+      }
+    } catch {
+      // Ignore storage quota/access errors.
     }
   }, [activeTabId]);
 
   useEffect(() => {
-    localStorage.setItem('codeagent.terminalFontSize', String(fontSize));
+    try {
+      localStorage.setItem('codeagent.terminalFontSize', String(fontSize));
+    } catch {
+      // Ignore storage quota/access errors.
+    }
   }, [fontSize]);
 
   useEffect(() => {
-    localStorage.setItem('codeagent.terminalCopyOnSelect', String(copyOnSelect));
+    try {
+      localStorage.setItem('codeagent.terminalCopyOnSelect', String(copyOnSelect));
+    } catch {
+      // Ignore storage quota/access errors.
+    }
   }, [copyOnSelect]);
 
   const openTab = useCallback((engine: string, cwd: string, sessionId?: string, attachId?: string, prompt?: string) => {
     const identity = attachId ?? sessionId;
     if (identity) {
-      const existing = tabs.find(
+      const existing = tabsRef.current.find(
         t => (attachId ? t.attachId === attachId : t.sessionId === identity) && t.engine === engine
       );
       if (existing) {
+        activeTabIdRef.current = existing.id;
         setActiveTabId(existing.id);
         setIsDrawerOpen(true);
         return;
@@ -158,36 +191,44 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
     const id = Math.random().toString(36).slice(2, 11);
     const trimmed = prompt?.trim();
-    setTabs(prev => [...prev, { id, engine, cwd, sessionId, attachId, ...(trimmed ? { prompt: trimmed } : {}) }]);
+    const nextTab: TerminalTab = { id, engine, cwd, sessionId, attachId, ...(trimmed ? { prompt: trimmed } : {}) };
+    const nextTabs = [...tabsRef.current, nextTab];
+    tabsRef.current = nextTabs;
+    setTabs(nextTabs);
+    activeTabIdRef.current = id;
     setActiveTabId(id);
     setIsDrawerOpen(true);
-  }, [tabs]);
+  }, []);
 
   const closeTab = useCallback((id: string) => {
-    const closing = tabs.find(tab => tab.id === id);
+    const currentTabs = tabsRef.current;
+    const idx = currentTabs.findIndex(tab => tab.id === id);
+    const closing = idx >= 0 ? currentTabs[idx] : undefined;
     // An attach tab is a guest on a terminal the instances page owns.
     if (closing && !closing.attachId) {
       closePtyTerminal(closing.engine, closing.cwd, closing.sessionId, closing.id).catch(() => {});
     }
-    setTabs(prev => prev.filter(tab => tab.id !== id));
+    const nextTabs = currentTabs.filter(tab => tab.id !== id);
+    tabsRef.current = nextTabs;
+    setTabs(nextTabs);
     setRateLimitedTabIds(prev => {
+      if (!prev.has(id)) return prev;
       const newSet = new Set(prev);
       newSet.delete(id);
       return newSet;
     });
-    setActiveTabId(currentActive => {
-      if (currentActive === id) {
-        const idx = tabs.findIndex(t => t.id === id);
-        if (tabs.length > 1) {
-          return tabs[idx > 0 ? idx - 1 : 1].id;
-        } else {
-          setIsDrawerOpen(false);
-          return null;
-        }
+    if (activeTabIdRef.current === id) {
+      if (nextTabs.length > 0) {
+        const fallback = currentTabs[idx > 0 ? idx - 1 : 1]?.id ?? nextTabs[0].id;
+        activeTabIdRef.current = fallback;
+        setActiveTabId(fallback);
+      } else {
+        activeTabIdRef.current = null;
+        setActiveTabId(null);
+        setIsDrawerOpen(false);
       }
-      return currentActive;
-    });
-  }, [tabs]);
+    }
+  }, []);
 
   const toggleDrawer = useCallback(() => setIsDrawerOpen(prev => !prev), []);
   const openDrawer = useCallback(() => setIsDrawerOpen(true), []);
@@ -248,7 +289,7 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toggleDrawer, isDrawerOpen, increaseFontSize, decreaseFontSize, resetFontSize]);
 
-  const value = {
+  const value = useMemo<TerminalContextValue>(() => ({
     tabs,
     activeTabId,
     rateLimitedTabIds,
@@ -261,7 +302,7 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
     setTerminalSlot,
     openTab,
     closeTab,
-    setActiveTabId,
+    setActiveTabId: selectActiveTab,
     toggleDrawer,
     openDrawer,
     closeDrawer,
@@ -273,7 +314,31 @@ export const TerminalProvider: React.FC<{ children: ReactNode }> = ({ children }
     toggleZenMode,
     markRateLimited,
     clearRateLimited,
-  };
+  }), [
+    tabs,
+    activeTabId,
+    rateLimitedTabIds,
+    isDrawerOpen,
+    isMaximized,
+    fontSize,
+    copyOnSelect,
+    zenMode,
+    terminalSlot,
+    openTab,
+    closeTab,
+    selectActiveTab,
+    toggleDrawer,
+    openDrawer,
+    closeDrawer,
+    toggleMaximize,
+    increaseFontSize,
+    decreaseFontSize,
+    resetFontSize,
+    toggleCopyOnSelect,
+    toggleZenMode,
+    markRateLimited,
+    clearRateLimited,
+  ]);
 
   return (
     <TerminalContext.Provider value={value}>

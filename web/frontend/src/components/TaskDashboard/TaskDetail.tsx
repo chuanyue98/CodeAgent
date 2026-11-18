@@ -22,11 +22,12 @@ import StatusDot from '../shared/StatusDot';
 import EditTaskModal from './EditTaskModal';
 import RunChanges from './RunChanges';
 import TaskBlueprintView from './TaskBlueprintView';
+import { formatDuration } from '../../utils/sessionProgress';
 import { formatWorkspaceLabel } from '../../utils/workspaceFormat';
 import { classifyStageStatus, type Engine, type RunStatus, type Task } from './types';
-import { useLanguageCode, useT } from '../../i18n/context';
+import { useT } from '../../i18n/context';
 import { fetchSchedules } from '../../api/schedules';
-import request from '../../utils/request';
+import { deleteTask } from '../../api/tasks';
 
 function stageIcon(status: string) {
   const state = classifyStageStatus(status);
@@ -46,17 +47,10 @@ function stageBadge(status: string) {
   return 'border-slate-100 text-slate-400 bg-slate-50';
 }
 
-/** Formats a duration in seconds as a compact human string (e.g. "12s", "3m 4s"). */
-function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return '—';
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
-  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-}
-
-function runDuration(run: RunStatus): number {
-  const end = run.endTime ?? (run.status === 'running' ? Date.now() / 1000 : 0);
-  return end ? end - run.startTime : 0;
+function formatRunDuration(run: RunStatus): string {
+  const end = run.endTime ?? (run.status === 'running' ? Date.now() / 1000 : null);
+  const ms = end !== null ? Math.max(0, (end - run.startTime) * 1000) : null;
+  return formatDuration(ms) ?? '—';
 }
 
 function runBadgeClass(status: RunStatus['status']): string {
@@ -116,7 +110,6 @@ export default function TaskDetail({
   onWorkspaceChange: (workspace: string) => void;
 }) {
   const t = useT();
-  const lang = useLanguageCode();
   const navigate = useSafeNavigate();
 
   const [selectedEngine, setSelectedEngine] = useState(engines[0]?.id || 'opencode');
@@ -179,7 +172,7 @@ export default function TaskDetail({
     // The backend refuses to delete a task with an active run (409). Surface
     // that as an inline error rather than navigating away.
     try {
-      await request(`/api/tasks/${task.name}`, { method: 'DELETE' });
+      await deleteTask(task.name);
       onDeleted();
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : t('taskDetail.deleteFailed'));
@@ -456,12 +449,10 @@ export default function TaskDetail({
                     <Terminal className="w-6 h-6" />
                   </div>
                   <h3 className="text-sm font-semibold text-slate-700">
-                    {lang === 'zh' ? '暂无执行日志' : 'No execution logs yet'}
+                    {t('taskDetail.noLogsTitle')}
                   </h3>
                   <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                    {lang === 'zh'
-                      ? '运行此任务或从历史记录中选择一次执行以查看终端日志。'
-                      : 'Run this task or select a past run from history to view terminal logs.'}
+                    {t('taskDetail.noLogsHint')}
                   </p>
                 </div>
               )}
@@ -479,12 +470,10 @@ export default function TaskDetail({
                     <GitBranch className="w-6 h-6" />
                   </div>
                   <h3 className="text-sm font-semibold text-slate-700">
-                    {lang === 'zh' ? '暂无变更记录' : 'No changes recorded'}
+                    {t('taskDetail.noChangesTitle')}
                   </h3>
                   <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                    {lang === 'zh'
-                      ? '执行任务后可在此检查文件修改与 Git diff。'
-                      : 'Run this task to inspect file modifications and git diffs.'}
+                    {t('taskDetail.noChangesHint')}
                   </p>
                 </div>
               )}
@@ -520,7 +509,7 @@ export default function TaskDetail({
                             )}
                           </div>
                           <p className="text-xs text-slate-400">
-                            {new Date(run.startTime * 1000).toLocaleString()} · {t('taskDetail.duration')}: {formatDuration(runDuration(run))}
+                            {new Date(run.startTime * 1000).toLocaleString()} · {t('taskDetail.duration')}: {formatRunDuration(run)}
                           </p>
                         </div>
 
@@ -574,7 +563,7 @@ export default function TaskDetail({
               <div className="glass-card p-4 border-slate-100 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-700 truncate">
-                    {lang === 'zh' ? '最新执行概览' : 'Latest Run Overview'}
+                    {t('taskDetail.latestRunOverview')}
                   </span>
                   <span className={`inline-flex items-center gap-1.5 text-[10px] px-2.5 py-0.5 rounded-lg font-bold uppercase tracking-wider border ${runBadgeClass(metaRun.status)}`}>
                     {metaRun.status === 'running' && <StatusDot tone="running" pulse />}
@@ -589,7 +578,7 @@ export default function TaskDetail({
                   </div>
                   <div className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-100">
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-0.5">{t('taskDetail.duration')}</span>
-                    <span className="font-semibold text-slate-800 block">{formatDuration(runDuration(metaRun))}</span>
+                    <span className="font-semibold text-slate-800 block">{formatRunDuration(metaRun)}</span>
                   </div>
                   {metaRun.exitCode !== undefined && metaRun.exitCode !== null && (
                     <div className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-100 col-span-2">
@@ -634,7 +623,7 @@ export default function TaskDetail({
                                 </span>
                               </div>
                               <p className="text-[10px] text-slate-400 mt-0.5">
-                                {formatDuration(runDuration(run))}
+                                {formatRunDuration(run)}
                                 {run.exitCode !== undefined && run.exitCode !== null && ` · ${t('taskDetail.exitCode')} ${run.exitCode}`}
                               </p>
                             </div>
@@ -660,9 +649,7 @@ export default function TaskDetail({
               <span>{t('taskDetail.scheduleThisTask')}</span>
             </div>
             <p className="text-xs text-slate-500 leading-relaxed">
-              {lang === 'zh'
-                ? '将此任务配置为定时自动化计划，按周期自动触发执行。'
-                : 'Configure this task to run automatically on a recurring schedule.'}
+              {t('taskDetail.scheduleDescription')}
             </p>
             <button
               type="button"
@@ -670,7 +657,7 @@ export default function TaskDetail({
               className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors shadow-sm"
             >
               <Clock className="w-3.5 h-3.5 text-primary" />
-              <span>{lang === 'zh' ? '前往定时计划' : 'Go to Schedules'}</span>
+              <span>{t('taskDetail.goToSchedules')}</span>
             </button>
           </section>
 

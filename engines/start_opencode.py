@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sys
 from collections.abc import Sequence
@@ -68,9 +69,9 @@ class OpenCodeEngine(BaseEngine):
             if entry.name in ("skills", "plugins") and entry.is_dir():
                 target.mkdir(exist_ok=True)
                 for child in entry.iterdir():
-                    if not (target / child.name).exists():
+                    if not os.path.lexists(target / child.name):
                         self._create_skill_link(child, target / child.name)
-            elif not target.exists():
+            elif not os.path.lexists(target):
                 self._create_skill_link(entry, target)
 
     def clear_stale_workspace_injection(self, project: Path) -> None:
@@ -188,14 +189,15 @@ class OpenCodeEngine(BaseEngine):
         # 构建工具定义块
         tool_lines: list[str] = []
         for tool in tool_defs:
-            cmd = "python" if tool["ext"] == ".py" else "sh"
+            cmd = f'"{sys.executable}"' if tool["ext"] == ".py" else "sh"
             if tool["ext"] == ".ps1":
                 cmd = "powershell"
             tool_name_js = json.dumps(tool["name"])
             tool_desc_js = json.dumps(
                 f"Execute script from plugin {name}: {Path(tool['path']).name}"
             )
-            tool_cmd_js = json.dumps(f"{cmd} {tool['path']} ")
+            quoted_path = json.dumps(tool["path"])
+            tool_cmd_js = json.dumps(f"{cmd} {quoted_path} ")
             tool_lines.append(
                 "      {\n"
                 f"        name: {tool_name_js},\n"
@@ -225,7 +227,7 @@ export default async ({{ client }}) => {{
 
   if (fs.existsSync(skillPath)) {{
     const raw = fs.readFileSync(skillPath, 'utf8');
-    const content = raw.replace(/^---[\\s\\S]*?---\\n/, '');
+    const content = raw.replace(/^---[\\s\\S]*?---\\r?\\n/, '');
     bootstrap = '\\n<PLUGIN_CONTEXT name="' + pluginName + '">\\n' + content + '\\n</PLUGIN_CONTEXT>\\n';
   }}
 
@@ -286,8 +288,16 @@ export default async ({{ client }}) => {{
             self._remove_generated_file(bridge_path)
             return False
 
-        before = [h for h in hooks if h.get("event") == "before_tool"]
-        after = [h for h in hooks if h.get("event") == "after_tool"]
+        before = [
+            h
+            for h in hooks
+            if h.get("event") == "before_tool" and isinstance(h.get("command"), str)
+        ]
+        after = [
+            h
+            for h in hooks
+            if h.get("event") == "after_tool" and isinstance(h.get("command"), str)
+        ]
         if not before and not after:
             self._remove_generated_file(bridge_path)
             return False

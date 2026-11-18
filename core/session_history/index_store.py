@@ -36,7 +36,7 @@ from core.session_history.paths import normalize_project_path
 
 logger = get_logger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 #: 记录"索引已经完整同步过一次"的元键。没有它就说明首轮构建还没跑完，读路径
 #: 必须回退到原来的解析方式，而不是返回空结果。
@@ -150,27 +150,33 @@ class SessionIndex:
         self.path = Path(path).expanduser()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
-        self._connection = sqlite3.connect(self.path, check_same_thread=False)
-        self._connection.row_factory = sqlite3.Row
-        self._connection.execute("PRAGMA journal_mode=WAL")
-        self._connection.execute("PRAGMA foreign_keys=ON")
-        # 服务进程与 CLI 可能同时写：让 SQLite 自己排一会儿队，而不是立刻
-        # 抛 database is locked。
-        self._connection.execute("PRAGMA busy_timeout=5000")
-        # 派生索引，不值当为每次提交 fsync：首次全量构建有近千个会话事务，
-        # NORMAL 能把构建时间砍掉一大截，代价只是断电时可能丢最后一次写入
-        self._connection.execute("PRAGMA synchronous=NORMAL")
+        self._read_lock = self._lock
         self._closed = False
-        self._migrate()
-        if str(self.path) == ":memory:" or "mode=memory" in str(self.path):
-            self._read_connection = self._connection
-            self._read_lock = self._lock
-        else:
-            self._read_lock = threading.RLock()
-            self._read_connection = sqlite3.connect(self.path, check_same_thread=False)
-            self._read_connection.row_factory = sqlite3.Row
-            self._read_connection.execute("PRAGMA busy_timeout=5000")
-            self._read_connection.execute("PRAGMA query_only=ON")
+        self._connection = sqlite3.connect(self.path, check_same_thread=False)
+        self._read_connection = self._connection
+        try:
+            self._connection.row_factory = sqlite3.Row
+            self._connection.execute("PRAGMA journal_mode=WAL")
+            self._connection.execute("PRAGMA foreign_keys=ON")
+            # 服务进程与 CLI 可能同时写：让 SQLite 自己排一会儿队，而不是立刻
+            # 抛 database is locked。
+            self._connection.execute("PRAGMA busy_timeout=5000")
+            # 派生索引，不值当为每次提交 fsync：首次全量构建有近千个会话事务，
+            # NORMAL 能把构建时间砍掉一大截，代价只是断电时可能丢最后一次写入
+            self._connection.execute("PRAGMA synchronous=NORMAL")
+            self._migrate()
+            if str(self.path) != ":memory:" and "mode=memory" not in str(self.path):
+                self._read_lock = threading.RLock()
+                self._read_connection = sqlite3.connect(
+                    self.path, check_same_thread=False
+                )
+                self._read_connection.row_factory = sqlite3.Row
+                self._read_connection.execute("PRAGMA busy_timeout=5000")
+                self._read_connection.execute("PRAGMA query_only=ON")
+        except Exception:
+            # 初始化或迁移失败时立即关掉句柄，避免 Windows 上后续删库重建报 WinError 32。
+            self.close()
+            raise
 
     @property
     def closed(self) -> bool:
@@ -264,6 +270,8 @@ class SessionIndex:
                         ON sessions(parent_session_id);
                     CREATE INDEX sessions_identity_idx
                         ON sessions(engine, session_id);
+                    CREATE INDEX sessions_last_activity_ts_idx
+                        ON sessions(last_activity_ts DESC);
 
                     CREATE TABLE messages (
                         session_key TEXT NOT NULL,
@@ -279,6 +287,7 @@ class SessionIndex:
                             ON DELETE CASCADE
                     );
                     CREATE INDEX messages_ts_idx ON messages(timestamp DESC);
+                    CREATE INDEX messages_ts_epoch_idx ON messages(timestamp_ts DESC);
 
                     CREATE TABLE tool_calls (
                         session_key TEXT NOT NULL,
@@ -297,6 +306,7 @@ class SessionIndex:
                             ON DELETE CASCADE
                     );
                     CREATE INDEX tool_calls_ts_idx ON tool_calls(timestamp DESC);
+                    CREATE INDEX tool_calls_ts_epoch_idx ON tool_calls(timestamp_ts DESC);
                     CREATE INDEX tool_calls_name_idx ON tool_calls(name);
                     """
                 )
@@ -309,6 +319,20 @@ class SessionIndex:
                         "INSERT INTO schema_version(version) VALUES (?)",
                         (SCHEMA_VERSION,),
                     )
+            elif version < SCHEMA_VERSION:
+                self._connection.executescript(
+                    """
+                    CREATE INDEX IF NOT EXISTS sessions_last_activity_ts_idx
+                        ON sessions(last_activity_ts DESC);
+                    CREATE INDEX IF NOT EXISTS messages_ts_epoch_idx
+                        ON messages(timestamp_ts DESC);
+                    CREATE INDEX IF NOT EXISTS tool_calls_ts_epoch_idx
+                        ON tool_calls(timestamp_ts DESC);
+                    """
+                )
+                self._connection.execute(
+                    "UPDATE schema_version SET version = ?", (SCHEMA_VERSION,)
+                )
 
     def close(self) -> None:
         with self._lock, self._read_lock:
@@ -686,8 +710,29 @@ class SessionIndex:
             ).fetchone()
         return _row_to_summary(row) if row else None
 
-    def get_title_map(self) -> dict[tuple[str, str], str]:
-        """``(engine, session_id) -> 已解析标题``，替代每请求重建的 title 表。"""
+    def get_title_map(
+        self, pairs: list[tuple[str, str]] | None = None
+    ) -> dict[tuple[str, str], str]:
+        """``(engine, session_id) -> 已解析标题``，支持按对过滤，替代每请求重建的 title 表。"""
+        if pairs is not None:
+            if not pairs:
+                return {}
+            if len(pairs) <= 200:
+                keys = list(
+                    dict.fromkeys(
+                        session_key(engine, session_id) for engine, session_id in pairs
+                    )
+                )
+                placeholders = ",".join("?" for _ in keys)
+                with self._read_lock:
+                    rows = self._read_connection.execute(
+                        f"SELECT engine, session_id, title FROM sessions WHERE session_key IN ({placeholders})",
+                        keys,
+                    ).fetchall()
+                return {
+                    (str(r["engine"]), str(r["session_id"])): str(r["title"])
+                    for r in rows
+                }
         with self._read_lock:
             rows = self._read_connection.execute(
                 "SELECT engine, session_id, title FROM sessions"
@@ -696,11 +741,15 @@ class SessionIndex:
 
     def reconstruct(self, engine: str, session_id: str) -> UnifiedSession | None:
         """由索引行还原完整 ``UnifiedSession``（详情/转换用）。"""
-        summary = self.get_summary(engine, session_id)
-        if summary is None:
-            return None
-        key = summary.session_key
         with self._read_lock:
+            sess_row = self._read_connection.execute(
+                "SELECT * FROM sessions WHERE engine = ? AND session_id = ?",
+                (engine, session_id),
+            ).fetchone()
+            if sess_row is None:
+                return None
+            summary = _row_to_summary(sess_row)
+            key = summary.session_key
             message_rows = self._read_connection.execute(
                 "SELECT * FROM messages WHERE session_key = ? ORDER BY ordinal",
                 (key,),
@@ -710,10 +759,7 @@ class SessionIndex:
                 "ORDER BY message_ordinal, ordinal",
                 (key,),
             ).fetchall()
-            titles_row = self._read_connection.execute(
-                "SELECT subagent_titles_json FROM sessions WHERE session_key = ?",
-                (key,),
-            ).fetchone()
+            titles_raw = sess_row["subagent_titles_json"]
 
         by_message: dict[int, list[ToolCallSummary]] = {}
         for r in tool_rows:
@@ -736,9 +782,7 @@ class SessionIndex:
             for r in message_rows
         ]
         try:
-            subagent_titles = (
-                json.loads(titles_row["subagent_titles_json"]) if titles_row else {}
-            )
+            subagent_titles = json.loads(titles_raw) if titles_raw else {}
         except (TypeError, ValueError):
             subagent_titles = {}
         return UnifiedSession(
@@ -794,7 +838,8 @@ class SessionIndex:
                        s.title AS session_title, m.timestamp AS timestamp,
                        m.role AS role, m.model AS model, m.content AS content_preview,
                        NULL AS tool_name, NULL AS args_preview,
-                       NULL AS result_preview, m.timestamp_ts AS timestamp_ts
+                       NULL AS result_preview, NULL AS result_captured,
+                       m.timestamp_ts AS timestamp_ts
                 FROM messages m JOIN sessions s ON s.session_key = m.session_key
                 WHERE m.has_content = 1
                 UNION ALL
@@ -803,7 +848,7 @@ class SessionIndex:
                        'tool_call', s.engine, s.project_norm, s.project_path,
                        s.session_id, s.title,
                        t.timestamp, t.role, t.model, NULL, t.name, t.args_preview,
-                       t.result_preview, t.timestamp_ts
+                       t.result_preview, t.result_captured, t.timestamp_ts
                 FROM tool_calls t JOIN sessions s ON s.session_key = t.session_key
                 WHERE 1 = 1
             ) q
@@ -836,12 +881,14 @@ class SessionIndex:
             clauses.append("s.last_activity_ts IS NOT NULL AND s.last_activity_ts >= ?")
             params.append(since)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        tool_clauses = [*clauses, "TRIM(t.name) != ''"]
+        tool_where = f"WHERE {' AND '.join(tool_clauses)}"
 
         with self._read_lock:
             rows = self._read_connection.execute(
                 f"SELECT t.name AS name, s.engine AS engine, COUNT(*) AS n "
                 f"FROM tool_calls t JOIN sessions s ON s.session_key = t.session_key "
-                f"{where} GROUP BY t.name, s.engine",
+                f"{tool_where} GROUP BY t.name, s.engine",
                 params,
             ).fetchall()
             session_row = self._read_connection.execute(
@@ -853,7 +900,9 @@ class SessionIndex:
         per_engine: dict[str, dict[str, int]] = {}
         engines: dict[str, int] = {}
         for r in rows:
-            name = str(r["name"])
+            name = str(r["name"]).strip()
+            if not name:
+                continue
             count = int(r["n"])
             totals[name] = totals.get(name, 0) + count
             per_engine.setdefault(name, {})[str(r["engine"])] = count
@@ -916,6 +965,7 @@ def _row_to_audit_event(row: sqlite3.Row) -> dict[str, Any]:
         event["tool_name"] = str(row["tool_name"] or "")
         event["args_preview"] = str(row["args_preview"] or "")
         event["result_preview"] = str(row["result_preview"] or "")
+        event["result_captured"] = bool(row["result_captured"])
     return event
 
 
@@ -943,9 +993,27 @@ def get_index() -> SessionIndex | None:
         if _index_broken:
             return None
         path = os.environ.get(ENV_PATH) or None
+        target = Path(path or default_index_path()).expanduser()
         try:
-            _index = SessionIndex(path or default_index_path())
-        except (sqlite3.DatabaseError, RuntimeError, OSError):
+            _index = SessionIndex(target)
+        except (sqlite3.DatabaseError, RuntimeError):
+            logger.warning(
+                "Corrupt or incompatible session index at %s; rebuilding once",
+                target,
+                exc_info=True,
+            )
+            try:
+                for suffix in ("", "-wal", "-shm", "-journal"):
+                    Path(f"{target}{suffix}").unlink(missing_ok=True)
+                _index = SessionIndex(target)
+            except (sqlite3.DatabaseError, RuntimeError, OSError):
+                logger.warning(
+                    "Session index unavailable; falling back to on-demand parsing",
+                    exc_info=True,
+                )
+                _index_broken = True
+                return None
+        except OSError:
             logger.warning(
                 "Session index unavailable; falling back to on-demand parsing",
                 exc_info=True,

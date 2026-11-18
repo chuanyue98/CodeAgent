@@ -32,7 +32,12 @@ class PluginService:
                 content = ""
                 description = ""
                 if readme_path.exists():
-                    content = readme_path.read_text(encoding="utf-8")
+                    try:
+                        content = readme_path.read_text(
+                            encoding="utf-8", errors="replace"
+                        )
+                    except (OSError, UnicodeDecodeError):
+                        content = ""
                     for line in content.splitlines():
                         line = line.strip()
                         if line and not line.startswith("#"):

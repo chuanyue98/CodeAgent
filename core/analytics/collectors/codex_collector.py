@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from core.analytics.models import RawUsageEntry
+from core.session_history.paths import codex_dir, strip_extended_length_prefix
+from core.utils.long_paths import exists as path_exists
 
 # Heuristic split for Codex's session-level total (no per-turn breakdown available)
 _INPUT_RATIO = 0.82
@@ -96,8 +98,8 @@ def scan_codex_usage(
         List[RawUsageEntry]: A list of raw usage entries extracted from the
             Codex state database.
     """
-    db_path = (home or Path.home()) / ".codex" / "state_5.sqlite"
-    if not db_path.exists():
+    db_path = codex_dir(home) / "state_5.sqlite"
+    if not path_exists(db_path):
         return []
 
     since_ms = _iso_to_ms(since_timestamp)
@@ -134,6 +136,14 @@ def scan_codex_usage(
         ts_ms = row["created_at_ms"] or 0
         timestamp = _ms_to_iso(ts_ms) if ts_ms else ""
 
+        raw_cwd = row["cwd"] or ""
+        slashed = raw_cwd.replace("\\", "/")
+        proj_path = (
+            strip_extended_length_prefix(slashed)
+            if slashed.lower().startswith("//?/")
+            else raw_cwd
+        )
+
         entries.append(
             RawUsageEntry(
                 timestamp=timestamp,
@@ -143,7 +153,7 @@ def scan_codex_usage(
                 output_tokens=int(total * _OUTPUT_RATIO),
                 cache_creation_tokens=0,
                 cache_read_tokens=0,
-                project_path=row["cwd"] or "",
+                project_path=proj_path,
                 target="codex",
                 parent_session_id=parents.get(row["id"], ""),
                 agent=_agent_name(row),

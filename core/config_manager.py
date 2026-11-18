@@ -6,7 +6,11 @@ from pathlib import Path
 
 from core.logging_config import get_logger
 from core.project_groups import resolve_project_group
-from core.resource_locator import get_bundled_resource_root, get_default_config_path
+from core.resource_locator import (
+    get_bundled_resource_root,
+    get_default_config_path,
+    resolve_resource_root_from_config,
+)
 from core.services.config_service import ConfigService
 
 logger = get_logger(__name__)
@@ -24,9 +28,9 @@ class ConfigManager:
     discovery for skills, prompts, hooks, and plugins.
     """
 
-    def __init__(self, root_dir: Path):
+    def __init__(self, root_dir: Path, config: dict | None = None):
         self.root_dir = root_dir
-        self.full_config = self._load_full_config()
+        self.full_config = config if config is not None else self._load_full_config()
 
     def _load_full_config(self) -> dict:
         config_service = ConfigService(get_default_config_path(self.root_dir))
@@ -35,9 +39,7 @@ class ConfigManager:
 
     def resolve_resource_root(self) -> Path:
         """Returns the resource root, respecting ``resource_root`` in config.json."""
-        resolved = __import__(
-            "core.resource_locator", fromlist=["resolve_resource_root_from_config"]
-        ).resolve_resource_root_from_config(self.full_config, self.root_dir)
+        resolved = resolve_resource_root_from_config(self.full_config, self.root_dir)
         if resolved is not None:
             return resolved
         return get_bundled_resource_root(self.root_dir)
@@ -46,7 +48,7 @@ class ConfigManager:
         """Resolves path tokens (``$CWD``, ``$CODEAGENT``) in a raw path string."""
         expanded = raw_path.replace("$CWD", str(Path.cwd().as_posix()))
         expanded = expanded.replace("$CODEAGENT", str(self.root_dir.as_posix()))
-        path_obj = Path(expanded)
+        path_obj = Path(expanded).expanduser()
         if path_obj.is_absolute():
             return path_obj
         return (self.root_dir / path_obj).resolve()

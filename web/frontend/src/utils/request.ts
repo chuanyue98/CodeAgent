@@ -22,17 +22,13 @@ async function request<T = unknown>(url: string, config: RequestConfig = {}): Pr
   }
 
   try {
+    const headers = new Headers({ 'Content-Type': 'application/json', ...authHeaders() });
+    new Headers(restConfig.headers).forEach((value, key) => headers.set(key, value));
     const response = await fetch(url, {
       ...restConfig,
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders(),
-        ...(restConfig.headers as Record<string, string>),
-      },
+      headers,
     });
-
-    clearTimeout(timeoutId);
 
     if (!response.ok) {
       let detail = `Request failed with status ${response.status}`;
@@ -49,14 +45,30 @@ async function request<T = unknown>(url: string, config: RequestConfig = {}): Pr
         );
       }
       try {
-        const body = await response.json() as { detail?: string | { error?: string; message?: string } };
-        if (typeof body.detail === 'string') detail = body.detail;
-        else if (body.detail?.error) detail = body.detail.error;
-        else if (body.detail?.message) detail = body.detail.message;
+        const body = await response.json() as {
+          detail?: string | { error?: string; message?: string } | Array<{ msg?: string }>;
+        };
+        if (typeof body.detail === 'string') {
+          detail = body.detail;
+        } else if (Array.isArray(body.detail)) {
+          const messages = body.detail
+            .map(item => (item && typeof item.msg === 'string' ? item.msg : ''))
+            .filter(Boolean);
+          if (messages.length > 0) detail = messages.join('; ');
+        } else if (body.detail?.error) {
+          detail = body.detail.error;
+        } else if (body.detail?.message) {
+          detail = body.detail.message;
+        }
       } catch {
+        controller.signal.throwIfAborted();
         // Keep the status-based fallback when the response is not JSON.
       }
       throw new Error(detail);
+    }
+
+    if (response.status === 204 || response.status === 205) {
+      return undefined as T;
     }
 
     const text = await response.text();
@@ -66,7 +78,7 @@ async function request<T = unknown>(url: string, config: RequestConfig = {}): Pr
 
     return JSON.parse(text) as T;
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (controller.signal.aborted) {
       // A caller-initiated abort is deliberate (request superseded or the
       // component unmounted); only the internal timeout deserves the
       // "Request timeout" message.

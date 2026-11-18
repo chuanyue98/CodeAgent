@@ -1,35 +1,4 @@
-export type AuditEventType = 'message' | 'tool_call';
-
-export interface AuditEvent {
-  eventId: string;
-  eventType: AuditEventType;
-  engine: string;
-  projectPath: string;
-  sessionId: string;
-  sessionTitle: string;
-  timestamp: string;
-  role: string;
-  model: string;
-  // message events only
-  contentPreview?: string;
-  // tool_call events only
-  toolName?: string;
-  argsPreview?: string;
-  resultPreview?: string;
-}
-
-export interface AuditEventsResponse {
-  events: AuditEvent[];
-  count: number;
-}
-
-export interface FetchAuditEventsParams {
-  engine?: string;
-  project?: string;
-  since?: string;
-  until?: string;
-  limit?: number;
-}
+import request from '../utils/request';
 
 export interface SessionMessage {
   role: string;
@@ -47,8 +16,6 @@ export interface SessionDetail {
   messages: SessionMessage[];
 }
 
-import request from '../utils/request';
-
 /** Full transcript of one session, including tool calls per message. */
 export async function fetchSessionDetail(
   engine: string,
@@ -61,28 +28,14 @@ export async function fetchSessionDetail(
   );
 }
 
-export async function fetchAuditEvents(
-  params: FetchAuditEventsParams = {},
-): Promise<AuditEventsResponse> {
-  const query = new URLSearchParams();
-  if (params.engine) query.set('engine', params.engine);
-  if (params.project) query.set('project', params.project);
-  if (params.since) query.set('since', params.since);
-  if (params.until) query.set('until', params.until);
-  if (params.limit) query.set('limit', String(params.limit));
-
-  const qs = query.toString();
-  return request(`/api/history/audit${qs ? `?${qs}` : ''}`);
-}
-
-export interface ConvertSessionParams {
+interface ConvertSessionParams {
   sourceEngine: string;
   sessionId?: string;
   targetEngine: string;
   projectPath: string;
 }
 
-export interface ConvertSessionResult {
+interface ConvertSessionResult {
   status: string;
   newSessionId: string;
   targetEngine: string;
@@ -101,7 +54,7 @@ export interface ResumeTarget {
   project: string;
 }
 
-export interface ConvertAndLaunchResult extends ConvertSessionResult, ResumeTarget {}
+interface ConvertAndLaunchResult extends ConvertSessionResult, ResumeTarget {}
 
 /** Asks where to resume an existing session; starts nothing by itself. */
 export async function continueSession(
@@ -123,13 +76,6 @@ function convertBody(params: ConvertSessionParams) {
     targetEngine: params.targetEngine,
     projectPath: params.projectPath,
   });
-}
-
-/** Converts a session to another engine's native format without launching it. */
-export async function convertSession(
-  params: ConvertSessionParams,
-): Promise<ConvertSessionResult> {
-  return request('/api/history/convert', { method: 'POST', body: convertBody(params) });
 }
 
 /** Converts a session and opens the target engine in a terminal for that project. */

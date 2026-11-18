@@ -137,6 +137,10 @@ export default function BrowserTerminal({
   useEffect(() => {
     tRef.current = t;
   }, [t]);
+  const copyOnSelectRef = useRef(copyOnSelect);
+  useEffect(() => {
+    copyOnSelectRef.current = copyOnSelect;
+  }, [copyOnSelect]);
 
   const initialFontSizeRef = useRef(fontSize);
 
@@ -325,19 +329,25 @@ export default function BrowserTerminal({
     });
 
     let copyTimer: ReturnType<typeof setTimeout> | undefined;
+    let copiedToastTimer: ReturnType<typeof setTimeout> | undefined;
+    const flashCopiedToast = () => {
+      if (superseded) return;
+      setCopiedToast(true);
+      clearTimeout(copiedToastTimer);
+      copiedToastTimer = setTimeout(() => {
+        if (!superseded) setCopiedToast(false);
+      }, 1500);
+    };
     let selectionDisposable = { dispose: () => {} };
     if (typeof term.onSelectionChange === 'function') {
       selectionDisposable = term.onSelectionChange(() => {
-        if (!copyOnSelect) return;
+        if (!copyOnSelectRef.current) return;
         clearTimeout(copyTimer);
         copyTimer = setTimeout(() => {
           const sel = term.getSelection();
           if (sel && sel.trim().length > 0) {
             if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-              void navigator.clipboard.writeText(sel).then(() => {
-                setCopiedToast(true);
-                setTimeout(() => setCopiedToast(false), 1500);
-              }).catch(() => {});
+              void navigator.clipboard.writeText(sel).then(flashCopiedToast).catch(() => {});
             }
           }
         }, 250);
@@ -355,10 +365,7 @@ export default function BrowserTerminal({
         if (term.hasSelection()) {
           const sel = term.getSelection();
           if (sel && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-            void navigator.clipboard.writeText(sel).then(() => {
-              setCopiedToast(true);
-              setTimeout(() => setCopiedToast(false), 1500);
-            }).catch(() => {});
+            void navigator.clipboard.writeText(sel).then(flashCopiedToast).catch(() => {});
           }
           term.clearSelection();
           return false;
@@ -370,10 +377,7 @@ export default function BrowserTerminal({
         if (term.hasSelection()) {
           const sel = term.getSelection();
           if (sel && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-            void navigator.clipboard.writeText(sel).then(() => {
-              setCopiedToast(true);
-              setTimeout(() => setCopiedToast(false), 1500);
-            }).catch(() => {});
+            void navigator.clipboard.writeText(sel).then(flashCopiedToast).catch(() => {});
           }
           return false;
         }
@@ -421,6 +425,7 @@ export default function BrowserTerminal({
       }
       superseded = true;
       clearTimeout(copyTimer);
+      clearTimeout(copiedToastTimer);
       clearTimeout(resizeTimer);
       selectionDisposable.dispose();
       resizeObserver.disconnect();
@@ -433,7 +438,7 @@ export default function BrowserTerminal({
       term.dispose();
     };
     // fontSize 只作初始值；之后的变化由上面单独的 effect 就地生效，放进来会断开重连。
-  }, [engine, cwd, sessionId, attachId, tabKey, attempt, copyOnSelect, restoreTitle, requestPermissionOnInteraction]);
+  }, [engine, cwd, sessionId, attachId, tabKey, attempt, restoreTitle, requestPermissionOnInteraction]);
 
   const canRestart = state === 'closed' || state === 'error';
 

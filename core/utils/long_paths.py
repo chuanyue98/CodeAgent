@@ -17,11 +17,14 @@ where the other tools look for it, which is the entire point of writing it.
 from __future__ import annotations
 
 import os
+import sqlite3
 import sys
 from pathlib import Path
 
 #: Longest path the ordinary Windows API accepts.
 WINDOWS_MAX_PATH = 260
+#: 提前在该阈值启用 ``\\?\`` 前缀，覆盖 248 字符目录上限及 ``.tmp``/``.lastgood`` 后缀余量。
+_LONG_PATH_THRESHOLD = 240
 
 EXTENDED_PREFIX = "\\\\?\\"
 
@@ -40,7 +43,7 @@ def long_path(path: Path | str) -> str:
     text = str(path)
     if sys.platform != "win32":
         return text
-    if text.startswith(EXTENDED_PREFIX) or len(text) < WINDOWS_MAX_PATH:
+    if text.startswith(EXTENDED_PREFIX) or len(text) < _LONG_PATH_THRESHOLD:
         return text
     try:
         resolved = str(Path(text).resolve())
@@ -109,3 +112,16 @@ def mtime(path: Path) -> float:
         return os.stat(long_path(path)).st_mtime
     except OSError:
         return 0.0
+
+
+def connect_sqlite_ro(db_path: Path) -> sqlite3.Connection:
+    """以只读模式打开 SQLite 库；Windows 超长路径回退为 ``query_only`` 连接。"""
+    try:
+        uri = f"{db_path.resolve().as_uri()}?mode=ro"
+        return sqlite3.connect(uri, uri=True)
+    except (sqlite3.OperationalError, OSError, ValueError):
+        if not exists(db_path):
+            raise
+        conn = sqlite3.connect(long_path(db_path))
+        conn.execute("PRAGMA query_only = ON")
+        return conn

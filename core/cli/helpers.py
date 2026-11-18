@@ -8,18 +8,24 @@ circular imports.
 from __future__ import annotations
 
 import os
+import shlex
+import shutil
 import socket
 import subprocess
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 from core.console import configure_console_encoding
 from core.constants import ENGINES  # noqa: F401
-from core.engine_registry import normalize_engine_name
+from core.engine_registry import ENGINES as ENGINE_SPECS
+from core.engine_registry import EngineSpec, normalize_engine_name
 from core.host_env import child_environ
 from core.i18n import ENV_VAR as CA_LANG_ENV  # noqa: F401
 from core.i18n import resolve_language, t  # noqa: F401
 from core.logging_config import configure_root_logging
+from core.project_groups import resolve_project_group
 from core.resource_locator import (
     CODE_ROOT,
     get_default_config_path,
@@ -56,7 +62,64 @@ def warm_session_index() -> None:
     repository.ensure_index_ready(announce)
 
 
-FALLBACK_ENGINE: str | None = None
+def resolve_engine_cli(
+    spec: EngineSpec,
+    which: Callable[[str], str | None] = shutil.which,
+) -> str | None:
+    """返回引擎 CLI 在 PATH 上的可执行路径；非 Windows 平台跳过 .cmd/.bat/.exe。"""
+    is_windows = sys.platform == "win32"
+    for name in spec.cli_candidates:
+        if not is_windows and name.lower().endswith((".cmd", ".bat", ".exe")):
+            continue
+        found = which(name)
+        if found:
+            return found
+    return None
+
+
+def format_cli_command(argv: Sequence[str]) -> str:
+    """按当前平台规则引用并拼接命令行参数，兼容含空格的路径或会话 ID。"""
+    if sys.platform == "win32":
+        return subprocess.list2cmdline(list(argv))
+    return shlex.join(argv)
+
+
+def run_resume_command(
+    argv: list[str],
+    engine: str,
+    *,
+    project_path: str,
+    child_env: dict[str, str] | None,
+    not_installed_msg_key: str,
+    manual_msg_key: str,
+    runner: Callable[..., Any] = subprocess.run,
+    which: Callable[[str], str | None] = shutil.which,
+) -> int:
+    """执行会话恢复命令；Windows 上尝试 PATH 后缀兜底，失败时提示手动命令。"""
+    try:
+        return runner(argv, cwd=project_path, env=child_env).returncode
+    except FileNotFoundError:
+        if sys.platform == "win32":
+            candidates = [argv[0]]
+            spec = ENGINE_SPECS.get(engine)
+            if spec:
+                for candidate in spec.cli_candidates:
+                    if candidate not in candidates:
+                        candidates.append(candidate)
+            for cand in candidates:
+                resolved = which(cand)
+                if resolved:
+                    try:
+                        return runner(
+                            [resolved, *argv[1:]],
+                            cwd=project_path,
+                            env=child_env,
+                        ).returncode
+                    except FileNotFoundError:
+                        continue
+        print(t(not_installed_msg_key, engine=engine))
+        print(t(manual_msg_key, command=format_cli_command(argv)))
+        return 1
 
 
 def _installed_root() -> Path:
@@ -126,6 +189,7 @@ def find_available_port(start_port: int = 8524) -> int:
     port = start_port
     while port < 9000:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.2)
             if s.connect_ex(("127.0.0.1", port)) != 0:
                 return port
         port += 1
@@ -180,17 +244,7 @@ def _ensure_project_on_path(root: Path) -> None:
 def _is_path_registered(cwd: Path, root: Path, registry: list) -> bool:
     if cwd == root or root in cwd.parents:
         return True
-    for item in registry:
-        raw_path = item.get("path")
-        if not raw_path:
-            continue
-        try:
-            mapping_path = Path(raw_path).resolve()
-        except Exception:
-            continue
-        if cwd == mapping_path or mapping_path in cwd.parents:
-            return True
-    return False
+    return resolve_project_group(cwd, registry) is not None
 
 
 def _ensure_project_registered(root: Path, config: dict) -> None:
@@ -235,20 +289,20 @@ def _ensure_project_registered(root: Path, config: dict) -> None:
     config_path = get_default_config_path(root)
     service = ConfigService(config_path)
 
-    def _modifier(cfg: dict) -> dict:
-        if is_new_group:
+    if is_new_group:
+
+        def _add_group(cfg: dict) -> dict:
             cfg.setdefault("groups", {})[chosen_group] = {
                 "skills": [],
                 "prompts": [],
                 "hooks": [],
                 "plugins": [],
             }
-        reg = cfg.get("project_registry", [])
-        reg.append({"path": str(cwd), "group": chosen_group})
-        cfg["project_registry"] = reg
-        return cfg
+            return cfg
 
-    service.modify_config(_modifier)
+        service.modify_config(_add_group)
+
+    service.add_project(str(cwd), chosen_group)
     persisted, _ = service.get_config()
     config["project_registry"] = persisted.get("project_registry", [])
     config["groups"] = persisted.get("groups", {})

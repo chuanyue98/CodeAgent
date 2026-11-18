@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import type { Translate } from '../../i18n/context';
+import { parseLocalDay, toLocalDayString } from '../../utils/dateRange';
 
 // ── Engine palette ───────────────────────────────────────────────────────────
 const ENGINE_COLORS: Record<string, string> = {
@@ -22,18 +23,38 @@ export function eb(t: string) { return ENGINE_BADGE[t] ?? 'bg-slate-100 text-sla
 
 // ── Tiny format helpers ──────────────────────────────────────────────────────
 export function formatDate(s: string) {
-  try { return format(new Date(s), 'MMM dd'); } catch { return s.slice(5); }
+  const local = parseLocalDay(s);
+  if (local) return format(local, 'MMM dd');
+  try {
+    const parsed = new Date(s);
+    if (!Number.isNaN(parsed.getTime())) return format(parsed, 'MMM dd');
+  } catch {
+    // fallback below
+  }
+  return s.slice(5);
 }
+
 export function formatMonth(s: string) {
-  try { return format(new Date(`${s}-01`), 'MMM yyyy'); } catch { return s; }
+  const local = parseLocalDay(`${s}-01`);
+  if (local) return format(local, 'MMM yyyy');
+  try {
+    const parsed = new Date(`${s}-01T00:00:00`);
+    if (!Number.isNaN(parsed.getTime())) return format(parsed, 'MMM yyyy');
+  } catch {
+    // fallback below
+  }
+  return s;
 }
+
 /** Takes `t` rather than calling a hook: this is a pure helper, not a component. */
 export function timeAgo(iso: string, t: Translate) {
   if (!iso) return '—';
-  const ms = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(ms / 86400000);
+  const parsed = new Date(iso);
+  const ts = parsed.getTime();
+  if (Number.isNaN(ts)) return '—';
+  const days = Math.floor((Date.now() - ts) / 86400000);
   if (days === 0) return t('time.today');
   if (days === 1) return t('time.yesterday');
   if (days < 30) return t('time.daysAgo', { days });
-  return iso.slice(0, 10);
+  return toLocalDayString(parsed);
 }

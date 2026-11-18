@@ -90,4 +90,21 @@ describe('useResourceToggle.toggleResources', () => {
 
     expect(postCalls).toHaveLength(0);
   });
+
+  test('serializes concurrent toggles so back-to-back activations both persist', async () => {
+    const { result } = renderHook(() => useHarness(), { wrapper });
+    await waitFor(() => {
+      expect(result.current.groups.codeagent?.skills).toEqual(['a', 'b']);
+    });
+
+    await act(async () => {
+      await Promise.all([
+        result.current.toggleResource('skills', 'c'),
+        result.current.toggleResource('skills', 'd'),
+      ]);
+    });
+
+    expect(postCalls).toHaveLength(2);
+    expect((postCalls[1].body.skills as string[]).slice().sort()).toEqual(['a', 'b', 'c', 'd']);
+  });
 });

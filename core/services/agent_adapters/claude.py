@@ -25,9 +25,12 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import SystemPromptPreset
 
+from core.host_env import child_environ
 from core.services.agent_adapters._event_queue import (
+    drain_events,
     iter_events,
     put_event_dropping_oldest,
+    put_sentinel_dropping_oldest,
 )
 from core.services.agent_protocol import (
     AdapterEvent,
@@ -112,6 +115,7 @@ class ClaudeAdapter:
                 "Claude Code CLI was not found on the CodeAgent server"
             )
             raise RuntimeError(self._unavailable_reason)
+        drain_events(self._events)
         self._started = True
         self._unavailable_reason = None
         if self.idle_timeout > 0:
@@ -151,6 +155,7 @@ class ClaudeAdapter:
         self._session_system_prompts.clear()
         self._current_message_ids.clear()
         self._started_tools.clear()
+        put_sentinel_dropping_oldest(self._events)
 
     async def capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(
@@ -421,6 +426,8 @@ class ClaudeAdapter:
             cli_path=shutil.which(self.executable),
             model=model,
             permission_mode=sdk_mode,
+            env=child_environ(),
+            max_buffer_size=16 * 1024 * 1024,
             can_use_tool=can_use_tool,
             include_partial_messages=True,
             include_hook_events=True,
@@ -474,6 +481,8 @@ class ClaudeAdapter:
                 )
             )
         finally:
+            if self._client_tasks.get(session_id) is asyncio.current_task():
+                self._client_tasks.pop(session_id, None)
             self._active_turns.pop(session_id, None)
             self._current_message_ids.pop(session_id, None)
             self._touch(session_id)

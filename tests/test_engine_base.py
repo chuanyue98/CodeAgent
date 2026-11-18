@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -79,20 +80,6 @@ def test_environment_manager_get_env(tmp_path):
     manager = EnvironmentManager(tmp_path)
     env = manager.get_env()
     assert env["CODEAGENT_PATH"] == str(tmp_path.absolute()).replace("\\", "/")
-
-
-def test_engine_resolve_config_groups(mock_engine, tmp_path, monkeypatch):
-    # Test default group
-    monkeypatch.chdir(tmp_path)
-    groups = mock_engine._resolve_config_groups("prompts")
-    assert "common" in groups
-
-    # Test pattern matching
-    web_dir = tmp_path / "some-web-site"
-    web_dir.mkdir()
-    monkeypatch.chdir(web_dir)
-    groups = mock_engine._resolve_config_groups("prompts")
-    assert set(groups) == {"web", "react"}
 
 
 def test_engine_get_current_project_group(mock_engine, tmp_path, monkeypatch):
@@ -277,7 +264,7 @@ def test_ensure_skills_link_preserves_unmanaged_links_and_regular_dirs(
     ) == "new"
     assert (regular_dir / "keep.txt").read_text(encoding="utf-8") == "keep"
 
-    engine.cleanup_skills_link(".opencode/skills")
+    engine.link_manager.cleanup_link_dir(mounted_root)
     assert (mounted_root / "old-skill").exists()
     assert not (mounted_root / "new-skill").exists()
 
@@ -351,14 +338,8 @@ def test_safe_remove_link_reports_windows_rmdir_failure(mock_engine, tmp_path, c
     with caplog.at_level("WARNING"):
         with patch("os.name", "nt"):
             with patch.object(Path, "is_symlink", return_value=True):
-                with patch.object(Path, "is_dir", return_value=True):
-                    with patch("subprocess.run") as mock_run:
-                        mock_run.return_value = MagicMock(
-                            returncode=1,
-                            stderr=b"Access is denied.",
-                            stdout=b"",
-                        )
-                        mock_engine._safe_remove_link(target)
+                with patch("os.rmdir", side_effect=OSError("Access is denied.")):
+                    mock_engine._safe_remove_link(target)
 
     assert "Access is denied" in caplog.text
 
@@ -375,34 +356,62 @@ def test_create_skill_link_unix(mock_engine, tmp_path):
 
 
 def test_create_skill_link_windows_fallback(mock_engine, tmp_path):
+    import sys
+
     source = tmp_path / "source"
     source.mkdir()
     target = tmp_path / "target"
 
-    with patch("os.name", "nt"):
+    if sys.platform == "win32":
         with patch.object(Path, "symlink_to", side_effect=OSError("Admin required")):
-            with patch("subprocess.run") as mock_run:
-                mock_engine._create_skill_link(source, target)
-                # Should fallback to mklink /j
-                mock_run.assert_called_once()
-                cmd = mock_run.call_args[0][0]
-                assert "mklink" in cmd
-                assert "/j" in cmd
+            mock_engine._create_skill_link(source, target)
+        assert target.is_junction()
+        assert target.resolve() == source.resolve()
+        mock_engine._safe_remove_link(target)
+        assert not os.path.lexists(target)
+    else:
+        with patch("os.name", "nt"):
+            with patch.object(
+                Path, "symlink_to", side_effect=OSError("Admin required")
+            ):
+                with patch.dict("sys.modules", {"_winapi": MagicMock()}) as _:
+                    mock_engine._create_skill_link(source, target)
+                    sys.modules["_winapi"].CreateJunction.assert_called_once_with(
+                        str(source), str(target)
+                    )
 
 
 def test_safe_remove_link_windows_dir(mock_engine, tmp_path):
+    import stat
+
     target = tmp_path / "link_dir"
     target.mkdir()
 
+    fake_stat = MagicMock(st_file_attributes=stat.FILE_ATTRIBUTE_DIRECTORY | 0x400)
     with patch("os.name", "nt"):
-        # _safe_remove_link delegates to LinkManager.safe_remove_link, so the
-        # link check is the module-level function, not the engine method.
         with patch("core.link_manager.is_windows_link", return_value=True):
-            with patch("subprocess.run") as mock_run:
-                mock_engine._safe_remove_link(target)
-                # On Windows, directories should be removed via rmdir if they are links/junctions
-                mock_run.assert_called_once()
-                assert "rmdir" in mock_run.call_args[0][0]
+            with patch.object(Path, "lstat", return_value=fake_stat):
+                with patch("os.rmdir") as mock_rmdir:
+                    mock_engine._safe_remove_link(target)
+                    mock_rmdir.assert_called_once_with(target)
+
+
+def test_safe_remove_dangling_windows_junction_is_cleaned(mock_engine, tmp_path):
+    import sys
+
+    if sys.platform != "win32":
+        pytest.skip("Windows junction test")
+    import _winapi
+
+    source = tmp_path / "R&D src"
+    source.mkdir()
+    target = tmp_path / "R&D link"
+    _winapi.CreateJunction(str(source), str(target))
+    source.rmdir()
+    assert not target.exists()
+    assert os.path.lexists(target)
+    mock_engine._safe_remove_link(target)
+    assert not os.path.lexists(target)
 
 
 def test_is_windows_link_detection(mock_engine, tmp_path):
@@ -423,23 +432,22 @@ def test_is_windows_link_detection(mock_engine, tmp_path):
 
             assert mock_engine._is_windows_link(path) is True
 
-    # 3. Test mount point (Junction fallback)
+    # 3. Normal non-link directory is not treated as a Windows link
     with patch.object(Path, "is_symlink", return_value=False):
-        with patch.object(Path, "lstat") as mock_lstat:
-            mock_stat = MagicMock(spec=[])  # No attributes
-            mock_lstat.return_value = mock_stat
-            with patch.object(Path, "is_mount", return_value=True):
-                assert mock_engine._is_windows_link(path) is True
+        with patch.object(Path, "is_junction", return_value=False):
+            with patch.object(Path, "lstat") as mock_lstat:
+                mock_lstat.return_value = MagicMock(st_file_attributes=0)
+                assert mock_engine._is_windows_link(path) is False
 
 
 def test_resolve_path_token(mock_engine, tmp_path):
     # $CWD resolution
     with patch("pathlib.Path.cwd", return_value=tmp_path):
-        resolved = mock_engine._resolve_path_token("$CWD/subdir")
+        resolved = mock_engine.config_manager.resolve_path_token("$CWD/subdir")
         assert resolved == tmp_path / "subdir"
 
     # $CODEAGENT resolution
-    resolved = mock_engine._resolve_path_token("$CODEAGENT/core")
+    resolved = mock_engine.config_manager.resolve_path_token("$CODEAGENT/core")
     assert resolved == (mock_engine.root_dir / "core").resolve()
 
 
@@ -496,38 +504,6 @@ def test_ensure_plugins_link(mock_engine, tmp_path, monkeypatch):
     # Cleanup
     mock_engine.cleanup_plugins_link()
     assert not (global_ext / "my-plugin").exists()
-
-
-def test_inject_plugins_to_settings(mock_engine, tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    settings_file = tmp_path / "settings.json"
-
-    plugin_dir = tmp_path / "cool-plugin"
-    plugin_dir.mkdir()
-
-    monkeypatch.setattr(
-        mock_engine,
-        "get_plugins_to_mount",
-        lambda: [{"name": "cool-plugin", "_plugin_dir": str(plugin_dir)}],
-    )
-
-    # Provide engine-specific formatter
-    mock_engine._format_plugins_for_settings = lambda data, plugins: {
-        **data,
-        "plugins": plugins,
-    }
-
-    mock_engine.inject_plugins_to_settings("settings.json")
-
-    assert settings_file.exists()
-    with open(settings_file) as f:
-        data = json.load(f)
-        assert data["_ca_injected"] is True
-        assert data["plugins"][0]["name"] == "cool-plugin"
-
-    # Test restore
-    mock_engine.restore_settings("settings.json")
-    assert not settings_file.exists()
 
 
 def test_load_manifest_corrupted_json_returns_empty(tmp_path):

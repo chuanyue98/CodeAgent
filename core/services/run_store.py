@@ -26,6 +26,7 @@ class TaskRunRecord:
     #: Set when a schedule fired the run, so a schedule can report what
     #: actually happened rather than that it once launched something.
     schedule_id: str | None = None
+    process_created_at: float | None = None
 
 
 #: Column order is the dataclass field order -- rows are unpacked positionally
@@ -43,6 +44,7 @@ _COLUMNS = (
     "exit_code",
     "task_name",
     "schedule_id",
+    "process_created_at",
 )
 _COLUMN_LIST = ", ".join(_COLUMNS)
 _PLACEHOLDERS = ", ".join("?" for _ in _COLUMNS)
@@ -120,6 +122,10 @@ class RunStore:
                     self._conn.execute("ALTER TABLE runs ADD COLUMN task_name TEXT")
                 if "schedule_id" not in columns:
                     self._conn.execute("ALTER TABLE runs ADD COLUMN schedule_id TEXT")
+                if "process_created_at" not in columns:
+                    self._conn.execute(
+                        "ALTER TABLE runs ADD COLUMN process_created_at REAL"
+                    )
                 # History is always read newest-first, and almost always
                 # narrowed to one task or one schedule.
                 self._conn.execute(
@@ -196,7 +202,8 @@ class RunStore:
                         end_time = excluded.end_time,
                         exit_code = excluded.exit_code,
                         task_name = excluded.task_name,
-                        schedule_id = excluded.schedule_id
+                        schedule_id = excluded.schedule_id,
+                        process_created_at = excluded.process_created_at
                     """,
                     (
                         run.task_id,
@@ -211,6 +218,7 @@ class RunStore:
                         run.exit_code,
                         run.task_name,
                         run.schedule_id,
+                        run.process_created_at,
                     ),
                 )
 
@@ -383,13 +391,14 @@ class RunStore:
                     (time.time(), notification_id),
                 )
 
-    def mark_all_read(self) -> None:
+    def mark_all_read(self) -> int:
         with self._lock:
             with self._conn:
-                self._conn.execute(
+                cur = self._conn.execute(
                     "UPDATE notifications SET read_at = ? WHERE read_at IS NULL",
                     (time.time(),),
                 )
+                return int(cur.rowcount or 0)
 
     def prune_notifications(self, retention_days: float, keep_latest: int = 0) -> None:
         with self._lock:

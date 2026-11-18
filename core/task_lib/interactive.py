@@ -37,7 +37,7 @@ def _prompt_for_task_choice(tasks: list[str]) -> str:
                 print("\n\n👋 Cancelled")
                 sys.exit(0)
             return answer.strip()
-        except ImportError:
+        except (ImportError, OSError, EOFError):
             pass
     return input("Select task (index or name): ").strip()
 
@@ -74,6 +74,7 @@ def select_task_interactively(
         file_suffix=file_suffix,
         history=history,
         range_selection_hint=allow_range,
+        tasks=tasks,
     )
 
     if allow_range:

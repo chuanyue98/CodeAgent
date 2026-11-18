@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Mapping
 from typing import Any
 
 from core.resource_locator import CODE_ROOT
@@ -23,7 +24,7 @@ MAX_DELEGATION_DEPTH = 1
 MCP_SERVER_NAME = "codeagent"
 
 
-def current_depth(env: dict[str, str] | None = None) -> int:
+def current_depth(env: Mapping[str, str] | None = None) -> int:
     raw = (env if env is not None else os.environ).get(DEPTH_ENV, "")
     try:
         return max(0, int(raw))
@@ -31,20 +32,28 @@ def current_depth(env: dict[str, str] | None = None) -> int:
         return 0
 
 
-def may_delegate(env: dict[str, str] | None = None) -> bool:
+def may_delegate(env: Mapping[str, str] | None = None) -> bool:
     return current_depth(env) < MAX_DELEGATION_DEPTH
 
 
-def codeagent_mcp_server() -> dict[str, Any] | None:
+def codeagent_mcp_server(env: Mapping[str, str] | None = None) -> dict[str, Any] | None:
     """本次会话要挂的 codeagent MCP 服务（stdio），到了深度上限返回 None。
 
     用当前解释器加 ``PYTHONPATH`` 拉起，源码检出与安装包两种形态都能 import
     到 ``core``；不经 ``uv run``，省掉每次起服务的解析开销。
     """
-    if not may_delegate():
+    if not may_delegate(env):
         return None
+    source_env = env if env is not None else os.environ
+    existing_pp = source_env.get("PYTHONPATH", "")
+    pythonpath = (
+        f"{CODE_ROOT}{os.pathsep}{existing_pp}" if existing_pp else str(CODE_ROOT)
+    )
     return {
         "command": sys.executable,
         "args": ["-m", "core.services.mcp_server_service", "--delegation"],
-        "env": {"PYTHONPATH": str(CODE_ROOT), DEPTH_ENV: str(current_depth())},
+        "env": {
+            "PYTHONPATH": pythonpath,
+            DEPTH_ENV: str(current_depth(source_env)),
+        },
     }

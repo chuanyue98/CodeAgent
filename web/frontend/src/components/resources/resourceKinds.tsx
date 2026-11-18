@@ -240,7 +240,3 @@ export const RESOURCE_KINDS: readonly ResourceKindConfig[] = [
     emptyKindKey: 'plugins.emptySidebar',
   }),
 ];
-
-export function kindById(id: string): ResourceKindConfig | undefined {
-  return RESOURCE_KINDS.find(kind => kind.id === id);
-}

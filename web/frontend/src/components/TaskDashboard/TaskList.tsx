@@ -13,7 +13,7 @@ import EmptyState from '../shared/EmptyState';
 import { SearchInput } from '../shared/Field';
 import SectionLabel from '../shared/SectionLabel';
 import StatusDot from '../shared/StatusDot';
-import { classifyStageStatus, type RunStatus, type Stage, type Task } from './types';
+import { classifyStageStatus, runMatchesTask, type RunStatus, type Stage, type Task } from './types';
 
 function StageProgress({ stages }: { stages: Stage[] }) {
   const done = stages.filter(s => classifyStageStatus(s.status) === 'done').length;
@@ -52,7 +52,7 @@ const RUN_LABEL_KEY = {
   running: 'tasks.statRunning',
   completed: 'tasks.statCompleted',
   failed: 'tasks.statFailed',
-  stopped: 'tasks.neverRun',
+  stopped: 'tasks.statStopped',
 } as const;
 
 const RUN_PILL: Record<RunStatus['status'], string> = {
@@ -186,7 +186,7 @@ export default memo(function TaskList({
     const map = new Map<string, RunStatus>();
     for (const run of runs) {
       if (run.status !== 'running') continue;
-      const owner = tasks.find(task => run.taskId.startsWith(task.name));
+      const owner = tasks.find(task => runMatchesTask(run, task.name));
       if (owner && !map.has(owner.name)) map.set(owner.name, run);
     }
     return map;
@@ -196,7 +196,7 @@ export default memo(function TaskList({
     const map = new Map<string, RunStatus>();
     for (const run of runs) {
       if (run.status === 'running') continue;
-      const owner = tasks.find(task => run.taskId.startsWith(task.name));
+      const owner = tasks.find(task => runMatchesTask(run, task.name));
       if (!owner) continue;
       const current = map.get(owner.name);
       if (!current || run.startTime > current.startTime) map.set(owner.name, run);
@@ -242,7 +242,7 @@ export default memo(function TaskList({
   // taskId is `${taskName}-<timestamp>`-ish; taskName is authoritative when
   // the runner sent it, the prefix match covers history rows that predate it.
   const resolveTask = (run: RunStatus) =>
-    tasks.find(task => (run.taskName && run.taskName === task.name) || run.taskId.startsWith(task.name));
+    tasks.find(task => runMatchesTask(run, task.name));
 
   const scheduleByTask = useMemo(() => {
     const map = new Map<string, Schedule>();

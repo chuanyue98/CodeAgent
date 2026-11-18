@@ -12,7 +12,7 @@
 const DAY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** Parses `YYYY-MM-DD` as local midnight, or null if it isn't a valid day. */
-function parseLocalDay(day: string): Date | null {
+export function parseLocalDay(day: string): Date | null {
   const match = DAY_PATTERN.exec(day);
   if (!match) return null;
   const [, year, month, date] = match;

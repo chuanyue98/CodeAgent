@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 interface ModalProps {
   children: ReactNode;
@@ -36,14 +36,26 @@ export default function Modal({
   panelClassName = 'max-w-xl p-6 space-y-4 mb-[10vh]',
   testId,
 }: ModalProps) {
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onCloseRef.current();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <div
       className={`fixed inset-0 z-50 flex items-start justify-center bg-foreground/40 ${overlayClassName}`}
       role="presentation"
       onClick={onClose}
-      onKeyDown={event => {
-        if (event.key === 'Escape') onClose();
-      }}
     >
       <div
         role={role}

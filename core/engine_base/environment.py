@@ -1,24 +1,30 @@
 import signal
 import sys
+import threading
 from pathlib import Path
 
 from core.host_env import child_environ
 
 
 def register_signal_handler() -> None:
-    """Install a SIGTERM handler that triggers a clean exit.
+    """Install termination signal handlers that trigger a clean exit.
 
     The handler raises ``SystemExit`` via ``sys.exit()``, which ensures
     ``finally`` blocks execute — so per-engine cleanup (restore settings,
-    remove symlinks, …) runs before the process terminates.  SIGKILL
-    cannot be caught, but this covers the common case of OS/service-manager
-    shutdown and manual ``kill <pid>``.
+    remove symlinks, …) runs before the process terminates.  Covers
+    ``SIGTERM``, ``SIGHUP`` (POSIX terminal/PTY hangup), and ``SIGBREAK``
+    (Windows Ctrl+Break).
     """
+    if threading.current_thread() is not threading.main_thread():
+        return
 
     def _sigterm_handler(signum: int, frame: object) -> None:
         sys.exit(128 + signum)
 
-    signal.signal(signal.SIGTERM, _sigterm_handler)
+    for sig_name in ("SIGTERM", "SIGHUP", "SIGBREAK"):
+        sig = getattr(signal, sig_name, None)
+        if sig is not None:
+            signal.signal(sig, _sigterm_handler)
 
 
 class EngineExecutionError(Exception):

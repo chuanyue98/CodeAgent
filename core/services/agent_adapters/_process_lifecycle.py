@@ -33,11 +33,17 @@ async def graceful_terminate(
     """
     if process is None or process.returncode is not None:
         return
-    process.terminate()
+    try:
+        process.terminate()
+    except ProcessLookupError:
+        return
     try:
         await asyncio.wait_for(process.wait(), timeout=terminate_timeout)
     except TimeoutError:
-        process.kill()
+        try:
+            process.kill()
+        except ProcessLookupError:
+            return
         try:
             await asyncio.wait_for(process.wait(), timeout=kill_timeout)
         except TimeoutError:

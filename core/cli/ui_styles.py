@@ -20,8 +20,6 @@ class EngineTheme:
     name: str
     display_name: str
     badge: str
-    hex_color: str
-    rgb_color: tuple[int, int, int]
     click_fg: str | tuple[int, int, int]
     style_class: str
 
@@ -31,8 +29,6 @@ ENGINE_THEMES: dict[str, EngineTheme] = {
         name="claude",
         display_name="Claude",
         badge="[Claude]",
-        hex_color="#f97316",
-        rgb_color=(249, 115, 22),
         click_fg=(249, 115, 22),
         style_class="eng_claude",
     ),
@@ -40,8 +36,6 @@ ENGINE_THEMES: dict[str, EngineTheme] = {
         name="codex",
         display_name="Codex",
         badge="[Codex]",
-        hex_color="#10b981",
-        rgb_color=(16, 185, 129),
         click_fg=(16, 185, 129),
         style_class="eng_codex",
     ),
@@ -49,8 +43,6 @@ ENGINE_THEMES: dict[str, EngineTheme] = {
         name="opencode",
         display_name="OpenCode",
         badge="[OpenCode]",
-        hex_color="#3b82f6",
-        rgb_color=(59, 130, 246),
         click_fg=(59, 130, 246),
         style_class="eng_opencode",
     ),
@@ -58,8 +50,6 @@ ENGINE_THEMES: dict[str, EngineTheme] = {
         name="antigravity",
         display_name="Antigravity",
         badge="[Antigravity]",
-        hex_color="#a855f7",
-        rgb_color=(168, 85, 247),
         click_fg=(168, 85, 247),
         style_class="eng_antigravity",
     ),
@@ -67,8 +57,6 @@ ENGINE_THEMES: dict[str, EngineTheme] = {
         name="codebuddy",
         display_name="CodeBuddy",
         badge="[CodeBuddy]",
-        hex_color="#06b6d4",
-        rgb_color=(6, 182, 212),
         click_fg=(6, 182, 212),
         style_class="eng_codebuddy",
     ),
@@ -78,8 +66,6 @@ DEFAULT_ENGINE_THEME = EngineTheme(
     name="unknown",
     display_name="Other",
     badge="[Other]",
-    hex_color="#94a3b8",
-    rgb_color=(148, 163, 184),
     click_fg="bright_white",
     style_class="eng_other",
 )
@@ -102,8 +88,6 @@ def get_engine_theme(engine: str | None) -> EngineTheme:
         name=norm,
         display_name=norm.capitalize(),
         badge=badge,
-        hex_color="#94a3b8",
-        rgb_color=(148, 163, 184),
         click_fg="bright_white",
         style_class="eng_other",
     )
@@ -168,6 +152,29 @@ def pad_display(text: str, width: int) -> str:
     return text
 
 
+def truncate_display(text: str, max_width: int, suffix: str = "...") -> str:
+    """按终端显示宽度截断字符串，兼容中文等双宽字符。"""
+    if max_width <= 0:
+        return ""
+    if display_width(text) <= max_width:
+        return text
+    suffix_w = display_width(suffix)
+    if suffix_w >= max_width:
+        suffix = ""
+        target_w = max_width
+    else:
+        target_w = max_width - suffix_w
+    out: list[str] = []
+    used = 0
+    for ch in text:
+        ch_w = display_width(ch)
+        if used + ch_w > target_w:
+            break
+        out.append(ch)
+        used += ch_w
+    return "".join(out) + suffix
+
+
 def format_styled_session_choice(
     idx: int, s: dict[str, Any], relative_time_str: str
 ) -> StyledTitle:
@@ -181,9 +188,7 @@ def format_styled_session_choice(
     msg_str = f"{msg_count:3d} msgs"
 
     title = s.get("title") or t("history.no_title")
-    title = title.replace("\n", " ").strip()
-    if len(title) > 50:
-        title = title[:47] + "..."
+    title = truncate_display(title.replace("\n", " ").strip(), 50)
 
     tokens = [
         ("class:idx", f"[{idx:2d}]  "),

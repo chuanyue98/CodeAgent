@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -33,8 +34,8 @@ from core.session_history.paths import (
 )
 from core.session_history.previews import args_preview, result_preview
 from core.utils.atomic_write import atomic_write
+from core.utils.long_paths import connect_sqlite_ro, list_dirs, long_path
 from core.utils.long_paths import exists as path_exists
-from core.utils.long_paths import list_dirs, long_path
 
 _USER_REQUEST_RE = re.compile(r"<USER_REQUEST>(.*?)</USER_REQUEST>", re.DOTALL)
 
@@ -237,7 +238,7 @@ def _get_metadata_from_db(db_path: Path, session_id: str) -> dict[str, str]:
         "agent": "",
     }
     try:
-        with sqlite3.connect(f"file:{long_path(db_path)}?mode=ro", uri=True) as conn:
+        with closing(connect_sqlite_ro(db_path)) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 "SELECT title, preview, workspace_uris, parent_conversation_id, agent_name "
@@ -531,15 +532,22 @@ def parse_antigravity_session(file_path: Path) -> UnifiedSession | None:
                         if inferred_project_path:
                             break
 
-        # 3. Extract model information if present
-        if not model:
-            raw_model = row.get("model") or row.get("modelTier")
-            if isinstance(raw_model, str) and raw_model:
-                model = _normalize_model_name(raw_model)
-            else:
-                c_text = row.get("content") or ""
+        # 3. Extract model information if present (支持同会话内切换模型)
+        raw_model = row.get("model") or row.get("modelTier")
+        if isinstance(raw_model, str) and raw_model:
+            model = _normalize_model_name(raw_model)
+        else:
+            c_text = row.get("content") or ""
+            m_switch = re.search(
+                r"Model Selection`?\s+from.*?to\s+([a-zA-Z0-9\.\-\_\s]+)",
+                c_text,
+                re.IGNORECASE,
+            )
+            if m_switch:
+                model = _normalize_model_name(m_switch.group(1).strip("`'\" ()"))
+            elif not model:
                 m_match = re.search(
-                    r"(?:Model Selection`?\s+from.*?to|model(?:_name)?\s*[:=])\s*([a-zA-Z0-9\.\-\_\s]+)",
+                    r"model(?:_name)?\s*[:=]\s*([a-zA-Z0-9\.\-\_\s]+)",
                     c_text,
                     re.IGNORECASE,
                 )
@@ -661,9 +669,9 @@ def find_antigravity_sessions(
     seen_ids: set[str] = set()
 
     # 1. Try reading from conversation_summaries.db first
-    if db_path.is_file():
+    if path_exists(db_path):
         try:
-            with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+            with closing(connect_sqlite_ro(db_path)) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
                     "SELECT conversation_id, workspace_uris, title, preview, "

@@ -3,11 +3,11 @@ import { useSearchParams } from 'react-router';
 import { useIsMounted } from '../hooks/useAsyncGuards';
 import { Clock, Plus, Trash2, Play, PauseCircle, PlayCircle, Pencil, X, Sparkles, CheckCircle2 } from 'lucide-react';
 import cronstrue from 'cronstrue';
+import 'cronstrue/locales/zh_CN';
 import { useProject } from '../context/ProjectContext';
 import { useLanguageCode, useT } from '../i18n/context';
 import { formatWorkspaceLabel, formatRelativeCountdown } from '../utils/workspaceFormat';
 import usePolling from '../hooks/usePolling';
-import request from '../utils/request';
 import Button from './shared/Button';
 import ConfirmDialog from './shared/ConfirmDialog';
 import EmptyState from './shared/EmptyState';
@@ -22,18 +22,13 @@ import {
   deleteSchedule,
   runScheduleNow,
   parseSchedule,
+  previewSchedule,
   type Schedule,
 } from '../api/schedules';
+import { createTask, listEngines, listTasks } from '../api/tasks';
+import type { Engine, Task as FullTask } from './TaskDashboard/types';
 
-interface Task {
-  name: string;
-  title: string;
-}
-
-interface Engine {
-  id: string;
-  name: string;
-}
+type Task = Pick<FullTask, 'name' | 'title'>;
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -48,7 +43,7 @@ interface TaskBlueprint {
 }
 
 function formatTimestamp(ts: number | null): string {
-  if (ts === null) return '—';
+  if (ts === null || ts <= 0 || !Number.isFinite(ts)) return '—';
   return new Date(ts * 1000).toLocaleString();
 }
 
@@ -132,9 +127,7 @@ export default function CronPage() {
       return;
     }
     const handle = window.setTimeout(() => {
-      request<{ valid: boolean; nextRuns: number[] }>(
-        `/api/schedules/preview?cron_expr=${encodeURIComponent(trimmed)}`,
-      )
+      previewSchedule(trimmed)
         .then(result => {
           if (!isMounted()) return;
           setCronPreview({ valid: result.valid, nextRuns: result.nextRuns });
@@ -150,8 +143,12 @@ export default function CronPage() {
   const cronDescription = useMemo(() => {
     const trimmed = cronExpr.trim();
     if (!trimmed || !cronPreview.valid) return '';
-    return cronstrue.toString(trimmed, { throwExceptionOnParseError: false });
-  }, [cronExpr, cronPreview.valid]);
+    return cronstrue.toString(trimmed, {
+      locale: langCode === 'zh' ? 'zh_CN' : 'en',
+      use24HourTimeFormat: true,
+      throwExceptionOnParseError: false,
+    });
+  }, [cronExpr, cronPreview.valid, langCode]);
 
   const loadSchedules = useCallback(() => {
     fetchSchedules()
@@ -179,7 +176,7 @@ export default function CronPage() {
   }, [loadSchedules]);
 
   const loadTasks = useCallback(async (): Promise<Task[]> => {
-    const list = await request<Task[]>('/api/tasks');
+    const list = await listTasks();
     if (isMounted()) {
       setTasks(list);
       if (list.length > 0) setTaskName(prev => prev || list[0].name);
@@ -196,7 +193,7 @@ export default function CronPage() {
       setError(t('cron.loadTasksFailed'));
     });
 
-    request<Engine[]>('/api/engines')
+    listEngines()
       .then((list) => {
         if (!isMounted()) return;
         setEngines(list);
@@ -243,7 +240,7 @@ export default function CronPage() {
         verification: t(template.verificationKey),
       };
       try {
-        await request('/api/tasks', { method: 'POST', body: JSON.stringify(body) });
+        await createTask(body);
         await loadTasks();
         select(false);
       } catch (createError) {
@@ -287,7 +284,7 @@ export default function CronPage() {
             verification: res.task.verification || '',
           };
           try {
-            await request('/api/tasks', { method: 'POST', body: JSON.stringify(body) });
+            await createTask(body);
             await loadTasks();
           } catch {
             await loadTasks().catch(() => []);
@@ -349,6 +346,9 @@ export default function CronPage() {
   const handleEdit = (schedule: Schedule) => {
     if (editingScheduleId === schedule.id) {
       setEditingScheduleId(null);
+      setCronExpr('0 9 * * *');
+      setNotifyOn('always');
+      setCreatedFromInput(null);
       return;
     }
     const availableWorkspaces = projects.filter(project => project.available !== false);

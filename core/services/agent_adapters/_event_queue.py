@@ -22,7 +22,10 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 
+from core.logging_config import get_logger
 from core.services.agent_protocol import AdapterEvent
+
+logger = get_logger(__name__)
 
 
 def put_event_dropping_oldest(
@@ -37,21 +40,42 @@ def put_event_dropping_oldest(
     try:
         queue.put_nowait(event)
     except asyncio.QueueFull:
+        # 保留最新到达的事件（例如 turn.completed / error），避免状态机失同步卡死。
+        logger.warning(
+            "%s event queue overflowed; dropping oldest buffered event", label
+        )
         try:
             queue.get_nowait()
         except asyncio.QueueEmpty:
             pass
-        queue.put_nowait(
-            AdapterEvent(
-                type="error",
-                provider_session_id="",
-                data={
-                    "code": "provider_backpressure",
-                    "message": f"{label} event queue overflowed",
-                    "retryable": True,
-                },
-            )
-        )
+        try:
+            queue.put_nowait(event)
+        except asyncio.QueueFull:
+            pass
+
+
+def put_sentinel_dropping_oldest(
+    queue: asyncio.Queue[AdapterEvent | None],
+) -> None:
+    """非阻塞放入 ``None`` 结束哨兵；队列已满时腾出最旧一项以保证流能正常关闭。"""
+    while True:
+        try:
+            queue.put_nowait(None)
+            return
+        except asyncio.QueueFull:
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+
+
+def drain_events(queue: asyncio.Queue[AdapterEvent | None]) -> None:
+    """清空队列中上一轮遗留的事件或结束哨兵。"""
+    while True:
+        try:
+            queue.get_nowait()
+        except asyncio.QueueEmpty:
+            return
 
 
 async def iter_events(

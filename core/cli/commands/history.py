@@ -11,6 +11,7 @@ from core.constants import ENGINES, normalize_engine_name
 from core.i18n import t
 
 from .. import helpers as _helpers
+from ..ui_styles import truncate_display
 
 #: 不加 ``-n`` 时列出的条数；与 ``ca -r`` 的列表一样长。
 DEFAULT_LIMIT = 20
@@ -35,6 +36,8 @@ def _history_list(ctx, engine, include_subagents=False, limit=DEFAULT_LIMIT):  #
         hidden = len(rows) - len(kept)
         rows = kept
     if not rows:
+        if hidden:
+            print(t("history.subagents_hidden", count=hidden))
         print(t("history.none"))
         return
     total = len(rows)
@@ -46,7 +49,9 @@ def _history_list(ctx, engine, include_subagents=False, limit=DEFAULT_LIMIT):  #
     index_width = len(str(len(rows)))
     engine_width = max(len(s["engine"]) for s in rows)
     for i, s in enumerate(rows, 1):
-        title = " ".join(s["title"].split())[:60] or t("history.no_title")
+        title = truncate_display(" ".join(s["title"].split()), 60) or t(
+            "history.no_title"
+        )
         print(
             f"  [{i:>{index_width}}] {s['engine']:<{engine_width}} | "
             f"{s['started_at'][:19]:19s} | {s['message_count']:4d} msgs | {title}"
@@ -134,6 +139,7 @@ def show(ctx, engine_name, session_id):  # type: ignore[no-untyped-def]
 @click.pass_context
 def convert(ctx, source_engine, session_id, target_engine, yes):  # type: ignore[no-untyped-def]
     _helpers._ensure_project_on_path(ctx.obj["root"])
+    from core.services.resume_commands import resume_command
     from core.session_history import repository
     from core.session_history.writers import write_session
 
@@ -146,7 +152,9 @@ def convert(ctx, source_engine, session_id, target_engine, yes):  # type: ignore
     if not session:
         print(t("history.not_found", engine=source_engine, session_id=session_id))
         return 1
-    title = session.title or session.first_user_message[:60] or t("history.no_title")
+    title = truncate_display(session.title or session.first_user_message, 60) or t(
+        "history.no_title"
+    )
     print(t("convert.about_to"))
     print(
         t(
@@ -170,7 +178,13 @@ def convert(ctx, source_engine, session_id, target_engine, yes):  # type: ignore
         print(t("convert.done", source=source_engine, target=target_engine))
         print(t("convert.new_id", session_id=new_id))
         if target_engine in ENGINES:
-            print(t(f"convert.resume_{target_engine}", session_id=new_id))
+            argv = resume_command(target_engine, new_id, Path(project_path))
+            print(
+                t(
+                    "convert.resume_with",
+                    command=_helpers.format_cli_command(argv),
+                )
+            )
     except Exception as e:
         print(t("convert.failed", error=e))
         return 1

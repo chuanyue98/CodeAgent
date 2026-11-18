@@ -49,8 +49,18 @@ def atomic_write(
     os.makedirs(parent_target, exist_ok=True)
 
     fd, tmp_path = tempfile.mkstemp(dir=parent_target, suffix=".tmp")
+    stream = None
     try:
-        with os.fdopen(fd, "w", encoding=encoding, newline=newline) as f:
+        stream = os.fdopen(fd, "w", encoding=encoding, newline=newline)
+    except BaseException:
+        os.close(fd)
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+    try:
+        with stream as f:
             f.write(content)
             if fsync:
                 f.flush()

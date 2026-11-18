@@ -18,6 +18,8 @@ from core.web.server import app
 
 
 class _FakeRunner:
+    is_initialized = False
+
     def __init__(self):
         self.calls: list[tuple] = []
         self.already_running = False
@@ -33,10 +35,11 @@ class _FakeRunner:
         tasks_root=None,
         workspace=None,
         prevent_overlap=False,
+        schedule_id=None,
     ):
         if self.already_running:
             raise TaskAlreadyRunningError("Task is already running")
-        self.calls.append((task_name, engine, group, workspace))
+        self.calls.append((task_name, engine, group, workspace, schedule_id))
         return SimpleNamespace(
             task_id=f"{task_name}_1",
             engine=engine,
@@ -101,12 +104,19 @@ def fake_runner(monkeypatch):
 @pytest.fixture(autouse=True)
 def isolated_config(tmp_path, monkeypatch):
     monkeypatch.setenv("CA_CONFIG_PATH", str(tmp_path / "config.json"))
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    monkeypatch.setenv("CA_TASKS_ROOT", str(tasks_dir))
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     monkeypatch.setenv("CA_TEST_WORKSPACE", str(workspace))
     (tmp_path / "config.json").write_text(
-        '{"project_registry": [{"path": "%s", "group": "common"}], "groups": {}}'
-        % str(workspace).replace("\\", "\\\\"),
+        json.dumps(
+            {
+                "project_registry": [{"path": str(workspace), "group": "common"}],
+                "groups": {},
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -308,6 +318,9 @@ async def test_delete_missing_schedule_returns_404():
 
 @pytest.mark.asyncio
 async def test_run_now_invokes_runner_and_records_status(fake_runner):
+    (Path(os.environ["CA_TASKS_ROOT"]) / "nightly-review.md").write_text(
+        "# Nightly\n", encoding="utf-8"
+    )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
@@ -327,7 +340,13 @@ async def test_run_now_invokes_runner_and_records_status(fake_runner):
 
     assert response.status_code == 200
     assert fake_runner.calls == [
-        ("nightly-review", "claude", "common", os.environ["CA_TEST_WORKSPACE"])
+        (
+            "nightly-review",
+            "claude",
+            "common",
+            os.environ["CA_TEST_WORKSPACE"],
+            schedule_id,
+        )
     ]
 
 
@@ -342,6 +361,9 @@ async def test_run_now_missing_schedule_returns_404(fake_runner):
 
 @pytest.mark.asyncio
 async def test_run_now_returns_conflict_for_atomic_overlap(fake_runner):
+    (Path(os.environ["CA_TASKS_ROOT"]) / "task.md").write_text(
+        "# Task\n", encoding="utf-8"
+    )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
@@ -464,7 +486,7 @@ async def test_delete_task_disables_linked_schedules(
     tmp_path, monkeypatch, fake_runner
 ):
     tasks_dir = tmp_path / "tasks"
-    tasks_dir.mkdir()
+    tasks_dir.mkdir(exist_ok=True)
     (tasks_dir / "my_task.md").write_text(
         "# My Task\n\nObjective: do something", encoding="utf-8"
     )

@@ -12,13 +12,14 @@ Provides:
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import subprocess
 import sys
 import time
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -54,9 +55,6 @@ class DelegationResult:
     error: str | None = None
     # 就地委派开跑前的检查点 id，用 delegation_checkpoint.rewind 退回。
     checkpoint: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
 
     def to_summary(self) -> str:
         status_str = "SUCCESS" if self.success else f"FAILED (exit {self.exit_code})"
@@ -100,6 +98,7 @@ def _run_git(
     check: bool = False,
     input: str | bytes | None = None,
     text: bool = True,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[Any]:
     """Runs a git command in *cwd* with a mandatory timeout parameter.
 
@@ -107,7 +106,7 @@ def _run_git(
     （中文 Windows 是 GBK）解码时读取线程直接抛错，diff 悄悄变成空的。
     """
     return subprocess.run(
-        ["git", "-C", str(cwd), *args],
+        ["git", "-c", "core.quotepath=false", "-C", str(cwd), *args],
         capture_output=True,
         text=text,
         encoding="utf-8" if text else None,
@@ -115,7 +114,32 @@ def _run_git(
         timeout=timeout,
         check=check,
         input=input,
+        env=env,
     )
+
+
+def _fallback_commit_env(repo_dir: Path) -> dict[str, str] | None:
+    """若仓库未配置 ``user.name`` / ``user.email``，补充兜底提交身份环境变量。"""
+    try:
+        name = _run_git(
+            repo_dir, "config", "--get", "user.name", timeout=10
+        ).stdout.strip()
+        email = _run_git(
+            repo_dir, "config", "--get", "user.email", timeout=10
+        ).stdout.strip()
+    except (subprocess.SubprocessError, OSError):
+        name = ""
+        email = ""
+    if name and email:
+        return None
+    env = os.environ.copy()
+    if not name:
+        env.setdefault("GIT_AUTHOR_NAME", "CodeAgent")
+        env.setdefault("GIT_COMMITTER_NAME", "CodeAgent")
+    if not email:
+        env.setdefault("GIT_AUTHOR_EMAIL", "codeagent@localhost")
+        env.setdefault("GIT_COMMITTER_EMAIL", "codeagent@localhost")
+    return env
 
 
 def is_git_repo(path: Path) -> bool:
@@ -206,6 +230,7 @@ def isolated_worktree(
                 "status",
                 "--porcelain",
                 timeout=_GIT_TIMEOUT_SECONDS,
+                check=True,
             )
             has_changes = bool(status_proc.stdout.strip())
 
@@ -215,25 +240,32 @@ def isolated_worktree(
                 "rev-list",
                 f"HEAD..{branch}",
                 timeout=_GIT_TIMEOUT_SECONDS,
+                check=True,
             )
             has_commits = bool(log_proc.stdout.strip())
 
             if not keep:
                 has_changes = has_commits = False
             if has_changes:
+                # 保存失败必须保留工作树；不能继续 force remove 丢掉唯一副本。
                 # Stage and commit any uncommitted changes so the worker branch preserves them
                 _run_git(
                     worktree_dir,
                     "add",
                     "-A",
                     timeout=_GIT_TIMEOUT_SECONDS,
+                    check=True,
                 )
+                commit_env = _fallback_commit_env(worktree_dir)
                 _run_git(
                     worktree_dir,
                     "commit",
+                    "--no-verify",
                     "-m",
                     f"ca: subtask commit on {branch}",
                     timeout=_GIT_TIMEOUT_SECONDS,
+                    check=True,
+                    env=commit_env,
                 )
                 has_commits = True
 
@@ -245,6 +277,7 @@ def isolated_worktree(
                 "--force",
                 str(worktree_dir),
                 timeout=_GIT_TIMEOUT_SECONDS,
+                check=True,
             )
 
             # If no commits were produced, delete the empty temporary branch
@@ -265,30 +298,56 @@ def isolated_worktree(
 
 
 def _carry_uncommitted_changes(repo_root: Path, worktree_dir: Path) -> None:
-    """把主工作区相对 HEAD 的改动（含已暂存）原样打到 worktree 上。"""
+    """把主工作区相对 HEAD 的改动（含已暂存与未跟踪文件）带进 worktree。"""
     diff = _run_git(
-        repo_root, "diff", "HEAD", "--binary", timeout=_GIT_TIMEOUT_SECONDS, text=False
-    ).stdout
-    if not diff:
-        return
-    applied = _run_git(
-        worktree_dir,
-        "apply",
-        "--whitespace=nowarn",
-        input=diff,
+        repo_root,
+        "diff",
+        "--no-ext-diff",
+        "HEAD",
+        "--binary",
         timeout=_GIT_TIMEOUT_SECONDS,
         text=False,
-    )
-    if applied.returncode != 0:
-        err_msg = (
-            applied.stderr.decode(errors="replace").strip()
-            if isinstance(applied.stderr, bytes)
-            else str(applied.stderr).strip()
+    ).stdout
+    if diff:
+        applied = _run_git(
+            worktree_dir,
+            "apply",
+            "--whitespace=nowarn",
+            input=diff,
+            timeout=_GIT_TIMEOUT_SECONDS,
+            text=False,
         )
-        logger.warning(
-            "Failed to carry uncommitted changes into worktree: %s",
-            err_msg,
-        )
+        if applied.returncode != 0:
+            err_msg = (
+                applied.stderr.decode(errors="replace").strip()
+                if isinstance(applied.stderr, bytes)
+                else str(applied.stderr).strip()
+            )
+            logger.warning(
+                "Failed to carry uncommitted changes into worktree: %s",
+                err_msg,
+            )
+
+    untracked = _run_git(
+        repo_root,
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z",
+        timeout=_GIT_TIMEOUT_SECONDS,
+    ).stdout
+    resolved_root = repo_root.resolve()
+    resolved_wt = worktree_dir.resolve()
+    for rel in untracked.split("\0"):
+        if not rel or _is_worktree_artifact(rel):
+            continue
+        src = (resolved_root / rel).resolve()
+        dst = (resolved_wt / rel).resolve()
+        if not src.is_relative_to(resolved_root) or not dst.is_relative_to(resolved_wt):
+            continue
+        if src.is_file() and not src.is_symlink():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
 
 
 REVIEW_PROMPT = """你是代码审查者，只读不写：不要修改、创建或删除任何文件，不要提交。
@@ -321,11 +380,18 @@ def _snapshot_worktree(path: Path) -> tuple[str | None, set[str]]:
         return None, set()
 
 
+def _is_worktree_artifact(rel_path: str) -> bool:
+    normalized = rel_path.replace("\\", "/").lstrip("./")
+    return normalized == ".ca_worktrees" or normalized.startswith(".ca_worktrees/")
+
+
 def _untracked_files(path: Path) -> set[str]:
     out = _run_git(
         path, "ls-files", "--others", "--exclude-standard", timeout=_GIT_TIMEOUT_SECONDS
     ).stdout
-    return {line for line in out.splitlines() if line}
+    return {
+        line for line in out.splitlines() if line and not _is_worktree_artifact(line)
+    }
 
 
 def _collect_git_changes(
@@ -338,12 +404,49 @@ def _collect_git_changes(
         return [], ""
     ref = base_commit or "HEAD"
     try:
-        changed = _run_git(
-            path, "diff", "--name-only", ref, timeout=_GIT_TIMEOUT_SECONDS
-        ).stdout.splitlines()
+        changed = [
+            f
+            for f in _run_git(
+                path,
+                "diff",
+                "--no-ext-diff",
+                "--name-only",
+                ref,
+                "--",
+                ":/",
+                ":!/.ca_worktrees",
+                timeout=_GIT_TIMEOUT_SECONDS,
+            ).stdout.splitlines()
+            if f and not _is_worktree_artifact(f)
+        ]
         new_untracked = sorted(_untracked_files(path) - (untracked_before or set()))
-        diff = _run_git(path, "diff", ref, timeout=_GIT_TIMEOUT_SECONDS).stdout
-        return [f for f in changed if f] + new_untracked, diff
+        diff_parts = [
+            _run_git(
+                path,
+                "diff",
+                "--no-ext-diff",
+                ref,
+                "--",
+                ":/",
+                ":!/.ca_worktrees",
+                timeout=_GIT_TIMEOUT_SECONDS,
+            ).stdout
+        ]
+        for rel in new_untracked:
+            untracked_diff = _run_git(
+                path,
+                "diff",
+                "--no-ext-diff",
+                "--no-index",
+                "--",
+                "/dev/null",
+                rel,
+                timeout=_GIT_TIMEOUT_SECONDS,
+            ).stdout
+            if untracked_diff:
+                diff_parts.append(untracked_diff)
+        combined_diff = "".join(diff_parts)
+        return changed + new_untracked, combined_diff
     except Exception as exc:
         logger.warning("Failed to collect git changes: %s", exc)
         return [], ""
@@ -553,11 +656,22 @@ def delegate_subtask(
             if checkpoint:
                 delegation_checkpoint.finish(effective_dir, checkpoint)
             # review 的 worktree 里本来就带着用户的改动，那不是审查者的产出。
-            files_changed, diff = (
-                ([], "")
-                if review
-                else _collect_git_changes(effective_dir, base_commit, untracked_before)
-            )
+            files_changed: list[str]
+            diff: str
+            if review:
+                files_changed, diff = [], ""
+            else:
+                cp_changes = (
+                    delegation_checkpoint.diff_changes(effective_dir, checkpoint)
+                    if checkpoint
+                    else None
+                )
+                if cp_changes is not None:
+                    files_changed, diff = cp_changes
+                else:
+                    files_changed, diff = _collect_git_changes(
+                        effective_dir, base_commit, untracked_before
+                    )
 
             if returncode is None:
                 # 超时：整棵进程树已经杀掉，但引擎在那之前改过的文件还在。
@@ -659,6 +773,7 @@ def handoff_session(
 
     new_id = write_session(session, canonical_target)
     cmd = resume_command(canonical_target, new_id, Path(ws))
+    quoted_cmd = subprocess.list2cmdline(cmd) if os.name == "nt" else shlex.join(cmd)
 
     return {
         "status": "ready",
@@ -666,10 +781,10 @@ def handoff_session(
         "target_engine": canonical_target,
         "original_session_id": resolved_id,
         "new_session_id": new_id,
-        "resume_command": " ".join(cmd),
+        "resume_command": quoted_cmd,
         "reason": reason,
         "message": (
             f"Session {resolved_id} successfully converted to {canonical_target} "
-            f"(new session id: {new_id}). Continue with: {' '.join(cmd)}"
+            f"(new session id: {new_id}). Continue with: {quoted_cmd}"
         ),
     }

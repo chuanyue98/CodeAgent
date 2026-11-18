@@ -101,17 +101,20 @@ export default function NotificationBell() {
   }, []);
 
   const handleItemClick = async (item: NotificationItem) => {
-    if (item.readAt === null) {
+    if (!item.readAt) {
       try {
         await markNotificationRead(item.id);
-        setNotifications(prev =>
-          prev.map(n => (n.id === item.id ? { ...n, readAt: Date.now() / 1000 } : n)),
-        );
-        setUnreadCount(prev => Math.max(0, prev - 1));
+        if (isMounted()) {
+          setNotifications(prev =>
+            prev.map(n => (n.id === item.id ? { ...n, readAt: Date.now() / 1000 } : n)),
+          );
+          setUnreadCount(prev => Math.max(0, prev - 1));
+        }
       } catch {
         // Continue navigation even if marking read fails
       }
     }
+    if (!isMounted()) return;
     setOpen(false);
     // taskId is a *run* id (`<task-name>_<suffix>`), not a session id — the
     // sessions page matches on session.sessionId, so linking there never
@@ -129,6 +132,7 @@ export default function NotificationBell() {
   const handleMarkAllRead = async () => {
     try {
       await markAllNotificationsRead();
+      if (!isMounted()) return;
       const now = Date.now() / 1000;
       setNotifications(prev => prev.map(n => ({ ...n, readAt: n.readAt ?? now })));
       setUnreadCount(0);
@@ -194,7 +198,7 @@ export default function NotificationBell() {
               </div>
             ) : (
               notifications.map(item => {
-                const isUnread = item.readAt === null;
+                const isUnread = !item.readAt;
                 return (
                   <div
                     key={item.id}

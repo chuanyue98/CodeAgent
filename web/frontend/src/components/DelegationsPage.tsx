@@ -9,7 +9,6 @@ import {
   type DelegationStatus,
 } from '../api/delegations';
 import { engineLabel } from '../utils/engines';
-import usePolling from '../hooks/usePolling';
 import Badge from './shared/Badge';
 import ConfirmDialog from './shared/ConfirmDialog';
 import EmptyState from './shared/EmptyState';
@@ -144,18 +143,14 @@ function DelegationDetailPanel({ runId, status }: { runId: string; status: Deleg
  */
 export default function DelegationsPage() {
   const t = useT();
-  const [runs, setRuns] = useState<DelegationRun[] | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [pendingStop, setPendingStop] = useState<DelegationRun | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      setRuns(await fetchDelegations());
-    } catch {
-      // 轮询失败静默，usePolling 自带退避重试。
-    }
-  }, []);
-  usePolling(refresh, 5000);
+  const { data: runs, refetch } = useQuery({
+    queryKey: ['delegations'],
+    queryFn: async () => (await fetchDelegations()) ?? [],
+    refetchInterval: 5000,
+  });
 
   const onConfirmStop = useCallback(async () => {
     if (!pendingStop) return;
@@ -163,11 +158,11 @@ export default function DelegationsPage() {
       await stopDelegation(pendingStop.runId);
     } finally {
       setPendingStop(null);
-      void refresh();
+      void refetch();
     }
-  }, [pendingStop, refresh]);
+  }, [pendingStop, refetch]);
 
-  if (runs === null) return <LoadingState height="h-40" />;
+  if (!runs) return <LoadingState height="h-40" />;
 
   const liveCount = runs.filter(run => LIVE.has(run.status)).length;
 

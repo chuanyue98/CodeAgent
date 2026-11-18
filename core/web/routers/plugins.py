@@ -13,7 +13,7 @@ def get_plugins_root():
 
 
 @router.get("/plugins")
-async def list_plugins() -> dict:
+def list_plugins() -> dict:
     """List all registered plugins with metadata."""
     try:
         service = PluginService(get_plugins_root())

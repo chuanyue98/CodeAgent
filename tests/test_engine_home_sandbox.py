@@ -10,8 +10,12 @@ from tests.conftest import ENGINE_HOME_VARS
 
 ROOT = Path(__file__).resolve().parent.parent
 # 引擎目录类变量：*_HOME、*_CONFIG_DIR，以及 ca 自己记的用户 codex home。
-_READ = re.compile(r"""environ(?:\.get)?[\(\[]\s*["']([A-Z_]*(?:_HOME|_CONFIG_DIR))["']""")
-_NAMED = re.compile(r"""^\s*[A-Z_]+_ENV\s*=\s*["']([A-Z_]*(?:_HOME|_CONFIG_DIR))["']""", re.M)
+_READ = re.compile(
+    r"""environ(?:\.get)?[\(\[]\s*["']([A-Z_]*(?:_HOME|_CONFIG_DIR))["']"""
+)
+_NAMED = re.compile(
+    r"""^\s*[A-Z_]+_ENV\s*=\s*["']([A-Z_]*(?:_HOME|_CONFIG_DIR))["']""", re.M
+)
 # 不是引擎目录的：ca 自己的数据目录等。
 _NOT_ENGINE = {"CA_HOME", "CODEAGENT_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"}
 

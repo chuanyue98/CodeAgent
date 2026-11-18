@@ -301,4 +301,12 @@ describe('ResourceHub cards and detail view', () => {
     );
     await waitFor(() => expect(screen.getByText('lint-fix')).toBeVisible());
   });
+
+  test('keyboard activation on a resource Toggle does not open the detail modal', async () => {
+    renderHub();
+    const toggle = await screen.findByRole('switch', { name: /Toggle code-review active status/i });
+    fireEvent.keyDown(toggle, { key: 'Enter' });
+
+    expect(screen.queryByRole('heading', { level: 1, name: 'code-review' })).not.toBeInTheDocument();
+  });
 });

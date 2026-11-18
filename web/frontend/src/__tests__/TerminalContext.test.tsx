@@ -1,5 +1,5 @@
 import { render, screen, act, fireEvent } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { TerminalProvider, useTerminal } from '../context/TerminalContext';
 
 const TestComponent = () => {
@@ -220,5 +220,34 @@ describe('TerminalContext', () => {
       fireEvent.keyDown(window, { key: '0', ctrlKey: true });
     });
     expect(screen.getByTestId('font-size')).toHaveTextContent('13');
+  });
+
+  it('closes the drawer and handles consecutive openTab/closeTab calls without stale closures', () => {
+    localStorage.clear();
+    const storageSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    try {
+      render(
+        <TerminalProvider>
+          <TestComponent />
+        </TerminalProvider>,
+      );
+
+      act(() => {
+        screen.getByText('Open Tab').click();
+      });
+      expect(screen.getByTestId('tabs-count')).toHaveTextContent('1');
+      expect(screen.getByTestId('drawer-open')).toHaveTextContent('true');
+
+      act(() => {
+        screen.getByText('Close Tab 1').click();
+      });
+      expect(screen.getByTestId('tabs-count')).toHaveTextContent('0');
+      expect(screen.getByTestId('drawer-open')).toHaveTextContent('false');
+      expect(screen.getByTestId('active-tab')).toHaveTextContent('none');
+    } finally {
+      storageSpy.mockRestore();
+    }
   });
 });

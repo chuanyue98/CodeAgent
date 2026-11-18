@@ -42,6 +42,7 @@ def handle_task_mode(
         return None
 
     selection: str | list[str]
+    is_range_selection = False
 
     if task_arg == "":
         task_name = select_task_interactively(
@@ -51,6 +52,7 @@ def handle_task_mode(
             allow_range=allow_range,
         )
         selection = task_name
+        is_range_selection = allow_range and isinstance(selection, list)
     else:
         # A task literally named e.g. "deploy+rollback" or "3-5" must win
         # over the combination/range syntax below -- otherwise it can never
@@ -88,31 +90,40 @@ def handle_task_mode(
                 directory,
                 file_suffix,
             )
+            is_range_selection = True
+        elif not is_literal_task_name and task_arg.isdigit():
+            # 支持 `-t 1` 形式的 1-based 数字序号选择。
+            if not available_tasks:
+                print(
+                    "❌ Error: No tasks available in current directory", file=sys.stderr
+                )
+                sys.exit(1)
+            idx = int(task_arg) - 1
+            if 0 <= idx < len(available_tasks):
+                selection = available_tasks[idx]
+            else:
+                print(
+                    f"❌ Error: Index {task_arg} out of range (1-{len(available_tasks)})",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
         else:
             selection = task_arg
 
-    if allow_range and isinstance(selection, list):
-        print(f"🔢 Selected {label} range: {', '.join(selection)}")
+    if isinstance(selection, list):
         prompts, files = load_multiple_tasks(
             selection,
             directory=directory,
             label=label,
             file_suffix=file_suffix,
         )
+        if is_range_selection:
+            print(f"🔢 Selected {label} range: {', '.join(selection)}")
+        else:
+            print(f"🧩 Merged {label}: {', '.join(selection)}")
         if with_path:
             return prompts, files
         return "\n\n".join(prompts)
-
-    if isinstance(selection, list):
-        prompts, _ = load_multiple_tasks(
-            selection,
-            directory=directory,
-            label=label,
-            file_suffix=file_suffix,
-        )
-        merged_prompt = "\n\n".join(prompts)
-        print(f"🧩 Merged {label}: {', '.join(selection)}")
-        return merged_prompt
 
     task_file = validate_task_file(selection, directory, file_suffix)
     task_prompt = read_task_prompt(task_file)

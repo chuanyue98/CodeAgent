@@ -2,23 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Wrench } from 'lucide-react';
 import { useT } from '../../i18n/context';
 import { engineLabel } from '../../utils/engines';
-import request from '../../utils/request';
+import { fetchToolUsage, type ToolUsageResponse } from '../../api/analytics';
 import LoadingState from '../shared/LoadingState';
 import EmptyState from '../shared/EmptyState';
 import ShowMoreToggle from './ShowMoreToggle';
-
-interface ToolUsage {
-  name: string;
-  count: number;
-  byEngine: Record<string, number>;
-}
-
-interface ToolUsageResponse {
-  tools: ToolUsage[];
-  totalCalls: number;
-  sessions: number;
-  engines: Record<string, number>;
-}
 
 export interface ToolRankingProps {
   /** Null means all history — matches the page's range selector. */
@@ -81,8 +68,7 @@ export default function ToolRanking({ rangeDays, rangeLabel }: ToolRankingProps)
     setLoading(true);
     setError(null);
 
-    const query = rangeDays === null ? '' : `?days=${rangeDays}`;
-    request<ToolUsageResponse>(`/api/analytics/tools${query}`, { timeout: 30000 })
+    fetchToolUsage(rangeDays)
       .then(result => {
         if (!active) return;
         setData(result);

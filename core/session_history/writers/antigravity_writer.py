@@ -20,12 +20,16 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.session_history.parsers.antigravity_parser import record_handoff_project
+from core.session_history.paths import strip_extended_length_prefix
+from core.session_history.previews import result_for_writer
 from core.utils.atomic_write import atomic_write
+from core.utils.long_paths import long_path
 
 if TYPE_CHECKING:
     from core.session_history.models import UnifiedSession
@@ -144,12 +148,14 @@ def _assistant_step_text(content: str, tool_calls: list) -> str:
         args = getattr(tc, "args_preview", "") or ""
         if name:
             lines.append(f"[tool] {name} {args}".rstrip())
+            lines.append(f"[result] {result_for_writer(tc)}".rstrip())
     return "\n".join(lines).strip()
 
 
 def _create_conversations_db(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(long_path(db_path))) as conn, conn:
+        conn.execute("PRAGMA busy_timeout=5000")
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS trajectory_meta (
@@ -265,7 +271,8 @@ def _write_conversations_db(
             )
             idx += 1
 
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(long_path(db_path))) as conn, conn:
+        conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("DELETE FROM trajectory_meta WHERE cascade_id = ?", (session_id,))
         conn.execute("DELETE FROM steps")
         conn.execute(
@@ -294,7 +301,8 @@ def _upsert_summary(db_path: Path, session: UnifiedSession, session_id: str) -> 
     never appeared and agy's summary cache never saw the conversion.
     """
     try:
-        with sqlite3.connect(db_path) as conn:
+        with closing(sqlite3.connect(long_path(db_path))) as conn, conn:
+            conn.execute("PRAGMA busy_timeout=5000")
             cols = [
                 r[1]
                 for r in conn.execute(
@@ -328,9 +336,11 @@ def _upsert_summary(db_path: Path, session: UnifiedSession, session_id: str) -> 
                     ).fetchall()
                 ]
 
-            proj = session.project_path
-            if proj:
-                norm_proj = proj.replace("\\", "/")
+            raw_proj = strip_extended_length_prefix(
+                (session.project_path or "").replace("\\", "/")
+            )
+            if raw_proj:
+                norm_proj = raw_proj
                 if not norm_proj.startswith("/"):
                     norm_proj = "/" + norm_proj
                 uris_json = json.dumps([f"file://{norm_proj}"])
@@ -407,8 +417,11 @@ def write_antigravity_session(session: UnifiedSession, home: Path | None = None)
     # 总是新 id：沿用源 id 会让 opencode 的 ``ses_…`` 进了 agy（它只认 UUID），
     # 同一个会话再接力一次还会覆盖掉上次接力后在 agy 里续聊的内容。
     session_id = str(uuid.uuid4())
+    clean_project = strip_extended_length_prefix(
+        (session.project_path or "").replace("\\", "/")
+    )
     # 先记项目再写 transcript：索引第一次解析它时就要能查到。
-    record_handoff_project(session_id, session.project_path, home)
+    record_handoff_project(session_id, clean_project, home)
     cli_dir = (home or Path.home()) / ".gemini" / "antigravity-cli"
     target_dir = cli_dir / "brain" / session_id / ".system_generated" / "logs"
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -453,6 +466,22 @@ def write_antigravity_session(session: UnifiedSession, home: Path | None = None)
             }
             lines.append(json.dumps(row, ensure_ascii=False))
             step_index += 1
+            for tc in msg.tool_calls:
+                # 紧跟在 PLANNER_RESPONSE 后的 MODEL 非对话步骤会被 parser 依次配对为工具输出。
+                lines.append(
+                    json.dumps(
+                        {
+                            "step_index": step_index,
+                            "source": "MODEL",
+                            "type": "TOOL_RESULT",
+                            "status": "DONE",
+                            "created_at": ts,
+                            "content": result_for_writer(tc),
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+                step_index += 1
 
     content_str = "\n".join(lines) + ("\n" if lines else "")
     atomic_write(transcript_file, content_str)

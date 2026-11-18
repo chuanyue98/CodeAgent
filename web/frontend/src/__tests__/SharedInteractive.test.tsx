@@ -34,6 +34,17 @@ describe('Modal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  test('Escape outside focus inside modal still closes once', () => {
+    const onClose = vi.fn();
+    render(
+      <Modal onClose={onClose} ariaLabel="Global Esc modal">
+        <p>content</p>
+      </Modal>,
+    );
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   test('ariaLabelledBy wins over ariaLabel', () => {
     render(
       <Modal onClose={vi.fn()} ariaLabel="ignored" ariaLabelledBy="heading-x">
@@ -117,6 +128,21 @@ describe('Toggle', () => {
     fireEvent.keyDown(toggle, { key: ' ' });
     fireEvent.keyDown(toggle, { key: 'Enter' });
     expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  test('suppresses synthetic click after Space keyup and blocks clicks when disabled', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<Toggle checked={false} onChange={onChange} aria-label="Enable" />);
+    const toggle = screen.getByRole('switch', { name: 'Enable' });
+    fireEvent.keyDown(toggle, { key: ' ' });
+    fireEvent.keyUp(toggle, { key: ' ' });
+    fireEvent.click(toggle);
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    rerender(<Toggle checked={false} disabled onChange={onChange} aria-label="Enable" />);
+    fireEvent.click(toggle);
+    fireEvent.keyDown(toggle, { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 });
 

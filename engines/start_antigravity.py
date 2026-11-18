@@ -13,7 +13,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from core.cli_utils import require_engine_cli
 from core.engine_base import BaseEngine, register_signal_handler
 from core.engine_base.launch_args import announce_launch, split_passthrough
-from core.engine_base.plugin_bundle_mixin import _PluginBundleMixin
+from core.engine_base.plugin_bundle_mixin import BUNDLE_NAME, _PluginBundleMixin
 from core.task_lib import (
     TASK_FILE_SUFFIX,
     handle_task_mode,
@@ -117,12 +117,19 @@ def main() -> None:
     def teardown() -> None:
         engine.cleanup_plugin_bundle()
 
-    with engine.shared_injection(Path.cwd(), setup, teardown):
-        final_command = engine.build_command(
-            message, args.non_interactive, yolo=args.yolo, passthrough=passthrough
-        )
-        announce_launch(engine.name)
-        engine.run_shell(final_command, env)
+    bundle_scope = engine._get_plugin_config_dir() / "plugins" / BUNDLE_NAME
+    try:
+        with engine.shared_injection(bundle_scope, setup, teardown):
+            final_command = engine.build_command(
+                engine.first_message(message),
+                args.non_interactive,
+                yolo=args.yolo,
+                passthrough=passthrough,
+            )
+            announce_launch(engine.name)
+            engine.run_shell(final_command, env)
+    finally:
+        engine.cleanup_temp_prompt()
 
 
 if __name__ == "__main__":

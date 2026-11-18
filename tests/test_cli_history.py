@@ -190,7 +190,7 @@ def test_convert_with_yes_writes_and_shows_the_resume_hint(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "[OK] Converted claude -> codex" in out
     assert "New session ID: new-id" in out
-    assert "codex continue" in out
+    assert "codex resume new-id" in out
 
 
 def test_convert_writer_failure_is_reported(monkeypatch, capsys):

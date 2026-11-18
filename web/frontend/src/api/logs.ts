@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import request from '../utils/request';
 import { withToken } from '../utils/token';
 
@@ -12,6 +12,7 @@ export interface LogFile {
 export interface LogFileContent {
   taskId: string;
   content: string;
+  cursor?: string;
 }
 
 export async function fetchLogFiles(): Promise<LogFile[]> {
@@ -22,71 +23,70 @@ export async function fetchLogFile(taskId: string): Promise<LogFileContent> {
   return request(`/api/logs/${encodeURIComponent(taskId)}`);
 }
 
-export function useLogStream(taskId: string | null) {
-  const [lines, setLines] = useState<string[]>([]);
+export function useLogStream(taskId: string | null, snapshot: LogFileContent | null = null) {
+  const [state, setState] = useState<{ taskId: string | null; content: string }>({ taskId: null, content: '' });
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [finished, setFinished] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!taskId) return;
-
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLines([]);
+    if (!taskId || snapshot?.taskId !== taskId || !snapshot.cursor) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setState(previous =>
+        previous.taskId === null && previous.content === '' ? previous : { taskId: null, content: '' },
+      );
+      setError(null);
+      setConnected(false);
+      setFinished(null);
+      return;
+    }
+    let disposed = false;
+    setState({ taskId, content: snapshot.content });
     setError(null);
     setConnected(false);
     setFinished(null);
-
-    // EventSource cannot set headers, so the token rides the query string.
-    const url = withToken(`/api/logs/${encodeURIComponent(taskId)}/stream`);
-    const eventSource = new EventSource(url);
-
-    eventSource.onopen = () => { setConnected(true); setError(null); };
-    eventSource.onerror = () => {
-      setConnected(false);
-      setError('Connection lost. Retrying...');
-    };
-
-    // The server ends the stream once the run stops. EventSource treats a
-    // closed connection as a dropped one and reconnects on its own, so the
-    // close has to be explicit here or a finished run reconnects forever
-    // behind a "Connection lost" banner.
-    eventSource.addEventListener('done', (event: MessageEvent) => {
+    const url = withToken(`/api/logs/${encodeURIComponent(taskId)}/stream?cursor=${encodeURIComponent(snapshot.cursor)}`);
+    const source = new EventSource(url);
+    source.onopen = () => { if (!disposed) { setConnected(true); setError(null); } };
+    // 浏览器使用 SSE 的 id 自动携带 Last-Event-ID，补发断线期间的内容。
+    source.onerror = () => { if (!disposed) { setConnected(false); setError('Connection lost. Retrying...'); } };
+    const receive = (event: MessageEvent, reset: boolean) => {
+      if (disposed) return;
       try {
-        setFinished(JSON.parse(event.data).status ?? 'completed');
+        const data = JSON.parse(event.data);
+        if (data.error) {
+          setError(data.error);
+          setConnected(false);
+          source.close();
+          return;
+        }
+        if (typeof data.content === 'string') {
+          setState(previous => {
+            const text = reset ? data.content : previous.content + data.content;
+            // 按文本拼接，不能把跨数据块的半行拆成两行。
+            return { taskId, content: text.split('\n').slice(-10000).join('\n') };
+          });
+        }
+      } catch { setError('Invalid log stream response'); }
+    };
+    source.addEventListener('message', (event: MessageEvent) => receive(event, false));
+    source.addEventListener('reset', (event: MessageEvent) => receive(event, true));
+    source.addEventListener('done', (event: MessageEvent) => {
+      if (disposed) return;
+      try {
+        const data = JSON.parse(event.data);
+        setFinished(typeof data?.status === 'string' ? data.status : 'completed');
       } catch {
         setFinished('completed');
       }
       setConnected(false);
       setError(null);
-      eventSource.close();
+      source.close();
     });
+    return () => { disposed = true; source.close(); };
+  }, [taskId, snapshot]);
 
-    eventSource.addEventListener('message', (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.content) {
-          setLines(prev => {
-            const newLines = data.content.split('\n').filter((l: string) => l.trim());
-            const MAX_LINES = 10000;
-            const trimmed = [...prev, ...newLines];
-            return trimmed.length > MAX_LINES ? trimmed.slice(trimmed.length - MAX_LINES) : trimmed;
-          });
-        }
-        if (data.error) {
-          setError(data.error);
-          eventSource.close();
-        }
-      } catch {
-        // ignore parse errors
-      }
-    });
-
-    return () => {
-      eventSource.close();
-      setConnected(false);
-    };
-  }, [taskId]);
-
-  return { lines, error, connected, finished };
+  const content = taskId && state.taskId === taskId ? state.content : undefined;
+  const lines = useMemo(() => content?.split('\n') ?? [], [content]);
+  return { lines, content, error, connected, finished };
 }

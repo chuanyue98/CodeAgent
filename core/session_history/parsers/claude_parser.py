@@ -30,6 +30,7 @@ from core.session_history.paths import (
     _claude_dir_matches,
     _decode_claude_project_path,
     _encode_claude_project_dir,
+    claude_dir,
     claude_dir_matches,
     decode_claude_project_path,
     encode_claude_project_dir,
@@ -148,8 +149,9 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
 
                 elif row_type == "assistant":
                     text, tool_calls = _extract_assistant_content(msg, pending_tools)
-                    if msg.get("model") and not model:
-                        model = msg["model"]
+                    turn_model = msg.get("model") or ""
+                    if turn_model:
+                        model = turn_model
                     if text or tool_calls:
                         messages.append(
                             UnifiedMessage(
@@ -157,7 +159,7 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
                                 content=text,
                                 timestamp=timestamp,
                                 tool_calls=tool_calls,
-                                model=model,
+                                model=turn_model or model,
                             )
                         )
 
@@ -169,8 +171,12 @@ def parse_claude_session(file_path: Path) -> UnifiedSession | None:
 
     # Claude's directory encoding is ambiguous for names containing dashes.
     # Prefer the exact cwd recorded in the JSONL whenever it is available.
+    # subagents/ 目录名不是项目目录名，避免被解码成 "subagents" 污染 project_path。
     project_dir = file_path.parent.name
-    project_path = cwd or _decode_claude_project_path(project_dir)
+    in_subagents = "subagents" in file_path.parent.parts
+    project_path = cwd or (
+        "" if in_subagents else _decode_claude_project_path(project_dir)
+    )
 
     return UnifiedSession(
         session_id=session_id,
@@ -288,7 +294,7 @@ def find_claude_sessions(
     Returns:
         list[UnifiedSession]: All sessions found, sorted by start time descending.
     """
-    base = (home or Path.home()) / ".claude" / "projects"
+    base = claude_dir(home) / "projects"
     if not base.exists():
         return []
 
@@ -333,6 +339,19 @@ def find_claude_sessions(
                 session.project_path = normalized_target
             session.parent_session_id = parent_session_id
             sessions.append(session)
+
+    # 子代理无 cwd 时从父会话继承 project_path（支持多层嵌套）。
+    by_id = {s.session_id: s for s in sessions}
+    for _ in range(5):
+        changed = False
+        for session in sessions:
+            if not session.project_path and session.parent_session_id:
+                parent = by_id.get(session.parent_session_id)
+                if parent and parent.project_path:
+                    session.project_path = parent.project_path
+                    changed = True
+        if not changed:
+            break
 
     title_subagent_runs(sessions)
     sessions.sort(key=lambda s: s.started_at, reverse=True)

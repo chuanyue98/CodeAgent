@@ -27,9 +27,9 @@ def _unavailable(reason: str, workspace: str | None = None) -> dict:
 
 
 def _git(workspace: Path, *args: str, stdin: str | None = None) -> str:
-    """Runs a git command in ``workspace``, raising on non-zero exit."""
+    """在 ``workspace`` 中执行 git 命令，非零退出码时抛出异常。"""
     completed = subprocess.run(
-        ["git", "-C", str(workspace), *args],
+        ["git", "-c", "core.quotepath=false", "-C", str(workspace), *args],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -84,6 +84,7 @@ def _collect(ws: Path, workspace: str, since: float, until: float) -> dict:
     log_output = _git(
         ws,
         "log",
+        "--no-show-signature",
         f"--since={_iso(since)}",
         f"--until={_iso(until)}",
         "--pretty=%H%x00%s%x00%an%x00%cI",
@@ -131,7 +132,7 @@ def _collect(ws: Path, workspace: str, since: float, until: float) -> dict:
     base["mode"] = "commits"
     base["commits"] = commits
     base["files"] = _numstat_files(ws, base_range, newest)
-    diff = _git(ws, "diff", f"{base_range}..{newest}")
+    diff = _git(ws, "diff", "--no-ext-diff", f"{base_range}..{newest}")
     base["diff"] = diff[:_MAX_DIFF_CHARS]
     base["diff_truncated"] = len(diff) > _MAX_DIFF_CHARS
     return base
@@ -139,7 +140,9 @@ def _collect(ws: Path, workspace: str, since: float, until: float) -> dict:
 
 def _numstat_files(ws: Path, base: str, head: str) -> list[dict]:
     files = []
-    for line in _git(ws, "diff", "--numstat", f"{base}..{head}").splitlines():
+    for line in _git(
+        ws, "diff", "--no-ext-diff", "--numstat", f"{base}..{head}"
+    ).splitlines():
         additions, deletions, path = line.split("\t", 2)
         files.append(
             {

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 
+from core.analytics.aggregator import _parse_ts
 from core.analytics.models import RawUsageEntry
 from core.logging_config import get_logger
 from core.utils.atomic_write import atomic_write
@@ -123,28 +125,47 @@ def save_history(entries: list[RawUsageEntry]) -> None:
         logger.warning("写入用量历史 %s 失败", path, exc_info=True)
 
 
-def get_last_timestamps() -> dict[str, str]:
-    """Returns the latest timestamp seen for each engine target."""
+def get_last_timestamps(
+    entries: list[RawUsageEntry] | None = None,
+) -> dict[str, str]:
+    """返回每个引擎最后一次出现的时间戳（按 UTC 时间点比较，保留原始字符串格式）。"""
     last_ts: dict[str, str] = {}
+    last_dt: dict[str, datetime] = {}
+    epoch_min = datetime.min.replace(tzinfo=UTC)
+
+    def _consider(target: str, ts: str) -> None:
+        if not ts:
+            return
+        dt = _parse_ts(ts)
+        prev_dt = last_dt.get(target)
+        if prev_dt is None:
+            last_dt[target] = dt
+            last_ts[target] = ts
+        elif dt > epoch_min and (prev_dt == epoch_min or dt > prev_dt):
+            last_dt[target] = dt
+            last_ts[target] = ts
+        elif dt == epoch_min and prev_dt == epoch_min and ts > last_ts.get(target, ""):
+            last_ts[target] = ts
+
+    if entries is not None:
+        for entry in entries:
+            _consider(entry.target or "unknown", entry.timestamp)
+        return last_ts
+
     path = _history_path()
     if not path.exists():
         return last_ts
 
     try:
-        # We could optimize this by reading from the end, but for now a full scan is okay
-        # since we need to distinguish by target.
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
                 try:
                     data = json.loads(line)
-                    target = data.get("target", "unknown")
-                    ts = data.get("timestamp", "")
-                    if ts and ts > last_ts.get(target, ""):
-                        last_ts[target] = ts
-                except (json.JSONDecodeError, KeyError):
+                    _consider(data.get("target", "unknown"), data.get("timestamp", ""))
+                except (json.JSONDecodeError, KeyError, AttributeError):
                     continue
     except OSError:
         pass

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Save, X } from 'lucide-react';
-import request from '../../utils/request';
+import { updateTask } from '../../api/tasks';
+import { useIsMounted } from '../../hooks/useAsyncGuards';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import ErrorBar from '../shared/ErrorBar';
@@ -18,6 +19,7 @@ export default function EditTaskModal({
   onSaved: (updated: Task) => void;
 }) {
   const t = useT();
+  const isMounted = useIsMounted();
   const [content, setContent] = useState(task.content ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,15 +29,14 @@ export default function EditTaskModal({
     setSubmitting(true);
     setError(null);
     try {
-      const updated = await request<Task>(`/api/tasks/${task.name}`, {
-        method: 'PUT',
-        body: JSON.stringify({ content }),
-      });
+      const updated = await updateTask(task.name, content);
+      if (!isMounted()) return;
       onSaved(updated);
     } catch (e) {
+      if (!isMounted()) return;
       setError(e instanceof Error ? e.message : t('taskModal.updateFailed'));
     } finally {
-      setSubmitting(false);
+      if (isMounted()) setSubmitting(false);
     }
   };
 

@@ -57,19 +57,9 @@ class PluginScanner:
                         continue
 
                 # Basic info
+                metadata["_id"] = f"{category}/{item.name}"
                 metadata["name"] = item.name
                 metadata["_plugin_dir"] = str(item.resolve().as_posix())
-
-                # Check for standard prompt files
-                prompt_files = []
-                for suffix in [".md", ".txt"]:
-                    # Priority: Platform specific -> Generic
-                    for name in ["AGENTS", "standards", "README"]:
-                        p = item / f"{name}{suffix}"
-                        if p.exists():
-                            prompt_files.append(str(p.resolve().as_posix()))
-
-                metadata["_prompt_files"] = prompt_files
                 plugins[item.name] = metadata
 
             if plugins:

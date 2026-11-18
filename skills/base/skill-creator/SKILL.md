@@ -63,7 +63,7 @@ skill-name/
 每个 `SKILL.md` 包含：
 
 -   **Frontmatter** (YAML)：包含 `name` 和 `description` 字段。这是 Agent 读取以确定何时使用技能的唯一字段，因此清楚全面地描述技能是什么以及何时使用它非常重要。
--   **正文** (Markdown)：使用技能的说明 and 指导。仅在技能触发后加载（如果有的话）。
+-   **正文** (Markdown)：使用技能的说明和指导。仅在技能触发后加载（如果有的话）。
 
 #### 配套资源 (可选)
 
@@ -148,7 +148,7 @@ Agent 仅在需要时加载 `FORMS.md`、`REFERENCE.md` 或 `EXAMPLES.md`。
 ```
 bigquery-skill/
 ├── SKILL.md (概览和导航)
-└── reference/
+└── references/
     ├── finance.md (收入，账单指标)
     ├── sales.md (机会，管道)
     ├── product.md (API 使用，功能)
@@ -258,10 +258,10 @@ Agent 仅在用户需要这些功能时读取 `REDLINING.md` 或 `OOXML.md`。
 
 当从头开始创建一个新技能时，始终运行 `init_skill.py` 脚本。该脚本方便地生成一个新的模板技能目录，自动包含技能所需的一切，使技能创建过程更加高效和可靠。
 
-用法：
+用法（在项目根目录下运行）：
 
 ```bash
-scripts/init_skill.py <skill-name> --path <output-directory>
+uv run python skills/base/skill-creator/scripts/init_skill.py <skill-name> --path <output-directory>
 ```
 
 该脚本：
@@ -409,7 +409,7 @@ Use UTC timestamps consistently across report generation
     -   在这里包含所有“何时使用”的信息——不要在正文中。正文仅在触发后加载，因此正文中的“何时使用此技能”部分对 Agent 没有帮助。
     -   `docx` 技能的示例描述：“支持修订、评论、格式保留和文本提取的综合文档创建、编辑和分析。当 Agent 需要处理专业文档（.docx 文件）用于以下情况时使用：(1) 创建新文档，(2) 修改或编辑内容，(3) 处理修订，(4) 添加评论，或任何其他文档任务”
 
-不要在 YAML frontmatter 中包含任何其他字段。
+不要在 YAML frontmatter 中添加规范之外的任意字段（仅允许 `name`、`description` 及可选的 `license`、`allowed-tools`、`metadata`）。
 
 ##### 正文
 
@@ -420,13 +420,13 @@ Use UTC timestamps consistently across report generation
 一旦技能开发完成，必须将其打包成可分发的 `.skill` 文件与用户共享。打包过程首先自动验证技能，以确保其满足所有要求：
 
 ```bash
-scripts/package_skill.py <path/to/skill-folder>
+uv run python skills/base/skill-creator/scripts/package_skill.py <path/to/skill-folder>
 ```
 
 可选的输出目录规范：
 
 ```bash
-scripts/package_skill.py <path/to/skill-folder> ./dist
+uv run python skills/base/skill-creator/scripts/package_skill.py <path/to/skill-folder> ./dist
 ```
 
 打包脚本将：

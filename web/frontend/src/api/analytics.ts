@@ -1,3 +1,5 @@
+import request from '../utils/request';
+
 export interface ModelBreakdown {
   modelName: string;
   inputTokens: number;
@@ -82,8 +84,6 @@ export interface AnalyticsSummary {
   sessionCount: number;
 }
 
-import request from '../utils/request';
-
 export async function fetchSummary(): Promise<AnalyticsSummary> {
   return request('/api/analytics/summary');
 }
@@ -153,8 +153,26 @@ export async function fetchModels(): Promise<ModelStat[]> {
   return request('/api/analytics/models');
 }
 
+export interface ToolUsage {
+  name: string;
+  count: number;
+  byEngine: Record<string, number>;
+}
+
+export interface ToolUsageResponse {
+  tools: ToolUsage[];
+  totalCalls: number;
+  sessions: number;
+  engines: Record<string, number>;
+}
+
+export async function fetchToolUsage(days?: number | null): Promise<ToolUsageResponse> {
+  const query = days === null || days === undefined ? '' : `?days=${days}`;
+  return request<ToolUsageResponse>(`/api/analytics/tools${query}`, { timeout: 30_000 });
+}
+
 export async function refreshAnalytics(): Promise<void> {
-  await request('/api/analytics/refresh', { method: 'POST' });
+  await request('/api/analytics/refresh', { method: 'POST', timeout: 60_000 });
 }
 
 export function fmtTokens(n: number): string {

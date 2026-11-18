@@ -144,3 +144,35 @@ describe('TaskList schedule descriptions', () => {
     expect(screen.getByText(/09:00/)).toHaveTextContent(/[一-鿿]/);
   });
 });
+
+describe('TaskList stopped status & task prefix boundary', () => {
+  test('renders Stopped pill and avoids prefix collisions between audit and audit-deep', () => {
+    const tasks = [makeTask('audit', 'Audit'), makeTask('audit-deep', 'Audit Deep')];
+    const runs: RunStatus[] = [
+      {
+        taskId: 'audit-deep-1725000000',
+        engine: 'claude',
+        status: 'stopped',
+        logPath: '/tmp/a.log',
+        startTime: 1725000000,
+      },
+    ];
+    render(
+      <TaskList
+        tasks={tasks}
+        runs={runs}
+        onSelect={vi.fn()}
+        onGenerateClick={vi.fn()}
+        onManualCreateClick={vi.fn()}
+      />,
+    );
+
+    const auditHeading = screen.getByRole('heading', { name: 'Audit' });
+    const auditRow = auditHeading.closest('button')!;
+    expect(within(auditRow).getByText('Never run')).toBeVisible();
+
+    const auditDeepHeading = screen.getByRole('heading', { name: 'Audit Deep' });
+    const auditDeepRow = auditDeepHeading.closest('button')!;
+    expect(within(auditDeepRow).getByText('Stopped')).toBeVisible();
+  });
+});

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from core.analytics.models import RawUsageEntry
+from core.session_history.parsers.opencode_parser import _find_opencode_db
 
 
 def _ms_to_iso(ms: int) -> str:
@@ -87,8 +88,8 @@ def scan_opencode_usage(
         List[RawUsageEntry]: A list of raw usage entries extracted from the
             OpenCode database, including token counts and costs.
     """
-    db_path = (home or Path.home()) / ".local" / "share" / "opencode" / "opencode.db"
-    if not db_path.exists():
+    db_path = _find_opencode_db(home)
+    if db_path is None:
         return []
 
     since_ms = _iso_to_ms(since_timestamp)

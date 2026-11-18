@@ -198,7 +198,11 @@ def test_pty_websocket_rejects_non_dict_client_messages(tmp_path, monkeypatch):
 
 def _pgrep_fake_engine() -> str:
     return subprocess.run(
-        ["pgrep", "-f", "fake_pty_engine.py"], capture_output=True, text=True
+        ["pgrep", "-f", "fake_pty_engine.py"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     ).stdout.strip()
 
 
@@ -881,6 +885,8 @@ async def test_posix_session_resize_updates_tmux_window_size(monkeypatch):
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=10,
         )
         assert original_display.returncode == 0
@@ -900,6 +906,8 @@ async def test_posix_session_resize_updates_tmux_window_size(monkeypatch):
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=10,
         )
         assert resized_display.returncode == 0
@@ -993,7 +1001,11 @@ async def test_windows_session_terminate_kills_the_child_process(monkeypatch):
         f"Where-Object {{ $_.ParentProcessId -eq {session._pty.pid} }}).ProcessId"
     )
     child_result = subprocess.run(
-        ["powershell", "-Command", tree_query], capture_output=True, text=True
+        ["powershell", "-Command", tree_query],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     child_pid = child_result.stdout.strip()
     pids_to_check = [str(session._pty.pid)] + ([child_pid] if child_pid else [])
@@ -1012,7 +1024,11 @@ async def test_windows_session_terminate_kills_the_child_process(monkeypatch):
     remaining = "unknown"
     for _ in range(10):
         result = subprocess.run(
-            ["powershell", "-Command", query], capture_output=True, text=True
+            ["powershell", "-Command", query],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         remaining = result.stdout.strip()
         if not remaining:

@@ -1,3 +1,6 @@
+import request from '../utils/request';
+import type { RunStatus } from '../components/TaskDashboard/types';
+
 export interface Schedule {
   id: string;
   taskName: string;
@@ -24,8 +27,6 @@ export interface CreateScheduleParams {
   notifyOn?: 'always' | 'success' | 'failure' | 'never';
   createdFromInput?: string | null;
 }
-
-import request from '../utils/request';
 
 export interface UpdateScheduleParams {
   taskName?: string;
@@ -55,6 +56,12 @@ export interface ParsedScheduleResult {
   rawOutput?: string | null;
 }
 
+export interface SchedulePreviewResult {
+  valid: boolean;
+  nextRuns: number[];
+  error?: string | null;
+}
+
 export async function parseSchedule(
   input: string,
   engine: string,
@@ -62,7 +69,12 @@ export async function parseSchedule(
   return request('/api/schedules/parse', {
     method: 'POST',
     body: JSON.stringify({ input, engine }),
+    timeout: 130_000,
   });
+}
+
+export async function previewSchedule(cronExpr: string): Promise<SchedulePreviewResult> {
+  return request(`/api/schedules/preview?cron_expr=${encodeURIComponent(cronExpr)}`);
 }
 
 export async function fetchSchedules(): Promise<Schedule[]> {
@@ -92,8 +104,8 @@ export async function deleteSchedule(scheduleId: string): Promise<void> {
   });
 }
 
-export async function runScheduleNow(scheduleId: string): Promise<void> {
-  await request(`/api/schedules/${encodeURIComponent(scheduleId)}/run-now`, {
+export async function runScheduleNow(scheduleId: string): Promise<RunStatus> {
+  return request(`/api/schedules/${encodeURIComponent(scheduleId)}/run-now`, {
     method: 'POST',
   });
 }

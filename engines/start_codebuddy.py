@@ -181,7 +181,9 @@ def main():
         engine.cleanup_plugin_dir(project)
 
     try:
-        with engine.shared_injection(project, setup, teardown):
+        with engine.shared_injection(
+            engine.plugin_session_scope(project), setup, teardown
+        ):
             final_command = engine.build_command(
                 engine.first_message(message),
                 args.non_interactive,

@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from core.session_history.paths import strip_extended_length_prefix
 from core.session_history.previews import result_for_writer
 
 if TYPE_CHECKING:
@@ -105,6 +106,8 @@ def _opencode_project_id(worktree: str) -> str:
             ["git", "-C", worktree, "rev-list", "--max-parents=0", "HEAD"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=10,
             check=False,
         )
@@ -237,7 +240,9 @@ def write_opencode_session(session: UnifiedSession) -> str:
 
     new_session_id = _opencode_id("ses", descending=True)
     now_ms = _now_ms()
-    worktree = session.project_path.replace("\\", "/")
+    worktree = strip_extended_length_prefix(
+        (session.project_path or "").replace("\\", "/")
+    )
 
     # NULL, so OpenCode falls back to the user's configured default. The
     # source engine's model name resolves to no OpenCode provider, and an
@@ -245,6 +250,7 @@ def write_opencode_session(session: UnifiedSession) -> str:
     session_model = None
 
     con = sqlite3.connect(str(db_path))
+    con.execute("PRAGMA busy_timeout=5000")
 
     try:
         project_id = _find_or_create_project(con, worktree, now_ms)
@@ -278,10 +284,11 @@ def write_opencode_session(session: UnifiedSession) -> str:
             ),
         )
 
-        # Insert messages and parts
+        # Insert messages and parts (从历史基准回推时间戳，避免消息落在未来时刻)
         previous_message_id: str | None = None
+        base_ms = now_ms - len(session.messages) * 1000
         for i, msg in enumerate(session.messages):
-            msg_time = now_ms + i * 1000  # stagger timestamps
+            msg_time = base_ms + i * 1000
             msg_id = _opencode_id("msg", ts=msg_time)
 
             # ``parentID`` chains each assistant reply to the turn it

@@ -226,18 +226,6 @@ async def test_codex_live_approval_decline_and_cancel():
         await adapter.stop()
 
 
-def test_codex_default_does_not_bypass_sandbox():
-    engine = CodexEngine()
-    cmd = engine.build_interactive_command(yolo=False)
-    assert "--dangerously-bypass-approvals-and-sandbox" not in cmd
-
-
-def test_codex_yolo_explicitly_bypasses_sandbox():
-    engine = CodexEngine()
-    cmd = engine.build_interactive_command(yolo=True)
-    assert "--dangerously-bypass-approvals-and-sandbox" in cmd
-
-
 def test_codex_build_command_default_interactive_no_bypass():
     engine = CodexEngine()
     cmd = engine.build_command("test prompt", non_interactive=False, yolo=False)

@@ -36,6 +36,7 @@ from core.session_history.parsers.opencode_parser import (
     _session_versions,
     parse_opencode_session,
 )
+from core.session_history.paths import claude_dir, codebuddy_dir, codex_dir
 from core.utils.long_paths import list_dirs, list_files, long_path
 
 
@@ -80,15 +81,11 @@ def _file_engine_sources(engine: str, projects_dir: Path) -> Iterator[SourceRef]
 
 
 def enumerate_claude_sources(home: Path | None = None) -> Iterator[SourceRef]:
-    yield from _file_engine_sources(
-        "claude", (home or Path.home()) / ".claude" / "projects"
-    )
+    yield from _file_engine_sources("claude", claude_dir(home) / "projects")
 
 
 def enumerate_codebuddy_sources(home: Path | None = None) -> Iterator[SourceRef]:
-    yield from _file_engine_sources(
-        "codebuddy", (home or Path.home()) / ".codebuddy" / "projects"
-    )
+    yield from _file_engine_sources("codebuddy", codebuddy_dir(home) / "projects")
 
 
 def enumerate_codex_sources(home: Path | None = None) -> Iterator[SourceRef]:
@@ -96,7 +93,7 @@ def enumerate_codex_sources(home: Path | None = None) -> Iterator[SourceRef]:
 
     父子关系来自 ``state_5.sqlite``，不在路径里，由摄取阶段统一补齐。
     """
-    base = (home or Path.home()) / ".codex" / "sessions"
+    base = codex_dir(home) / "sessions"
     if not base.exists():
         return
     for jsonl_file in list_files(base, ".jsonl", recursive=True):
@@ -247,8 +244,14 @@ def codex_thread_names(home: Path | None = None) -> dict[str, str]:
 
 
 def codex_lineage_version(home: Path | None = None) -> str:
-    base = (home or Path.home()) / ".codex"
+    base = codex_dir(home)
     return file_version(base / "state_5.sqlite") or "absent"
+
+
+def codex_thread_names_version(home: Path | None = None) -> str:
+    """Codex ``session_index.jsonl`` 的版本令牌，未改名时用于跳过空写。"""
+    base = codex_dir(home)
+    return file_version(base / "session_index.jsonl") or "absent"
 
 
 def antigravity_lineage(home: Path | None = None) -> dict[str, tuple[str, str]]:

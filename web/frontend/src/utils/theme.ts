@@ -24,10 +24,3 @@ export function applyTheme(choice: ThemeChoice): void {
     // Not persisted; the choice still holds for this page load.
   }
 }
-
-/** What the page currently shows, resolving "system" against the OS. */
-export function effectiveTheme(): 'light' | 'dark' {
-  const explicit = document.documentElement.getAttribute('data-theme');
-  if (explicit === 'light' || explicit === 'dark') return explicit;
-  return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-}

@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import os
 import re
-import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -25,15 +25,22 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+import psutil
+
 from core.delegation_depth import current_depth
 from core.engine_registry import ENGINES, normalize_engine_name
 from core.host_env import child_environ
+from core.lock_manager import LockManager
 from core.resource_locator import CODE_ROOT
+from core.session_history.paths import normalize_project_path
 from core.utils.atomic_write import atomic_write
+from core.utils.process_tree import terminate_process_tree
 
 MODES = ("write", "review")
 TERMINAL_STATUSES = ("completed", "failed", "stopped")
 DEFAULT_TIMEOUT_SECONDS = 30 * 60
+RETENTION_DAYS = 30
+RETENTION_KEEP = 100
 
 _RUN_ID_RE = re.compile(r"^[a-z]+-\d{8}-\d{6}-[0-9a-f]{6}$")
 #: 结果里给发起方模型看的输出尾巴，够看清结论，又不至于撑爆上下文。
@@ -126,7 +133,7 @@ def start_delegation(
         else {"start_new_session": True}
     )
     with open(run_dir / "worker.log", "w", encoding="utf-8") as worker_log:
-        proc = subprocess.Popen(
+        subprocess.Popen(
             [sys.executable, "-m", "core.services.delegation_worker", str(run_dir)],
             cwd=str(ws),
             env=env,
@@ -135,25 +142,35 @@ def start_delegation(
             stderr=subprocess.STDOUT,
             **detach,
         )
-    write_status(run_dir, pid=proc.pid)
+    # 不在父进程中回写 status.json，避免覆盖 worker 自己写入的 running/pid/终态。
     return run_id
 
 
-def _pid_alive(pid: int) -> bool:
-    if sys.platform == "win32":
-        result = subprocess.run(
-            ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-            capture_output=True,
-            text=True,
-        )
-        return str(pid) in result.stdout
+def _pid_alive(
+    pid: int,
+    expected_created_at: float | None = None,
+    run_dir: Path | None = None,
+) -> bool:
+    """优先通过排他文件锁探活 worker；无锁文件时回退到 psutil + create_time 核对。"""
+    if run_dir is not None:
+        lock_path = run_dir / "worker.lock"
+        if lock_path.exists():
+            locks = LockManager()
+            probe = locks.try_acquire_resource_lock(lock_path)
+            if probe is None:
+                return True
+            locks.release_resource_lock(probe)
+            return False
     try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
+        proc = psutil.Process(pid)
+        if (
+            expected_created_at is not None
+            and abs(proc.create_time() - expected_created_at) > 0.5
+        ):
+            return False
+        return proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE
+    except psutil.Error:
         return False
-    except PermissionError:
-        return True
-    return True
 
 
 def get_run(run_id: str) -> dict[str, Any]:
@@ -166,16 +183,25 @@ def get_run(run_id: str) -> dict[str, Any]:
     state = status.get("status", "unknown")
 
     pid = status.get("pid")
-    if state not in TERMINAL_STATUSES and isinstance(pid, int) and not _pid_alive(pid):
-        # worker 没来得及写终态就没了（被杀、崩溃）。
-        state = "failed"
-        write_status(
-            run_dir,
-            status=state,
-            ended_at=time.time(),
-            error="worker exited without reporting a result",
-        )
+    created_at = status.get("process_created_at")
+    if (
+        state not in TERMINAL_STATUSES
+        and isinstance(pid, int)
+        and not _pid_alive(pid, expected_created_at=created_at, run_dir=run_dir)
+    ):
+        # worker 可能刚刚在写完终态后才释放锁，重读一次避免误报失败。
         status = read_json(run_dir / "status.json")
+        state = status.get("status", "unknown")
+        if state not in TERMINAL_STATUSES:
+            # worker 没来得及写终态就没了（被杀、崩溃）。
+            state = "failed"
+            write_status(
+                run_dir,
+                status=state,
+                ended_at=time.time(),
+                error="worker exited without reporting a result",
+            )
+            status = read_json(run_dir / "status.json")
 
     run: dict[str, Any] = {
         "run_id": run_id,
@@ -210,44 +236,75 @@ def wait_run(run_id: str, timeout: float = 45.0, poll: float = 1.0) -> dict[str,
         time.sleep(poll)
 
 
+def _prune_old_runs(run_dirs: list[Path], *, keep: int = RETENTION_KEEP) -> None:
+    """清理超过保留期且已结束的旧委派目录，保留最近 ``keep`` 条与所有运行中记录。"""
+    if len(run_dirs) <= keep:
+        return
+    cutoff = time.time() - RETENTION_DAYS * 86400
+    locks = LockManager()
+    for run_dir in run_dirs[keep:]:
+        status = read_json(run_dir / "status.json")
+        if status.get("status") not in TERMINAL_STATUSES:
+            continue
+        lock_path = run_dir / "worker.lock"
+        if lock_path.exists():
+            probe = locks.try_acquire_resource_lock(lock_path)
+            if probe is None:
+                continue
+            locks.release_resource_lock(probe)
+        ended = status.get("ended_at") or status.get("created_at")
+        if not isinstance(ended, (int, float)):
+            try:
+                ended = run_dir.stat().st_mtime
+            except OSError:
+                continue
+        if ended < cutoff:
+            shutil.rmtree(run_dir, ignore_errors=True)
+
+
 def list_runs(workspace: Path | str | None = None, limit: int = 20) -> list[dict]:
     root = runs_root()
     if not root.is_dir():
         return []
-    ws = str(Path(workspace).resolve()) if workspace else None
+    ws = (
+        normalize_project_path(str(Path(workspace).resolve()))
+        if workspace is not None
+        else None
+    )
     runs: list[dict] = []
-    run_dirs = [p for p in root.iterdir() if _RUN_ID_RE.match(p.name)]
+    run_dirs = [p for p in root.iterdir() if p.is_dir() and _RUN_ID_RE.match(p.name)]
     # run id 是 <engine>-<日期>-<时间>-<随机>，按名字排会先按引擎名排。
     run_dirs.sort(key=lambda p: p.name.split("-", 1)[1], reverse=True)
     for run_dir in run_dirs:
         task = read_json(run_dir / "task.json")
-        if ws is not None and task.get("workspace") != ws:
+        task_ws = task.get("workspace")
+        if ws is not None and (
+            not isinstance(task_ws, str) or normalize_project_path(task_ws) != ws
+        ):
             continue
         run = get_run(run_dir.name)
         run.pop("result", None)
         runs.append(run)
         if len(runs) >= limit:
             break
+    _prune_old_runs(run_dirs, keep=max(RETENTION_KEEP, limit))
     return runs
 
 
 def stop_run(run_id: str) -> bool:
-    """结束 worker 及其拉起的子引擎（它们同属一个进程组）。"""
+    """核对锁与进程身份后结束 worker 及其全部子孙进程。"""
     run_dir = _run_dir(run_id)
     status = read_json(run_dir / "status.json")
     pid = status.get("pid")
+    created_at = status.get("process_created_at")
     if status.get("status") in TERMINAL_STATUSES or not isinstance(pid, int):
         return False
-    try:
-        if sys.platform == "win32":
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(pid)],
-                capture_output=True,
-                timeout=10,
-            )
-        else:
-            os.killpg(os.getpgid(pid), signal.SIGTERM)
-    except (OSError, subprocess.SubprocessError):
+    if not _pid_alive(pid, expected_created_at=created_at, run_dir=run_dir):
+        return False
+    if not terminate_process_tree(pid, created_at):
+        return False
+    latest = read_json(run_dir / "status.json")
+    if latest.get("status") in TERMINAL_STATUSES:
         return False
     write_status(run_dir, status="stopped", ended_at=time.time())
     return True

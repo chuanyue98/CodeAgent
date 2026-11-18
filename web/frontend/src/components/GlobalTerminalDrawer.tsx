@@ -4,6 +4,7 @@ import {
   Terminal, Plus, X, Maximize2, Minimize2, ChevronDown, ChevronUp, Zap, Loader2,
   ZoomIn, ZoomOut, Copy, Check, Expand, Shrink, MoreHorizontal,
 } from 'lucide-react';
+import { useIsMounted } from '../hooks/useAsyncGuards';
 import { useTerminal } from '../context/TerminalContext';
 const BrowserTerminal = lazy(() => import('./BrowserTerminal'));
 import SmartHandoffBanner from './SmartHandoffBanner';
@@ -72,6 +73,7 @@ export default function GlobalTerminalDrawer() {
   } = useTerminal();
 
   const t = useT();
+  const isMounted = useIsMounted();
 
   const [handoffLoading, setHandoffLoading] = useState<string | null>(null);
   const [handoffError, setHandoffError] = useState<string | null>(null);
@@ -120,12 +122,25 @@ export default function GlobalTerminalDrawer() {
     };
   }, [showHandoffMenu]);
 
+  useEffect(() => {
+    if (!showMoreMenu && !showHandoffMenu) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowMoreMenu(false);
+        setShowHandoffMenu(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showMoreMenu, showHandoffMenu]);
+
   if (tabs.length === 0) return null;
 
   const isAgentEngine = Boolean(activeTab && AGENT_ENGINES.some(e => e.id === activeTab.engine));
 
   const handleHandoff = async (targetEngineId: string) => {
     if (!activeTab) return;
+    const tabId = activeTab.id;
     setHandoffLoading(targetEngineId);
     setHandoffError(null);
     try {
@@ -135,14 +150,18 @@ export default function GlobalTerminalDrawer() {
         targetEngine: targetEngineId,
         projectPath: activeTab.cwd,
       });
-      closeTab(activeTab.id);
+      if (!isMounted()) return;
+      closeTab(tabId);
       openTab(result.engine, result.project, result.sessionId);
     } catch (err) {
-      console.error(err);
-      setHandoffError(err instanceof Error ? err.message : String(err));
+      if (isMounted()) {
+        setHandoffError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
-      setHandoffLoading(null);
-      setShowHandoffMenu(false);
+      if (isMounted()) {
+        setHandoffLoading(null);
+        setShowHandoffMenu(false);
+      }
     }
   };
 
@@ -210,7 +229,8 @@ export default function GlobalTerminalDrawer() {
         className={`flex flex-col bg-card ${frame}`}
         style={frameStyle}
         data-testid="drawer-expanded"
-        onTransitionEnd={() => {
+        onTransitionEnd={e => {
+          if (e.target !== e.currentTarget) return;
           window.dispatchEvent(new Event('resize'));
         }}
       >
@@ -237,7 +257,7 @@ export default function GlobalTerminalDrawer() {
                     type="button"
                     onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
                     className="ml-auto opacity-0 transition-opacity group-hover:opacity-100 hover:bg-slate-200 p-0.5 rounded"
-                    aria-label="Close terminal"
+                    aria-label={t('launch.closeTerminal')}
                   >
                     <X size={14} />
                   </button>
@@ -245,10 +265,11 @@ export default function GlobalTerminalDrawer() {
               );
             })}
             <button
+              type="button"
               onClick={() => setActiveTabId(null)}
               className="flex w-10 items-center justify-center text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-              title="Switch to Launcher"
-              aria-label="New terminal"
+              title={t('terminal.switchToLauncher')}
+              aria-label={t('launch.newTerminal')}
             >
               <Plus size={16} />
             </button>
@@ -403,18 +424,20 @@ export default function GlobalTerminalDrawer() {
             {!docked && (
               <>
                 <button
+                  type="button"
                   onClick={toggleMaximize}
                   className="rounded p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-                  title="Maximize"
-                  aria-label="Maximize"
+                  title={t('terminal.maximize')}
+                  aria-label={t('terminal.maximize')}
                 >
                   {isMaximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                 </button>
                 <button
+                  type="button"
                   onClick={toggleDrawer}
                   className="rounded p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-                  title="Minimize Drawer"
-                  aria-label="Minimize Drawer"
+                  title={t('terminal.minimizeDrawer')}
+                  aria-label={t('terminal.minimizeDrawer')}
                 >
                   <ChevronDown size={16} />
                 </button>
@@ -424,9 +447,14 @@ export default function GlobalTerminalDrawer() {
         </div>
 
         {handoffError && (
-          <div className="flex items-center justify-between border-b border-red-200 bg-red-50 p-2 text-xs text-red-700">
-            <span>{t('launch.handoffFailed', { error: handoffError }) || handoffError}</span>
-            <button onClick={() => setHandoffError(null)} className="p-0.5 text-red-500 hover:text-red-700">
+          <div role="alert" className="flex items-center justify-between border-b border-red-200 bg-red-50 p-2 text-xs text-red-700">
+            <span>{t('launch.handoffFailed', { error: handoffError })}</span>
+            <button
+              type="button"
+              aria-label={t('common.close')}
+              onClick={() => setHandoffError(null)}
+              className="p-0.5 text-red-500 hover:text-red-700"
+            >
               <X size={14} />
             </button>
           </div>

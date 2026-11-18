@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
+from contextlib import closing
 from pathlib import Path
 
 from core.session_history.models import (
@@ -99,7 +100,7 @@ def _create_mock_antigravity_env(
 
     # 2. Create conversation_summaries.db
     db_path = cli_dir / "conversation_summaries.db"
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS conversation_summaries (
@@ -306,7 +307,7 @@ def test_write_antigravity_session_and_roundtrip(tmp_path: Path):
         tmp_path / ".gemini" / "antigravity-cli" / "conversations" / f"{written_id}.db"
     )
     assert conv_db.exists()
-    with sqlite3.connect(conv_db) as conn:
+    with closing(sqlite3.connect(conv_db)) as conn:
         meta = conn.execute(
             "SELECT cascade_id, trajectory_type, source FROM trajectory_meta"
         ).fetchall()
@@ -326,7 +327,7 @@ def test_write_antigravity_session_and_roundtrip(tmp_path: Path):
     # Summary row must exist with last_user_input_time (NOT NULL, no default).
     summary_db = tmp_path / ".gemini" / "antigravity-cli" / "conversation_summaries.db"
     assert summary_db.exists()
-    with sqlite3.connect(summary_db) as conn:
+    with closing(sqlite3.connect(summary_db)) as conn:
         rows = conn.execute(
             "SELECT title, last_user_input_time FROM conversation_summaries "
             "WHERE conversation_id = ?",
@@ -440,7 +441,7 @@ def test_antigravity_subagent_role_title_extraction(tmp_path: Path):
     )
 
     db_path = cli_dir / "conversation_summaries.db"
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS conversation_summaries (
@@ -750,7 +751,7 @@ def test_converted_session_keeps_its_project_after_agy_clears_the_workspace(
     summaries_db = (
         tmp_path / ".gemini" / "antigravity-cli" / "conversation_summaries.db"
     )
-    with sqlite3.connect(summaries_db) as conn:
+    with closing(sqlite3.connect(summaries_db)) as conn, conn:
         conn.execute("UPDATE conversation_summaries SET workspace_uris = ''")
 
     found = find_all_sessions(project, home=tmp_path, engine="antigravity")

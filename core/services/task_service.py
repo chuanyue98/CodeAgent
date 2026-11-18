@@ -1,19 +1,36 @@
 from __future__ import annotations
 
-import collections
 import os
 import re
 from pathlib import Path
 
-_SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
+from core.utils.atomic_write import atomic_write
+
+# 不允许空字符串、"."、".." 或以 "." / "-" 开头（防止隐藏文件、路径穿越或被引擎当成命令行参数）。
+_SAFE_NAME_RE = re.compile(r"^(?![.-])[\w.-]+$")
+_STAGE_GOAL_RE = re.compile(r"\*\*目标(?:\s*[:：]\s*\*\*|\*\*\s*[:：])\s*(.*)")
+_STAGE_STATUS_RE = re.compile(r"\*\*状态(?:\s*[:：]\s*\*\*|\*\*\s*[:：])\s*(.*)")
+_TAIL_MAX_BYTES = 1024 * 1024
 
 
 def is_valid_task_name(name: str) -> bool:
-    return bool(_SAFE_NAME_RE.match(name))
+    return bool(name and _SAFE_NAME_RE.match(name))
+
+
+def _tail_lines(path: Path, max_lines: int = 100) -> str:
+    """从文件末尾读取最后 ``max_lines`` 行，使用 UTF-8 替换解码。"""
+    with path.open("rb") as f:
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        read_size = min(size, _TAIL_MAX_BYTES)
+        f.seek(size - read_size)
+        raw = f.read(read_size)
+    text = raw.decode("utf-8", errors="replace")
+    return "".join(text.splitlines(keepends=True)[-max_lines:])
 
 
 class TaskService:
-    """Service for listing and reading tasks from the tasks directory."""
+    """管理和读取任务剧本目录的业务服务。"""
 
     def __init__(self, tasks_root: Path):
         self.tasks_root = tasks_root
@@ -36,13 +53,11 @@ class TaskService:
         instructions: str = "",
         verification: str = "",
     ) -> dict:
-        """Writes a new task blueprint as a plain ``.md`` file in the tasks root.
-
-        Follows the four-section structure (Objective/Context/Instructions/
-        Verification) documented in ``skills/base/task-authoring/SKILL.md``.
-        """
+        """在任务根目录以独占创建方式写入新的 ``.md`` 任务剧本。"""
         if not is_valid_task_name(name):
-            raise ValueError("Task name must match [\\w.-]+")
+            raise ValueError(
+                "Task name must match [\\w.-]+ and not start with '.' or '-'"
+            )
 
         self.tasks_root.mkdir(parents=True, exist_ok=True)
         path = self.tasks_root / f"{name}.md"
@@ -57,9 +72,7 @@ class TaskService:
             f"## Verification (验证)\n{verification}\n"
         )
         try:
-            # Exclusive-create ("x") makes the existence check and the write
-            # atomic, closing the TOCTOU window a separate exists()-then-write
-            # would leave between two concurrent requests for the same name.
+            # 独占创建 ("x") 让存在性检查与写入保持原子性，避免并发请求写覆盖。
             with path.open("x", encoding="utf-8") as f:
                 f.write(content)
         except FileExistsError as exc:
@@ -67,28 +80,27 @@ class TaskService:
         return self._parse_task(path, full_content=True)
 
     def update_task(self, name: str, content: str) -> dict:
-        """Overwrites an existing task blueprint with the given markdown content.
-
-        Unlike ``create_task`` which assembles a fixed four-section template,
-        this accepts the full raw markdown so any structure (stages, custom
-        sections) is preserved. The task must already exist.
-        """
-        if not _SAFE_NAME_RE.match(name):
-            raise ValueError("Task name must match [\\w.-]+")
+        """原子覆盖已存在的任务剧本 Markdown 正文。"""
+        if not is_valid_task_name(name):
+            raise ValueError(
+                "Task name must match [\\w.-]+ and not start with '.' or '-'"
+            )
 
         path = self.tasks_root / f"{name}.md"
         if not path.resolve().is_relative_to(self.tasks_root.resolve()):
             raise ValueError("Invalid task name")
-        if not path.exists():
+        if not path.is_file():
             raise FileNotFoundError(f"Task '{name}' not found")
 
-        path.write_text(content, encoding="utf-8")
+        atomic_write(path, content, encoding="utf-8")
         return self._parse_task(path, full_content=True)
 
     def delete_task(self, name: str) -> bool:
-        """Removes a task blueprint file. Returns False if it did not exist."""
-        if not _SAFE_NAME_RE.match(name):
-            raise ValueError("Task name must match [\\w.-]+")
+        """删除任务剧本文件；不存在时返回 ``False``。"""
+        if not is_valid_task_name(name):
+            raise ValueError(
+                "Task name must match [\\w.-]+ and not start with '.' or '-'"
+            )
 
         path = self.tasks_root / f"{name}.md"
         if not path.resolve().is_relative_to(self.tasks_root.resolve()):
@@ -99,21 +111,19 @@ class TaskService:
         return True
 
     def get_task(self, name: str, log_path: str | None = None) -> dict | None:
-        if not _SAFE_NAME_RE.match(name):
+        if not is_valid_task_name(name):
             return None
         path = self.tasks_root / f"{name}.md"
         if not path.resolve().is_relative_to(self.tasks_root.resolve()):
             return None
-        if not path.exists():
+        if not path.is_file():
             return None
 
         task_data = self._parse_task(path, full_content=True)
 
         if log_path and os.path.exists(log_path):
             try:
-                # Only read last 100 lines for efficiency
-                with open(log_path, encoding="utf-8") as f:
-                    task_data["logs"] = "".join(collections.deque(f, maxlen=100))
+                task_data["logs"] = _tail_lines(Path(log_path), max_lines=100)
             except Exception:
                 task_data["logs"] = "Failed to read logs."
 
@@ -121,20 +131,20 @@ class TaskService:
 
     def _parse_task(self, path: Path, full_content: bool = False) -> dict:
         try:
-            content = path.read_text(encoding="utf-8")
+            content = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             content = ""
 
         lines = content.splitlines()
         title = path.stem
 
-        # First `# ` heading as title
+        # 第一个一级标题作为任务标题
         for line in lines:
             if line.startswith("# "):
                 title = line[2:].strip()
                 break
 
-        # First non-empty, non-heading line as description
+        # 第一个非空且非标题行作为摘要
         description = ""
         for line in lines:
             stripped = line.strip()
@@ -159,7 +169,8 @@ class TaskService:
 def _parse_stages(content: str) -> list[dict]:
     stages = []
     sections = re.split(r"^##\s+", content, flags=re.MULTILINE)
-    for section in sections:
+    # sections[0] 是首个二级标题之前的前言，不能当作阶段解析。
+    for section in sections[1:]:
         if not section.strip():
             continue
         lines = section.splitlines()
@@ -167,10 +178,13 @@ def _parse_stages(content: str) -> list[dict]:
         goal = ""
         status = ""
         for line in lines:
-            if "**目标**" in line and ":" in line:
-                goal = line.split(":", 1)[1].strip()
-            elif "**状态**" in line and ":" in line:
-                raw = line.split(":", 1)[1].strip()
+            goal_match = _STAGE_GOAL_RE.search(line)
+            if goal_match:
+                goal = goal_match.group(1).strip()
+                continue
+            status_match = _STAGE_STATUS_RE.search(line)
+            if status_match:
+                raw = status_match.group(1).strip()
                 status = raw.strip("[]").strip()
         if status or goal:
             stages.append({"name": name, "status": status, "goal": goal})

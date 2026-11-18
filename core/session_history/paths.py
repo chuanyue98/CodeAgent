@@ -16,7 +16,9 @@ so the whole app agrees on what "the same project" means.
 
 from __future__ import annotations
 
+import os
 import re
+from pathlib import Path
 
 # Windows extended-length prefixes. `\\?\UNC\server\share` denotes the network
 # path `\\server\share`, so that one is rewritten rather than merely dropped.
@@ -114,3 +116,30 @@ _encode_claude_project_dir = encode_claude_project_dir
 _claude_dir_matches = claude_dir_matches
 _encode_codebuddy_project_dir = encode_codebuddy_project_dir
 _codebuddy_dir_matches = codebuddy_dir_matches
+
+
+def claude_dir(home: Path | None = None) -> Path:
+    """解析 Claude 数据根目录；显式传入 *home* 时优先于 ``CLAUDE_CONFIG_DIR``。"""
+    if home is not None:
+        return home / ".claude"
+    configured = os.environ.get("CLAUDE_CONFIG_DIR", "").strip()
+    return Path(configured).expanduser() if configured else Path.home() / ".claude"
+
+
+def codebuddy_dir(home: Path | None = None) -> Path:
+    """解析 CodeBuddy 数据根目录；显式传入 *home* 时优先于 ``CODEBUDDY_CONFIG_DIR``。"""
+    if home is not None:
+        return home / ".codebuddy"
+    configured = os.environ.get("CODEBUDDY_CONFIG_DIR", "").strip()
+    return Path(configured).expanduser() if configured else Path.home() / ".codebuddy"
+
+
+def codex_dir(home: Path | None = None) -> Path:
+    """解析 Codex 数据根目录；显式传入 *home* 时优先于 ``CA_USER_CODEX_HOME`` / ``CODEX_HOME``。"""
+    if home is not None:
+        return home / ".codex"
+    configured = (
+        os.environ.get("CA_USER_CODEX_HOME", "").strip()
+        or os.environ.get("CODEX_HOME", "").strip()
+    )
+    return Path(configured).expanduser() if configured else Path.home() / ".codex"

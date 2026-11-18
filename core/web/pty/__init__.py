@@ -50,6 +50,8 @@ from core.web.pty.tmux import (
     prune_detached_sessions,
     start_tmux_watchdog,
     stop_active_session,
+    stop_all_active_sessions,
+    stop_tmux_watchdog,
 )
 
 __all__ = [
@@ -94,4 +96,6 @@ __all__ = [
     "prune_detached_sessions",
     "start_tmux_watchdog",
     "stop_active_session",
+    "stop_all_active_sessions",
+    "stop_tmux_watchdog",
 ]

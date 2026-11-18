@@ -12,13 +12,16 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from typing import Any
 
 from core.host_env import child_environ
 from core.logging_config import get_logger
 from core.services.agent_adapters._event_queue import (
+    drain_events,
     iter_events,
     put_event_dropping_oldest,
+    put_sentinel_dropping_oldest,
 )
 from core.services.agent_adapters._process_lifecycle import graceful_terminate
 from core.services.agent_protocol import (
@@ -76,6 +79,7 @@ class OpenCodeAdapter:
             )
             raise RuntimeError(self._unavailable_reason)
         self._stopping = False
+        drain_events(self._events)
         self._loop = asyncio.get_running_loop()
         self._password = secrets.token_urlsafe(32)
         env = child_environ()
@@ -94,6 +98,8 @@ class OpenCodeAdapter:
             self._base_url = f"http://127.0.0.1:{port}"
             try:
                 await self._spawn_and_wait_healthy(executable, port, env)
+                self._stopping = False
+                drain_events(self._events)
                 self._started = True
                 self._unavailable_reason = None
                 self._sse_task = asyncio.create_task(
@@ -141,6 +147,7 @@ class OpenCodeAdapter:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
+            limit=16 * 1024 * 1024,
         )
         self._stderr_lines = []
         self._stdout_task = asyncio.create_task(
@@ -195,6 +202,7 @@ class OpenCodeAdapter:
         self._sse_task = self._stdout_task = self._stderr_task = None
         self._active_turns.clear()
         self._pending_approvals.clear()
+        put_sentinel_dropping_oldest(self._events)
 
     async def capabilities(self) -> ProviderCapabilities:
         running = (
@@ -429,18 +437,25 @@ class OpenCodeAdapter:
                             self._loop.call_soon_threadsafe(
                                 self._handle_sse_envelope, envelope
                             )
-                        except json.JSONDecodeError:
+                        except (json.JSONDecodeError, RuntimeError):
                             pass
                         data_lines.clear()
                     continue
                 if line.startswith("data:"):
                     data_lines.append(line[5:].lstrip())
+            if not self._stopping and self._loop:
+                with suppress(RuntimeError):
+                    self._loop.call_soon_threadsafe(
+                        self._emit_global_error,
+                        "OpenCode event stream closed unexpectedly",
+                    )
         except Exception as exc:
             if not self._stopping and self._loop:
-                self._loop.call_soon_threadsafe(
-                    self._emit_global_error,
-                    f"OpenCode event stream stopped: {exc}",
-                )
+                with suppress(RuntimeError):
+                    self._loop.call_soon_threadsafe(
+                        self._emit_global_error,
+                        f"OpenCode event stream stopped: {exc}",
+                    )
         finally:
             self._sse_response = None
 
@@ -459,6 +474,7 @@ class OpenCodeAdapter:
                 },
             )
         )
+        put_sentinel_dropping_oldest(self._events)
 
     def _handle_sse_envelope(self, envelope: dict[str, Any]) -> None:
         payload = envelope.get("payload") or envelope

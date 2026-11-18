@@ -72,6 +72,7 @@ def build_audit_events(sessions: list[UnifiedSession]) -> list[dict]:
                         "tool_name": tool_call.name,
                         "args_preview": tool_call.args_preview,
                         "result_preview": tool_call.result_preview,
+                        "result_captured": bool(tool_call.result_captured),
                     }
                 )
 

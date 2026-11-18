@@ -77,9 +77,18 @@ export default function useAnalyticsData(): AnalyticsData {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await refreshAnalytics(); await loadAll(); } catch { /* ignore */ }
-    finally { setRefreshing(false); }
-  }, [loadAll]);
+    try {
+      await refreshAnalytics();
+      if (!isMounted()) return;
+      await loadAll();
+    } catch (e) {
+      if (isMounted()) {
+        setError(e instanceof Error ? e.message : t('analytics.loadFailed'));
+      }
+    } finally {
+      if (isMounted()) setRefreshing(false);
+    }
+  }, [isMounted, loadAll, t]);
 
   return {
     engines, daily, monthly, sessions, modelStats, totalSessions,

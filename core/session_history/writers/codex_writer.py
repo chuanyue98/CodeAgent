@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from core.session_history.paths import codex_dir, strip_extended_length_prefix
 from core.session_history.previews import result_for_writer
 from core.utils.atomic_write import atomic_write
 
@@ -44,7 +45,7 @@ def _configured_model_provider(home: Path | None = None) -> str:
     Returns:
         str: The configured provider name, or ``"openai"`` when unset.
     """
-    config_path = (home or Path.home()) / ".codex" / "config.toml"
+    config_path = codex_dir(home) / "config.toml"
     try:
         raw = config_path.read_text(encoding="utf-8")
     except OSError:
@@ -77,11 +78,17 @@ def write_codex_session(session: UnifiedSession) -> str:
     new_session_id = str(uuid.uuid4())
     now = _now_iso()
     now_fname = _now_filename()
-    cwd = session.project_path
+    raw_cwd = session.project_path or ""
+    slashed_cwd = raw_cwd.replace("\\", "/")
+    cwd = (
+        strip_extended_length_prefix(slashed_cwd)
+        if slashed_cwd.lower().startswith("//?/")
+        else raw_cwd
+    )
 
     # Build file path
     today = datetime.now(tz=UTC)
-    sessions_dir = Path.home() / ".codex" / "sessions"
+    sessions_dir = codex_dir() / "sessions"
     day_dir = (
         sessions_dir / f"{today.year:04d}" / f"{today.month:02d}" / f"{today.day:02d}"
     )
@@ -213,7 +220,7 @@ def _update_session_index(session_id: str, session: UnifiedSession) -> None:
         session_id: The new session ID.
         session: The source session (for title).
     """
-    index_path = Path.home() / ".codex" / "session_index.jsonl"
+    index_path = codex_dir() / "session_index.jsonl"
     index_path.parent.mkdir(parents=True, exist_ok=True)
     title = session.title or session.first_user_message[:80] or "Converted session"
 
@@ -233,7 +240,7 @@ def remove_from_session_index(session_id: str, home: Path | None = None) -> bool
 
     不删的话线程名会一直留在文件里，跟已经不存在的会话对不上。
     """
-    index_path = (home or Path.home()) / ".codex" / "session_index.jsonl"
+    index_path = codex_dir(home) / "session_index.jsonl"
     try:
         lines = index_path.read_text(encoding="utf-8").splitlines(keepends=True)
     except OSError:

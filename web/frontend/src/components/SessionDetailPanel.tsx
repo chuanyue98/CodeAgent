@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowDownToLine,
@@ -25,6 +25,7 @@ import {
 } from '../api/audit';
 import { type SessionUsage, fmtTokens } from '../api/analytics';
 import { ALL_ENGINES, READ_ONLY_ENGINES, engineLabel } from '../utils/engines';
+import { workspaceLabel } from '../utils/workspaceFormat';
 import ConfirmDialog from './shared/ConfirmDialog';
 import Badge from './shared/Badge';
 import Button from './shared/Button';
@@ -114,7 +115,7 @@ export interface SessionDetailPanelProps {
  * delete, Events could show the transcript and convert — so answering "what
  * did I discuss in that session?" meant crossing between them.
  */
-export default function SessionDetailPanel({
+const SessionDetailPanel = memo(function SessionDetailPanel({
   engine,
   sessionId,
   projectPath,
@@ -189,11 +190,11 @@ export default function SessionDetailPanel({
     const element = scrollRef.current;
     if (!element) return;
     const slack = 24;
-    setScrollEdges({
-      atTop: element.scrollTop <= slack,
-      atBottom:
-        element.scrollHeight - element.scrollTop - element.clientHeight <= slack,
-    });
+    const atTop = element.scrollTop <= slack;
+    const atBottom = element.scrollHeight - element.scrollTop - element.clientHeight <= slack;
+    setScrollEdges(prev =>
+      prev.atTop === atTop && prev.atBottom === atBottom ? prev : { atTop, atBottom },
+    );
   }, []);
 
   // A transcript is read from the end: the last thing the engine said is why
@@ -227,7 +228,6 @@ export default function SessionDetailPanel({
 
   useEffect(() => {
     let mounted = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setLoadError(null);
     setDetail(null);
@@ -319,7 +319,7 @@ export default function SessionDetailPanel({
     }
   };
 
-  const projectName = projectPath.split(/[\\/]/).filter(Boolean).pop() || projectPath || '—';
+  const projectName = projectPath ? workspaceLabel(projectPath) : '—';
   const totalTokens = usage ? usage.inputTokens + usage.outputTokens : 0;
   const subtasks = usage?.subtasks ?? [];
   const own = usage?.own;
@@ -640,4 +640,6 @@ export default function SessionDetailPanel({
       )}
     </div>
   );
-}
+});
+
+export default SessionDetailPanel;

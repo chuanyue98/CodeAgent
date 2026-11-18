@@ -10,17 +10,17 @@
 
 from __future__ import annotations
 
-import shutil
-import sys
 from pathlib import Path
 
 import click
 
 from core.config_manager import ConfigManager
-from core.engine_registry import ENGINES, EngineSpec
+from core.engine_registry import ENGINES
 from core.i18n import t
 from core.project_groups import resolve_project_group
 from core.report import INFO, OK, WARN, Section, display_width, render_sections
+
+from .. import helpers as _helpers
 
 _RESOURCE_KINDS = (
     ("skills", "status.kind_skills"),
@@ -28,22 +28,6 @@ _RESOURCE_KINDS = (
     ("hooks", "status.kind_hooks"),
     ("plugins", "status.kind_plugins"),
 )
-
-
-def _engine_cli_path(spec: EngineSpec) -> str | None:
-    """引擎 CLI 的可执行文件路径，不在 PATH 上时返回 None。
-
-    与 ``core/doctor.check_engines`` 同一套候选与后缀规则：POSIX 上跳过
-    ``.cmd``/``.bat``/``.exe``，因为那些候选只对 Windows 有意义。
-    """
-    is_windows = sys.platform == "win32"
-    for name in spec.cli_candidates:
-        if not is_windows and name.lower().endswith((".cmd", ".bat", ".exe")):
-            continue
-        found = shutil.which(name)
-        if found:
-            return found
-    return None
 
 
 def _project_section(config: dict, group: str) -> Section:
@@ -97,7 +81,7 @@ def _engines_section() -> Section:
     section = Section(t("status.section_engines"))
 
     for spec in ENGINES.values():
-        cli_path = _engine_cli_path(spec)
+        cli_path = _helpers.resolve_engine_cli(spec)
         if cli_path is None:
             section.add(
                 WARN,

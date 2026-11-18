@@ -6,7 +6,7 @@ from __future__ import annotations
 import importlib
 import os
 import shutil
-import subprocess
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -33,9 +33,16 @@ from core.report import (
 from core.report import (
     display_width as _display_width,
 )
-from core.resource_locator import CODE_ROOT, seed_config_if_missing
+from core.resource_locator import (
+    CODE_ROOT,
+    get_bundled_resource_root,
+    get_default_config_path,
+    resolve_resource_root_from_config,
+    seed_config_if_missing,
+)
 from core.services.config_service import ConfigService
 from core.settings_manager import SettingsFile
+from engines.codex_home import user_codex_home
 
 # ── Engine binary map ─────────────────────────────────────────────────────────
 
@@ -45,7 +52,6 @@ from core.settings_manager import SettingsFile
 #: table could silently know nothing about an engine -- its own comment
 #: admitted as much.)
 ENGINE_BINARIES = {spec.name: list(spec.cli_candidates) for spec in ENGINES.values()}
-ENGINE_COMMANDS = ENGINE_BINARIES
 
 ENGINE_INSTALL_HINTS = {spec.name: spec.install_hint for spec in ENGINES.values()}
 
@@ -90,7 +96,7 @@ def check_engines(section: Section) -> None:
 
 
 def check_config(section: Section, root: Path, fix: bool = False) -> dict | None:
-    config_path = root / "config.json"
+    config_path = get_default_config_path(root)
 
     # A fresh clone has no config.json -- it is gitignored -- and the old hint
     # ("Run: ca, first launch creates defaults") was untrue: nothing wrote the
@@ -123,13 +129,17 @@ def check_config(section: Section, root: Path, fix: bool = False) -> dict | None
     return cfg
 
 
-def check_directories(section: Section, root: Path) -> None:
+def check_directories(section: Section, root: Path, cfg: dict | None = None) -> None:
+    resource_root = (
+        resolve_resource_root_from_config(cfg, root) if cfg else None
+    ) or get_bundled_resource_root(root)
+    paths_cfg = cfg.get("paths", {}) if isinstance(cfg, dict) else {}
     dirs = {
-        "prompt/": root / "prompt",
-        "skills/": root / "skills",
-        "hooks/": root / "hooks",
-        "plugins/": root / "plugins",
-        "tasks/": root / "tasks",
+        "prompt/": resource_root / paths_cfg.get("prompt", "prompt"),
+        "skills/": resource_root / paths_cfg.get("skills", "skills"),
+        "hooks/": resource_root / paths_cfg.get("hooks", "hooks"),
+        "plugins/": resource_root / paths_cfg.get("plugins", "plugins"),
+        "tasks/": resource_root / paths_cfg.get("tasks", "tasks"),
     }
     for label, path in dirs.items():
         if path.exists():
@@ -139,12 +149,28 @@ def check_directories(section: Section, root: Path) -> None:
             section.add(WARN, label, t("doctor.dir_missing"))
 
 
-def check_skills_resolution(section: Section, root: Path, cfg: dict) -> None:
+def _skill_dir_valid(candidate: Path) -> bool:
+    if not candidate.is_dir():
+        return False
+    if (candidate / "SKILL.md").is_file():
+        return True
+    return any(
+        sub.is_dir() and (sub / "SKILL.md").is_file() for sub in candidate.iterdir()
+    )
+
+
+def check_skills_resolution(
+    section: Section,
+    root: Path,
+    cfg: dict,
+    *,
+    resolver: _LightweightResolver | None = None,
+) -> None:
     """Verify every skill declared in the current group can be found on disk."""
 
     try:
         # Use a minimal stand-in to get resolution logic without launching
-        engine = _LightweightResolver(root, cfg)
+        engine = resolver or _LightweightResolver(root, cfg)
         project_type = engine.get_current_project_group()
         section.add(INFO, t("doctor.active_group", group=project_type))
 
@@ -156,7 +182,7 @@ def check_skills_resolution(section: Section, root: Path, cfg: dict) -> None:
 
         missing = []
         for name in skills:
-            found = any((r / name).exists() for r in skill_roots)
+            found = any(_skill_dir_valid(r / name) for r in skill_roots)
             if not found:
                 missing.append(name)
 
@@ -191,9 +217,15 @@ def check_skills_resolution(section: Section, root: Path, cfg: dict) -> None:
         )
 
 
-def check_hooks_resolution(section: Section, root: Path, cfg: dict) -> None:
+def check_hooks_resolution(
+    section: Section,
+    root: Path,
+    cfg: dict,
+    *,
+    resolver: _LightweightResolver | None = None,
+) -> None:
     try:
-        engine = _LightweightResolver(root, cfg)
+        engine = resolver or _LightweightResolver(root, cfg)
         project_type = engine.get_current_project_group()
         hooks, warnings = engine.get_hooks_to_inject()
         for w in warnings:
@@ -202,7 +234,14 @@ def check_hooks_resolution(section: Section, root: Path, cfg: dict) -> None:
         declared = cfg.get("groups", {}).get(project_type, {}).get("hooks", [])
         missing = []
         for name in declared:
-            if not any(h.get("name") == name.split("/")[-1] for h in hooks):
+            if not any(
+                (
+                    h.get("_id") == name
+                    if "_id" in h
+                    else h.get("name") == name.split("/")[-1]
+                )
+                for h in hooks
+            ):
                 missing.append(name)
 
         if not missing:
@@ -224,9 +263,15 @@ def check_hooks_resolution(section: Section, root: Path, cfg: dict) -> None:
         )
 
 
-def check_plugins_resolution(section: Section, root: Path, cfg: dict) -> None:
+def check_plugins_resolution(
+    section: Section,
+    root: Path,
+    cfg: dict,
+    *,
+    resolver: _LightweightResolver | None = None,
+) -> None:
     try:
-        engine = _LightweightResolver(root, cfg)
+        engine = resolver or _LightweightResolver(root, cfg)
         project_type = engine.get_current_project_group()
         plugins, warnings = engine.get_plugins_to_mount()
         for w in warnings:
@@ -236,7 +281,10 @@ def check_plugins_resolution(section: Section, root: Path, cfg: dict) -> None:
         missing = []
         for name in declared:
             key = name.split("/")[-1]
-            if not any(p.get("name") == key for p in plugins):
+            if not any(
+                (p.get("_id") == name if "_id" in p else p.get("name") == key)
+                for p in plugins
+            ):
                 missing.append(name)
 
         if not missing:
@@ -366,14 +414,13 @@ def _remove_probe_dir(path: Path) -> None:
     if not os.path.lexists(path):
         return
     if os.name == "nt":
-        # Best effort cleanup; a hung rmdir must not hang all of `ca doctor`.
         try:
-            subprocess.run(
-                ["cmd", "/c", "rmdir", str(path)],
-                capture_output=True,
-                timeout=30,
-            )
-        except subprocess.TimeoutExpired:
+            attrs = getattr(path.lstat(), "st_file_attributes", 0)
+            if attrs & stat.FILE_ATTRIBUTE_DIRECTORY:
+                os.rmdir(path)
+            else:
+                path.unlink(missing_ok=True)
+        except OSError:
             pass
     else:
         try:
@@ -420,28 +467,20 @@ def check_symlink_capability(section: Section, root: Path) -> None:
     test_link = probe_dir / "link"
     try:
         test_target.mkdir()
-        # mklink /j needs no elevated privileges; a non-zero exit here is a
-        # real capability failure rather than leftover state.
-        result = subprocess.run(
-            ["cmd", "/c", "mklink", "/j", str(test_link), str(test_target)],
-            capture_output=True,
-            check=False,
-            timeout=30,
+        import _winapi
+
+        _winapi.CreateJunction(str(test_target), str(test_link))
+        section.add(OK, t("doctor.junction_label"), t("doctor.junction_ok"))
+    except OSError as e:
+        detail = str(e) or t(
+            "doctor.junction_exit_code", code=getattr(e, "winerror", 1)
         )
-        if result.returncode == 0:
-            section.add(OK, t("doctor.junction_label"), t("doctor.junction_ok"))
-        else:
-            detail = (
-                result.stderr.decode(errors="replace").strip()
-                or result.stdout.decode(errors="replace").strip()
-                or t("doctor.junction_exit_code", code=result.returncode)
-            )
-            section.add(
-                WARN,
-                t("doctor.junction_label"),
-                t("doctor.junction_failed", detail=detail),
-                t("doctor.junction_hint"),
-            )
+        section.add(
+            WARN,
+            t("doctor.junction_label"),
+            t("doctor.junction_failed", detail=detail),
+            t("doctor.junction_hint"),
+        )
     except Exception as e:
         section.add(WARN, t("doctor.junction_label"), str(e))
     finally:
@@ -449,7 +488,13 @@ def check_symlink_capability(section: Section, root: Path) -> None:
         shutil.rmtree(probe_dir, ignore_errors=True)
 
 
-def check_hook_delivery(section: Section, root: Path, cfg: dict) -> None:
+def check_hook_delivery(
+    section: Section,
+    root: Path,
+    cfg: dict,
+    *,
+    resolver: _LightweightResolver | None = None,
+) -> None:
     """Reports which engines will actually run the configured hooks.
 
     Resolving a hook only means CodeAgent found it — whether the engine then
@@ -458,7 +503,7 @@ def check_hook_delivery(section: Section, root: Path, cfg: dict) -> None:
     under the engine you were about to launch.
     """
     try:
-        engine = _LightweightResolver(root, cfg)
+        engine = resolver or _LightweightResolver(root, cfg)
         hooks, _ = engine.get_hooks_to_inject()
     except Exception as exc:
         section.add(
@@ -488,7 +533,7 @@ def check_hook_delivery(section: Section, root: Path, cfg: dict) -> None:
         import tomlkit
 
         project = Path.cwd().resolve()
-        user_config = Path.home() / ".codex" / "config.toml"
+        user_config = user_codex_home() / "config.toml"
         trusted = False
         if user_config.exists():
             doc = tomlkit.parse(user_config.read_text(encoding="utf-8"))
@@ -694,7 +739,9 @@ class _LightweightResolver:
     """Thin wrapper around BaseEngine just for resolution queries."""
 
     def __init__(self, root: Path, cfg: dict):
-        sys.path.insert(0, str(root))
+        root_str = str(root)
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
         from core.engine_base import BaseEngine
 
         class _Stub(BaseEngine):
@@ -704,29 +751,32 @@ class _LightweightResolver:
                 self_inner.root_dir = root
                 from core.config_manager import ConfigManager
 
-                self_inner.config_manager = ConfigManager(root)
-                self_inner.config_manager.full_config = cfg
+                self_inner.config_manager = ConfigManager(root, config=cfg)
                 self_inner.full_config = cfg
                 from core.engine_base import EnvironmentManager
 
                 self_inner.env_manager = EnvironmentManager(root)
                 from core.hook_scanner import HookScanner
                 from core.plugin_scanner import PluginScanner
-                from core.prompt_scanner import PromptScanner
                 from core.skill_scanner import SkillScanner
 
                 resource_root = self_inner.config_manager.resolve_resource_root()
-                self_inner.skill_scanner = SkillScanner(resource_root / "skills")
-                self_inner.prompt_scanner = PromptScanner(resource_root / "prompt")
+                paths_cfg = cfg.get("paths", {}) if isinstance(cfg, dict) else {}
+                self_inner.skill_scanner = SkillScanner(
+                    resource_root / paths_cfg.get("skills", "skills")
+                )
                 self_inner.hook_scanner = HookScanner(
                     self_inner._get_hook_search_roots()
                 )
-                self_inner.plugin_scanner = PluginScanner(resource_root / "plugins")
+                self_inner.plugin_scanner = PluginScanner(
+                    resource_root / paths_cfg.get("plugins", "plugins")
+                )
 
             def execute(self_inner, *a, **kw):
                 raise NotImplementedError
 
         self._engine = _Stub()
+        self._cached_hooks: tuple[list[dict], list[str]] | None = None
 
     def get_skills_to_mount(self) -> tuple[list[str], list[str]]:
         data = self._engine.get_skills_to_mount()
@@ -734,12 +784,14 @@ class _LightweightResolver:
         return data, warnings
 
     def get_hooks_to_inject(self) -> tuple[list[dict], list[str]]:
-        project_type = self._engine.get_current_project_group()
-        return get_hooks_to_inject(
-            self._engine.full_config,
-            self._engine.hook_scanner,
-            project_type=project_type,
-        )
+        if self._cached_hooks is None:
+            project_type = self._engine.get_current_project_group()
+            self._cached_hooks = get_hooks_to_inject(
+                self._engine.full_config,
+                self._engine.hook_scanner,
+                project_type=project_type,
+            )
+        return self._cached_hooks
 
     def get_plugins_to_mount(self) -> tuple[list[dict], list[str]]:
         project_type = self._engine.get_current_project_group()
@@ -793,8 +845,9 @@ def get_doctor_sections(
 ) -> list[Section]:
     """Run all health checks and return structured Section results.
 
-    Does NOT print anything. The caller is responsible for rendering or
-    serializing the sections.
+    When ``fix`` or ``dry_run`` is False, does NOT print anything (the caller is
+    responsible for rendering or serializing the sections). When ``fix`` or
+    ``dry_run`` is True, repair/preview actions also print progress lines.
     """
     root = CODE_ROOT
 
@@ -805,13 +858,15 @@ def get_doctor_sections(
     s2 = Section(t("doctor.section_configuration"))
     cfg = check_config(s2, root, fix=fix)
     if cfg is not None:
-        check_directories(s2, root)
+        check_directories(s2, root, cfg)
+
+    resolver = _LightweightResolver(root, cfg) if cfg is not None else None
 
     s3 = Section(t("doctor.section_context"))
     if cfg is not None:
-        check_skills_resolution(s3, root, cfg)
-        check_hooks_resolution(s3, root, cfg)
-        check_plugins_resolution(s3, root, cfg)
+        check_skills_resolution(s3, root, cfg, resolver=resolver)
+        check_hooks_resolution(s3, root, cfg, resolver=resolver)
+        check_plugins_resolution(s3, root, cfg, resolver=resolver)
     else:
         s3.add(INFO, t("doctor.skipped"), t("doctor.skipped_no_config"))
 
@@ -823,7 +878,7 @@ def get_doctor_sections(
 
     s5 = Section(t("doctor.section_parity"))
     if cfg is not None:
-        check_hook_delivery(s5, root, cfg)
+        check_hook_delivery(s5, root, cfg, resolver=resolver)
     check_mcp_drift(s5)
 
     s6 = Section(t("doctor.section_sessions"))

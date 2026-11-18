@@ -131,13 +131,17 @@ def _jwt_expiry(token: Any) -> datetime | None:
         return None
     payload = token.split(".")[1]
     try:
-        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        claims = json.loads(
+            base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))
+        )
         return datetime.fromtimestamp(int(claims["exp"]), tz=UTC)
     except (ValueError, KeyError, TypeError):
         return None
 
 
-def credential_refresh_due(auth: dict[str, Any], now: datetime | None = None) -> str | None:
+def credential_refresh_due(
+    auth: dict[str, Any], now: datetime | None = None
+) -> str | None:
     """codex 在这次委派里可能要刷新 token 时返回原因，否则 ``None``。
 
     API key 登录没有 token 可刷，永远不到期。判断不了（字段缺失、格式不认识）
@@ -162,14 +166,14 @@ def credential_refresh_due(auth: dict[str, Any], now: datetime | None = None) ->
 
 def _link_credential(source: Path, target: Path) -> None:
     """让 *target* 成为 *source* 的硬链接；已经是就不动。"""
-    if target.exists():
+    if os.path.lexists(target):
         try:
             if os.path.samefile(source, target):
                 return
         except OSError:
             pass
         # 用户的 codex 刷新过 token，原文件被换掉了，这里是旧的那份。
-        target.unlink()
+        target.unlink(missing_ok=True)
     try:
         os.link(source, target)
     except OSError as exc:
@@ -187,7 +191,7 @@ def _link_sessions(home: Path, user_home: Path, links: LinkManager) -> None:
         except OSError:
             pass
         links.safe_remove_link(target)
-    elif target.exists():
+    elif os.path.lexists(target):
         raise IsolatedHomeUnavailable(
             f"{target} 是个真实目录而不是链接，委派的会话会看不到；删掉它后再试"
         )
@@ -266,20 +270,26 @@ def prepare_isolated_codex_home(
         raise IsolatedHomeUnavailable(f"{user_home / 'config.toml'} 读不懂")
     store = user_config.get("cli_auth_credentials_store")
     if store == "keyring":
-        raise IsolatedHomeUnavailable("codex 的凭据存在系统 keyring 里，没有可共享的 auth.json")
+        raise IsolatedHomeUnavailable(
+            "codex 的凭据存在系统 keyring 里，没有可共享的 auth.json"
+        )
 
     auth_path = user_home / "auth.json"
     try:
         auth = json.loads(auth_path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
-        raise IsolatedHomeUnavailable(f"{auth_path} 不存在（codex 还没登录？）") from exc
+        raise IsolatedHomeUnavailable(
+            f"{auth_path} 不存在（codex 还没登录？）"
+        ) from exc
     except (OSError, ValueError) as exc:
         raise IsolatedHomeUnavailable(f"{auth_path} 读不懂：{exc}") from exc
     if not isinstance(auth, dict):
         raise IsolatedHomeUnavailable(f"{auth_path} 格式不认识")
     due = credential_refresh_due(auth)
     if due:
-        raise IsolatedHomeUnavailable(f"{due}；隔离 home 里的 codex 刷新不了硬链接的凭据")
+        raise IsolatedHomeUnavailable(
+            f"{due}；隔离 home 里的 codex 刷新不了硬链接的凭据"
+        )
 
     home.mkdir(parents=True, exist_ok=True)
     locks = lock_manager or LockManager()

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useIsMounted } from '../hooks/useAsyncGuards';
+import { useIsMounted, useLatestRequest } from '../hooks/useAsyncGuards';
 import { Pencil, Plus, Server, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { useProject } from '../context/ProjectContext';
 import { findEngine } from './terminalEngines';
 import { useT } from '../i18n/context';
-import request from '../utils/request';
+import { engineLabel } from '../utils/engines';
 import ConfirmDialog from './shared/ConfirmDialog';
 import Button from './shared/Button';
 import EmptyState from './shared/EmptyState';
@@ -14,11 +14,8 @@ import Modal from './shared/Modal';
 import { Field, Input, Textarea, Select, SearchInput } from './shared/Field';
 import { ACTIVE_CHIP } from './shared/activeChip';
 import { fetchMcpServers, addMcpServer, removeMcpServer, type McpServer } from '../api/mcp';
-
-interface Engine {
-  id: string;
-  name: string;
-}
+import { listEngines } from '../api/tasks';
+import type { Engine } from './TaskDashboard/types';
 
 // codex, opencode, and antigravity register MCP servers in a single global config file
 // regardless of cwd.
@@ -76,6 +73,7 @@ export default function McpPage() {
   const [pendingRemoveServer, setPendingRemoveServer] = useState<string | null>(null);
 
   const isMounted = useIsMounted();
+  const claimLatestServers = useLatestRequest();
 
   const groupProjects = useMemo(
     () => projects.filter(p => p.group === currentGroup),
@@ -93,7 +91,7 @@ export default function McpPage() {
   }, [servers, serverSearch]);
 
   useEffect(() => {
-    request<Engine[]>('/api/engines')
+    listEngines()
       .then((list) => {
         if (!isMounted()) return;
         setEngines(list);
@@ -106,13 +104,19 @@ export default function McpPage() {
   }, [isMounted, t]);
 
   useEffect(() => {
-    if (projectPath || groupProjects.length === 0) return;
+    if (groupProjects.length === 0) {
+      if (projectPath) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setProjectPath('');
+      }
+      return;
+    }
+    if (groupProjects.some(project => project.path === projectPath)) return;
     // Open on the workspace the user is already working in, when this group
     // contains it, rather than always snapping to the first path in the list.
     const shared = groupProjects.some(project => project.path === selectedWorkspace)
       ? selectedWorkspace
       : groupProjects[0].path;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setProjectPath(shared);
   }, [groupProjects, projectPath, selectedWorkspace]);
 
@@ -121,16 +125,18 @@ export default function McpPage() {
       setServers([]);
       return;
     }
+    const isCurrent = claimLatestServers();
     fetchMcpServers(selectedEngine, projectPath)
       .then(list => {
-        if (!isMounted()) return;
+        if (!isMounted() || !isCurrent()) return;
         setServers(list);
+        setError(null);
       })
       .catch(e => {
-        if (!isMounted()) return;
+        if (!isMounted() || !isCurrent()) return;
         setError(e instanceof Error ? e.message : t('mcp.loadServersFailed'));
       });
-  }, [selectedEngine, projectPath, isMounted, t]);
+  }, [selectedEngine, projectPath, claimLatestServers, isMounted, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -305,20 +311,20 @@ export default function McpPage() {
             {t('mcp.noWorkspaceForGroup', { group: currentGroup })}{' '}
             <Link to="/settings/workspace" className="font-semibold text-primary hover:underline">
               {t('mcp.registerInSettings')}
-            </Link>。
+            </Link>
           </div>
         )}
 
         {GLOBAL_SCOPE_ENGINES.has(selectedEngine) && (
           <div className="flex items-center gap-2 px-3 py-2 bg-amber-50/60 border border-amber-100 rounded-lg text-xs text-amber-700">
-            {t('mcp.globalScopeNotice', { engine: selectedEngine === 'codex' ? 'Codex' : 'OpenCode' })}
+            {t('mcp.globalScopeNotice', { engine: engineLabel(selectedEngine) })}
           </div>
         )}
 
         {error && <ErrorState message={error} onRetry={retryServers} />}
 
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
-          {servers.length === 0 ? (
+          {error ? null : servers.length === 0 ? (
             <EmptyState icon={Server} title={t('mcp.noServers')} />
           ) : filteredServers.length === 0 ? (
             <EmptyState compact title={t('mcp.noSearchMatch')} />

@@ -27,7 +27,11 @@ from core.session_history.models import (
     UnifiedSession,
 )
 from core.session_history.parse_cache import cached_file_parser
-from core.session_history.paths import normalize_project_path
+from core.session_history.paths import (
+    codex_dir,
+    normalize_project_path,
+    strip_extended_length_prefix,
+)
 from core.session_history.previews import args_preview, result_preview
 from core.utils.long_paths import exists as path_exists
 from core.utils.long_paths import list_files, long_path
@@ -163,14 +167,20 @@ def parse_codex_session(file_path: Path) -> UnifiedSession | None:
 
                 if row_type == "session_meta":
                     session_id = payload.get("id", "")
-                    cwd = payload.get("cwd", "")
+                    raw_cwd = payload.get("cwd", "") or ""
+                    slashed = raw_cwd.replace("\\", "/")
+                    cwd = (
+                        strip_extended_length_prefix(slashed)
+                        if slashed.lower().startswith("//?/")
+                        else raw_cwd
+                    )
                     if not started_at:
                         started_at = timestamp
                     continue
 
                 if row_type == "turn_context":
                     m = payload.get("model", "")
-                    if m and not model:
+                    if m:
                         model = m
                     continue
 
@@ -334,7 +344,7 @@ def _thread_lineage(home: Path | None = None) -> dict[str, tuple[str, str]]:
     session someone started, unless the spawn edge it records is read back.
     Returns an empty map when the database or its columns are absent.
     """
-    db_path = (home or Path.home()) / ".codex" / "state_5.sqlite"
+    db_path = codex_dir(home) / "state_5.sqlite"
     if not db_path.exists():
         return {}
 
@@ -370,7 +380,7 @@ def _thread_names(home: Path | None = None) -> dict[str, str]:
     Codex 的 ``/rename`` 和 ca 接力写进去的标题都只在这里，rollout 文件里没有。
     同一 id 可能出现多行，以最后一行为准。
     """
-    path = (home or Path.home()) / ".codex" / "session_index.jsonl"
+    path = codex_dir(home) / "session_index.jsonl"
     names: dict[str, str] = {}
     try:
         text = path.read_text(encoding="utf-8")
@@ -405,7 +415,7 @@ def find_codex_sessions(
     Returns:
         list[UnifiedSession]: All sessions found, sorted by start time descending.
     """
-    base = (home or Path.home()) / ".codex" / "sessions"
+    base = codex_dir(home) / "sessions"
     if not base.exists():
         return []
 

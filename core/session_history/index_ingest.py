@@ -32,12 +32,16 @@ from core.session_history.session_finder import _deduplicate_sessions
 from core.session_history.sources import (
     ENGINE_PARSERS,
     codex_lineage,
+    codex_lineage_version,
     codex_thread_names,
+    codex_thread_names_version,
 )
 
 logger = get_logger(__name__)
 
 _PARSER_FINGERPRINT_KEY = "parser_fingerprint"
+_CODEX_LINEAGE_VERSION_KEY = "codex_lineage_version"
+_CODEX_NAMES_VERSION_KEY = "codex_thread_names_version"
 
 #: 读路径据此判断"该不该顺手同步一下"。取一个比一次页面刷新略短的值：既不会
 #: 每个请求都去 stat 全量文件，也不会让刚开的会话长时间看不到。
@@ -139,6 +143,8 @@ class SessionIndexer:
         """
         if self._syncing:
             return False
+        if self._last_finished > 0 and time.monotonic() - self._last_finished < max_age:
+            return False
         last = self._index.get_meta(LAST_SYNC_KEY)
         try:
             if last and time.time() - float(last) < max_age:
@@ -162,11 +168,13 @@ class SessionIndexer:
             self._index.clear_all()
             self._index.set_meta(_PARSER_FINGERPRINT_KEY, fingerprint)
 
+        changed_engines: set[str] = set()
         for engine, (enumerator, parser) in ENGINE_PARSERS.items():
             if self._index.closed:
                 return
             try:
-                self._sync_engine(engine, enumerator, parser)
+                if self._sync_engine(engine, enumerator, parser):
+                    changed_engines.add(engine)
             except Exception:
                 # 一个引擎的坏文件/坏库不该拖住其余引擎，更不该让整轮同步白跑。
                 logger.exception(
@@ -175,15 +183,44 @@ class SessionIndexer:
 
         if self._index.closed:
             return
-        self._apply_codex_lineage()
-        self._apply_codex_thread_names()
-        self._apply_antigravity_lineage()
-        self._inherit_parent_projects()
-        self._reconcile_subagent_titles()
-        self._index.delete_orphan_sessions()
-        self._index.set_meta(LAST_SYNC_KEY, str(int(time.time())))
+        codex_changed = "codex" in changed_engines
+        lineage_ver = codex_lineage_version(self._home)
+        lineage_changed = (
+            force
+            or codex_changed
+            or self._index.get_meta(_CODEX_LINEAGE_VERSION_KEY) != lineage_ver
+        )
+        if lineage_changed:
+            self._apply_codex_lineage()
+            self._index.set_meta(_CODEX_LINEAGE_VERSION_KEY, lineage_ver)
 
-    def _sync_engine(self, engine: str, enumerator: Enumerator, parser: Parser) -> None:
+        names_ver = codex_thread_names_version(self._home)
+        names_changed = (
+            force
+            or codex_changed
+            or self._index.get_meta(_CODEX_NAMES_VERSION_KEY) != names_ver
+        )
+        if names_changed:
+            self._apply_codex_thread_names()
+            self._index.set_meta(_CODEX_NAMES_VERSION_KEY, names_ver)
+
+        if force or "antigravity" in changed_engines:
+            self._apply_antigravity_lineage()
+        if force or changed_engines or lineage_changed:
+            self._inherit_parent_projects()
+        if force or changed_engines or lineage_changed or names_changed:
+            self._reconcile_subagent_titles()
+            self._index.delete_orphan_sessions()
+        if (
+            force
+            or changed_engines
+            or lineage_changed
+            or names_changed
+            or self._index.get_meta(LAST_SYNC_KEY) is None
+        ):
+            self._index.set_meta(LAST_SYNC_KEY, str(int(time.time())))
+
+    def _sync_engine(self, engine: str, enumerator: Enumerator, parser: Parser) -> bool:
         refs: dict[str, SourceRef] = {}
         for ref in enumerator(self._home):
             refs[ref.source_key] = ref
@@ -191,7 +228,7 @@ class SessionIndexer:
         changed = [r for key, r in refs.items() if existing.get(key) != r.version_token]
         removed = [key for key in existing if key not in refs]
         if not changed and not removed:
-            return
+            return False
 
         connection = self._open_engine_connection(engine, refs)
         try:
@@ -218,6 +255,7 @@ class SessionIndexer:
 
         for source in removed:
             self._index.remove_source(source)
+        return True
 
     def _open_engine_connection(
         self, engine: str, refs: dict[str, SourceRef]
@@ -308,10 +346,11 @@ class SessionIndexer:
                     self._index.set_session_title(child_key, role)
 
     def _inherit_parent_projects(self) -> None:
-        """antigravity 的子会话项目路径常为空，从父继承（父可能后到，跑两轮）。"""
-        for _ in range(2):
-            if self._index.inherit_parent_projects("antigravity") == 0:
-                break
+        """子会话项目路径为空时从父会话继承，按引擎循环直到收敛。"""
+        for engine in ENGINE_PARSERS:
+            for _ in range(5):
+                if self._index.inherit_parent_projects(engine) == 0:
+                    break
 
     def _reconcile_subagent_titles(self) -> None:
         """用父会话记录的启动描述给子代理命名。"""

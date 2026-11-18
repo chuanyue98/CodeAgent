@@ -27,7 +27,6 @@ from core.services.agent_gateway import (
     supervisor,
 )
 from core.services.agent_protocol import (
-    AdapterEvent,
     AgentAck,
     AgentCommand,
     AgentEvent,
@@ -190,15 +189,6 @@ class AgentGateway:
     ) -> ResourceSnapshot:
         return resources.resource_snapshot(self, workspace, config)
 
-    @staticmethod
-    def _prompt_root(config: dict) -> Path:
-        return resources.prompt_root(config)
-
-    def _assemble_system_prompt(
-        self, prompt_groups: list[str], config: dict
-    ) -> tuple[str, list[dict]] | None:
-        return resources.assemble_system_prompt(prompt_groups, config)
-
     # -- sessions -----------------------------------------------------------
 
     def get_session(self, session_id: str) -> AgentSession:
@@ -278,9 +268,6 @@ class AgentGateway:
     async def publish(self, event: AgentEvent) -> AgentEvent:
         return await events.publish(self, event)
 
-    def _persist_event(self, event: AgentEvent) -> AgentEvent:
-        return events.persist_event(self, event)
-
     def subscribe(
         self, session_id: str, after_sequence: int = 0
     ) -> asyncio.Queue[AgentEvent | None]:
@@ -290,11 +277,6 @@ class AgentGateway:
         self, session_id: str, queue: asyncio.Queue[AgentEvent | None]
     ) -> None:
         events.unsubscribe(self, session_id, queue)
-
-    async def _handle_adapter_event(
-        self, provider: str, adapter_event: AdapterEvent
-    ) -> None:
-        await events.handle_adapter_event(self, provider, adapter_event)
 
     # -- supervision ---------------------------------------------------------
 

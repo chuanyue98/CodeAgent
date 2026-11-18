@@ -34,6 +34,7 @@ def show_tasks(
     file_suffix: str = TASK_FILE_SUFFIX,
     history: dict[str, str] | None = None,
     range_selection_hint: bool = False,
+    tasks: list[str] | None = None,
 ) -> None:
     """Displays the available tasks in the specified directory.
 
@@ -43,8 +44,10 @@ def show_tasks(
         file_suffix: The task file suffix.
         history: A dictionary mapping task names to their last run timestamp.
         range_selection_hint: Whether to show a hint for range selection.
+        tasks: 可选的预扫描任务名列表，避免重复扫描目录。
     """
-    tasks = list_tasks(directory, file_suffix=file_suffix)
+    if tasks is None:
+        tasks = list_tasks(directory, file_suffix=file_suffix)
 
     if not tasks:
         prefix = f"📋 {label} No tasks available" if label else "📋 No tasks available"
@@ -136,50 +139,6 @@ def read_task_prompt(task_file: Path) -> str:
     """
 
     try:
-        return task_file.read_text(encoding="utf-8").strip()
+        return task_file.read_text(encoding="utf-8", errors="replace").strip()
     except OSError as exc:
         raise FileNotFoundError(f"Failed to read task file: {exc}") from exc
-
-
-def create_task_template(task_name: str, directory: str = TASKS_DIR) -> Path:
-    """Creates a new task template file in the specified directory.
-
-    Args:
-        task_name: The name of the new task.
-        directory: The tasks directory.
-
-    Returns:
-        The Path object for the newly created task file.
-    """
-    tasks_dir = get_tasks_dir(directory)
-    tasks_dir.mkdir(parents=True, exist_ok=True)
-
-    file_path = tasks_dir / f"{task_name}{TASK_FILE_SUFFIX}"
-    if file_path.exists():
-        print(
-            f"❌ Error: Task '{task_name}' already exists at {file_path}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    template_content = f"""# Task: {task_name}
-
-## Objective
-Describe the goal of the task here.
-
-## Context
-List background information the AI needs to be aware of.
-
-## Instructions
-1. First step
-2. Second step
-
-## Verification
-How to verify the task has been successfully completed.
-"""
-    try:
-        file_path.write_text(template_content, encoding="utf-8")
-        return file_path
-    except OSError as exc:
-        print(f"❌ Failed to create task template: {exc}", file=sys.stderr)
-        sys.exit(1)

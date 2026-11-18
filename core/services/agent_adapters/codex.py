@@ -10,7 +10,9 @@ import asyncio
 import shutil
 from typing import Any
 
+from core.host_env import child_environ
 from core.logging_config import get_logger
+from core.services.agent_adapters._event_queue import drain_events
 from core.services.agent_adapters._jsonrpc_transport import JsonRpcStdioTransport
 from core.services.agent_adapters._process_lifecycle import graceful_terminate
 from core.services.agent_adapters._rpc_adapter_base import RpcAdapterBase
@@ -41,12 +43,14 @@ class CodexAdapter(RpcAdapterBase):
         self.executable = executable
         self._events: asyncio.Queue[AdapterEvent | None] = asyncio.Queue(queue_size)
         self._process: asyncio.subprocess.Process | None = None
+        self._stopping = False
         self._transport = JsonRpcStdioTransport(
             protocol_error=CodexProtocolError,
             crash_label="Codex app-server",
             on_server_request=self._handle_server_request,
             on_notification=self._handle_notification,
             on_crash=self._emit_crash_event,
+            is_stopping=lambda: self._stopping,
         )
         self._approval_requests: dict[str, tuple[Any, str]] = {}
         self._approval_timeouts: dict[str, asyncio.Task] = {}
@@ -59,6 +63,8 @@ class CodexAdapter(RpcAdapterBase):
         if not executable:
             self._unavailable_reason = "Codex CLI was not found on the CodeAgent server"
             raise RuntimeError(self._unavailable_reason)
+        self._stopping = False
+        drain_events(self._events)
         try:
             self._process = await asyncio.create_subprocess_exec(
                 executable,
@@ -66,6 +72,8 @@ class CodexAdapter(RpcAdapterBase):
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=child_environ(),
+                limit=16 * 1024 * 1024,
             )
             self._transport.attach(
                 self._process,
@@ -92,6 +100,7 @@ class CodexAdapter(RpcAdapterBase):
             raise RuntimeError(self._unavailable_reason) from exc
 
     async def stop(self) -> None:
+        self._stopping = True
         process = self._process
         self._process = None
         await graceful_terminate(process, logger=logger, label="Codex app-server")
@@ -100,6 +109,7 @@ class CodexAdapter(RpcAdapterBase):
             task.cancel()
         self._approval_timeouts.clear()
         self._approval_requests.clear()
+        self._put_sentinel()
 
     async def capabilities(self) -> ProviderCapabilities:
         running = self._process is not None and self._process.returncode is None

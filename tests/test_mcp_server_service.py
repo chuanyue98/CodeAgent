@@ -367,6 +367,8 @@ def test_ca_handoff_session_tool(skills_root, tmp_path, monkeypatch):
     assert payload["target_engine"] == "codex"
 
     # Check audit log written
-    audit_file = tmp_path / ".ca_task_logs" / "mcp_audit.log"
+    from core.runtime_paths import get_run_dir
+
+    audit_file = get_run_dir() / "mcp_audit.log"
     assert audit_file.exists()
     assert "ca_handoff_session" in audit_file.read_text(encoding="utf-8")

@@ -22,15 +22,19 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
+import os
+import shlex
 import shutil
+import subprocess
+from contextlib import closing
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import field_validator
 
-from core.constants import ENGINES
+from core.constants import ENGINES, normalize_engine_name
 from core.services.config_service import ConfigService
-from core.services.resume_commands import resume_command
+from core.services.resume_commands import is_safe_session_id, resume_command
 from core.services.workspace_service import (
     WorkspaceConfigError,
     WorkspaceResolutionError,
@@ -38,11 +42,25 @@ from core.services.workspace_service import (
 )
 from core.session_history import repository
 from core.session_history.antigravity_cache import remove_from_summaries_cache
+from core.session_history.paths import claude_dir, codebuddy_dir, codex_dir
 from core.session_history.writers.codex_writer import remove_from_session_index
 from core.web.case_convert import ProtocolModel, camelize, wire
 from core.web.routers.config import get_config_path
 
 router = APIRouter(prefix="/api")
+
+
+def _opencode_allowed_dirs(home: Path) -> list[Path]:
+    """返回 OpenCode 允许的会话存储目录（尊重环境覆盖与用户主目录）。"""
+    dirs = [
+        (home / ".opencode").resolve(),
+        (home / ".local" / "share" / "opencode").resolve(),
+    ]
+    if opencode_dir := os.environ.get("OPENCODE_CONFIG_DIR", "").strip():
+        dirs.append(Path(opencode_dir).expanduser().resolve())
+    if xdg_data := os.environ.get("XDG_DATA_HOME", "").strip():
+        dirs.append((Path(xdg_data).expanduser() / "opencode").resolve())
+    return dirs
 
 
 def _validate_source_file_path(source_file: str, engine: str) -> Path:
@@ -59,6 +77,7 @@ def _validate_source_file_path(source_file: str, engine: str) -> Path:
             detail={"error": "Session source file path is empty"},
         )
 
+    engine = normalize_engine_name(engine)
     home = Path.home()
     file_path = Path(source_file).resolve()
 
@@ -70,15 +89,14 @@ def _validate_source_file_path(source_file: str, engine: str) -> Path:
 
     allowed_dirs: list[Path] = []
     if engine == "claude":
-        allowed_dirs.append((home / ".claude" / "projects").resolve())
+        allowed_dirs.append((claude_dir() / "projects").resolve())
     elif engine == "codex":
-        allowed_dirs.append((home / ".codex" / "sessions").resolve())
+        allowed_dirs.append((codex_dir() / "sessions").resolve())
     elif engine == "opencode":
-        allowed_dirs.append((home / ".opencode").resolve())
-        allowed_dirs.append((home / ".local" / "share" / "opencode").resolve())
+        allowed_dirs.extend(_opencode_allowed_dirs(home))
     elif engine == "codebuddy":
-        allowed_dirs.append((home / ".codebuddy" / "projects").resolve())
-    elif engine in ("antigravity", "agy"):
+        allowed_dirs.append((codebuddy_dir() / "projects").resolve())
+    elif engine == "antigravity":
         allowed_dirs.append((home / ".gemini" / "antigravity-cli").resolve())
 
     for allowed in allowed_dirs:
@@ -306,12 +324,19 @@ async def convert_session(req: ConvertRequest) -> dict:
 
     try:
         new_id = await asyncio.to_thread(write_session, session, req.target_engine)
+        try:
+            cmd = resume_command(req.target_engine, new_id, Path(validated_project))
+            cmd_hint = (
+                subprocess.list2cmdline(cmd) if os.name == "nt" else shlex.join(cmd)
+            )
+        except ValueError:
+            cmd_hint = f"{req.target_engine} continue"
         return wire(
             ConvertResponse(
                 status="ok",
                 new_session_id=new_id,
                 target_engine=req.target_engine,
-                message=f"Session converted to {req.target_engine}. Use '{req.target_engine} continue' or equivalent to resume.",
+                message=f"Session converted to {req.target_engine}. Resume with: {cmd_hint}",
             )
         )
     except Exception as e:
@@ -453,33 +478,12 @@ async def continue_session(
     )
 
 
-@router.delete("/history/{engine}/{session_id}")
-async def delete_session(
-    engine: str,
-    session_id: str,
-    project: str = Query(..., description="Project directory path"),
-) -> dict:
-    """Deletes a specific session from local history storage."""
+def _delete_session_storage(engine: str, session_id: str, validated_path: Path) -> None:
+    """在工作线程中执行会话文件与本地数据库删除。"""
     import sqlite3
 
-    summary = await asyncio.to_thread(
-        repository.get_summary, engine, session_id, project
-    )
-    if not summary:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": "Session not found",
-                "sessionId": session_id,
-                "engine": engine,
-            },
-        )
-
-    validated_path = _validate_source_file_path(
-        summary.get("source_file") or "", engine
-    )
-
-    if engine == "opencode":
+    normalized = normalize_engine_name(engine)
+    if normalized == "opencode":
         con = None
         try:
             con = sqlite3.connect(str(validated_path))
@@ -494,7 +498,7 @@ async def delete_session(
         finally:
             if con is not None:
                 con.close()
-    elif engine in ("antigravity", "agy"):
+    elif normalized == "antigravity":
         try:
             cli_root = Path.home() / ".gemini" / "antigravity-cli"
             brain = (cli_root / "brain").resolve()
@@ -510,16 +514,17 @@ async def delete_session(
             remove_from_summaries_cache(cli_root, session_id)
             db_path = (cli_root / "conversation_summaries.db").resolve()
             if db_path.is_file():
-                with sqlite3.connect(str(db_path)) as con:
+                with closing(sqlite3.connect(str(db_path))) as con, con:
+                    con.execute("PRAGMA busy_timeout=5000")
                     con.execute(
                         "DELETE FROM conversation_summaries WHERE conversation_id = ?",
                         (session_id,),
                     )
+            conv_dir = (cli_root / "conversations").resolve()
             for suffix in ("", "-wal", "-shm"):
-                trail_path = (
-                    cli_root / "conversations" / f"{session_id}.db{suffix}"
-                ).resolve()
-                trail_path.unlink(missing_ok=True)
+                trail_path = (conv_dir / f"{session_id}.db{suffix}").resolve()
+                if trail_path.is_relative_to(conv_dir):
+                    trail_path.unlink(missing_ok=True)
         except (OSError, sqlite3.Error) as e:
             raise HTTPException(
                 status_code=500, detail={"error": f"Failed to delete session file: {e}"}
@@ -527,12 +532,44 @@ async def delete_session(
     else:
         try:
             validated_path.unlink()
-            if engine == "codex":
+            if normalized == "codex":
                 remove_from_session_index(session_id)
         except OSError as e:
             raise HTTPException(
                 status_code=500, detail={"error": f"Failed to delete session file: {e}"}
             ) from e
+
+
+@router.delete("/history/{engine}/{session_id}")
+async def delete_session(
+    engine: str,
+    session_id: str,
+    project: str = Query(..., description="Project directory path"),
+) -> dict:
+    """Deletes a specific session from local history storage."""
+    if not is_safe_session_id(session_id):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": f"Invalid session ID: {session_id!r}"},
+        )
+
+    summary = await asyncio.to_thread(
+        repository.get_summary, engine, session_id, project
+    )
+    if not summary:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Session not found",
+                "sessionId": session_id,
+                "engine": engine,
+            },
+        )
+
+    validated_path = await asyncio.to_thread(
+        _validate_source_file_path, summary.get("source_file") or "", engine
+    )
+    await asyncio.to_thread(_delete_session_storage, engine, session_id, validated_path)
 
     # 立刻把索引行摘掉，不必等下一次同步才发现文件没了。
     await asyncio.to_thread(repository.forget_session, engine, session_id)

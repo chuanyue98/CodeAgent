@@ -42,6 +42,7 @@ describe('LogViewer', () => {
 
     vi.mocked(logsApi.useLogStream).mockReturnValue({
       lines: [],
+      content: undefined,
       error: null,
       connected: false,
       finished: null,
@@ -77,6 +78,19 @@ describe('LogViewer', () => {
     });
   });
 
+  test('切换任务后忽略旧日志请求的迟到响应', async () => {
+    let finishOld!: (value: logsApi.LogFileContent) => void;
+    vi.mocked(logsApi.fetchLogFile).mockImplementation(taskId => taskId === 'task-1'
+      ? new Promise(resolve => { finishOld = resolve; })
+      : Promise.resolve({ taskId, content: '当前任务日志' }));
+    render(<LogViewer taskId="task-1" />);
+    fireEvent.click(await screen.findByText('task-2.log'));
+    expect(await screen.findByText('当前任务日志')).toBeInTheDocument();
+    await act(async () => { finishOld({ taskId: 'task-1', content: '过期日志' }); });
+    expect(screen.queryByText('过期日志')).not.toBeInTheDocument();
+    expect(screen.getByText('当前任务日志')).toBeInTheDocument();
+  });
+
   test('filters logs by keyword (case-insensitive), shows empty state on 0 matches, and restores on clear', async () => {
     render(<LogViewer taskId="task-1" />);
 
@@ -95,7 +109,7 @@ describe('LogViewer', () => {
 
     // Filter by non-matching query
     fireEvent.change(searchInput, { target: { value: 'nonexistent-pattern' } });
-    expect(screen.getByText('匹配 0 行')).toBeInTheDocument();
+    expect(screen.getByText('No matching lines')).toBeInTheDocument();
 
     // Clear search
     fireEvent.change(searchInput, { target: { value: '' } });

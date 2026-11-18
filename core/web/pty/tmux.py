@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from core.host_env import child_environ
 from core.web.pty.common import SpawnError
 
 _TMUX_SOCKET_ENV = "CA_PTY_TMUX_SOCKET"
@@ -24,6 +25,7 @@ _DEFAULT_TMUX_SOCKET = "codeagent"
 # 活跃 PTY 会话注册表，供实例管理页（routers/instances.py）列出与停止。
 # 只在事件循环内读写，普通 dict 即可。
 _ACTIVE_SESSIONS: dict[str, dict[str, Any]] = {}
+_WATCHDOG_PROC: subprocess.Popen[bytes] | None = None
 
 # The browser tab id that names a fresh terminal's tmux session. It is only
 # hashed, never passed to a shell, but a bounded charset keeps it a key.
@@ -72,19 +74,22 @@ def _tmux_socket() -> str:
 
 
 def _run_tmux(*args: str, timeout: float = 10) -> subprocess.CompletedProcess[str]:
-    """Runs one tmux command on the dedicated socket, synchronously.
-
-    The environment matches what a directly-spawned engine got (see
-    _spawn_posix), so panes created on a fresh server inherit the same
-    PATH/locale/credentials this server would have handed the engine.
-    """
+    """在专用 socket 上同步执行一条 tmux 命令，并剥离宿主会话标记、固定 UTF-8 区域。"""
     binary = _tmux_binary()
     if binary is None:
         raise SpawnError("tmux is not available")
+    env = {
+        **child_environ(),
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+    }
     return subprocess.run(
         [binary, "-L", _tmux_socket(), *args],
+        env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=timeout,
         check=False,
     )
@@ -153,7 +158,7 @@ def _tmux_ensure_session(
             "-t",
             name,
             "pane-died",
-            f"run-shell 'tmux -L {_tmux_socket()} detach-client -s {name}'",
+            f"detach-client -s {name}",
         ),
         ("set-option", "-t", name, "status", "off"),
         ("set-option", "-t", name, "escape-time", "10"),
@@ -198,8 +203,28 @@ def _tmux_pane_pid(name: str) -> int | None:
         return None
 
 
+def stop_tmux_watchdog() -> None:
+    """结束本进程拉起的 tmux 看门狗进程，避免正常关停后残留。"""
+    global _WATCHDOG_PROC
+    proc = _WATCHDOG_PROC
+    _WATCHDOG_PROC = None
+    if proc is None:
+        return
+    if proc.poll() is None:
+        with contextlib.suppress(OSError):
+            proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            with contextlib.suppress(OSError):
+                proc.kill()
+            with contextlib.suppress(subprocess.TimeoutExpired, OSError):
+                proc.wait(timeout=2)
+
+
 def kill_tmux_server() -> None:
-    """Kills the dedicated tmux server (lifespan startup/shutdown hook)."""
+    """关闭专用 tmux server 并清理看门狗进程（lifespan 启停钩子）。"""
+    stop_tmux_watchdog()
     if _tmux_binary() is None:
         return
     with contextlib.suppress(Exception):
@@ -213,12 +238,14 @@ _TMUX_WATCHDOG_SCRIPT = (
 
 
 def start_tmux_watchdog(pid: int | None = None) -> None:
-    """Takes the tmux server down once *pid* (this process) is gone, however it died."""
+    """启动看门狗：当 *pid*（当前服务进程）异常消失后自动关闭 tmux server。"""
+    global _WATCHDOG_PROC
     binary = _tmux_binary()
     if binary is None:
         return
+    stop_tmux_watchdog()
     with contextlib.suppress(OSError):
-        subprocess.Popen(
+        _WATCHDOG_PROC = subprocess.Popen(
             [
                 "/bin/sh",
                 "-c",
@@ -277,3 +304,10 @@ async def stop_active_session(session_id: str) -> bool:
             await asyncio.to_thread(_tmux_kill_session, name)
     _ACTIVE_SESSIONS.pop(session_id, None)
     return True
+
+
+async def stop_all_active_sessions() -> None:
+    """关闭所有仍登记在案的活跃 PTY 会话（供服务关停阶段清理 WinPTY/tmux 子进程）。"""
+    for session_id in list(_ACTIVE_SESSIONS.keys()):
+        with contextlib.suppress(Exception):
+            await stop_active_session(session_id)

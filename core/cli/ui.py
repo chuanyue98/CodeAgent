@@ -14,6 +14,7 @@ from pathlib import Path
 
 from core.i18n import t
 from core.resource_locator import get_bundled_resource_root
+from core.runtime_paths import get_run_dir
 
 from . import helpers as _helpers
 
@@ -155,7 +156,7 @@ def _start_ui_dev_server() -> bool:
             print(t("ui.node_modules_install_failed", error=str(exc)))
             return False
 
-    log_dir = _helpers._project_root() / ".ca_task_logs"
+    log_dir = get_run_dir()
     log_dir.mkdir(parents=True, exist_ok=True)
     dev_log = log_dir / "vite_dev.log"
 
@@ -164,15 +165,19 @@ def _start_ui_dev_server() -> bool:
     except OSError:
         log_fh = None
 
-    _ui_dev_process = subprocess.Popen(  # noqa: S603
-        cmd,
-        cwd=str(frontend_root),
-        stdout=log_fh if log_fh else subprocess.DEVNULL,
-        stderr=subprocess.STDOUT if log_fh else subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL,
-        start_new_session=True,
-        env=os.environ.copy(),
-    )
+    try:
+        _ui_dev_process = subprocess.Popen(  # noqa: S603
+            cmd,
+            cwd=str(frontend_root),
+            stdout=log_fh if log_fh else subprocess.DEVNULL,
+            stderr=subprocess.STDOUT if log_fh else subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+            env=os.environ.copy(),
+        )
+    finally:
+        if log_fh is not None:
+            log_fh.close()
     deadline = time.time() + UI_DEV_SERVER_START_TIMEOUT
     while time.time() < deadline:
         if _is_ui_dev_server_running():
@@ -291,6 +296,21 @@ def run_ui_command(dev: bool = False) -> int:
                     print(t("ui.vite_failed_no_dist"))
                     return 1
 
+    raw_host = os.environ.get("CA_UI_HOST", "").strip()
+    api_host = (
+        raw_host[1:-1]
+        if raw_host.startswith("[") and raw_host.endswith("]")
+        else raw_host
+    ) or "127.0.0.1"
+    # 将通配绑定地址映射为可探测/可点击的回环地址，显式非通配地址保持原样。
+    if api_host in ("", "0.0.0.0"):
+        connect_host = "127.0.0.1"
+    elif api_host == "::":
+        connect_host = "::1"
+    else:
+        connect_host = api_host
+    url_host = f"[{connect_host}]" if ":" in connect_host else connect_host
+
     if use_dev_server:
         port = UI_API_PORT
         url = f"http://{UI_DEV_SERVER_HOST}:{UI_DEV_SERVER_PORT}"
@@ -308,12 +328,10 @@ def run_ui_command(dev: bool = False) -> int:
             )
             return 1
         port = _helpers.find_available_port(UI_API_PORT)
-        url = f"http://127.0.0.1:{port}"
+        url = f"http://{url_host}:{port}"
         if _frontend_sources_newer_than_dist():
             print(t("ui.dist_stale", frontend_root=_frontend_root()))
         print(t("ui.starting", url=url))
-
-    api_host = os.environ.get("CA_UI_HOST", "127.0.0.1")
 
     from core.web.security import (
         TOKEN_QUERY_PARAM,
@@ -340,7 +358,7 @@ def run_ui_command(dev: bool = False) -> int:
 
     threading.Thread(
         target=_wait_for_api_then_open_browser,
-        args=(api_host, port, url),
+        args=(connect_host, port, url),
         daemon=True,
     ).start()
 

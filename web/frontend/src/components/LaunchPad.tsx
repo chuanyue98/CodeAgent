@@ -33,7 +33,7 @@ export default function LaunchPad() {
   const language = useLanguageCode();
   const { validProjects, selectedWorkspace } = useProject();
   const { activeTabId, openTab, setTerminalSlot, tabs } = useTerminal();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [available, setAvailable] = useState<boolean | null>(null);
   const [reason, setReason] = useState<string | null>(null);
@@ -70,8 +70,14 @@ export default function LaunchPad() {
     const attachParam = searchParams.get('attach') || undefined;
     if (engineParam && cwdParam && (sessionParam || attachParam)) {
       openTab(engineParam, cwdParam, sessionParam, attachParam);
+      const next = new URLSearchParams(searchParams);
+      next.delete('engine');
+      next.delete('cwd');
+      next.delete('session');
+      next.delete('attach');
+      setSearchParams(next, { replace: true });
     }
-  }, [searchParams, openTab]);
+  }, [searchParams, openTab, setSearchParams]);
 
   if (activeTab) {
     return (

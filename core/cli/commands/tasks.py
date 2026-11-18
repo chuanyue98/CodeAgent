@@ -171,7 +171,7 @@ def _pick_authoring_engine(preferred: str | None) -> str | None:
     order = ["opencode", *(name for name in ENGINES if name != "opencode")]
     for name in order:
         spec = ENGINES.get(name)
-        if spec and any(shutil.which(candidate) for candidate in spec.cli_candidates):
+        if spec and _helpers.resolve_engine_cli(spec, which=shutil.which):
             return name
     return None
 
@@ -186,18 +186,16 @@ def _pick_authoring_engine(preferred: str | None) -> str | None:
 )
 @click.pass_context
 def new(ctx, name, engine):  # type: ignore[no-untyped-def]
-    config = ctx.obj["config"]
+    from core.services.task_service import is_valid_task_name
+    from core.web.resource_paths import resolve_resource_path
+
     root = ctx.obj["root"]
     child_env = ctx.obj["child_env"]
     task_name = name or "unnamed_task"
-    paths_cfg = config.get("paths", {})
-    res_root = paths_cfg.get("resource_root")
-    if res_root:
-        tasks_dir = Path(res_root.replace("$CODEAGENT", str(root.as_posix()))) / "tasks"
-    else:
-        tasks_dir = Path(paths_cfg.get("tasks", "tasks"))
-    if not tasks_dir.is_absolute():
-        tasks_dir = root / tasks_dir
+    if not is_valid_task_name(task_name):
+        print(t("task.invalid_name", name=task_name), file=sys.stderr)
+        return 1
+    tasks_dir = resolve_resource_path("tasks", "CA_TASKS_ROOT")
     try:
         rel_tasks_path = os.path.relpath(tasks_dir, Path.cwd())
     except ValueError:

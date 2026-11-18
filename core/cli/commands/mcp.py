@@ -15,6 +15,15 @@ from .. import helpers as _helpers
 _ENGINE_CHOICE = click.Choice(sorted(ENGINES))
 
 
+def _scope_label(engine: str) -> str:
+    """返回 MCP 配置的作用域本地化标签。"""
+    return (
+        t("mcp.scope_project")
+        if engine in ("claude", "codebuddy")
+        else t("mcp.scope_global")
+    )
+
+
 @click.group(name="mcp", invoke_without_command=True, help=t("cli.desc.mcp"))
 @click.pass_context
 def mcp(ctx):  # type: ignore[no-untyped-def]
@@ -37,7 +46,7 @@ def mcp_list(ctx, engine):  # type: ignore[no-untyped-def]
         except Exception as exc:
             click.echo(f"{click.style(name, bold=True)}: ⚠️  {exc}")
             continue
-        scope = "project" if name in ("claude", "codebuddy") else "global"
+        scope = _scope_label(name)
         header = f"{name} ({scope})"
         if not servers:
             click.echo(f"{click.style(header, bold=True)}: (none)")
@@ -90,7 +99,7 @@ def mcp_add(ctx, engine, name, command, url, env_pairs, transport):  # type: ign
     except (ValueError, RuntimeError) as exc:
         print(t("mcp.error", error=exc))
         sys.exit(1)
-    scope = t("mcp.scope_project") if engine == "claude" else t("mcp.scope_global")
+    scope = _scope_label(engine)
     print(t("mcp.added", name=name, engine=engine, scope=scope))
     others = sorted(ENGINES - {engine})
     print(t("mcp.sync_hint", engine=engine))

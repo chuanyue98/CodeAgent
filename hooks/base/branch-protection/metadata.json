@@ -1,7 +1,6 @@
 {
-  "id": "branch-protection",
-  "name": "Branch Protection Hook",
-  "description": "Prevents accidental direct commits or pushes to the main branch.",
+  "name": "branch-protection",
   "event": "before_tool",
-  "command": "python {hook_dir}/hook.py"
+  "command": "python \"{hook_dir}/hook.py\"",
+  "description": "禁止直接在 main 或 master 分支执行 git commit 或 git push，防止误提交到受保护分支。"
 }

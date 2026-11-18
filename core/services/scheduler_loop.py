@@ -61,7 +61,7 @@ async def _record_and_notify(
         run_id,
         set_run_at,
     )
-    if not _is_failure_status(status):
+    if record.get("notify_on") == "never" or not _is_failure_status(status):
         return
     try:
         config, _warnings = await asyncio.to_thread(
@@ -100,7 +100,7 @@ def _should_notify(notify_on: str, run_status: str) -> bool:
         return True
     if notify_on == "success" and run_status in ("completed", "success"):
         return True
-    if notify_on == "failure" and run_status in ("failed", "task_not_found"):
+    if notify_on == "failure" and _is_failure_status(run_status):
         return True
     return False
 
@@ -134,6 +134,8 @@ async def _maybe_record_notification(
                 summary = _strip_ansi(raw_logs).strip()[-200:]
         except Exception:
             pass
+    if not summary and _is_failure_status(run_status):
+        summary = run_status
 
     try:
         await asyncio.to_thread(
@@ -264,6 +266,9 @@ async def tick_once(
             workspace = record.get("workspace")
             if not isinstance(workspace, str) or not workspace:
                 await _record_and_notify(schedule_service, record, "workspace_required")
+                await _maybe_record_notification(
+                    run_store, record, "workspace_required", "", tasks_root=tasks_root
+                )
                 continue
 
             try:
@@ -276,15 +281,26 @@ async def tick_once(
                 await _record_and_notify(
                     schedule_service, record, "workspace_unregistered"
                 )
+                await _maybe_record_notification(
+                    run_store,
+                    record,
+                    "workspace_unregistered",
+                    "",
+                    tasks_root=tasks_root,
+                )
                 continue
             except WorkspaceResolutionError as exc:
-                await _record_and_notify(
-                    schedule_service, record, f"workspace_invalid: {exc}"
+                failure_status = f"workspace_invalid: {exc}"
+                await _record_and_notify(schedule_service, record, failure_status)
+                await _maybe_record_notification(
+                    run_store, record, failure_status, "", tasks_root=tasks_root
                 )
                 continue
             except WorkspaceConfigError as exc:
-                await _record_and_notify(
-                    schedule_service, record, f"workspace_config_error: {exc}"
+                failure_status = f"workspace_config_error: {exc}"
+                await _record_and_notify(schedule_service, record, failure_status)
+                await _maybe_record_notification(
+                    run_store, record, failure_status, "", tasks_root=tasks_root
                 )
                 continue
 
@@ -292,6 +308,9 @@ async def tick_once(
             task_exists = await asyncio.to_thread(_task_exists, tasks_root, record)
             if not task_exists:
                 await _record_and_notify(schedule_service, record, "task_not_found")
+                await _maybe_record_notification(
+                    run_store, record, "task_not_found", "", tasks_root=tasks_root
+                )
                 continue
 
             try:
@@ -319,17 +338,35 @@ async def tick_once(
                 recorded_status = str(result_status)
             else:
                 recorded_status = f"failed: {result_status}"
+            run_id = getattr(status, "task_id", None)
             await _record_and_notify(
                 schedule_service,
                 record,
                 recorded_status,
-                run_id=getattr(status, "task_id", None),
+                run_id=run_id,
             )
+            if recorded_status != "started":
+                await _maybe_record_notification(
+                    run_store,
+                    record,
+                    recorded_status,
+                    run_id or "",
+                    log_path=getattr(status, "log_path", None),
+                    tasks_root=tasks_root,
+                )
         except ValueError as exc:
-            await _record_and_notify(schedule_service, record, f"failed: {exc}")
+            failure_status = f"failed: {exc}"
+            await _record_and_notify(schedule_service, record, failure_status)
+            await _maybe_record_notification(
+                run_store, record, failure_status, "", tasks_root=tasks_root
+            )
         except Exception as exc:
             logger.exception("Schedule %s failed", record.get("id"))
+            failure_status = f"failed: {exc}"
             try:
-                await _record_and_notify(schedule_service, record, f"failed: {exc}")
+                await _record_and_notify(schedule_service, record, failure_status)
+                await _maybe_record_notification(
+                    run_store, record, failure_status, "", tasks_root=tasks_root
+                )
             except Exception:
                 logger.exception("Could not persist schedule failure")

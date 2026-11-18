@@ -197,8 +197,8 @@ DOCTOR_MESSAGES: dict[str, dict[str, str]] = {
         "zh": "钩子生效情况 ({count})",
     },
     "doctor.hook_delivery_supported": {
-        "en": "claude, opencode, codebuddy: supported",
-        "zh": "claude, opencode, codebuddy: 支持",
+        "en": "claude, opencode, codebuddy: supported (antigravity: unsupported)",
+        "zh": "claude, opencode, codebuddy: 支持（antigravity: 不支持）",
     },
     "doctor.codex_hooks_label": {"en": "codex hooks", "zh": "codex 钩子"},
     "doctor.codex_trusted": {"en": "project is trusted", "zh": "项目已被信任"},
@@ -226,8 +226,8 @@ DOCTOR_MESSAGES: dict[str, dict[str, str]] = {
         "zh": "MCP 服务 ({count} 个)",
     },
     "doctor.mcp_in_sync": {
-        "en": "configured identically on all four engines",
-        "zh": "四个引擎的配置完全一致",
+        "en": "configured identically across all engines",
+        "zh": "所有引擎的配置完全一致",
     },
     "doctor.mcp_drift_count": {
         "en": "MCP drift ({count} server(s) not on every engine)",

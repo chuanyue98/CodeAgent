@@ -35,7 +35,7 @@ from core.services.workspace_service import (
     WorkspaceResolutionError,
     resolve_registered_workspace,
 )
-from core.web.case_convert import ProtocolModel, camelize
+from core.web.case_convert import ProtocolModel
 from core.web.pty import (
     _ACTIVE_SESSIONS,
     _DEFAULT_TMUX_SOCKET,
@@ -77,6 +77,8 @@ from core.web.pty import (
     prune_detached_sessions,
     start_tmux_watchdog,
     stop_active_session,
+    stop_all_active_sessions,
+    stop_tmux_watchdog,
     winpty,
 )
 from core.web.routers.config import get_config_path
@@ -125,6 +127,8 @@ __all__ = [
     "router",
     "start_tmux_watchdog",
     "stop_active_session",
+    "stop_all_active_sessions",
+    "stop_tmux_watchdog",
     "winpty",
 ]
 
@@ -133,7 +137,28 @@ logger = get_logger(__name__)
 
 _CA_LAUNCHER = CODE_ROOT / "ca_launcher.py"
 
-_READ_CHUNK = 65536
+
+def _ws_reason(text: str, max_bytes: int = 120) -> str:
+    """将 WebSocket 关闭原因截断到不超过 ``max_bytes`` 个 UTF-8 字节（RFC 6455 控制帧限制）。"""
+    encoded = text.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return text
+    return encoded[:max_bytes].decode("utf-8", errors="ignore")
+
+
+def _clamp_dimensions(cols: object, rows: object) -> tuple[int, int] | None:
+    """校验并限制终端行列数范围，拒绝 ``bool`` 等非法类型。"""
+    if (
+        isinstance(cols, bool)
+        or isinstance(rows, bool)
+        or not isinstance(cols, int)
+        or not isinstance(rows, int)
+    ):
+        return None
+    return (
+        max(_MIN_COLS, min(_MAX_COLS, cols)),
+        max(_MIN_ROWS, min(_MAX_ROWS, rows)),
+    )
 
 
 def _shell_command() -> list[str]:
@@ -232,19 +257,6 @@ async def stage_initial_prompt(body: StagePromptRequest) -> dict:
         )
     _stage_prompt(body.tab_key, body.prompt)
     return {"success": True}
-
-
-@router.get("/sessions")
-async def list_pty_sessions() -> dict:
-    """活跃 PTY 会话列表，供实例管理页使用。"""
-    # 内部注册表 _ACTIVE_SESSIONS 仍是 snake_case，因为 instances.py 也按
-    # Python 的读法取它的字段；camelize 只作用在出网这一层。
-    return {"sessions": [camelize(entry) for entry in list_active_sessions()]}
-
-
-@router.post("/sessions/{session_id}/stop")
-async def stop_pty_session(session_id: str) -> dict:
-    return {"success": await stop_active_session(session_id)}
 
 
 @router.post("/close")
@@ -346,24 +358,26 @@ async def pty_websocket(
 
     capability = pty_capability()
     if not capability["available"]:
-        await websocket.close(code=1013, reason=capability["reason"])
+        await websocket.close(
+            code=1013, reason=_ws_reason(str(capability["reason"] or ""))
+        )
         return
     if engine != SHELL_ENGINE and engine not in ENGINES:
-        await websocket.close(code=4400, reason=f"Unknown engine: {engine}")
+        await websocket.close(code=4400, reason=_ws_reason(f"Unknown engine: {engine}"))
         return
     if session_id is not None:
         # The id becomes an argv element. Nothing reaches a shell, but one
         # starting with "-" would be read by the engine CLI as a flag.
         if engine == SHELL_ENGINE:
             await websocket.close(
-                code=4400, reason="A plain shell has no session to resume"
+                code=4400, reason=_ws_reason("A plain shell has no session to resume")
             )
             return
         if not is_safe_session_id(session_id):
-            await websocket.close(code=4400, reason="Malformed session id")
+            await websocket.close(code=4400, reason=_ws_reason("Malformed session id"))
             return
     if tab_key is not None and not _TAB_KEY_RE.fullmatch(tab_key):
-        await websocket.close(code=4400, reason="Malformed tab key")
+        await websocket.close(code=4400, reason=_ws_reason("Malformed tab key"))
         return
     attach_tmux_name: str | None = None
     if attach_id is not None:
@@ -374,7 +388,8 @@ async def pty_websocket(
             or not entry["tmux_name"]
         ):
             await websocket.close(
-                code=4404, reason="The terminal to attach to was not found"
+                code=4404,
+                reason=_ws_reason("The terminal to attach to was not found"),
             )
             return
         if await asyncio.to_thread(_tmux_engine_gone, entry["tmux_name"]):
@@ -383,14 +398,15 @@ async def pty_websocket(
             await asyncio.to_thread(_tmux_kill_session, entry["tmux_name"])
             _ACTIVE_SESSIONS.pop(attach_id, None)
             await websocket.close(
-                code=4404, reason="That terminal's engine has already exited"
+                code=4404,
+                reason=_ws_reason("That terminal's engine has already exited"),
             )
             return
         attach_tmux_name = entry["tmux_name"]
     try:
         working_dir = _resolve_registered_workspace(cwd)
     except ValueError as exc:
-        await websocket.close(code=4400, reason=str(exc))
+        await websocket.close(code=4400, reason=_ws_reason(str(exc)))
         return
 
     output_queue: asyncio.Queue[bytes | str | None] = asyncio.Queue(
@@ -432,7 +448,9 @@ async def pty_websocket(
             )
     except SpawnError as exc:
         with contextlib.suppress(Exception):
-            await websocket.close(code=1011, reason=f"Failed to start session: {exc}")
+            await websocket.close(
+                code=1011, reason=_ws_reason(f"Failed to start session: {exc}")
+            )
         return
 
     # One registry entry per tmux session (per engine process), not per
@@ -487,10 +505,15 @@ async def pty_websocket(
         while True:
             chunk = await output_queue.get()
             if chunk is None:
+                tail = decoder.decode(b"", final=True)
+                if tail:
+                    with contextlib.suppress(Exception):
+                        await websocket.send_json({"type": "output", "data": tail})
                 return
             text = decoder.decode(chunk) if isinstance(chunk, bytes) else chunk
-            with contextlib.suppress(Exception):
-                await websocket.send_json({"type": "output", "data": text})
+            if text:
+                with contextlib.suppress(Exception):
+                    await websocket.send_json({"type": "output", "data": text})
 
     process_exited = asyncio.Event()
 
@@ -576,11 +599,11 @@ async def pty_websocket(
             if kind == "input":
                 data = message.get("data")
                 if isinstance(data, str):
-                    session.write(data)
+                    await asyncio.to_thread(session.write, data)
             elif kind == "resize":
-                new_cols, new_rows = message.get("cols"), message.get("rows")
-                if isinstance(new_cols, int) and isinstance(new_rows, int):
-                    session.resize(new_cols, new_rows)
+                dims = _clamp_dimensions(message.get("cols"), message.get("rows"))
+                if dims is not None:
+                    await asyncio.to_thread(session.resize, dims[0], dims[1])
     except WebSocketDisconnect:
         pass
     finally:

@@ -74,7 +74,7 @@ beforeEach(() => {
   mounted.length = 0;
   unmounted.length = 0;
   localStorage.clear();
-  globalThis.fetch = vi.fn().mockImplementation((url: string) => { console.log("FETCH_MOCK", url);
+  globalThis.fetch = vi.fn().mockImplementation((url: string) => {
     if (url.includes('/api/pty/status')) return jsonResponse({ available: true, reason: null });
     if (url.includes('/api/projects')) {
       return jsonResponse([{ path: '/workspace/proj', group: 'codeagent', available: true }]);
@@ -190,7 +190,7 @@ describe('LaunchPad terminal tabs', () => {
 
   test('with no workspace at all the cards say why they are dead', async () => {
     // Five tiles at half opacity used to be the entire explanation.
-    globalThis.fetch = vi.fn().mockImplementation((url: string) => { console.log("FETCH_MOCK", url);
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.includes('/api/pty/status')) return jsonResponse({ available: true, reason: null });
       if (url.includes('/api/projects')) return jsonResponse([]);
       if (url.includes('/api/analytics/sessions')) {
@@ -209,6 +209,11 @@ describe('LaunchPad terminal tabs', () => {
     renderLaunchPad('/agent/terminal?engine=opencode&cwd=/workspace/proj&session=ses_abc');
     await screen.findByTestId('term-opencode:ses_abc');
     expect(screen.getAllByRole('tab')).toHaveLength(1);
+
+    // Closing the deep-linked tab must not reopen it on the next render because query params were cleared.
+    fireEvent.click(screen.getByLabelText(/close terminal/i));
+    await waitFor(() => expect(screen.queryByRole('tab')).toBeNull());
+    expect(screen.queryByTestId('term-opencode:ses_abc')).toBeNull();
   });
 
   test('picking a recent session on the launcher resumes it in a terminal', async () => {

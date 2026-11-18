@@ -31,27 +31,23 @@ def _parse_ts(ts: str) -> datetime:
 
 
 def _date(ts: str) -> str:
-    """Extract YYYY-MM-DD from an ISO 8601 timestamp.
-
-    Args:
-        ts: ISO 8601 timestamp string.
-
-    Returns:
-        The date part (YYYY-MM-DD) or "unknown" if ts is empty.
-    """
-    return ts[:10] if ts else "unknown"
+    """将 ISO 8601 时间戳归并到 UTC 日期字符串 YYYY-MM-DD。"""
+    if not ts:
+        return "unknown"
+    dt = _parse_ts(ts)
+    if dt == datetime.min.replace(tzinfo=UTC):
+        return ts[:10] if len(ts) >= 10 else "unknown"
+    return dt.astimezone(UTC).strftime("%Y-%m-%d")
 
 
 def _month(ts: str) -> str:
-    """Extract YYYY-MM from an ISO 8601 timestamp.
-
-    Args:
-        ts: ISO 8601 timestamp string.
-
-    Returns:
-        The month part (YYYY-MM) or "unknown" if ts is empty.
-    """
-    return ts[:7] if ts else "unknown"
+    """将 ISO 8601 时间戳归并到 UTC 月份字符串 YYYY-MM。"""
+    if not ts:
+        return "unknown"
+    dt = _parse_ts(ts)
+    if dt == datetime.min.replace(tzinfo=UTC):
+        return ts[:7] if len(ts) >= 7 else "unknown"
+    return dt.astimezone(UTC).strftime("%Y-%m")
 
 
 def _merge_breakdown(
@@ -146,7 +142,9 @@ def aggregate(entries: list[RawUsageEntry]) -> dict[str, Any]:
     daily_list = sorted(daily.values(), key=lambda x: x.date)
     monthly_list = sorted(monthly.values(), key=lambda x: x.month)
     session_list = sorted(
-        _nest_subtasks(sessions), key=_rolled_last_activity, reverse=True
+        _nest_subtasks(sessions),
+        key=lambda su: _parse_ts(_rolled_last_activity(su)),
+        reverse=True,
     )
 
     return {

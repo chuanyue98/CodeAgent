@@ -68,17 +68,36 @@ def project_list(ctx):  # type: ignore[no-untyped-def]
     if not registry:
         print(t("project.none_registered"))
         return
-    cwd = Path.cwd().resolve()
-    width = max(len(str(item.get("path", "?"))) for item in registry)
-    for item in registry:
+    try:
+        cwd: Path | None = Path.cwd().resolve()
+    except OSError:
+        cwd = None
+    rows = [item for item in registry if isinstance(item, dict)]
+    if not rows:
+        print(t("project.none_registered"))
+        return
+    width = max(len(str(item.get("path", "?"))) for item in rows)
+    for item in rows:
         path = str(item.get("path", "?"))
         resolved = Path(path).expanduser()
-        available = path != "?" and resolved.is_dir()
+        available = False
+        resolved_target: Path | None = None
+        if path != "?":
+            try:
+                available = resolved.is_dir()
+                if available:
+                    resolved_target = resolved.resolve()
+            except OSError:
+                available = False
+                resolved_target = None
         note = ""
         if not available:
             note = t("project.missing_marker")
-        elif resolved.resolve() == cwd:
-            note = t("project.current_marker")
+        elif cwd is not None and resolved_target is not None:
+            if resolved_target == cwd:
+                note = t("project.current_marker")
+            elif resolved_target in cwd.parents:
+                note = t("project.parent_marker")
         print(
             t(
                 "project.list_row",

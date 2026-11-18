@@ -1,7 +1,6 @@
 """``core.cli`` package — re-exported via ``ca_launcher`` for backward compat."""
 
 from .helpers import (
-    FALLBACK_ENGINE,
     _ensure_project_on_path,
     _installed_root,
     _is_path_registered,
@@ -31,7 +30,6 @@ from .ui import (
 )
 
 __all__ = [
-    "FALLBACK_ENGINE",
     "CodeAgentGroup",
     "EPILOG",
     "UI_API_PORT",

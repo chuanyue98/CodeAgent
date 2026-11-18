@@ -216,4 +216,78 @@ describe('ConfigHub Component', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  test('saves via PATCH /api/config, displays Windows basename, and navigates without dead query param', async () => {
+    const originalFetch = globalThis.fetch;
+    const patchPayloads: Array<{ method: string; body: Record<string, unknown> }> = [];
+    globalThis.fetch = vi.fn().mockImplementation((url: string, options?: RequestInit) => {
+      const method = options?.method || 'GET';
+      if (url.includes('/api/config') && method === 'PATCH') {
+        patchPayloads.push({ method, body: JSON.parse(options?.body as string) });
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ status: 'success' }),
+          json: async () => ({ status: 'success' }),
+        });
+      }
+      if (url.includes('/api/config')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            language: 'en',
+            paths: { resource_root: '' },
+            project_registry: [{ path: 'E:\\demo\\CodeAgent', group: 'common' }],
+          }),
+          json: async () => ({
+            language: 'en',
+            paths: { resource_root: '' },
+            project_registry: [{ path: 'E:\\demo\\CodeAgent', group: 'common' }],
+          }),
+        });
+      }
+      if (url.includes('/api/projects')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify([{ path: 'E:\\demo\\CodeAgent', group: 'common', available: true }]),
+          json: async () => [{ path: 'E:\\demo\\CodeAgent', group: 'common', available: true }],
+        });
+      }
+      if (url.includes('/api/groups')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ common: { skills: [], prompts: [], hooks: [], plugins: [] } }),
+          json: async () => ({ common: { skills: [], prompts: [], hooks: [], plugins: [] } }),
+        });
+      }
+      return originalFetch(url, options);
+    });
+
+    try {
+      renderConfigHub();
+      expect(await screen.findByText('CodeAgent')).toBeVisible();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open Terminal' }));
+      expect(mockNavigate).toHaveBeenCalledWith('/agent/terminal');
+
+      // Switch to General tab and verify radiogroup accessibility role
+      fireEvent.click(screen.getByRole('button', { name: /General & Language/i }));
+      expect(screen.getAllByRole('radiogroup').length).toBeGreaterThanOrEqual(2);
+
+      // Modify resource root and save — must use PATCH /api/config with partial config
+      fireEvent.change(screen.getByRole('textbox'), {
+        target: { value: '/tmp/resources' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Save All Changes/i }));
+      await screen.findByText(/Saved to config\.json/);
+      expect(patchPayloads).toHaveLength(1);
+      expect(patchPayloads[0].method).toBe('PATCH');
+      expect(patchPayloads[0].body).not.toHaveProperty('language');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

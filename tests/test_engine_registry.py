@@ -59,11 +59,9 @@ def test_get_spec_accepts_alias_and_canonical():
 
 def test_constants_derive_from_registry():
     from core.constants import ENGINES as CONSTANTS_ENGINES
-    from core.constants import HEADLESS_ENGINES, MCP_ENGINES, normalize_engine_name
+    from core.constants import normalize_engine_name
 
     assert CONSTANTS_ENGINES == frozenset(ENGINES)
-    assert HEADLESS_ENGINES == CONSTANTS_ENGINES
-    assert MCP_ENGINES == CONSTANTS_ENGINES
     # Live alias and legacy retired-engine spelling both resolve to
     # antigravity instead of erroring.
     assert normalize_engine_name("agy") == "antigravity"

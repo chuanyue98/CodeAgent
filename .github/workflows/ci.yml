@@ -13,6 +13,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
@@ -51,6 +53,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
@@ -116,6 +120,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
@@ -136,7 +142,7 @@ jobs:
       - name: Build wheel and verify runtime assets
         run: |
           uv build --wheel --out-dir /tmp/codeagent-dist
-          python -c "import zipfile; from pathlib import Path; wheel=next(Path('/tmp/codeagent-dist').glob('*.whl')); names=set(zipfile.ZipFile(wheel).namelist()); required=('prompt/base/general.basic.md','skills/base/skill-creator/SKILL.md','web/frontend/dist/index.html'); assert all(any(name.endswith(item) for name in names) for item in required)"
+          python -c "import zipfile; from pathlib import Path; wheel=next(Path('/tmp/codeagent-dist').glob('*.whl')); names=set(zipfile.ZipFile(wheel).namelist()); required=('config.example.json','prompt/base/general.basic.md','skills/base/skill-creator/SKILL.md','web/frontend/dist/index.html'); assert all(any(name.endswith(item) for name in names) for item in required); assert any('plugins/base/superpowers/' in name for name in names); assert not any('__pycache__' in name or '/.git/' in name or name.endswith('/.git') for name in names)"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -154,6 +160,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
       - name: Replace committed UI with tested artifact
         run: rm -rf web/frontend/dist
       - uses: actions/download-artifact@v8
@@ -177,6 +185,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7

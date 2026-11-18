@@ -436,7 +436,12 @@ def _make_git_repo(path: Path) -> str:
     """Creates a git repository at *path* and returns its root-commit SHA."""
     path.mkdir(parents=True, exist_ok=True)
     run = lambda *args: subprocess.run(  # noqa: E731
-        ["git", "-C", str(path), *args], capture_output=True, text=True, check=True
+        ["git", "-C", str(path), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
     )
     run("init", "-q")
     run("config", "user.email", "t@example.com")

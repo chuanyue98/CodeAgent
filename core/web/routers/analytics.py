@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query
 
 from core.analytics.service import get_analytics_data, refresh_analytics_data
+from core.constants import normalize_engine_name
 from core.session_history import repository
 from core.session_history.parse_cache import clear_parse_cache
 from core.session_history.paths import normalize_project_path
@@ -33,9 +35,36 @@ async def _data() -> dict:
 # minutes later.
 
 
-async def _session_title_map() -> dict[tuple[str, str], str]:
-    # 以前这里每个请求都全量解析一遍引擎历史来重建标题表；现在是一次 SQL。
-    return await asyncio.to_thread(repository.get_title_map)
+def _collect_session_pairs(sessions: list[dict]) -> list[tuple[str, str]]:
+    """收集会话列表及其子代理对应的唯一 ``(engine, session_id)`` 键。"""
+    seen: set[tuple[str, str]] = set()
+    pairs: list[tuple[str, str]] = []
+    for session in sessions:
+        for row in (session, *session.get("subtasks", ())):
+            engine = normalize_engine_name(str(row.get("target") or ""))
+            session_id = str(row.get("sessionId") or "")
+            if engine and session_id and (engine, session_id) not in seen:
+                seen.add((engine, session_id))
+                pairs.append((engine, session_id))
+    return pairs
+
+
+def _lookup_titles_sync(
+    sessions: list[dict], *, project: str | None = None
+) -> dict[tuple[str, str], str]:
+    """按需查询目标会话标题，避免每次分页请求扫描或拉取整张标题表。"""
+    pairs = _collect_session_pairs(sessions)
+    if not pairs:
+        return {}
+    return repository.get_title_map(pairs=pairs, project=project)
+
+
+async def _targeted_title_map(
+    sessions: list[dict], *, project: str | None = None
+) -> dict[tuple[str, str], str]:
+    if not sessions:
+        return {}
+    return await asyncio.to_thread(_lookup_titles_sync, sessions, project=project)
 
 
 @router.get("/summary")
@@ -67,17 +96,34 @@ def _encode_cursor(session: dict) -> str:
     return base64.urlsafe_b64encode(raw.encode()).decode()
 
 
+def _utc_sort_str(value: object) -> str:
+    """将混合时区 ISO 时间戳规范为固定 UTC 字符串，保证排序与游标比较一致。"""
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    except ValueError:
+        return raw
+
+
 def _decode_cursor(cursor: str) -> tuple[str, str] | None:
     try:
         raw = base64.urlsafe_b64decode(cursor.encode()).decode()
     except (ValueError, UnicodeDecodeError):
         return None
     activity, separator, session_id = raw.partition("|")
-    return (activity, session_id) if separator else None
+    return (_utc_sort_str(activity), session_id) if separator else None
 
 
 def _sort_key(session: dict) -> tuple[str, str]:
-    return (str(session.get("lastActivity") or ""), str(session.get("sessionId") or ""))
+    return (
+        _utc_sort_str(session.get("lastActivity")),
+        str(session.get("sessionId") or ""),
+    )
 
 
 @router.get("/sessions")
@@ -111,30 +157,30 @@ async def get_sessions(
     """
     data = await _data()
     sessions = data["sessions"]
-    title_map = await _session_title_map()
 
-    def _title(session: dict) -> str:
-        return title_map.get(
-            (session.get("target", ""), session.get("sessionId", "")), ""
-        )
+    def _title(title_map: dict[tuple[str, str], str], session: dict) -> str:
+        engine = normalize_engine_name(str(session.get("target") or ""))
+        return title_map.get((engine, str(session.get("sessionId") or "")), "")
 
-    def _with_titles(session: dict) -> dict:
+    def _with_titles(title_map: dict[tuple[str, str], str], session: dict) -> dict:
         return {
             **session,
-            "title": _title(session),
-            "subtasks": [_with_titles(child) for child in session.get("subtasks", ())],
+            "title": _title(title_map, session),
+            "subtasks": [
+                _with_titles(title_map, child) for child in session.get("subtasks", ())
+            ],
         }
 
-    def _searchable(session: dict) -> str:
+    def _searchable(title_map: dict[tuple[str, str], str], session: dict) -> str:
         # Subagent titles are part of the parent's haystack: the subtask rows
         # are no longer searchable on their own, and "which session ran that
         # review" is exactly what the box is used for.
         parts = [
-            _title(session),
+            _title(title_map, session),
             str(session.get("sessionId") or ""),
             str(session.get("projectPath") or ""),
             str(session.get("target") or ""),
-            *(_title(child) for child in session.get("subtasks", ())),
+            *(_title(title_map, child) for child in session.get("subtasks", ())),
         ]
         return " ".join(parts).lower()
 
@@ -146,27 +192,35 @@ async def get_sessions(
             if normalize_project_path(s.get("projectPath") or "") == target
         ]
 
-    if search:
-        needle = search.strip().lower()
-        if needle:
-            sessions = [s for s in sessions if needle in _searchable(s)]
+    needle = search.strip().lower() if search else ""
+    if needle:
+        title_map = await _targeted_title_map(sessions, project=project)
+        sessions = [s for s in sessions if needle in _searchable(title_map, s)]
+        total = len(sessions)
+        sessions = sorted(sessions, key=_sort_key, reverse=True)
+        if cursor:
+            after = _decode_cursor(cursor)
+            if after is None:
+                raise HTTPException(status_code=400, detail="Malformed cursor")
+            sessions = [s for s in sessions if _sort_key(s) < after]
+        page = sessions[:limit]
+        has_more = len(sessions) > limit
+    else:
+        total = len(sessions)
+        # `data["sessions"]` arrives sorted by last activity, but the cursor
+        # compares against a specific key, so make the ordering explicit here.
+        sessions = sorted(sessions, key=_sort_key, reverse=True)
+        if cursor:
+            after = _decode_cursor(cursor)
+            if after is None:
+                raise HTTPException(status_code=400, detail="Malformed cursor")
+            sessions = [s for s in sessions if _sort_key(s) < after]
+        page = sessions[:limit]
+        has_more = len(sessions) > limit
+        title_map = await _targeted_title_map(page, project=project)
 
-    total = len(sessions)
-
-    # `data["sessions"]` arrives sorted by last activity, but the cursor
-    # compares against a specific key, so make the ordering explicit here.
-    sessions = sorted(sessions, key=_sort_key, reverse=True)
-
-    if cursor:
-        after = _decode_cursor(cursor)
-        if after is None:
-            raise HTTPException(status_code=400, detail="Malformed cursor")
-        sessions = [s for s in sessions if _sort_key(s) < after]
-
-    page = sessions[:limit]
-    has_more = len(sessions) > limit
     return {
-        "sessions": [_with_titles(s) for s in page],
+        "sessions": [_with_titles(title_map, s) for s in page],
         "nextCursor": _encode_cursor(page[-1]) if page and has_more else None,
         "total": total,
     }

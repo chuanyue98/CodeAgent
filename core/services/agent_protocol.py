@@ -8,12 +8,11 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from core.web.case_convert import ProtocolModel, _to_camel, wire
+from core.web.case_convert import ProtocolModel, wire
 
 __all__ = [
     "ProtocolModel",
     "wire",
-    "_to_camel",
     "utc_now",
     "PermissionMode",
     "ApprovalDecision",

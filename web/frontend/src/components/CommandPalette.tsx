@@ -7,8 +7,10 @@ import { useT } from '../i18n/context';
 import type { TranslationKey } from '../i18n/locales/en';
 import { PAGE_LABEL_KEYS } from '../navigation';
 import { fetchSessions, type SessionUsage } from '../api/analytics';
+import { listTasks } from '../api/tasks';
+import { useIsMounted } from '../hooks/useAsyncGuards';
 import { buildSessionLink } from '../utils/sessionLink';
-import request from '../utils/request';
+import { workspaceLabel } from '../utils/workspaceFormat';
 import Modal from './shared/Modal';
 
 interface TaskSummary {
@@ -55,6 +57,8 @@ export default function CommandPalette({ variant = 'header' }: { variant?: 'head
   const [dataLoaded, setDataLoaded] = useState(false);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => loadPinnedIds());
   const inputRef = useRef<HTMLInputElement>(null);
+  const listboxRef = useRef<HTMLUListElement>(null);
+  const isMounted = useIsMounted();
   const navigate = useNavigate();
   const { availableGroups, currentGroup, setCurrentGroup, projects, setSelectedWorkspace } = useProject();
   const t = useT();
@@ -67,12 +71,12 @@ export default function CommandPalette({ variant = 'header' }: { variant?: 'head
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setDataLoaded(true);
     fetchSessions(200)
-      .then(setSessions)
-      .catch(() => setSessions([]));
-    request<TaskSummary[]>('/api/tasks')
-      .then(setTasks)
-      .catch(() => setTasks([]));
-  }, [open, dataLoaded]);
+      .then(list => { if (isMounted()) setSessions(list); })
+      .catch(() => { if (isMounted()) setSessions([]); });
+    listTasks()
+      .then(list => { if (isMounted()) setTasks(list); })
+      .catch(() => { if (isMounted()) setTasks([]); });
+  }, [open, dataLoaded, isMounted]);
 
   const items = useMemo<PaletteItem[]>(() => {
     const navItems: PaletteItem[] = Object.entries(PAGE_LABEL_KEYS).map(([path, labelKey]) => ({
@@ -96,7 +100,7 @@ export default function CommandPalette({ variant = 'header' }: { variant?: 'head
       .map(project => ({
         id: `workspace:${project.path}`,
         pinKey: `workspace:${project.path}`,
-        label: project.path.split(/[\\/]/).filter(Boolean).pop() || project.path,
+        label: workspaceLabel(project.path),
         hint: project.path,
         section: 'palette.section.workspace',
         icon: FolderGit2,
@@ -109,7 +113,7 @@ export default function CommandPalette({ variant = 'header' }: { variant?: 'head
       }));
     const sessionItems: PaletteItem[] = sessions.map(session => ({
       id: `session:${session.target}:${session.sessionId}`,
-      label: session.projectPath.split(/[\\/]/).filter(Boolean).pop() || session.sessionId,
+      label: session.projectPath ? workspaceLabel(session.projectPath) : session.sessionId,
       hint: t('palette.sessionHint', { engine: session.target, path: session.projectPath }),
       section: 'palette.section.session',
       icon: MessageSquare,
@@ -140,7 +144,11 @@ export default function CommandPalette({ variant = 'header' }: { variant?: 'head
       const next = new Set(prev);
       if (next.has(pinKey)) next.delete(pinKey);
       else next.add(pinKey);
-      localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify(Array.from(next)));
+      try {
+        localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify(Array.from(next)));
+      } catch {
+        // Ignore storage quota/access errors.
+      }
       return next;
     });
   };
@@ -153,10 +161,18 @@ export default function CommandPalette({ variant = 'header' }: { variant?: 'head
     );
   }, [items, query]);
 
+  const clampedActiveIndex = filtered.length === 0 ? -1 : Math.min(activeIndex, filtered.length - 1);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveIndex(0);
   }, [query, open]);
+
+  useEffect(() => {
+    if (!open || clampedActiveIndex < 0 || !listboxRef.current) return;
+    const option = listboxRef.current.querySelectorAll<HTMLElement>('[role="option"]')[clampedActiveIndex];
+    option?.scrollIntoView?.({ block: 'nearest' });
+  }, [clampedActiveIndex, open]);
 
   useEffect(() => {
     function handleGlobalKeyDown(event: KeyboardEvent) {
@@ -186,19 +202,21 @@ export default function CommandPalette({ variant = 'header' }: { variant?: 'head
   const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      setActiveIndex(i => Math.min(i + 1, filtered.length - 1));
+      setActiveIndex(i => Math.min(i + 1, Math.max(0, filtered.length - 1)));
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       setActiveIndex(i => Math.max(i - 1, 0));
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      const item = filtered[activeIndex];
+      const item = clampedActiveIndex >= 0 ? filtered[clampedActiveIndex] : undefined;
       if (item) runItem(item);
     } else if (event.key === 'Escape') {
       event.preventDefault();
       setOpen(false);
     }
   };
+
+  const isMac = typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.userAgent || navigator.platform || '');
 
   return (
     <>
@@ -218,7 +236,7 @@ export default function CommandPalette({ variant = 'header' }: { variant?: 'head
         {variant === 'rail' && <span className="flex-1 truncate">{t('palette.railLabel')}</span>}
         {variant !== 'icon' && (
           <kbd className="hidden rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline">
-            {navigator.platform.toLowerCase().includes('mac') ? '⌘K' : 'Ctrl K'}
+            {isMac ? '⌘K' : 'Ctrl K'}
           </kbd>
         )}
       </button>
@@ -246,25 +264,26 @@ export default function CommandPalette({ variant = 'header' }: { variant?: 'head
               Esc
             </kbd>
           </div>
-          <ul className="max-h-80 overflow-y-auto py-2" role="listbox" aria-label={t('palette.results')}>
+          <ul ref={listboxRef} className="max-h-80 overflow-y-auto py-2" role="listbox" aria-label={t('palette.results')}>
             {filtered.length === 0 && (
               <li className="px-4 py-6 text-center text-sm text-slate-400">{t('palette.noMatches')}</li>
             )}
             {filtered.map((item, index) => {
               const pinned = !!item.pinKey && pinnedIds.has(item.pinKey);
+              const isSelected = index === clampedActiveIndex;
               return (
                 <li
                   key={item.id}
                   role="option"
-                  aria-selected={index === activeIndex}
-                  className={`flex items-center gap-1 ${index === activeIndex ? 'bg-primary/10' : ''}`}
+                  aria-selected={isSelected}
+                  className={`flex items-center gap-1 ${isSelected ? 'bg-primary/10' : ''}`}
                 >
                   <button
                     type="button"
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => runItem(item)}
                     className={`flex flex-1 min-w-0 items-center justify-between gap-3 px-4 py-2 text-left text-sm transition-colors ${
-                      index === activeIndex ? 'text-primary' : 'text-slate-600 hover:bg-slate-50'
+                      isSelected ? 'text-primary' : 'text-slate-600 hover:bg-slate-50'
                     }`}
                   >
                     <span className="flex min-w-0 items-center gap-2">

@@ -33,6 +33,37 @@ def test_hit_when_inputs_unchanged(redirected):
     assert disk_cache.load_cache() == {"v": 1}
 
 
+@pytest.mark.parametrize("payload", [b"[]", b"null", b"\xff"])
+def test_corrupt_cache_is_ignored(redirected, payload):
+    _, cache_file = redirected
+    cache_file.write_bytes(payload)
+    assert disk_cache.load_cache() is None
+
+
+@pytest.mark.parametrize("saved_at", [None, "yesterday", float("nan"), float("inf")])
+def test_invalid_timestamp_is_ignored(redirected, saved_at):
+    _, cache_file = redirected
+    disk_cache.save_cache({"v": 1})
+    doc = json.loads(cache_file.read_text(encoding="utf-8"))
+    doc["saved_at"] = saved_at
+    cache_file.write_text(json.dumps(doc), encoding="utf-8")
+    assert disk_cache.load_cache() is None
+    assert disk_cache.load_cache(allow_stale=True) is None
+
+
+def test_failed_cache_replace_preserves_previous_copy(redirected, monkeypatch):
+    from core.utils import atomic_write as atomic_module
+
+    disk_cache.save_cache({"v": 1})
+
+    def fail_replace(*args):
+        raise OSError("模拟替换失败")
+
+    monkeypatch.setattr(atomic_module.os, "replace", fail_replace)
+    disk_cache.save_cache({"v": 2})
+    assert disk_cache.load_cache() == {"v": 1}
+
+
 def test_miss_when_history_grows(redirected):
     history_file, _ = redirected
     disk_cache.save_cache({"v": 1})

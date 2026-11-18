@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.injection_ledger import InjectionLedger
 from core.logging_config import get_logger
+from core.utils.atomic_write import atomic_write
 from engines.codex_home import user_codex_home
 
 logger = get_logger(__name__)
@@ -68,6 +69,7 @@ class CodexPluginMixin:
         plugins_root.mkdir(parents=True, exist_ok=True)
         marketplace_plugins_dir.mkdir(parents=True, exist_ok=True)
 
+        desired_names: set[str] = set()
         marketplace_entries: list[dict[str, Any]] = []
         for plugin_meta in plugins:
             plugin_name = plugin_meta["name"]
@@ -75,10 +77,11 @@ class CodexPluginMixin:
             if not plugin_src:
                 continue
 
+            desired_names.add(plugin_name)
             plugin_src_path = Path(plugin_src).resolve()
             target_link = plugins_root / plugin_name
 
-            if target_link.exists():
+            if os.path.lexists(target_link):
                 try:
                     if self._is_windows_link(target_link) or target_link.is_symlink():
                         if target_link.resolve() != plugin_src_path:
@@ -88,7 +91,7 @@ class CodexPluginMixin:
                 except Exception:
                     self._safe_remove_link(target_link)
 
-            if not target_link.exists():
+            if not os.path.lexists(target_link):
                 self._create_skill_link(plugin_src_path, target_link)
 
             category = (
@@ -111,15 +114,21 @@ class CodexPluginMixin:
                 }
             )
 
+        for existing in list(plugins_root.iterdir()):
+            if existing.name in desired_names:
+                continue
+            if self._is_windows_link(existing) or existing.is_symlink():
+                self._safe_remove_link(existing)
+
         marketplace_payload = {
             "name": self.MARKETPLACE_NAME,
             "interface": {"displayName": "CodeAgent Local"},
             "plugins": marketplace_entries,
         }
         marketplace_path = marketplace_plugins_dir / "marketplace.json"
-        marketplace_path.write_text(
+        atomic_write(
+            marketplace_path,
             json.dumps(marketplace_payload, indent=2, ensure_ascii=False),
-            encoding="utf-8",
         )
         return marketplace_root
 
@@ -130,7 +139,7 @@ class CodexPluginMixin:
         cache_root.mkdir(parents=True, exist_ok=True)
         installed_path = cache_root / "local"
 
-        if installed_path.exists():
+        if os.path.lexists(installed_path):
             try:
                 if self._is_windows_link(installed_path) or installed_path.is_symlink():
                     if installed_path.resolve() == plugin_src_path.resolve():
@@ -297,15 +306,21 @@ class CodexPluginMixin:
 
         marketplace_root = self._get_marketplace_root()
         if marketplace_root.exists():
-            plugins_link = marketplace_root / "plugins"
-            if plugins_link.exists() and (
-                self._is_windows_link(plugins_link) or plugins_link.is_symlink()
-            ):
-                self._safe_remove_link(plugins_link)
+            plugins_dir = marketplace_root / "plugins"
+            if plugins_dir.is_dir():
+                for child in list(plugins_dir.iterdir()):
+                    if self._is_windows_link(child) or child.is_symlink():
+                        self._safe_remove_link(child)
             shutil.rmtree(marketplace_root, ignore_errors=True)
             logger.info("Cleaned up local Codex marketplace")
 
         cache_root = self._get_plugin_cache_root()
         if cache_root.exists():
+            for plugin_dir in list(cache_root.iterdir()):
+                local_link = plugin_dir / "local"
+                if os.path.lexists(local_link) and (
+                    self._is_windows_link(local_link) or local_link.is_symlink()
+                ):
+                    self._safe_remove_link(local_link)
             shutil.rmtree(cache_root, ignore_errors=True)
             logger.info("Cleaned up local Codex plugin cache")

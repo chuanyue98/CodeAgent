@@ -135,18 +135,20 @@ class InjectionLedger:
     # ── 注入流程 ──────────────────────────────────────────────────────────
 
     def begin(self) -> None:
-        """注入前调用：已有账本就沿用（合并），没有就记下文件此刻的原文。
-
-        账本先于配置文件落盘：即使紧接着崩溃，下一次也知道原文是什么。
-        """
+        """注入前调用：已有账本就沿用（合并），没有就记下文件此刻的原文。"""
         if self._loaded or self.load():
             return
-        self.original = read_raw_text(self.settings_path)
-        self.written_digest = file_digest(self.settings_path)
+        try:
+            raw_bytes = self.settings_path.read_bytes()
+        except FileNotFoundError:
+            self.original = None
+            self.written_digest = None
+        else:
+            self.original = raw_bytes.decode("utf-8")
+            self.written_digest = hashlib.sha256(raw_bytes).hexdigest()
         self.entries = []
         self.created = []
         self._loaded = True
-        self.save()
 
     def commit(self) -> None:
         """配置文件写完后调用，记下写完的摘要。"""

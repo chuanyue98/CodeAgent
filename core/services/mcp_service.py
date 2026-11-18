@@ -29,24 +29,29 @@ its own native format and no config file is ever copied across.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
 
-from core.constants import ENGINES
+from core.constants import ENGINES, normalize_engine_name
+from core.host_env import child_environ
 from core.logging_config import get_logger
 from core.utils.atomic_write import atomic_write
+from engines.codex_home import user_codex_home
 
 logger = get_logger(__name__)
 
 _SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
 
 
-def _validate_engine(engine: str) -> None:
-    if engine not in ENGINES:
+def _validate_engine(engine: str) -> str:
+    canonical = normalize_engine_name(engine)
+    if canonical not in ENGINES:
         raise ValueError(f"Invalid engine: {engine!r}")
+    return canonical
 
 
 def _validate_name(name: str) -> None:
@@ -62,7 +67,7 @@ def _claude_mcp_path(project: Path) -> Path:
 
 
 def _codex_config_path() -> Path:
-    return Path.home() / ".codex" / "config.toml"
+    return user_codex_home() / "config.toml"
 
 
 def _antigravity_config_path() -> Path:
@@ -73,18 +78,18 @@ _OPENCODE_CONFIG_NAMES = ("opencode.jsonc", "opencode.json")
 
 
 def _opencode_config_path() -> Path:
-    """Resolves opencode's global config, which may be ``.jsonc`` or ``.json``.
-
-    opencode 1.18 writes ``opencode.jsonc``; ``opencode.json`` is equally
-    valid and is what hand-written setups tend to use. Whichever exists wins
-    — checking only one name made every opencode server invisible to reads
-    on a default install.
-
-    When neither exists the ``.jsonc`` path is returned as the nominal
-    location; nothing here creates the file, so this only affects the error
-    message a caller sees.
-    """
-    config_dir = Path.home() / ".config" / "opencode"
+    """解析 OpenCode 全局配置文件路径，兼容环境变量覆盖与 ``.jsonc`` / ``.json``。"""
+    explicit_file = os.environ.get("OPENCODE_CONFIG", "").strip()
+    if explicit_file:
+        return Path(explicit_file).expanduser()
+    configured_dir = os.environ.get("OPENCODE_CONFIG_DIR", "").strip()
+    if configured_dir:
+        config_dir = Path(configured_dir).expanduser()
+    else:
+        xdg_config = os.environ.get("XDG_CONFIG_HOME", "").strip()
+        config_dir = (
+            Path(xdg_config).expanduser() if xdg_config else Path.home() / ".config"
+        ) / "opencode"
     for name in _OPENCODE_CONFIG_NAMES:
         candidate = config_dir / name
         if candidate.exists():
@@ -138,28 +143,36 @@ def _strip_jsonc_comments(text: str) -> str:
     return "".join(out)
 
 
-def _read_json(path: Path) -> dict:
-    """Reads a config file, tolerating JSONC comments.
-
-    opencode's config is routinely a ``.jsonc``; without the comment-stripping
-    fallback a commented file parses as empty and its servers silently vanish
-    from every read. A file that is still unparseable afterwards keeps the
-    existing tolerant behaviour of reading as empty.
-    """
+def _read_json(path: Path, *, strict: bool = False) -> dict:
+    """读取 JSON/JSONC 配置文件；``strict=True`` 时拒绝将损坏配置视为空对象。"""
     if not path.exists():
         return {}
     try:
-        raw = path.read_text(encoding="utf-8")
-    except OSError:
+        raw = path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError) as exc:
+        if strict:
+            raise RuntimeError(f"无法读取配置文件 {path}: {exc}") from exc
+        logger.warning("读取 %s 失败，MCP 列表按空处理: %s", path, exc)
         return {}
+    parsed: Any = None
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        pass
-    try:
-        return json.loads(_strip_jsonc_comments(raw))
-    except json.JSONDecodeError:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as first_exc:
+        try:
+            parsed = json.loads(_strip_jsonc_comments(raw))
+        except json.JSONDecodeError as exc:
+            if strict:
+                raise RuntimeError(
+                    f"配置文件 {path} JSON 格式损坏，拒绝覆盖: {first_exc}"
+                ) from exc
+            logger.warning("解析 %s 失败，MCP 列表按空处理: %s", path, first_exc)
+            return {}
+    if not isinstance(parsed, dict):
+        if strict:
+            raise RuntimeError(f"配置文件 {path} 顶层不是 JSON 对象，拒绝覆盖")
+        logger.warning("配置文件 %s 顶层不是 JSON 对象，MCP 列表按空处理", path)
         return {}
+    return parsed
 
 
 def _atomic_write_json(path: Path, data: dict) -> None:
@@ -168,21 +181,24 @@ def _atomic_write_json(path: Path, data: dict) -> None:
 
 def _has_jsonc_comments(path: Path) -> bool:
     try:
-        raw = path.read_text(encoding="utf-8")
-    except OSError:
+        raw = path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError):
         return False
     return _strip_jsonc_comments(raw) != raw
 
 
 def _remove_key(path: Path, top_key: str, name: str) -> None:
-    """Pops one server entry from a native config file, preserving everything else."""
-    data = _read_json(path)
-    servers = data.get(top_key, {})
+    """从原生配置文件中移除指定 MCP 条目，损坏配置直接报错而不覆盖。"""
+    data = _read_json(path, strict=True)
+    if top_key not in data:
+        raise KeyError(f"MCP server not found: {name!r}")
+    servers = data[top_key]
+    if not isinstance(servers, dict):
+        raise RuntimeError(f"配置文件 {path} 中 {top_key!r} 不是对象，拒绝修改")
     if name not in servers:
         raise KeyError(f"MCP server not found: {name!r}")
 
-    # Rewriting the file as plain JSON would silently delete any comments the
-    # user wrote, so refuse rather than destroy them.
+    # 直接以标准 JSON 重写会丢失用户注释，检测到注释时拒绝修改。
     if _has_jsonc_comments(path):
         raise RuntimeError(
             f"{path} contains comments, which would be lost by rewriting it. "
@@ -194,27 +210,49 @@ def _remove_key(path: Path, top_key: str, name: str) -> None:
     _atomic_write_json(path, data)
 
 
-def _normalize_entry(name: str, scope: str, cfg: dict) -> dict:
-    """Maps one engine-native server config dict to a uniform shape.
-
-    Handles claude's ``{"command": str, "args": [...], "env": {...}}``,
-    codex's TOML-derived equivalent, and opencode's
-    ``{"command": [...combined...], "environment": {...}}`` — all four in
-    one place rather than four near-duplicate normalizers.
-    """
+def _normalize_entry(name: str, scope: str, cfg: object) -> dict:
+    """将各引擎原生 MCP 配置条目归一化为统一结构，并防护畸形字段。"""
+    if not isinstance(cfg, dict):
+        return {
+            "name": name,
+            "scope": scope,
+            "transport": "unknown",
+            "command": None,
+            "url": None,
+            "env": {},
+        }
     command = cfg.get("command")
-    args = cfg.get("args", [])
+    raw_args = cfg.get("args")
+    if isinstance(raw_args, (list, tuple)):
+        args = [str(item) for item in raw_args]
+    elif isinstance(raw_args, str) and raw_args:
+        args = [raw_args]
+    else:
+        args = []
+
     if isinstance(command, list):
-        full_command = command
-    elif command:
+        full_command: list[str] | None = [str(item) for item in command] or None
+    elif isinstance(command, str) and command:
         full_command = [command, *args]
     else:
         full_command = None
-    url = cfg.get("url") or cfg.get("httpUrl") or cfg.get("serverUrl")
-    transport = cfg.get("type") or (
-        "http" if url else "stdio" if full_command else "unknown"
+
+    raw_url = cfg.get("url") or cfg.get("httpUrl") or cfg.get("serverUrl")
+    url = raw_url if isinstance(raw_url, str) and raw_url else None
+    raw_transport = cfg.get("type")
+    transport = (
+        str(raw_transport)
+        if isinstance(raw_transport, str) and raw_transport
+        else ("http" if url else "stdio" if full_command else "unknown")
     )
-    env = cfg.get("env") or cfg.get("environment") or {}
+    raw_env = cfg.get("env")
+    if not isinstance(raw_env, dict):
+        raw_env = cfg.get("environment")
+    env = (
+        {str(k): str(v) for k, v in raw_env.items()}
+        if isinstance(raw_env, dict)
+        else {}
+    )
     return {
         "name": name,
         "scope": scope,
@@ -296,15 +334,15 @@ def _list_antigravity() -> list[dict]:
 
 def list_servers(engine: str, project_path: str) -> list[dict]:
     """Lists configured MCP servers for one engine, read from its native config."""
-    _validate_engine(engine)
+    canonical = _validate_engine(engine)
     project = Path(project_path)
-    if engine == "claude":
+    if canonical == "claude":
         return _list_claude(project)
-    if engine == "codex":
+    if canonical == "codex":
         return _list_codex()
-    if engine == "codebuddy":
+    if canonical == "codebuddy":
         return _list_codebuddy(project)
-    if engine == "antigravity":
+    if canonical == "antigravity":
         return _list_antigravity()
     return _list_opencode()
 
@@ -320,6 +358,7 @@ def _run_cli(cmd: list[str], cwd: str) -> None:
         result = subprocess.run(
             [executable, *cmd[1:]],
             cwd=cwd,
+            env=child_environ(),
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -426,13 +465,13 @@ def add_server(
     transport: str | None = None,
 ) -> None:
     """Adds an MCP server via the engine's own ``mcp add`` CLI subcommand."""
-    _validate_engine(engine)
+    canonical = _validate_engine(engine)
     _validate_name(name)
     if bool(command) == bool(url):
         raise ValueError("Exactly one of command or url must be provided")
 
     env_pairs = [f"{k}={v}" for k, v in (env or {}).items()]
-    cmd = _build_add_command(engine, name, command, url, env_pairs, transport)
+    cmd = _build_add_command(canonical, name, command, url, env_pairs, transport)
     _run_cli(cmd, cwd=project_path)
 
 
@@ -440,18 +479,18 @@ def remove_server(engine: str, project_path: str, name: str) -> None:
     """Removes an MCP server — via CLI where it works, via direct config-file
     edit for opencode, where the spike found the CLI path absent (see module
     docstring)."""
-    _validate_engine(engine)
+    canonical = _validate_engine(engine)
     _validate_name(name)
 
-    if engine == "claude":
+    if canonical == "claude":
         _run_cli(["claude", "mcp", "remove", name], cwd=project_path)
-    elif engine == "codex":
+    elif canonical == "codex":
         _run_cli(["codex", "mcp", "remove", name], cwd=project_path)
-    elif engine == "codebuddy":
+    elif canonical == "codebuddy":
         _run_cli(
             ["codebuddy", "mcp", "remove", name, "-s", "project"], cwd=project_path
         )
-    elif engine == "antigravity":
+    elif canonical == "antigravity":
         _run_cli(["agy", "mcp", "remove", name], cwd=project_path)
     else:
         _remove_key(_opencode_config_path(), "mcp", name)
@@ -471,7 +510,8 @@ def _sync_add_kwargs(entry: dict) -> dict:
     """
     url = entry.get("url")
     command = entry.get("command")
-    env = entry.get("env") or {}
+    raw_env = entry.get("env")
+    env = raw_env if isinstance(raw_env, dict) else {}
 
     if url:
         raw = str(entry.get("transport") or "").lower()
@@ -514,22 +554,21 @@ def sync_servers(
         ``name``, ``action`` (``added``/``replaced``/``skipped``/``failed``)
         and a human-readable ``detail``.
     """
-    _validate_engine(source_engine)
+    canonical_source = _validate_engine(source_engine)
 
     if targets is None:
-        target_engines = sorted(ENGINES - {source_engine})
+        target_engines = sorted(ENGINES - {canonical_source})
     else:
-        target_engines = list(dict.fromkeys(targets))
+        target_engines = list(dict.fromkeys(_validate_engine(t) for t in targets))
         for target in target_engines:
-            _validate_engine(target)
-            if target == source_engine:
+            if target == canonical_source:
                 raise ValueError(
-                    f"Cannot sync {source_engine!r} onto itself; "
+                    f"Cannot sync {canonical_source!r} onto itself; "
                     "drop it from the target list"
                 )
 
     available = {
-        entry["name"]: entry for entry in list_servers(source_engine, project_path)
+        entry["name"]: entry for entry in list_servers(canonical_source, project_path)
     }
     if names is None:
         selected = list(available.values())
@@ -537,7 +576,7 @@ def sync_servers(
         missing = [name for name in names if name not in available]
         if missing:
             raise ValueError(
-                f"No such MCP server in {source_engine}: {', '.join(sorted(missing))}"
+                f"No such MCP server in {canonical_source}: {', '.join(sorted(missing))}"
             )
         selected = [available[name] for name in dict.fromkeys(names)]
 

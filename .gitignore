@@ -27,8 +27,8 @@ repos/
 repos_fix_by_pr/
 repos_comment_issue/
 git_workspace/
-repos_fix_by_pr/
 .ca_prompt.tmp
+commit_draft.tmp
 .gemini/
 .claude/
 
@@ -36,8 +36,6 @@ repos_fix_by_pr/
 codeagent.egg-info/
 dist/
 *.egg
-.opencode/
-.claude/
 .opencode/
 assets/edit_tmp/
 assets/watermark_tmp/

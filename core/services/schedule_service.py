@@ -6,8 +6,9 @@ from typing import Any
 
 from croniter import croniter
 
-from core.constants import ENGINES
+from core.constants import ENGINES, normalize_engine_name
 from core.services.config_service import ConfigService
+from core.services.task_service import is_valid_task_name
 
 _SCHEDULES_KEY = "schedules"
 
@@ -67,6 +68,9 @@ class ScheduleService:
         notify_on: str = "always",
         created_from_input: str | None = None,
     ) -> dict:
+        if not is_valid_task_name(task_name):
+            raise ValueError(f"Invalid task name: {task_name!r}")
+        engine = normalize_engine_name(engine)
         if engine not in ENGINES:
             raise ValueError(f"Invalid engine: {engine!r}")
         if not croniter.is_valid(cron_expr):
@@ -99,16 +103,24 @@ class ScheduleService:
         return record
 
     def update_schedule(self, schedule_id: str, **fields: Any) -> dict:
-        if fields.get("engine") is not None and fields["engine"] not in ENGINES:
-            raise ValueError(f"Invalid engine: {fields['engine']!r}")
-        new_cron_expr = fields.get("cron_expr")
+        updates = dict(fields)
+        if updates.get("task_name") is not None and not is_valid_task_name(
+            str(updates["task_name"])
+        ):
+            raise ValueError(f"Invalid task name: {updates['task_name']!r}")
+        if updates.get("engine") is not None:
+            normalized_engine = normalize_engine_name(str(updates["engine"]))
+            if normalized_engine not in ENGINES:
+                raise ValueError(f"Invalid engine: {updates['engine']!r}")
+            updates["engine"] = normalized_engine
+        new_cron_expr = updates.get("cron_expr")
         if new_cron_expr is not None and not croniter.is_valid(new_cron_expr):
             raise ValueError(f"Invalid cron expression: {new_cron_expr!r}")
         if (
-            fields.get("notify_on") is not None
-            and fields["notify_on"] not in _VALID_NOTIFY_ON
+            updates.get("notify_on") is not None
+            and updates["notify_on"] not in _VALID_NOTIFY_ON
         ):
-            raise ValueError(f"Invalid notify_on: {fields['notify_on']!r}")
+            raise ValueError(f"Invalid notify_on: {updates['notify_on']!r}")
 
         found: dict | None = None
 
@@ -119,7 +131,7 @@ class ScheduleService:
                     continue
                 if new_cron_expr is not None:
                     record["next_run_at"] = _compute_next_run(new_cron_expr)
-                elif fields.get("enabled") is True and not record.get("enabled"):
+                elif updates.get("enabled") is True and not record.get("enabled"):
                     record["next_run_at"] = _compute_next_run(record["cron_expr"])
                 for key in (
                     "cron_expr",
@@ -131,8 +143,8 @@ class ScheduleService:
                     "notify_on",
                     "created_from_input",
                 ):
-                    if fields.get(key) is not None:
-                        record[key] = fields[key]
+                    if updates.get(key) is not None:
+                        record[key] = updates[key]
                 found = record
                 break
             return schedules

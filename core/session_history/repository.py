@@ -15,10 +15,12 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from core.constants import normalize_engine_name
 from core.session_history.audit import build_audit_events
-from core.session_history.index_ingest import get_indexer
+from core.session_history.index_ingest import _PARSER_FINGERPRINT_KEY, get_indexer
 from core.session_history.index_store import get_index, session_key, to_epoch
 from core.session_history.models import UnifiedSession
+from core.session_history.parse_cache import _parser_fingerprint
 from core.session_history.session_finder import find_all_sessions, find_session_by_id
 
 
@@ -53,13 +55,15 @@ def ensure_index_ready(notify: Callable[[], None] | None = None) -> bool:
 
 
 def _ready_index():
-    """只在索引"已经完整同步过一次"时返回它，否则 None（调用方回退）。
+    """只在索引"已经完整同步过一次"且出自当前解析器指纹时返回它，否则 None（调用方回退）。
 
     首轮构建是在后台跑的：刚启动时索引还没内容，若此时就走索引，用户会看到
     空列表——宁可慢一点走原来的解析，也不要先给一个空页面。
     """
     index = get_index()
     if index is None or not index.is_ready():
+        return None
+    if index.get_meta(_PARSER_FINGERPRINT_KEY) != _parser_fingerprint():
         return None
     return index
 
@@ -76,6 +80,8 @@ def list_summaries(
     limit: int = 500,
 ) -> list[dict[str, Any]]:
     """按 ``started_at`` 倒序的会话摘要列表。"""
+    if engine:
+        engine = normalize_engine_name(engine)
     kick_sync()
     index = _ready_index()
     if index is not None:
@@ -94,13 +100,47 @@ def list_summaries(
     return [s.to_summary_dict() for s in found[:limit]]
 
 
-def get_title_map() -> dict[tuple[str, str], str]:
+def get_title_map(
+    pairs: list[tuple[str, str]] | None = None,
+    *,
+    project: str | None = None,
+) -> dict[tuple[str, str], str]:
     """``(engine, session_id) -> 标题``，供分析页把标题并到用量行上。"""
+    if pairs is not None and not pairs:
+        return {}
+    normalized_pairs = (
+        [
+            (normalize_engine_name(engine), sid)
+            for engine, sid in pairs
+            if engine and sid
+        ]
+        if pairs is not None
+        else None
+    )
+    if normalized_pairs is not None and not normalized_pairs:
+        return {}
+    kick_sync()
     index = _ready_index()
     if index is not None:
-        return index.get_title_map()
+        return index.get_title_map(pairs=normalized_pairs)
+    if project:
+        return {
+            (normalize_engine_name(s.engine.value), s.session_id): s.to_summary_dict()[
+                "title"
+            ]
+            for s in find_all_sessions(_project_or_none(project))
+        }
+    if normalized_pairs is not None and len(normalized_pairs) <= 5:
+        titles: dict[tuple[str, str], str] = {}
+        for eng, sid in normalized_pairs:
+            found = find_session_by_id(sid, eng, _project_or_none(project))
+            if found is not None:
+                titles[(eng, sid)] = found.to_summary_dict()["title"]
+        return titles
     return {
-        (s.engine.value, s.session_id): s.to_summary_dict()["title"]
+        (normalize_engine_name(s.engine.value), s.session_id): s.to_summary_dict()[
+            "title"
+        ]
         for s in find_all_sessions()
     }
 
@@ -108,10 +148,13 @@ def get_title_map() -> dict[tuple[str, str], str]:
 def get_summary(
     engine: str, session_id: str, project: str | None = None
 ) -> dict[str, Any] | None:
+    engine = normalize_engine_name(engine)
+    kick_sync()
     index = _ready_index()
     if index is not None:
         summary = index.get_summary(engine, session_id)
-        return summary.to_summary_dict() if summary else None
+        if summary is not None:
+            return summary.to_summary_dict()
     session = find_session_by_id(session_id, engine, _project_or_none(project))
     return session.to_summary_dict() if session else None
 
@@ -123,6 +166,7 @@ def get_full(
 
     索引里查不到时回退到单次解析——刚建立、还没同步进索引的会话走这条路。
     """
+    engine = normalize_engine_name(engine)
     kick_sync()
     index = _ready_index()
     if index is not None:
@@ -134,6 +178,7 @@ def get_full(
 
 def forget_session(engine: str, session_id: str) -> None:
     """把会话从索引里摘掉（引擎侧的文件由调用方删除）。"""
+    engine = normalize_engine_name(engine)
     index = get_index()
     if index is None:
         return
@@ -152,6 +197,8 @@ def audit_events(
     limit: int = 500,
 ) -> list[dict[str, Any]]:
     """跨会话的消息/工具调用时间线，newest first。"""
+    if engine:
+        engine = normalize_engine_name(engine)
     kick_sync()
     index = _ready_index()
     if index is not None:
@@ -167,17 +214,22 @@ def audit_events(
     )
     if since:
         since_epoch = to_epoch(since)
-        events = [
-            e for e in events if (to_epoch(e["timestamp"]) or 0) >= (since_epoch or 0)
-        ]
+        if since_epoch is not None:
+            events = [
+                e
+                for e in events
+                if (ts_epoch := to_epoch(e["timestamp"])) is not None
+                and ts_epoch >= since_epoch
+            ]
     if until:
         until_epoch = to_epoch(until)
-        events = [
-            e
-            for e in events
-            if until_epoch is not None
-            and (to_epoch(e["timestamp"]) or 0) <= until_epoch
-        ]
+        if until_epoch is not None:
+            events = [
+                e
+                for e in events
+                if (ts_epoch := to_epoch(e["timestamp"])) is not None
+                and ts_epoch <= until_epoch
+            ]
     return events[:limit]
 
 
@@ -188,6 +240,9 @@ def tool_usage(
     days: int | None = None,
 ) -> dict[str, Any]:
     """按工具名统计调用次数；``days`` 只计时间窗内的会话。"""
+    if engine:
+        engine = normalize_engine_name(engine)
+    kick_sync()
     since: int | None = None
     if days is not None and days > 0:
         since = int((datetime.now(UTC) - timedelta(days=days)).timestamp())

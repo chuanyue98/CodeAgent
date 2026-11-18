@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import { ArrowUpRight as LinkArrow, Clock, Terminal } from 'lucide-react';
 import { fmtTokens, type EngineSummary, type SessionUsage } from '../../api/analytics';
 import { useT } from '../../i18n/context';
+import { workspaceLabel } from '../../utils/workspaceFormat';
 import { eb, ec, timeAgo } from './present';
 import { SectionTitle, TokenDistributionCard, type PieDatum } from './ChartCards';
 import { ioTokens } from './rangeStats';
@@ -109,7 +110,7 @@ export default function EnginePanel({
                 <div className="flex flex-col min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="font-medium truncate text-slate-700" title={s.projectPath}>
-                      {s.projectPath.split(/[\\/]/).pop() || s.projectPath || '—'}
+                      {s.projectPath ? workspaceLabel(s.projectPath) : '—'}
                     </span>
                     <span className={`shrink-0 px-1 py-0 text-[9px] font-bold rounded uppercase ${eb(s.target)}`}>
                       {s.target}

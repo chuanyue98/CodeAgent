@@ -13,8 +13,8 @@
  */
 
 const STORAGE_KEY = 'codeagent.uiToken';
-export const TOKEN_QUERY_PARAM = 'ca_token';
-export const TOKEN_HEADER = 'X-CA-Token';
+const TOKEN_QUERY_PARAM = 'ca_token';
+const TOKEN_HEADER = 'X-CA-Token';
 
 let cached: string | null = null;
 
@@ -42,7 +42,7 @@ export function bootstrapToken(): void {
   }
 }
 
-export function getToken(): string | null {
+function getToken(): string | null {
   if (cached !== null) return cached;
   try {
     cached = sessionStorage.getItem(STORAGE_KEY);

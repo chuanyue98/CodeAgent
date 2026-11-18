@@ -12,44 +12,58 @@ import sys
 import time
 from pathlib import Path
 
+from core.lock_manager import LockManager
 from core.services.delegation_runs import build_result, read_json, write_status
 from core.services.delegation_service import delegate_subtask
 from core.utils.atomic_write import atomic_write
+from core.utils.process_tree import process_created_at
 
 
 def run(run_dir: Path) -> int:
-    task = read_json(run_dir / "task.json")
-    # pid 也由自己写：发起方写 pid 与这里写状态是两次读改写，可能互相覆盖。
-    write_status(run_dir, status="running", pid=os.getpid(), started_at=time.time())
+    locks = LockManager()
+    lock_handle = locks.acquire_resource_lock(run_dir / "worker.lock")
     try:
-        res = delegate_subtask(
-            engine=task["engine"],
-            instruction=task.get("instruction", ""),
-            workspace=task.get("workspace"),
-            target_paths=task.get("target_paths") or None,
-            timeout=int(task.get("timeout") or 1800),
-            isolate=bool(task.get("isolate")),
-            group=task.get("group") or "common",
-            mode=task.get("mode") or "write",
-            log_path=run_dir / "output.log",
-            depth=int(task.get("depth") or 0),
-            checkpoint_name=run_dir.name,
+        task = read_json(run_dir / "task.json")
+        pid = os.getpid()
+        # pid 与创建时间都由 worker 自己写，避免和父进程竞争；锁在写完终态后才释放。
+        write_status(
+            run_dir,
+            status="running",
+            pid=pid,
+            process_created_at=process_created_at(pid),
+            started_at=time.time(),
         )
-    except Exception as exc:  # 结果必须落盘，否则发起方只能等到超时
-        write_status(run_dir, status="failed", ended_at=time.time(), error=str(exc))
-        return 1
+        try:
+            res = delegate_subtask(
+                engine=task["engine"],
+                instruction=task.get("instruction", ""),
+                workspace=task.get("workspace"),
+                target_paths=task.get("target_paths") or None,
+                timeout=int(task.get("timeout") or 1800),
+                isolate=bool(task.get("isolate")),
+                group=task.get("group") or "common",
+                mode=task.get("mode") or "write",
+                log_path=run_dir / "output.log",
+                depth=int(task.get("depth") or 0),
+                checkpoint_name=run_dir.name,
+            )
+        except Exception as exc:  # 结果必须落盘，否则发起方只能等到超时
+            write_status(run_dir, status="failed", ended_at=time.time(), error=str(exc))
+            return 1
 
-    atomic_write(
-        run_dir / "result.json",
-        json.dumps(build_result(res), ensure_ascii=False, indent=2),
-    )
-    write_status(
-        run_dir,
-        status="completed" if res.success else "failed",
-        ended_at=time.time(),
-        error=res.error,
-    )
-    return 0 if res.success else 1
+        atomic_write(
+            run_dir / "result.json",
+            json.dumps(build_result(res), ensure_ascii=False, indent=2),
+        )
+        write_status(
+            run_dir,
+            status="completed" if res.success else "failed",
+            ended_at=time.time(),
+            error=res.error,
+        )
+        return 0 if res.success else 1
+    finally:
+        locks.release_resource_lock(lock_handle)
 
 
 def main() -> None:

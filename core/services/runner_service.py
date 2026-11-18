@@ -3,9 +3,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
-import re
 import shutil
-import signal
 import subprocess
 import sys
 import threading
@@ -15,15 +13,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
 
-from core.engine_registry import ENGINES, get_spec
+import psutil
+
+from core.engine_registry import ENGINES, get_spec, normalize_engine_name
 from core.host_env import child_environ
 from core.logging_config import get_logger
+from core.runtime_paths import prepare_run_dir
 from core.services.log_broker import LogBroker
 from core.services.run_store import RunStore, TaskRunRecord
+from core.services.task_service import _SAFE_NAME_RE, is_valid_task_name
+from core.utils.process_tree import process_created_at, terminate_process_tree
 
 logger = get_logger(__name__)
 
-_SAFE_NAME_RE = re.compile(r"^[\w.-]+$")
+_MAX_TERMINAL_ACTIVE_RUNS = 200
 
 #: Finished runs that ended more than this many days ago are dropped from the
 #: run DB and their log files deleted, once, at startup. Log files are the part
@@ -122,6 +125,7 @@ class TaskRunStatus:
     exit_code: int | None = None
     task_name: str | None = None
     schedule_id: str | None = None
+    process_created_at: float | None = None
 
 
 class TaskAlreadyRunningError(ValueError):
@@ -137,7 +141,7 @@ class TaskRunner:
         self._processes: dict[str, subprocess.Popen] = {}
         self._stopping_tasks: set[str] = set()
         self._run_lock = threading.RLock()
-        self.log_dir = self.root_dir / ".ca_task_logs"
+        self.log_dir = prepare_run_dir(self.root_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self._run_store = RunStore(self.log_dir / "runs.db")
         # stdout 由 _pump_stdout 线程写盘后唤醒日志流订阅者，见 log_broker。
@@ -182,10 +186,11 @@ class TaskRunner:
         ``schedule_id`` is recorded on the run when a schedule fired it, so the
         schedule can later report what the run actually did.
         """
-        if not _SAFE_NAME_RE.match(task_name):
+        if not is_valid_task_name(task_name):
             raise ValueError(f"Invalid task name: {task_name!r}")
         if not _SAFE_NAME_RE.match(group):
             raise ValueError(f"Invalid group name: {group!r}")
+        engine = normalize_engine_name(engine)
         if engine not in ENGINES:
             raise ValueError(f"Invalid engine: {engine!r}")
 
@@ -246,6 +251,7 @@ class TaskRunner:
                     task_id=task_id,
                     engine=engine,
                     pid=process.pid,
+                    process_created_at=process_created_at(process.pid),
                     status="running",
                     log_path=str(log_file),
                     start_time=time.time(),
@@ -255,8 +261,14 @@ class TaskRunner:
                 )
                 self.active_runs[task_id] = status
                 self._processes[task_id] = process
-                self._start_pump(task_id, process, log_file)
+                try:
+                    self._start_pump(task_id, process, log_file)
+                except Exception:
+                    self._processes.pop(task_id, None)
+                    terminate_process_tree(process.pid, status.process_created_at)
+                    raise
                 self._persist(status)
+                self._trim_terminal_runs()
                 return status
             except Exception as e:
                 status = TaskRunStatus(
@@ -273,6 +285,7 @@ class TaskRunner:
                 )
                 self.active_runs[task_id] = status
                 self._persist(status)
+                self._trim_terminal_runs()
                 return status
 
     def run_chat_turn(
@@ -291,6 +304,7 @@ class TaskRunner:
         ``.jsonl`` log so ``logs.py``'s ``*.log`` glob doesn't pick it up.
         """
 
+        engine = normalize_engine_name(engine)
         if engine not in ENGINES:
             raise ValueError(f"Invalid engine: {engine!r}")
         if not message or not message.strip():
@@ -345,6 +359,7 @@ class TaskRunner:
                 task_id=turn_id,
                 engine=engine,
                 pid=process.pid,
+                process_created_at=process_created_at(process.pid),
                 status="running",
                 log_path=str(log_file),
                 start_time=time.time(),
@@ -353,6 +368,7 @@ class TaskRunner:
                 self.active_runs[turn_id] = status
                 self._processes[turn_id] = process
                 self._persist(status)
+                self._trim_terminal_runs()
             return status
         except Exception as e:
             status = TaskRunStatus(
@@ -366,6 +382,7 @@ class TaskRunner:
             with self._run_lock:
                 self.active_runs[turn_id] = status
                 self._persist(status)
+                self._trim_terminal_runs()
             return status
 
     def _start_pump(
@@ -387,7 +404,12 @@ class TaskRunner:
             daemon=True,
         )
         self._pumps[run_id] = thread
-        thread.start()
+        try:
+            thread.start()
+        except Exception:
+            self._pumps.pop(run_id, None)
+            self._log_broker.finish(run_id)
+            raise
 
     def _pump_stdout(
         self, run_id: str, process: subprocess.Popen, log_file: Path
@@ -446,6 +468,7 @@ class TaskRunner:
             exit_code=record.exit_code,
             task_name=record.task_name,
             schedule_id=record.schedule_id,
+            process_created_at=record.process_created_at,
         )
 
     def close(self) -> None:
@@ -471,6 +494,7 @@ class TaskRunner:
             older_than=cutoff, keep_latest=RUN_RETENTION_KEEP
         ):
             _unlink_quietly(Path(log_path))
+        self._run_store.prune_notifications(days, keep_latest=RUN_RETENTION_KEEP)
 
         # Logs whose row was deleted individually (see `delete`) leave no
         # trace in the table, so age is the only thing left to judge them by.
@@ -512,6 +536,7 @@ class TaskRunner:
                 exit_code=run.exit_code,
                 task_name=run.task_name,
                 schedule_id=run.schedule_id,
+                process_created_at=run.process_created_at,
             )
         )
 
@@ -534,7 +559,7 @@ class TaskRunner:
 
     def _extract_chat_session_id(self, engine: str, log_path: Path) -> str | None:
         """Scans a completed chat turn's JSONL log for the engine-reported session id."""
-        fields = _CHAT_SESSION_ID_FIELDS.get(engine, ())
+        fields = _CHAT_SESSION_ID_FIELDS.get(normalize_engine_name(engine), ())
         if not fields:
             return None
         try:
@@ -601,20 +626,39 @@ class TaskRunner:
             )
         return [self._status_from_record(record) for record in records]
 
-    def has_active_task(self, task_name: str, workspace: str | None = None) -> bool:
-        """Return whether a task with this name is already running.
+    @staticmethod
+    def _matches_task_name(run: TaskRunStatus, task_name: str) -> bool:
+        """优先精确匹配 ``run.task_name``；仅在历史遗留空字段时按 ``<name>_<数字>`` 回退。"""
+        if run.task_name is not None:
+            return run.task_name == task_name
+        derived, _, suffix = run.task_id.rpartition("_")
+        if suffix.isdigit():
+            return derived == task_name
+        return run.task_id == task_name
 
-        Schedules use this as a conservative overlap guard.  A task name is
-        embedded in the generated run id, so this remains compatible with
-        persisted records created before workspace metadata was introduced.
-        """
-        prefix = f"{task_name}_"
+    def _trim_terminal_runs(self) -> None:
+        """限制内存中已结束运行记录的数量上限，防止长期运行后内存持续膨胀。"""
+        terminal = [
+            (run.end_time or run.start_time, tid)
+            for tid, run in self.active_runs.items()
+            if run.status != "running"
+        ]
+        excess = len(terminal) - _MAX_TERMINAL_ACTIVE_RUNS
+        if excess <= 0:
+            return
+        terminal.sort()
+        for _, tid in terminal[:excess]:
+            self.active_runs.pop(tid, None)
+            self._processes.pop(tid, None)
+
+    def has_active_task(self, task_name: str, workspace: str | None = None) -> bool:
+        """Return whether a task with this name is already running."""
         resolved_workspace = (
             str(Path(workspace).expanduser().resolve()) if workspace else None
         )
         with self._run_lock:
-            for task_id, _run in list(self.active_runs.items()):
-                if not task_id.startswith(prefix):
+            for task_id, run in list(self.active_runs.items()):
+                if not self._matches_task_name(run, task_name):
                     continue
                 refreshed = self.get_status(task_id)
                 if refreshed is None or refreshed.status != "running":
@@ -636,7 +680,11 @@ class TaskRunner:
                 return None
 
             run = self.active_runs[task_id]
-            if run.status != "running" or run.pid is None:
+            if (
+                run.status != "running"
+                or run.pid is None
+                or task_id in self._stopping_tasks
+            ):
                 return run
 
             proc = self._processes.get(task_id)
@@ -658,13 +706,24 @@ class TaskRunner:
                         run.engine, Path(run.log_path)
                     )
                 self._persist(run)
+                self._trim_terminal_runs()
                 return run
 
         with self._run_lock:
-            if proc is None and not self._is_process_running(run.pid):
-                run.status = "failed"
-                run.end_time = time.time()
-                self._persist(run)
+            if proc is None:
+                alive = self._is_process_running(run.pid)
+                if alive and run.process_created_at is not None:
+                    actual_created = process_created_at(run.pid)
+                    if (
+                        actual_created is None
+                        or abs(actual_created - run.process_created_at) > 0.5
+                    ):
+                        alive = False
+                if not alive:
+                    run.status = "failed"
+                    run.end_time = time.time()
+                    self._persist(run)
+                    self._trim_terminal_runs()
 
             return run
 
@@ -684,26 +743,22 @@ class TaskRunner:
             proc = self._processes.get(task_id)
 
         try:
-            if sys.platform == "win32":
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", str(pid)],
-                    capture_output=True,
-                    timeout=10,
-                )
-            else:
-                os.killpg(os.getpgid(pid), signal.SIGTERM)
+            if not terminate_process_tree(pid, run.process_created_at):
+                logger.error("任务 %s 未能停止，保留运行记录以便重试", task_id)
+                with self._run_lock:
+                    self._stopping_tasks.discard(task_id)
+                return False
             if proc is not None:
                 try:
                     proc.wait(timeout=2)
                 except subprocess.TimeoutExpired:
                     pass
-            # 进程没了，管道里最后一段还要落地，否则日志停在半截。
             self._await_pump(task_id)
         except Exception:
+            logger.warning("停止任务 %s 失败", task_id, exc_info=True)
             with self._run_lock:
                 self._stopping_tasks.discard(task_id)
             return False
-
         with self._run_lock:
             try:
                 if self._processes.get(task_id) is proc:
@@ -712,6 +767,7 @@ class TaskRunner:
                 run.status = "stopped"
                 run.end_time = time.time()
                 self._persist(run)
+                self._trim_terminal_runs()
                 return True
             except Exception:
                 return False
@@ -719,50 +775,32 @@ class TaskRunner:
                 self._stopping_tasks.discard(task_id)
 
     def kill_all(self):
-        """Terminates all active processes immediately."""
+        """只终止本进程持有的任务；失败时保留句柄和真实状态。"""
         with self._run_lock:
-            processes_to_kill = list(self._processes.items())
-            self._processes.clear()
-            runs_to_persist: list[TaskRunStatus] = []
-            for task_id, _process in processes_to_kill:
-                if task_id in self.active_runs:
-                    self.active_runs[task_id].status = "stopped"
-                    runs_to_persist.append(self.active_runs[task_id])
-
-        for run in runs_to_persist:
-            self._persist(run)
-        for _task_id, process in processes_to_kill:
-            try:
-                process.terminate()
-                process.wait(timeout=1.0)
-            except Exception:
+            processes = list(self._processes.items())
+        for task_id, process in processes:
+            run = self.active_runs.get(task_id)
+            if isinstance(run, TaskRunStatus):
+                self.stop_task(task_id)
+                continue
+            # 兼容启动中尚未登记状态的子进程。
+            if process.poll() is None:
+                if not terminate_process_tree(
+                    process.pid, process_created_at(process.pid)
+                ):
+                    continue
                 try:
-                    process.kill()
-                    process.wait()
-                except Exception:
-                    # 杀不动只能记录：留着僵尸进程比无痕失败好。
-                    logger.warning(
-                        "强制终止任务 %s 的进程失败", _task_id, exc_info=True
-                    )
-            # 进程已终止，把管道里最后一段日志收进文件再算结束。
-            self._await_pump(_task_id)
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    pass
+            with self._run_lock:
+                self._processes.pop(task_id, None)
+            self._await_pump(task_id)
 
     def _is_process_running(self, pid: int) -> bool:
+        """使用 psutil 检查 PID 是否仍在运行（排除已退出的僵尸进程）。"""
         try:
-            if sys.platform == "win32":
-                import ctypes
-
-                PROCESS_QUERY_INFORMATION = 0x0400
-                PROCESS_VM_READ = 0x0010
-                handle = ctypes.windll.kernel32.OpenProcess(
-                    PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, False, pid
-                )
-                if handle == 0:
-                    return False
-                ctypes.windll.kernel32.CloseHandle(handle)
-                return True
-            else:
-                os.kill(pid, 0)
-                return True
-        except OSError:
+            proc = psutil.Process(pid)
+            return proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE
+        except psutil.Error:
             return False

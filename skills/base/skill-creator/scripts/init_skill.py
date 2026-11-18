@@ -3,14 +3,16 @@
 技能初始化器 - 从模板创建一个新技能
 
 用法:
-    init_skill.py <skill-name> --path <path>
+    uv run python init_skill.py <skill-name> --path <path>
 
 示例:
-    init_skill.py my-new-skill --path skills/public
-    init_skill.py my-api-helper --path skills/private
-    init_skill.py custom-skill --path /custom/location
+    uv run python init_skill.py my-new-skill --path skills/base
+    uv run python init_skill.py my-api-helper --path skills/custom
+    uv run python init_skill.py custom-skill --path /custom/location
 """
 
+import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -116,8 +118,8 @@ description: [TODO: 完整且信息丰富地解释该技能的作用以及何时
 **任何不需要的目录都可以删除。** 并非每个技能都需要所有三种类型的资源。
 """
 
-EXAMPLE_SCRIPT_CONTENT = """#!/usr/bin/env python3
-{skill_name} 的示例辅助脚本
+EXAMPLE_SCRIPT_CONTENT = '''#!/usr/bin/env python3
+"""{skill_name} 的示例辅助脚本。
 
 这是一个可以直接执行的占位符脚本。
 替换为实际实现，如果不需要则删除。
@@ -125,15 +127,18 @@ EXAMPLE_SCRIPT_CONTENT = """#!/usr/bin/env python3
 来自其他技能的真实脚本示例：
 - pdf/scripts/fill_fillable_fields.py - 填充 PDF 表单字段
 - pdf/scripts/convert_pdf_to_images.py - 将 PDF 页面转换为图像
+"""
+
 
 def main():
     print("这是 {skill_name} 的示例脚本")
     # TODO: 在此添加实际脚本逻辑
     # 这可以是数据处理、文件转换、API 调用等。
 
+
 if __name__ == "__main__":
     main()
-"""
+'''
 
 EXAMPLE_REFERENCE = """# {skill_title} 的参考文档
 
@@ -198,6 +203,20 @@ Agent 生成的输出中使用。
 """
 
 
+def validate_skill_name(skill_name):
+    """校验技能名称是否符合规范（连字符命名法，最多 64 个字符）。"""
+    if not skill_name or not re.match(r"^[a-z0-9-]+$", skill_name):
+        return (
+            False,
+            f"名称 '{skill_name}' 应为连字符命名法（仅小写字母、数字和连字符）",
+        )
+    if skill_name.startswith("-") or skill_name.endswith("-") or "--" in skill_name:
+        return False, f"名称 '{skill_name}' 不能以连字符开头/结尾或包含连续的连字符"
+    if len(skill_name) > 64:
+        return False, f"名称太长 ({len(skill_name)} 个字符)。最大为 64 个字符。"
+    return True, ""
+
+
 def title_case_skill_name(skill_name):
     """Convert hyphenated skill name to Title Case for display."""
     return " ".join(word.capitalize() for word in skill_name.split("-"))
@@ -214,6 +233,11 @@ def init_skill(skill_name, path):
     Returns:
         Path to created skill directory, or None if error
     """
+    valid_name, name_err = validate_skill_name(skill_name)
+    if not valid_name:
+        print(f"❌ 错误: {name_err}")
+        return None
+
     # Determine skill directory path
     skill_dir = Path(path).resolve() / skill_name
 
@@ -276,8 +300,8 @@ def init_skill(skill_name, path):
         return None
 
     # Print next steps
-    print(f"\\n✅ 技能 '{skill_name}' 已成功初始化于 {skill_dir}")
-    print("\\n下一步:")
+    print(f"\n✅ 技能 '{skill_name}' 已成功初始化于 {skill_dir}")
+    print("\n下一步:")
     print("1. 编辑 SKILL.md 以完成 TODO 项目并更新描述")
     print("2. 自定义或删除 scripts/、references/ 和 assets/ 中的示例文件")
     print("3. 准备好检查技能结构时运行验证器")
@@ -286,21 +310,27 @@ def init_skill(skill_name, path):
 
 
 def main():
-    if len(sys.argv) < 4 or sys.argv[2] != "--path":
-        print("用法: init_skill.py <skill-name> --path <path>")
-        print("\\n技能名称要求:")
-        print("  - 连字符命名法 (例如 'data-analyzer')")
-        print("  - 仅小写字母、数字和连字符")
-        print("  - 最多 40 个字符")
-        print("  - 必须与目录名完全匹配")
-        print("\\n示例:")
-        print("  init_skill.py my-new-skill --path skills/public")
-        print("  init_skill.py my-api-helper --path skills/private")
-        print("  init_skill.py custom-skill --path /custom/location")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="从模板初始化一个新的 CodeAgent 技能目录。",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "技能名称要求:\n"
+            "  - 连字符命名法 (例如 'data-analyzer')\n"
+            "  - 仅小写字母、数字和连字符\n"
+            "  - 最多 64 个字符\n"
+            "  - 必须与目录名完全匹配\n\n"
+            "示例:\n"
+            "  uv run python init_skill.py my-new-skill --path skills/base\n"
+            "  uv run python init_skill.py my-api-helper --path skills/custom\n"
+            "  uv run python init_skill.py custom-skill --path /custom/location"
+        ),
+    )
+    parser.add_argument("skill_name", help="技能名称（连字符命名法，如 data-analyzer）")
+    parser.add_argument("--path", required=True, help="技能输出目录路径")
 
-    skill_name = sys.argv[1]
-    path = sys.argv[3]
+    args = parser.parse_args()
+    skill_name = args.skill_name
+    path = args.path
 
     print(f"🚀 正在初始化技能: {skill_name}")
     print(f"   位置: {path}")

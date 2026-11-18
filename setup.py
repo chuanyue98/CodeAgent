@@ -19,6 +19,29 @@ DISTRIBUTION_COMMANDS = ("bdist_wheel", "sdist", "bdist_egg")
 # disabled config seeding for anyone who pip-installed rather than cloned.
 RESOURCE_FILES = ("config.example.json",)
 
+# 仅排除缓存、VCS 与系统临时文件；不能一刀切过滤所有点开头目录，
+# 因为插件（如 superpowers）会在 `.claude-plugin/`、`.codex-plugin/` 等隐藏目录
+# 中存放必需的清单文件。
+_EXCLUDED_DIR_NAMES = frozenset(
+    {
+        "__pycache__",
+        ".git",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        "node_modules",
+    }
+)
+_EXCLUDED_FILE_NAMES = frozenset({".git", ".gitkeep", ".DS_Store", "Thumbs.db"})
+_EXCLUDED_SUFFIXES = frozenset({".pyc", ".pyo", ".pyd", ".tmp"})
+
+
+def _is_excluded_asset(path: Path, root: Path) -> bool:
+    rel_parts = path.relative_to(root).parts
+    if any(part in _EXCLUDED_DIR_NAMES for part in rel_parts[:-1]):
+        return True
+    return path.name in _EXCLUDED_FILE_NAMES or path.suffix in _EXCLUDED_SUFFIXES
+
 
 def _building_a_distribution() -> bool:
     return any(command in sys.argv for command in DISTRIBUTION_COMMANDS)
@@ -29,7 +52,11 @@ def runtime_data_files() -> list[tuple[str, list[str]]]:
     for directory in RESOURCE_DIRS:
         root = ROOT / directory
         if root.exists():
-            files.extend(path for path in root.rglob("*") if path.is_file())
+            files.extend(
+                path
+                for path in root.rglob("*")
+                if path.is_file() and not _is_excluded_asset(path, root)
+            )
 
     for name in RESOURCE_FILES:
         candidate = ROOT / name
@@ -38,7 +65,11 @@ def runtime_data_files() -> list[tuple[str, list[str]]]:
 
     frontend_dist = ROOT / "web" / "frontend" / "dist"
     if frontend_dist.exists():
-        files.extend(path for path in frontend_dist.rglob("*") if path.is_file())
+        files.extend(
+            path
+            for path in frontend_dist.rglob("*")
+            if path.is_file() and not _is_excluded_asset(path, frontend_dist)
+        )
     elif _building_a_distribution():
         # Shipping a wheel without the bundle installs cleanly and then fails
         # at `ca ui`, on a machine that has no frontend toolchain to fix it.

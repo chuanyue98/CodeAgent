@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.constants import ENGINES, HEADLESS_ENGINES, MCP_ENGINES
+from core.constants import ENGINES
 from engines.start_antigravity import AntigravityEngine
 
 
 def test_antigravity_constants():
     assert "antigravity" in ENGINES
-    assert "antigravity" in HEADLESS_ENGINES
-    assert "antigravity" in MCP_ENGINES
 
 
 def test_antigravity_engine_build_command():
@@ -64,10 +62,9 @@ def test_antigravity_engine_build_chat_command():
 
 
 def test_doctor_engine_commands():
-    from core.doctor import ENGINE_BINARIES, ENGINE_COMMANDS
+    from core.doctor import ENGINE_BINARIES
 
     assert "antigravity" in ENGINE_BINARIES
-    assert "antigravity" in ENGINE_COMMANDS
     assert "agy" in ENGINE_BINARIES["antigravity"]
 
 
@@ -123,7 +120,9 @@ def test_start_antigravity_main(monkeypatch):
     assert mock_run.called
     cmd, env = mock_run.call_args[0]
     assert "agy" in cmd
-    assert any("task content" in arg for arg in cmd)
+    # 多行消息会写入临时提示词文件避免 Windows cmd 截断；单行时直接进命令参数。
+    assert len(cmd) > 1
+    assert any("additional input" in arg or "ca_prompt." in arg for arg in cmd)
 
 
 def test_headless_agy_keeps_a_user_supplied_workspace():

@@ -23,6 +23,7 @@ from .ui_styles import (
     StyledTitle,
     get_engine_theme,
     pad_display,
+    truncate_display,
 )
 
 if TYPE_CHECKING:
@@ -50,9 +51,7 @@ def print_banner(project_path: Path, latest_summary: dict | None = None) -> None
         rel_time = format_relative_time(latest_summary.get("started_at", ""))
         msg_count = latest_summary.get("message_count", 0)
         title = latest_summary.get("title") or t("history.no_title")
-        title = title.replace("\n", " ").strip()
-        if len(title) > 40:
-            title = title[:37] + "..."
+        title = truncate_display(title.replace("\n", " ").strip(), 40)
         line2_raw = f"💬 {t('launcher.latest_session_label')}: {theme.badge} {rel_time} · {title} ({msg_count} msgs)"
         line2_styled = (
             f"💬 {click.style(t('launcher.latest_session_label') + ':', bold=True)} "
@@ -112,9 +111,7 @@ def run_interactive_launcher(ctx: click.Context) -> int:
             theme = get_engine_theme(eng)
             rel_time = format_relative_time(latest_summary.get("started_at", ""))
             title = latest_summary.get("title") or t("history.no_title")
-            title = title.replace("\n", " ").strip()
-            if len(title) > 28:
-                title = title[:25] + "..."
+            title = truncate_display(title.replace("\n", " ").strip(), 28)
             resume_plain = t(
                 "launcher.resume_latest",
                 engine=eng,
@@ -199,49 +196,31 @@ def run_interactive_launcher(ctx: click.Context) -> int:
         if action == "launch_engine":
             engine_choices: list[Choice] = []
             order = ["claude", "codex", "opencode", "antigravity", "codebuddy"]
-            for eng_id in order:
-                spec = ENGINES.get(eng_id)
-                if spec:
-                    installed = any(shutil.which(cmd) for cmd in spec.cli_candidates)
-                    badge = (
-                        t("launcher.engine_ready")
-                        if installed
-                        else t("launcher.engine_missing")
-                    )
-                    badge_class = (
-                        "class:badge_ready" if installed else "class:badge_missing"
-                    )
-                    theme = get_engine_theme(eng_id)
-                    name_padded = pad_display(spec.display_name, 18)
-                    plain = f"{name_padded} {badge}"
-                    tokens = [
-                        (f"class:{theme.style_class}", name_padded + " "),
-                        (badge_class, badge),
-                    ]
-                    engine_choices.append(
-                        Choice(title=StyledTitle(tokens, plain), value=spec.name)
-                    )
-            for name, spec in ENGINES.items():
-                if name not in order:
-                    installed = any(shutil.which(cmd) for cmd in spec.cli_candidates)
-                    badge = (
-                        t("launcher.engine_ready")
-                        if installed
-                        else t("launcher.engine_missing")
-                    )
-                    badge_class = (
-                        "class:badge_ready" if installed else "class:badge_missing"
-                    )
-                    theme = get_engine_theme(name)
-                    name_padded = pad_display(spec.display_name, 18)
-                    plain = f"{name_padded} {badge}"
-                    tokens = [
-                        (f"class:{theme.style_class}", name_padded + " "),
-                        (badge_class, badge),
-                    ]
-                    engine_choices.append(
-                        Choice(title=StyledTitle(tokens, plain), value=spec.name)
-                    )
+            ordered_specs = [
+                (eng_id, ENGINES[eng_id]) for eng_id in order if eng_id in ENGINES
+            ] + [(name, spec) for name, spec in ENGINES.items() if name not in order]
+            for eng_id, spec in ordered_specs:
+                installed = (
+                    _helpers.resolve_engine_cli(spec, which=shutil.which) is not None
+                )
+                badge = (
+                    t("launcher.engine_ready")
+                    if installed
+                    else t("launcher.engine_missing")
+                )
+                badge_class = (
+                    "class:badge_ready" if installed else "class:badge_missing"
+                )
+                theme = get_engine_theme(eng_id)
+                name_padded = pad_display(spec.display_name, 18)
+                plain = f"{name_padded} {badge}"
+                tokens = [
+                    (f"class:{theme.style_class}", name_padded + " "),
+                    (badge_class, badge),
+                ]
+                engine_choices.append(
+                    Choice(title=StyledTitle(tokens, plain), value=spec.name)
+                )
             engine_choices.append(Choice(title=t("launcher.back"), value="back"))
 
             try:

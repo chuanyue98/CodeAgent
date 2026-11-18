@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { CheckSquare, Compass, FileText, Layers, ListOrdered, Target } from 'lucide-react';
 import MarkdownMessage from '../MarkdownMessage';
-import { useLanguageCode, useT } from '../../i18n/context';
+import { useT } from '../../i18n/context';
 
 export interface TaskBlueprintViewProps {
   content?: string;
@@ -162,14 +162,13 @@ function parseBlueprintSections(content: string): ParsedSections | null {
 
 export default function TaskBlueprintView({ content, title }: TaskBlueprintViewProps): ReactElement {
   const t = useT();
-  const lang = useLanguageCode();
 
   if (!content || !content.trim()) {
     return (
       <div className="glass-card p-8 border-dashed border-slate-200 text-center space-y-2">
         <Layers className="w-8 h-8 text-slate-300 mx-auto" />
         <p className="text-sm text-slate-400">
-          {lang === 'zh' ? '暂无任务蓝图内容' : 'No blueprint content available'}
+          {t('taskBlueprint.empty')}
         </p>
       </div>
     );

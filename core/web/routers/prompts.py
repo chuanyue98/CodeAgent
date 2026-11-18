@@ -23,7 +23,7 @@ def get_root_dir():
 
 
 @router.get("/prompts")
-async def list_prompts() -> list:
+def list_prompts() -> list:
     """List all prompt groups with metadata."""
     try:
         service = PromptService(get_prompts_root(), get_root_dir())

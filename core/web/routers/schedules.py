@@ -21,14 +21,16 @@ import asyncio
 import json
 import re
 import time
+from contextlib import suppress
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
-from core.constants import ENGINES
+from core.constants import ENGINES, normalize_engine_name
 from core.services.config_service import ConfigService
 from core.services.runner_service import TaskAlreadyRunningError
 from core.services.schedule_service import ScheduleService
+from core.services.task_service import TaskService
 from core.web.case_convert import ProtocolModel, wire
 from core.web.resource_paths import ROOT_DIR
 from core.web.routers import tasks as tasks_router
@@ -242,7 +244,8 @@ def _extract_json_from_text(text: str) -> dict | None:
 @router.post("/schedules/parse")
 async def parse_schedule(req: ParseScheduleRequest) -> dict:
     """Parses a natural language schedule description into structured task and cron."""
-    if req.engine not in ENGINES:
+    engine = normalize_engine_name(req.engine)
+    if engine not in ENGINES:
         raise HTTPException(status_code=400, detail=f"Invalid engine: {req.engine!r}")
     if not req.input or not req.input.strip():
         raise HTTPException(status_code=400, detail="Input must not be empty")
@@ -252,7 +255,7 @@ async def parse_schedule(req: ParseScheduleRequest) -> dict:
     try:
         status = await asyncio.to_thread(
             tasks_router._runner.run_chat_turn,
-            req.engine,
+            engine,
             message,
             group="common",
             project_path=str(ROOT_DIR),
@@ -260,12 +263,32 @@ async def parse_schedule(req: ParseScheduleRequest) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    deadline = time.time() + PARSE_TIMEOUT_SECONDS
-    while time.time() < deadline:
-        st = await asyncio.to_thread(tasks_router._runner.get_status, status.task_id)
-        if st is None or st.status != "running":
-            break
-        await asyncio.sleep(0.2)
+    still_running = True
+    try:
+        deadline = time.time() + PARSE_TIMEOUT_SECONDS
+        while time.time() < deadline:
+            st = await asyncio.to_thread(
+                tasks_router._runner.get_status, status.task_id
+            )
+            if st is None or st.status != "running":
+                still_running = False
+                break
+            await asyncio.sleep(0.2)
+    finally:
+        # 超时、异常或客户端取消请求时及时终止尚未结束的解析回合，避免后台残留进程。
+        if still_running:
+            stop_fn = getattr(tasks_router._runner, "stop_task", None)
+            if callable(stop_fn):
+                try:
+                    await asyncio.to_thread(stop_fn, status.task_id)
+                except asyncio.CancelledError:
+                    with suppress(Exception):
+                        asyncio.get_running_loop().run_in_executor(
+                            None, stop_fn, status.task_id
+                        )
+                    raise
+                except Exception:
+                    pass
 
     log_path = Path(status.log_path)
     raw = ""
@@ -431,20 +454,28 @@ def run_now(schedule_id: str) -> dict:
                 status_code=409,
                 detail="Schedule has no workspace; edit it before running",
             )
+        tasks_root = tasks_router.get_tasks_root()
+        if TaskService(tasks_root).get_task(record["task_name"]) is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Task '{record['task_name']}' not found",
+            )
         registered_workspace = tasks_router.resolve_registered_workspace(workspace)
         status = tasks_router._runner.run_task(
             record["task_name"],
             record["engine"],
             registered_workspace.group,
-            tasks_root=tasks_router.get_tasks_root(),
+            tasks_root=tasks_root,
             workspace=registered_workspace.path,
             prevent_overlap=True,
+            schedule_id=schedule_id,
         )
     except TaskAlreadyRunningError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    run_id = getattr(status, "task_id", None)
     if getattr(status, "status", "running") != "running":
         failure_status = str(status.status)
         service.record_run(
@@ -452,8 +483,11 @@ def run_now(schedule_id: str) -> dict:
             failure_status
             if failure_status.startswith("failed")
             else f"failed: {failure_status}",
+            run_id=run_id,
             advance_schedule=False,
         )
     else:
-        service.record_run(schedule_id, "started", advance_schedule=False)
+        service.record_run(
+            schedule_id, "started", run_id=run_id, advance_schedule=False
+        )
     return wire(TaskRunStatusResponse(**status.__dict__))

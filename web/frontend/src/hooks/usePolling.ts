@@ -53,6 +53,7 @@ function usePolling(
     if (!enabled) return;
     let disposed = false;
     let failures = 0;
+    let inFlight = false;
     let timer: number | undefined;
 
     const schedule = () => {
@@ -65,15 +66,17 @@ function usePolling(
 
     const tick = () => {
       timer = undefined;
-      if (disposed) return;
+      if (disposed || inFlight) return;
       if (!pollWhenHidden && document.visibilityState !== 'visible') {
         // Paused: visibilitychange resumes the loop with a catch-up call.
         return;
       }
       let settled = false;
+      inFlight = true;
       const finish = (failed: boolean) => {
         if (disposed || settled) return;
         settled = true;
+        inFlight = false;
         failures = failed ? failures + 1 : 0;
         schedule();
       };

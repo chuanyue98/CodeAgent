@@ -10,15 +10,16 @@
   - 执行脚本：`uv run python xxx.py`
   - 模块方式：`uv run python -m core.xxx`
   - Lint：`uv run ruff check .`
-  - 类型检查：`uv run mypy core`
+  - 格式检查：`uv run ruff format --check .`
+  - 类型检查：`uv run mypy core engines ca_launcher.py`
 - 添加依赖：`uv add <pkg>`；添加开发依赖：`uv add --group dev <pkg>`。
 - 仓库根目录的 `.venv` 由 uv 自动管理，**不要**手动重建、激活或往里装包；直接 `uv run` 即可。
 - `uv.lock` 与 `pyproject.toml` 必须保持同步，两者都提交。
 
 ## 项目速览
 
-- Python 项目，核心代码在 `core/`，测试在 `tests/`（pytest，配置见 `pyproject.toml`）。
-- 改动完成后，交付前必须通过：`uv run pytest` 和 `uv run ruff check .`。
+- Python 项目，核心代码在 `core/`，引擎适配在 `engines/`，测试在 `tests/`（pytest，配置见 `pyproject.toml`）。
+- 改动完成后，交付前必须通过：`uv run pytest`、`uv run ruff check .`、`uv run ruff format --check .` 和 `uv run mypy core engines ca_launcher.py`。
 - 提交信息、注释与文档使用中文。
 
 ## 教训
